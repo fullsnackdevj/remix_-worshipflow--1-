@@ -27,8 +27,10 @@ function json(statusCode: number, body: unknown) {
 }
 
 export const handler: Handler = async (event: HandlerEvent, _context: HandlerContext) => {
-    // Parse path: /.netlify/functions/api/songs  ->  /songs
-    const rawPath = event.path.replace(/^\/.netlify\/functions\/api/, "") || "/";
+    // Parse path: strip /.netlify/functions/api OR /api prefix
+    const rawPath = event.path
+        .replace(/^\/.netlify\/functions\/api/, "")
+        .replace(/^\/api/, "") || "/";
     const method = event.httpMethod;
     const body = event.body ? JSON.parse(event.body) : {};
 
