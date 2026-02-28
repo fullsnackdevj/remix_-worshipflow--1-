@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@custom-variant dark (&:is(.dark *));
+
+body {
+  @apply antialiased text-gray-900 bg-gray-50 dark:text-gray-100 dark:bg-gray-900;
+}
