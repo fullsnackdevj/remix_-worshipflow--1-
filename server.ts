@@ -149,6 +149,23 @@ app.post("/api/songs", async (req, res) => {
   const { title, artist, lyrics, chords, tags, video_url } = req.body;
 
   try {
+    // Duplicate check: same title (case-insensitive) AND same lyrics (trimmed)
+    const existing = await firestore.collection("songs").get();
+    const normalizedTitle = (title || "").trim().toLowerCase();
+    const normalizedLyrics = (lyrics || "").trim().toLowerCase();
+    const duplicate = existing.docs.find((doc) => {
+      const d = doc.data();
+      return (
+        (d.title || "").trim().toLowerCase() === normalizedTitle &&
+        (d.lyrics || "").trim().toLowerCase() === normalizedLyrics
+      );
+    });
+    if (duplicate) {
+      return res.status(409).json({
+        error: `Duplicate song detected! "${title}" already exists in the database with the same lyrics.`,
+      });
+    }
+
     const docRef = await firestore.collection("songs").add({
       title,
       artist: artist || "",
