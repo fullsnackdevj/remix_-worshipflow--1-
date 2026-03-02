@@ -339,8 +339,9 @@ export default function App() {
   };
 
   const toggleTagSelection = (tagId: string) => {
+    // Single-select: clicking active tag deselects, clicking another replaces
     setEditTags((prev) =>
-      prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]
+      prev.includes(tagId) ? [] : [tagId]
     );
   };
 
@@ -537,19 +538,27 @@ export default function App() {
                         Tags <span className="text-red-500">*</span>
                       </label>
                       <div className={`flex flex-wrap gap-2 p-2 rounded-xl ${formErrors.tags ? "border border-red-400" : ""}`}>
-                        {tags.map((tag) => (
-                          <button
-                            key={tag.id}
-                            onClick={() => { toggleTagSelection(tag.id); if (formErrors.tags) setFormErrors(p => ({ ...p, tags: undefined })); }}
-                            className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium transition-colors border ${editTags.includes(tag.id)
-                              ? `${tag.color} border-transparent`
-                              : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
-                              }`}
-                          >
-                            <TagIcon size={14} />
-                            {tag.name}
-                          </button>
-                        ))}
+                        {tags.map((tag) => {
+                          const isSelected = editTags.includes(tag.id);
+                          const isDisabled = editTags.length > 0 && !isSelected;
+                          return (
+                            <button
+                              key={tag.id}
+                              type="button"
+                              disabled={isDisabled}
+                              onClick={() => { toggleTagSelection(tag.id); if (formErrors.tags) setFormErrors(p => ({ ...p, tags: undefined })); }}
+                              className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium transition-colors border ${isSelected
+                                  ? `${tag.color} border-transparent ring-2 ring-offset-1 ring-indigo-400`
+                                  : isDisabled
+                                    ? "bg-gray-100 dark:bg-gray-800 text-gray-300 dark:text-gray-600 border-gray-200 dark:border-gray-700 opacity-40 cursor-not-allowed"
+                                    : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
+                                }`}
+                            >
+                              <TagIcon size={14} />
+                              {tag.name}
+                            </button>
+                          );
+                        })}
                       </div>
                       {formErrors.tags && <p className="mt-1 text-xs text-red-500">{formErrors.tags}</p>}
                     </div>
