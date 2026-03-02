@@ -691,17 +691,22 @@ export default function App() {
                       </div>
                       {/* Action Buttons */}
                       <div className="flex items-center gap-2 sm:gap-3 shrink-0 pt-1">
-                        {[
-                          { icon: <Printer size={20} />, label: "Print", onClick: () => handlePrint(selectedSong), hoverClass: "hover:text-indigo-600 dark:hover:text-indigo-400" },
-                          { icon: <Edit size={20} />, label: "Edit", onClick: () => openEditor(selectedSong), hoverClass: "hover:text-indigo-600 dark:hover:text-indigo-400" },
-                          { icon: <Trash2 size={20} />, label: "Delete", onClick: () => handleDeleteSong(selectedSong.id), hoverClass: "hover:text-red-500 dark:hover:text-red-400" },
-                          { icon: <X size={20} />, label: "Close", onClick: () => setSelectedSong(null), hoverClass: "hover:text-gray-700 dark:hover:text-gray-200" },
-                        ].map(({ icon, label, onClick, hoverClass }) => (
-                          <button key={label} onClick={onClick} className={`relative group text-gray-400 dark:text-gray-500 ${hoverClass} transition-colors duration-150`}>
-                            {icon}
-                            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">{label}</span>
-                          </button>
-                        ))}
+                        <button onClick={() => handlePrint(selectedSong)} className="hidden sm:block relative group text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors duration-150">
+                          <Printer size={20} />
+                          <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">Print</span>
+                        </button>
+                        <button onClick={() => openEditor(selectedSong)} className="relative group text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors duration-150">
+                          <Edit size={20} />
+                          <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">Edit</span>
+                        </button>
+                        <button onClick={() => handleDeleteSong(selectedSong.id)} className="relative group text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-colors duration-150">
+                          <Trash2 size={20} />
+                          <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">Delete</span>
+                        </button>
+                        <button onClick={() => setSelectedSong(null)} className="relative group text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 transition-colors duration-150">
+                          <X size={20} />
+                          <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">Close</span>
+                        </button>
                       </div>
                     </div>
 
