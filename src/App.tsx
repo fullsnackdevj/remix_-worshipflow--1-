@@ -405,7 +405,7 @@ export default function App() {
       )}
 
       {/* Sidebar */}
-      <div className={`relative fixed lg:static inset-y-0 left-0 z-30 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col transition-all duration-300 transform ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+      <div className={`fixed lg:static inset-y-0 left-0 z-30 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col transition-all duration-300 transform ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         } ${isSidebarCollapsed ? "w-20" : "w-64"}`}>
 
         <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between h-16">
@@ -677,7 +677,7 @@ export default function App() {
                 <div className="max-w-4xl mx-auto space-y-4">
 
                   {/* Minimalist Header Card */}
-                  <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6 sm:p-8">
+                  <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-4 sm:p-6">
                     <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap gap-2 mb-3">
@@ -692,7 +692,7 @@ export default function App() {
                           <p className="text-indigo-600 dark:text-indigo-400 font-medium text-base">{selectedSong.artist}</p>
                         )}
                       </div>
-                      <div className="flex items-center gap-1 shrink-0">
+                      <div className="flex items-center flex-wrap gap-1 shrink-0">
                         {[
                           { icon: <Printer size={18} />, label: "Print", onClick: () => handlePrint(selectedSong), hoverClass: "hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/40" },
                           { icon: <Edit size={18} />, label: "Edit", onClick: () => openEditor(selectedSong), hoverClass: "hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/40" },
@@ -726,20 +726,20 @@ export default function App() {
                   {/* Lyrics & Chords Cards */}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col">
-                      <div className="flex items-center gap-2 px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+                      <div className="flex items-center gap-2 px-4 sm:px-6 py-4 border-b border-gray-100 dark:border-gray-700">
                         <div className="w-2 h-2 rounded-full bg-indigo-500" />
                         <h3 className="font-bold text-gray-900 dark:text-white tracking-wide text-sm uppercase">Lyrics</h3>
                       </div>
-                      <div className="p-6 flex-1 overflow-auto">
+                      <div className="p-4 sm:p-6 flex-1 overflow-auto">
                         <pre className="whitespace-pre-wrap font-sans text-gray-700 dark:text-gray-300 leading-relaxed text-base">{selectedSong.lyrics || "No lyrics added."}</pre>
                       </div>
                     </div>
                     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col">
-                      <div className="flex items-center gap-2 px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+                      <div className="flex items-center gap-2 px-4 sm:px-6 py-4 border-b border-gray-100 dark:border-gray-700">
                         <div className="w-2 h-2 rounded-full bg-purple-500" />
                         <h3 className="font-bold text-gray-900 dark:text-white tracking-wide text-sm uppercase">Chords</h3>
                       </div>
-                      <div className="p-6 flex-1 overflow-auto">
+                      <div className="p-4 sm:p-6 flex-1 overflow-auto">
                         {selectedSong.chords ? (
                           <pre className="whitespace-pre-wrap font-mono text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{selectedSong.chords}</pre>
                         ) : (
@@ -780,17 +780,18 @@ export default function App() {
                               <button
                                 onClick={handleBulkDelete}
                                 disabled={selectedSongIds.length === 0}
-                                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors font-medium shadow-sm text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors font-medium shadow-sm text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 <Trash2 size={18} />
-                                <span>Delete ({selectedSongIds.length})</span>
+                                <span className="hidden sm:inline">Delete ({selectedSongIds.length})</span>
+                                <span className="sm:hidden">{selectedSongIds.length}</span>
                               </button>
                               <button
                                 onClick={() => { setIsSelectionMode(false); setSelectedSongIds([]); }}
-                                className="flex items-center gap-2 px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-medium text-sm"
+                                className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-medium text-sm"
                               >
                                 <X size={18} />
-                                <span>Cancel</span>
+                                <span className="hidden sm:inline">Cancel</span>
                               </button>
                             </>
                           ) : (
@@ -807,10 +808,10 @@ export default function App() {
                               </button>
                               <button
                                 onClick={() => openEditor()}
-                                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium shadow-sm text-sm"
+                                className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium shadow-sm text-sm"
                               >
                                 <Plus size={18} />
-                                <span>Add Song</span>
+                                <span className="hidden sm:inline">Add Song</span>
                               </button>
                             </>
                           )}
@@ -818,7 +819,7 @@ export default function App() {
                       </div>
 
                       {/* Row 2: Multi-select Filter Dropdown + Total Songs */}
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center flex-wrap gap-2">
                         <div className="relative" ref={filterDropdownRef}>
                           <button
                             onClick={() => setIsFilterOpen(prev => !prev)}
