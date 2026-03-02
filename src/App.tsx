@@ -677,51 +677,63 @@ export default function App() {
                 <div className="max-w-4xl mx-auto space-y-4">
 
                   {/* Minimalist Header Card */}
-                  <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-4 sm:p-6">
-                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                  <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-4 sm:p-6 lg:p-8">
+                    <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
-                        <div className="flex flex-wrap gap-2 mb-3">
+                        {/* Tags */}
+                        <div className="flex flex-wrap gap-2 mb-4">
                           {selectedSong.tags.map((tag) => (
-                            <span key={tag.id} className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${tag.color}`}>
+                            <span key={tag.id} className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs sm:text-sm font-semibold ${tag.color}`}>
                               {tag.name}
                             </span>
                           ))}
                         </div>
-                        <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-1 leading-tight">{selectedSong.title}</h2>
+                        {/* Title & Artist */}
+                        <h2 className="text-xl sm:text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white mb-1 leading-tight">{selectedSong.title}</h2>
                         {selectedSong.artist && (
-                          <p className="text-indigo-600 dark:text-indigo-400 font-medium text-base">{selectedSong.artist}</p>
+                          <p className="text-indigo-500 dark:text-indigo-400 font-semibold text-base sm:text-lg">{selectedSong.artist}</p>
                         )}
                       </div>
-                      <div className="flex items-center flex-wrap gap-1 shrink-0">
+                      {/* Action Buttons */}
+                      <div className="flex items-center gap-2 sm:gap-3 shrink-0 pt-1">
                         {[
-                          { icon: <Printer size={18} />, label: "Print", onClick: () => handlePrint(selectedSong), hoverClass: "hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/40" },
-                          { icon: <Edit size={18} />, label: "Edit", onClick: () => openEditor(selectedSong), hoverClass: "hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/40" },
-                          { icon: <Trash2 size={18} />, label: "Delete", onClick: () => handleDeleteSong(selectedSong.id), hoverClass: "hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/40" },
-                          { icon: <X size={18} />, label: "Close", onClick: () => setSelectedSong(null), hoverClass: "hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700" },
+                          { icon: <Printer size={20} />, label: "Print", onClick: () => handlePrint(selectedSong), hoverClass: "hover:text-indigo-600 dark:hover:text-indigo-400" },
+                          { icon: <Edit size={20} />, label: "Edit", onClick: () => openEditor(selectedSong), hoverClass: "hover:text-indigo-600 dark:hover:text-indigo-400" },
+                          { icon: <Trash2 size={20} />, label: "Delete", onClick: () => handleDeleteSong(selectedSong.id), hoverClass: "hover:text-red-500 dark:hover:text-red-400" },
+                          { icon: <X size={20} />, label: "Close", onClick: () => setSelectedSong(null), hoverClass: "hover:text-gray-700 dark:hover:text-gray-200" },
                         ].map(({ icon, label, onClick, hoverClass }) => (
-                          <button key={label} onClick={onClick} className={`relative group p-2.5 rounded-xl text-gray-400 dark:text-gray-500 ${hoverClass} transition-all duration-150`}>
+                          <button key={label} onClick={onClick} className={`relative group text-gray-400 dark:text-gray-500 ${hoverClass} transition-colors duration-150`}>
                             {icon}
                             <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">{label}</span>
                           </button>
                         ))}
                       </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
-                      <span className="text-xs text-gray-400 dark:text-gray-500">Added {selectedSong.created_at ? new Date(selectedSong.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : "Unknown"}</span>
-                      <span className="text-gray-200 dark:text-gray-600 text-xs hidden sm:inline">·</span>
-                      <span className="text-xs text-gray-400 dark:text-gray-500">Updated {selectedSong.updated_at ? new Date(selectedSong.updated_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : "Never"}</span>
+
+                    {/* Divider + Meta */}
+                    <div className="mt-5 pt-5 border-t border-gray-200 dark:border-gray-700 space-y-1">
+                      <p className="text-sm text-gray-400 dark:text-gray-500">
+                        <span className="font-medium text-gray-500 dark:text-gray-400">Added:</span>{" "}
+                        {selectedSong.created_at ? new Date(selectedSong.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : "Unknown"}
+                      </p>
+                      <p className="text-sm text-gray-400 dark:text-gray-500">
+                        <span className="font-medium text-gray-500 dark:text-gray-400">Updated:</span>{" "}
+                        {selectedSong.updated_at ? new Date(selectedSong.updated_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : "Never"}
+                      </p>
                       {selectedSong.video_url && (
-                        <>
-                          <span className="text-gray-200 dark:text-gray-600 text-xs hidden sm:inline">·</span>
-                          <a href={selectedSong.video_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 px-3 py-1 rounded-full transition-colors">
-                            <CustomVideoBtnIcon size={14} />
-                            Watch Reference Video
-                            <ExternalLink size={11} className="opacity-75" />
-                          </a>
-                        </>
+                        <a
+                          href={selectedSong.video_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-sm font-semibold text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 transition-colors pt-1"
+                        >
+                          Watch Reference Video
+                          <ExternalLink size={14} />
+                        </a>
                       )}
                     </div>
                   </div>
+
 
                   {/* Lyrics & Chords Cards */}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
