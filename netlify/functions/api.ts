@@ -26,6 +26,10 @@ function json(statusCode: number, body: unknown) {
     };
 }
 
+const toTitleCase = (str: string) =>
+    str.trim().replace(/\b\w/g, (char) => char.toUpperCase());
+
+
 export const handler: Handler = async (event: HandlerEvent, _context: HandlerContext) => {
     // Parse path: strip /.netlify/functions/api OR /api prefix
     const rawPath = event.path
@@ -125,32 +129,42 @@ Rules:
 
     // POST /songs
     if (rawPath === "/songs" && method === "POST") {
-        try {
-            const { title, artist, lyrics, chords, tags, video_url } = body;
+        const { title, artist, lyrics, chords, tags, video_url } = body;
 
-            // Duplicate check: same title (case-insensitive) AND same lyrics (trimmed)
+        // Required field validation
+        const missingFields: string[] = [];
+        if (!title?.trim()) missingFields.push("Title");
+        if (!artist?.trim()) missingFields.push("Artist");
+        if (!lyrics?.trim()) missingFields.push("Lyrics");
+        if (!tags || tags.length === 0) missingFields.push("Tags (at least one)");
+        if (missingFields.length > 0) {
+            return json(400, { error: `The following required fields are missing: ${missingFields.join(", ")}.` });
+        }
+
+        try {
+            // Duplicate check: same Title + Artist (case-insensitive)
             const existing = await firestore.collection("songs").get();
-            const normalizedTitle = (title || "").trim().toLowerCase();
-            const normalizedLyrics = (lyrics || "").trim().toLowerCase();
+            const normalizedTitle = title.trim().toLowerCase();
+            const normalizedArtist = artist.trim().toLowerCase();
             const duplicate = existing.docs.find((doc) => {
                 const d = doc.data();
                 return (
                     (d.title || "").trim().toLowerCase() === normalizedTitle &&
-                    (d.lyrics || "").trim().toLowerCase() === normalizedLyrics
+                    (d.artist || "").trim().toLowerCase() === normalizedArtist
                 );
             });
             if (duplicate) {
                 return json(409, {
-                    error: `Duplicate song detected! "${title}" already exists in the database with the same lyrics.`,
+                    error: `Duplicate song detected! "${title}" by "${artist}" already exists in the database.`,
                 });
             }
 
             const docRef = await firestore.collection("songs").add({
-                title,
-                artist: artist || "",
-                lyrics: lyrics || "",
+                title: toTitleCase(title),
+                artist: toTitleCase(artist),
+                lyrics: lyrics.trim().toUpperCase(),
                 chords: chords || "",
-                tagIds: tags || [],
+                tagIds: tags,
                 video_url: video_url || "",
                 created_at: admin.firestore.FieldValue.serverTimestamp(),
                 updated_at: admin.firestore.FieldValue.serverTimestamp(),
@@ -190,14 +204,43 @@ Rules:
         }
 
         if (method === "PUT") {
+            const { title, artist, lyrics, chords, tags, video_url } = body;
+
+            // Required field validation
+            const missingFields: string[] = [];
+            if (!title?.trim()) missingFields.push("Title");
+            if (!artist?.trim()) missingFields.push("Artist");
+            if (!lyrics?.trim()) missingFields.push("Lyrics");
+            if (!tags || tags.length === 0) missingFields.push("Tags (at least one)");
+            if (missingFields.length > 0) {
+                return json(400, { error: `The following required fields are missing: ${missingFields.join(", ")}.` });
+            }
+
             try {
-                const { title, artist, lyrics, chords, tags, video_url } = body;
+                // Duplicate check: exclude self
+                const existing = await firestore.collection("songs").get();
+                const normalizedTitle = title.trim().toLowerCase();
+                const normalizedArtist = artist.trim().toLowerCase();
+                const duplicate = existing.docs.find((doc) => {
+                    if (doc.id === id) return false;
+                    const d = doc.data();
+                    return (
+                        (d.title || "").trim().toLowerCase() === normalizedTitle &&
+                        (d.artist || "").trim().toLowerCase() === normalizedArtist
+                    );
+                });
+                if (duplicate) {
+                    return json(409, {
+                        error: `Duplicate song detected! "${title}" by "${artist}" already exists in the database.`,
+                    });
+                }
+
                 await firestore.collection("songs").doc(id).update({
-                    title,
-                    artist: artist || "",
-                    lyrics: lyrics || "",
+                    title: toTitleCase(title),
+                    artist: toTitleCase(artist),
+                    lyrics: lyrics.trim().toUpperCase(),
                     chords: chords || "",
-                    tagIds: tags || [],
+                    tagIds: tags,
                     video_url: video_url || "",
                     updated_at: admin.firestore.FieldValue.serverTimestamp(),
                 });
@@ -225,10 +268,10 @@ Rules:
             let tags = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as any[];
 
             const defaultTags = [
-                { name: "Joyful", color: "bg-yellow-100 text-yellow-800" },
-                { name: "Solemn", color: "bg-indigo-100 text-indigo-800" },
-                { name: "English", color: "bg-blue-100 text-blue-800" },
-                { name: "Tagalog", color: "bg-red-100 text-red-800" },
+                { name: "English, Solemn", color: "bg-violet-100 text-violet-700" },
+                { name: "English, Joyful", color: "bg-emerald-100 text-emerald-700" },
+                { name: "Tagalog, Solemn", color: "bg-rose-100 text-rose-700" },
+                { name: "Tagalog, Joyful", color: "bg-amber-100 text-amber-700" },
             ];
 
             const seenNames = new Set<string>();
