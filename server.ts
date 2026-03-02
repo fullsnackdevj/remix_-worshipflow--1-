@@ -16,6 +16,11 @@ const PORT = 3000;
 
 app.use(express.json({ limit: "50mb" }));
 
+// Text formatting helpers
+const toTitleCase = (str: string) =>
+  str.trim().replace(/\b\w/g, (char) => char.toUpperCase());
+
+
 // Firebase Initialization
 let db: FirebaseFirestore.Firestore | null = null;
 
@@ -179,9 +184,9 @@ app.post("/api/songs", async (req, res) => {
     }
 
     const docRef = await firestore.collection("songs").add({
-      title: title.trim(),
-      artist: artist.trim(),
-      lyrics: lyrics.trim(),
+      title: toTitleCase(title),
+      artist: toTitleCase(artist),
+      lyrics: lyrics.trim().toUpperCase(),
       chords: chords || "",
       tagIds: tags,
       video_url: video_url || "",
@@ -203,13 +208,43 @@ app.put("/api/songs/:id", async (req, res) => {
   const { id } = req.params;
   const { title, artist, lyrics, chords, tags, video_url } = req.body;
 
+  // Required field validation
+  const missingFields: string[] = [];
+  if (!title?.trim()) missingFields.push("Title");
+  if (!artist?.trim()) missingFields.push("Artist");
+  if (!lyrics?.trim()) missingFields.push("Lyrics");
+  if (!tags || tags.length === 0) missingFields.push("Tags (at least one)");
+  if (missingFields.length > 0) {
+    return res.status(400).json({
+      error: `The following required fields are missing: ${missingFields.join(", ")}.`,
+    });
+  }
+
   try {
+    // Duplicate check: same title + artist as another song (exclude self)
+    const existing = await firestore.collection("songs").get();
+    const normalizedTitle = title.trim().toLowerCase();
+    const normalizedArtist = artist.trim().toLowerCase();
+    const duplicate = existing.docs.find((doc) => {
+      if (doc.id === id) return false; // skip self
+      const d = doc.data();
+      return (
+        (d.title || "").trim().toLowerCase() === normalizedTitle &&
+        (d.artist || "").trim().toLowerCase() === normalizedArtist
+      );
+    });
+    if (duplicate) {
+      return res.status(409).json({
+        error: `Duplicate song detected! "${title}" by "${artist}" already exists in the database.`,
+      });
+    }
+
     await firestore.collection("songs").doc(id).update({
-      title,
-      artist: artist || "",
-      lyrics: lyrics || "",
+      title: toTitleCase(title),
+      artist: toTitleCase(artist),
+      lyrics: lyrics.trim().toUpperCase(),
       chords: chords || "",
-      tagIds: tags || [],
+      tagIds: tags,
       video_url: video_url || "",
       updated_at: admin.firestore.FieldValue.serverTimestamp()
     });
@@ -245,10 +280,10 @@ app.get("/api/tags", async (req, res) => {
 
     // Ensure default tags exist and remove duplicates
     const defaultTags = [
-      { name: "Joyful", color: "bg-yellow-100 text-yellow-800" },
-      { name: "Solemn", color: "bg-indigo-100 text-indigo-800" },
-      { name: "English", color: "bg-blue-100 text-blue-800" },
-      { name: "Tagalog", color: "bg-red-100 text-red-800" }
+      { name: "English, Solemn", color: "bg-violet-100 text-violet-700" },
+      { name: "English, Joyful", color: "bg-emerald-100 text-emerald-700" },
+      { name: "Tagalog, Solemn", color: "bg-rose-100 text-rose-700" },
+      { name: "Tagalog, Joyful", color: "bg-amber-100 text-amber-700" },
     ];
 
     let changed = false;

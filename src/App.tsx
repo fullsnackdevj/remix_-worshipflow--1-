@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, Moon, Sun, ImagePlus, Loader2, Youtube, ExternalLink, Printer, CheckSquare, Square, Check } from "lucide-react";
+import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, Youtube, ExternalLink, Printer, CheckSquare, Square, Check, Filter } from "lucide-react";
 import { Song, Tag } from "./types";
 
 const CustomYoutubeIcon = ({ size = 24, className = "" }: { size?: number, className?: string }) => (
@@ -22,7 +22,9 @@ export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedTagId, setSelectedTagId] = useState<string | null>(null);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const filterDropdownRef = useRef<HTMLDivElement>(null);
   const [songs, setSongs] = useState<Song[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
 
@@ -65,7 +67,18 @@ export default function App() {
 
   useEffect(() => {
     fetchSongs();
-  }, [searchQuery, selectedTagId]);
+  }, [searchQuery, selectedTagIds]);
+
+  // Close filter dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (filterDropdownRef.current && !filterDropdownRef.current.contains(e.target as Node)) {
+        setIsFilterOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -134,19 +147,28 @@ export default function App() {
     try {
       const url = new URL("/api/songs", window.location.origin);
       if (searchQuery) url.searchParams.append("search", searchQuery);
-      if (selectedTagId && selectedTagId !== "recently-added") url.searchParams.append("tagId", selectedTagId);
 
       const res = await fetch(url.toString());
       const data = await res.json();
       if (Array.isArray(data)) {
         let processedSongs = data;
-        if (selectedTagId === "recently-added") {
-          processedSongs = [...data].sort((a, b) => {
-            const dateA = new Date(a.created_at).getTime();
-            const dateB = new Date(b.created_at).getTime();
-            return dateB - dateA;
+
+        // Apply multi-tag filter client-side
+        const tagFilters = selectedTagIds.filter(id => id !== "recently-added");
+        const recentlyAdded = selectedTagIds.includes("recently-added");
+
+        if (tagFilters.length > 0) {
+          processedSongs = processedSongs.filter((song: any) =>
+            tagFilters.every(tagId => song.tagIds?.includes(tagId))
+          );
+        }
+
+        if (recentlyAdded) {
+          processedSongs = [...processedSongs].sort((a, b) => {
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
           });
         }
+
         setSongs(processedSongs);
       } else {
         setSongs([]);
@@ -183,13 +205,11 @@ export default function App() {
   };
 
   const handleSaveSong = async () => {
-    // Client-side validation first
-    if (!selectedSong?.id) {
-      const errors = validateForm();
-      if (Object.keys(errors).length > 0) {
-        setFormErrors(errors);
-        return;
-      }
+    // Validate required fields for both new songs and edits
+    const errors = validateForm();
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      return;
     }
     setFormErrors({});
 
@@ -720,42 +740,10 @@ export default function App() {
                 <div className="space-y-6">
                   {/* Filter & Search Bar */}
                   {!isEditing && !selectedSong && (
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                      <div className="flex items-center gap-2 overflow-x-auto pb-2 lg:pb-0 scrollbar-hide">
-                        <button
-                          onClick={() => setSelectedTagId(null)}
-                          className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap border ${selectedTagId === null
-                            ? "bg-indigo-600 text-white border-transparent"
-                            : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
-                            }`}
-                        >
-                          All Songs
-                        </button>
-                        <button
-                          onClick={() => setSelectedTagId("recently-added")}
-                          className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap border ${selectedTagId === "recently-added"
-                            ? "bg-indigo-600 text-white border-transparent"
-                            : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
-                            }`}
-                        >
-                          Recently Added
-                        </button>
-                        {Array.isArray(tags) && tags.map((tag) => (
-                          <button
-                            key={tag.id}
-                            onClick={() => setSelectedTagId(tag.id === selectedTagId ? null : tag.id)}
-                            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap border ${selectedTagId === tag.id
-                              ? `${tag.color} border-transparent shadow-sm`
-                              : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
-                              }`}
-                          >
-                            {tag.name}
-                          </button>
-                        ))}
-                      </div>
-
+                    <div className="flex flex-col gap-3">
+                      {/* Row 1: Search + Actions */}
                       <div className="flex items-center gap-3">
-                        <div className="relative flex-1 sm:w-64">
+                        <div className="relative flex-1">
                           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                           <input
                             type="text"
@@ -766,23 +754,20 @@ export default function App() {
                           />
                         </div>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 shrink-0">
                           {isSelectionMode ? (
                             <>
                               <button
                                 onClick={handleBulkDelete}
                                 disabled={selectedSongIds.length === 0}
-                                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors font-medium shadow-sm text-sm shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors font-medium shadow-sm text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 <Trash2 size={18} />
                                 <span>Delete ({selectedSongIds.length})</span>
                               </button>
                               <button
-                                onClick={() => {
-                                  setIsSelectionMode(false);
-                                  setSelectedSongIds([]);
-                                }}
-                                className="flex items-center gap-2 px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-medium text-sm shrink-0"
+                                onClick={() => { setIsSelectionMode(false); setSelectedSongIds([]); }}
+                                className="flex items-center gap-2 px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-medium text-sm"
                               >
                                 <X size={18} />
                                 <span>Cancel</span>
@@ -802,7 +787,7 @@ export default function App() {
                               </button>
                               <button
                                 onClick={() => openEditor()}
-                                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium shadow-sm text-sm shrink-0"
+                                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium shadow-sm text-sm"
                               >
                                 <Plus size={18} />
                                 <span>Add Song</span>
@@ -811,8 +796,88 @@ export default function App() {
                           )}
                         </div>
                       </div>
+
+                      {/* Row 2: Multi-select Filter Dropdown */}
+                      <div className="relative" ref={filterDropdownRef}>
+                        <button
+                          onClick={() => setIsFilterOpen(prev => !prev)}
+                          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-all ${selectedTagIds.length > 0
+                            ? "bg-indigo-600 text-white border-transparent shadow-sm"
+                            : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-indigo-300 hover:text-indigo-600 dark:hover:text-indigo-400"
+                            }`}
+                        >
+                          <Filter size={15} />
+                          <span>
+                            {selectedTagIds.length === 0
+                              ? "Filter"
+                              : `${selectedTagIds.length} Filter${selectedTagIds.length > 1 ? "s" : ""} Active`}
+                          </span>
+                          {selectedTagIds.length > 0 && (
+                            <span
+                              onClick={(e) => { e.stopPropagation(); setSelectedTagIds([]); }}
+                              className="ml-1 hover:opacity-70 transition-opacity"
+                              role="button"
+                              title="Clear filters"
+                            >
+                              <X size={13} />
+                            </span>
+                          )}
+                          <ChevronDown size={15} className={`transition-transform ${isFilterOpen ? "rotate-180" : ""}`} />
+                        </button>
+
+                        {isFilterOpen && (
+                          <div className="absolute left-0 top-full mt-2 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-xl z-50 overflow-hidden">
+                            <div className="p-2">
+                              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-3 py-2">Sort</p>
+                              <button
+                                onClick={() => setSelectedTagIds(prev =>
+                                  prev.includes("recently-added") ? prev.filter(id => id !== "recently-added") : [...prev, "recently-added"]
+                                )}
+                                className="flex items-center gap-3 w-full px-3 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm text-gray-700 dark:text-gray-300"
+                              >
+                                <div className={`w-4 h-4 rounded flex items-center justify-center border-2 transition-colors shrink-0 ${selectedTagIds.includes("recently-added")
+                                  ? "bg-indigo-600 border-indigo-600"
+                                  : "border-gray-300 dark:border-gray-600"
+                                  }`}>
+                                  {selectedTagIds.includes("recently-added") && <Check size={10} className="text-white" strokeWidth={3} />}
+                                </div>
+                                <span>Recently Added</span>
+                              </button>
+
+                              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-3 pt-3 pb-2 mt-1 border-t border-gray-100 dark:border-gray-700">Tags</p>
+                              {Array.isArray(tags) && tags.map((tag) => (
+                                <button
+                                  key={tag.id}
+                                  onClick={() => setSelectedTagIds(prev =>
+                                    prev.includes(tag.id) ? prev.filter(id => id !== tag.id) : [...prev, tag.id]
+                                  )}
+                                  className="flex items-center gap-3 w-full px-3 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm text-gray-700 dark:text-gray-300"
+                                >
+                                  <div className={`w-4 h-4 rounded flex items-center justify-center border-2 transition-colors shrink-0 ${selectedTagIds.includes(tag.id)
+                                    ? "bg-indigo-600 border-indigo-600"
+                                    : "border-gray-300 dark:border-gray-600"
+                                    }`}>
+                                    {selectedTagIds.includes(tag.id) && <Check size={10} className="text-white" strokeWidth={3} />}
+                                  </div>
+                                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tag.color}`}>{tag.name}</span>
+                                </button>
+                              ))}
+
+                              {selectedTagIds.length > 0 && (
+                                <button
+                                  onClick={() => setSelectedTagIds([])}
+                                  className="w-full mt-2 px-3 py-2 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors font-medium border-t border-gray-100 dark:border-gray-700"
+                                >
+                                  Clear all filters
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
+
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
                     {Array.isArray(songs) && songs.map((song) => (
