@@ -39,6 +39,7 @@ export default function App() {
   const [isOcrLoading, setIsOcrLoading] = useState<"lyrics" | "chords" | null>(null);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedSongIds, setSelectedSongIds] = useState<string[]>([]);
+  const [formErrors, setFormErrors] = useState<{ title?: string; artist?: string; lyrics?: string; tags?: string }>({});
 
   const lyricsInputRef = useRef<HTMLInputElement>(null);
   const chordsInputRef = useRef<HTMLInputElement>(null);
@@ -172,7 +173,26 @@ export default function App() {
   };
 
 
+  const validateForm = () => {
+    const errors: { title?: string; artist?: string; lyrics?: string; tags?: string } = {};
+    if (!editTitle.trim()) errors.title = "Title is required.";
+    if (!editArtist.trim()) errors.artist = "Artist is required.";
+    if (!editLyrics.trim() || editLyrics.trim() === "Verse:\n\nPre Chorus:\n\nChorus:\n\nBridge:") errors.lyrics = "Lyrics are required.";
+    if (editTags.length === 0) errors.tags = "Please select at least one tag.";
+    return errors;
+  };
+
   const handleSaveSong = async () => {
+    // Client-side validation first
+    if (!selectedSong?.id) {
+      const errors = validateForm();
+      if (Object.keys(errors).length > 0) {
+        setFormErrors(errors);
+        return;
+      }
+    }
+    setFormErrors({});
+
     const payload = {
       title: editTitle,
       artist: editArtist,
@@ -295,6 +315,7 @@ export default function App() {
       setEditTags([]);
     }
     setIsEditing(true);
+    setFormErrors({});
   };
 
   const toggleTagSelection = (tagId: string) => {
@@ -453,24 +474,30 @@ export default function App() {
                   <div className="space-y-6">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Title</label>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          Title <span className="text-red-500">*</span>
+                        </label>
                         <input
                           type="text"
                           value={editTitle}
-                          onChange={(e) => setEditTitle(e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none"
+                          onChange={(e) => { setEditTitle(e.target.value); if (formErrors.title) setFormErrors(p => ({ ...p, title: undefined })); }}
+                          className={`w-full px-4 py-2 border ${formErrors.title ? "border-red-400 focus:border-red-400 focus:ring-red-200" : "border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-indigo-200"} bg-white dark:bg-gray-700 rounded-xl focus:ring-2 outline-none`}
                           placeholder="Song Title"
                         />
+                        {formErrors.title && <p className="mt-1 text-xs text-red-500">{formErrors.title}</p>}
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Artist</label>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          Artist <span className="text-red-500">*</span>
+                        </label>
                         <input
                           type="text"
                           value={editArtist}
-                          onChange={(e) => setEditArtist(e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none"
+                          onChange={(e) => { setEditArtist(e.target.value); if (formErrors.artist) setFormErrors(p => ({ ...p, artist: undefined })); }}
+                          className={`w-full px-4 py-2 border ${formErrors.artist ? "border-red-400 focus:border-red-400 focus:ring-red-200" : "border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-indigo-200"} bg-white dark:bg-gray-700 rounded-xl focus:ring-2 outline-none`}
                           placeholder="Artist Name"
                         />
+                        {formErrors.artist && <p className="mt-1 text-xs text-red-500">{formErrors.artist}</p>}
                       </div>
                     </div>
 
@@ -486,15 +513,17 @@ export default function App() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tags</label>
-                      <div className="flex flex-wrap gap-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Tags <span className="text-red-500">*</span>
+                      </label>
+                      <div className={`flex flex-wrap gap-2 p-2 rounded-xl ${formErrors.tags ? "border border-red-400" : ""}`}>
                         {tags.map((tag) => (
                           <button
                             key={tag.id}
-                            onClick={() => toggleTagSelection(tag.id)}
+                            onClick={() => { toggleTagSelection(tag.id); if (formErrors.tags) setFormErrors(p => ({ ...p, tags: undefined })); }}
                             className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium transition-colors border ${editTags.includes(tag.id)
-                                ? `${tag.color} border-transparent`
-                                : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
+                              ? `${tag.color} border-transparent`
+                              : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
                               }`}
                           >
                             <TagIcon size={14} />
@@ -502,12 +531,15 @@ export default function App() {
                           </button>
                         ))}
                       </div>
+                      {formErrors.tags && <p className="mt-1 text-xs text-red-500">{formErrors.tags}</p>}
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Lyrics</label>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Lyrics <span className="text-red-500">*</span>
+                          </label>
                           <button
                             type="button"
                             onClick={() => lyricsInputRef.current?.click()}
@@ -531,11 +563,12 @@ export default function App() {
                         </div>
                         <textarea
                           value={editLyrics}
-                          onChange={(e) => setEditLyrics(e.target.value)}
+                          onChange={(e) => { setEditLyrics(e.target.value); if (formErrors.lyrics) setFormErrors(p => ({ ...p, lyrics: undefined })); }}
                           rows={15}
-                          className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none font-sans resize-none"
+                          className={`w-full px-4 py-3 border ${formErrors.lyrics ? "border-red-400 focus:border-red-400 focus:ring-red-200" : "border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-indigo-200"} bg-white dark:bg-gray-700 rounded-xl focus:ring-2 outline-none font-sans resize-none`}
                           placeholder="Paste lyrics here..."
                         />
+                        {formErrors.lyrics && <p className="mt-1 text-xs text-red-500">{formErrors.lyrics}</p>}
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-1">
@@ -580,8 +613,7 @@ export default function App() {
                       </button>
                       <button
                         onClick={handleSaveSong}
-                        disabled={!editTitle.trim()}
-                        className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-medium transition-colors"
                       >
                         <Save size={18} />
                         Save Song
@@ -693,8 +725,8 @@ export default function App() {
                         <button
                           onClick={() => setSelectedTagId(null)}
                           className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap border ${selectedTagId === null
-                              ? "bg-indigo-600 text-white border-transparent"
-                              : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
+                            ? "bg-indigo-600 text-white border-transparent"
+                            : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
                             }`}
                         >
                           All Songs
@@ -702,8 +734,8 @@ export default function App() {
                         <button
                           onClick={() => setSelectedTagId("recently-added")}
                           className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap border ${selectedTagId === "recently-added"
-                              ? "bg-indigo-600 text-white border-transparent"
-                              : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
+                            ? "bg-indigo-600 text-white border-transparent"
+                            : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
                             }`}
                         >
                           Recently Added
@@ -713,8 +745,8 @@ export default function App() {
                             key={tag.id}
                             onClick={() => setSelectedTagId(tag.id === selectedTagId ? null : tag.id)}
                             className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap border ${selectedTagId === tag.id
-                                ? `${tag.color} border-transparent shadow-sm`
-                                : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
+                              ? `${tag.color} border-transparent shadow-sm`
+                              : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
                               }`}
                           >
                             {tag.name}
@@ -788,8 +820,8 @@ export default function App() {
                         key={song.id}
                         onClick={() => isSelectionMode ? toggleSongSelection(song.id) : setSelectedSong(song)}
                         className={`bg-white dark:bg-gray-800 rounded-2xl p-6 border transition-all cursor-pointer group flex flex-col h-full relative ${selectedSongIds.includes(song.id)
-                            ? "border-indigo-500 ring-2 ring-indigo-200 dark:ring-indigo-900 shadow-md"
-                            : "border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-500"
+                          ? "border-indigo-500 ring-2 ring-indigo-200 dark:ring-indigo-900 shadow-md"
+                          : "border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-500"
                           }`}
                       >
                         {isSelectionMode && (

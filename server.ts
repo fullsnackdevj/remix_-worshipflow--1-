@@ -148,30 +148,42 @@ app.post("/api/songs", async (req, res) => {
 
   const { title, artist, lyrics, chords, tags, video_url } = req.body;
 
+  // Required field validation
+  const missingFields: string[] = [];
+  if (!title?.trim()) missingFields.push("Title");
+  if (!artist?.trim()) missingFields.push("Artist");
+  if (!lyrics?.trim()) missingFields.push("Lyrics");
+  if (!tags || tags.length === 0) missingFields.push("Tags (at least one)");
+  if (missingFields.length > 0) {
+    return res.status(400).json({
+      error: `The following required fields are missing: ${missingFields.join(", ")}.`,
+    });
+  }
+
   try {
-    // Duplicate check: same title (case-insensitive) AND same lyrics (trimmed)
+    // Duplicate check: same title (case-insensitive) AND same artist (case-insensitive)
     const existing = await firestore.collection("songs").get();
-    const normalizedTitle = (title || "").trim().toLowerCase();
-    const normalizedLyrics = (lyrics || "").trim().toLowerCase();
+    const normalizedTitle = title.trim().toLowerCase();
+    const normalizedArtist = artist.trim().toLowerCase();
     const duplicate = existing.docs.find((doc) => {
       const d = doc.data();
       return (
         (d.title || "").trim().toLowerCase() === normalizedTitle &&
-        (d.lyrics || "").trim().toLowerCase() === normalizedLyrics
+        (d.artist || "").trim().toLowerCase() === normalizedArtist
       );
     });
     if (duplicate) {
       return res.status(409).json({
-        error: `Duplicate song detected! "${title}" already exists in the database with the same lyrics.`,
+        error: `Duplicate song detected! "${title}" by "${artist}" already exists in the database.`,
       });
     }
 
     const docRef = await firestore.collection("songs").add({
-      title,
-      artist: artist || "",
-      lyrics: lyrics || "",
+      title: title.trim(),
+      artist: artist.trim(),
+      lyrics: lyrics.trim(),
       chords: chords || "",
-      tagIds: tags || [],
+      tagIds: tags,
       video_url: video_url || "",
       created_at: admin.firestore.FieldValue.serverTimestamp(),
       updated_at: admin.firestore.FieldValue.serverTimestamp()
