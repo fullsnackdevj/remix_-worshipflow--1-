@@ -405,7 +405,7 @@ export default function App() {
       )}
 
       {/* Sidebar */}
-      <div className={`fixed lg:static inset-y-0 left-0 z-30 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col transition-all duration-300 transform ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+      <div className={`relative fixed lg:static inset-y-0 left-0 z-30 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col transition-all duration-300 transform ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         } ${isSidebarCollapsed ? "w-20" : "w-64"}`}>
 
         <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between h-16">
@@ -437,30 +437,28 @@ export default function App() {
           </div>
         </nav>
 
-        <div className="p-3 border-t border-gray-200 dark:border-gray-800 flex flex-col items-center gap-2">
+        <div className="p-3 border-t border-gray-200 dark:border-gray-800 flex items-center justify-center gap-2">
           <button
             onClick={() => setIsDarkMode(!isDarkMode)}
-            className="flex w-full items-center justify-center p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:text-gray-300 dark:hover:bg-gray-800 rounded-lg transition-colors"
+            className="flex items-center justify-center p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:text-gray-300 dark:hover:bg-gray-800 rounded-lg transition-colors"
             title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
           >
             {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
           </button>
-          <button
-            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-            className="hidden lg:flex w-full items-center justify-center p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:text-gray-300 dark:hover:bg-gray-800 rounded-lg transition-colors"
-          >
-            {isSidebarCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
-          </button>
-          <div className="text-xs text-gray-400 font-mono">
-            {isSidebarCollapsed ? "v1.6.1" : "Version 1.6.1"}
-          </div>
         </div>
+        {/* Sidebar collapse toggle — floats on the border line */}
+        <button
+          onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+          className="hidden lg:flex absolute -right-3.5 top-8 -translate-y-1/2 z-40 w-7 h-7 items-center justify-center rounded-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-300 shadow-sm transition-all"
+        >
+          {isSidebarCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+        </button>
       </div>
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header */}
-        <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 p-4 flex items-center gap-4 h-16 shrink-0">
+        <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 py-4 px-4 sm:px-6 flex items-center gap-4 h-16 shrink-0">
           <button
             className="lg:hidden p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
             onClick={() => setIsMobileMenuOpen(true)}
@@ -468,11 +466,8 @@ export default function App() {
             <Menu size={20} />
           </button>
 
-          <div className="flex-1 flex items-center justify-between">
+          <div className="flex-1 flex items-center">
             <h1 className="text-xl font-bold text-gray-900 dark:text-white">Song Management</h1>
-            <div className="text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full">
-              {songs.length} {songs.length === 1 ? 'Song' : 'Songs'} Total
-            </div>
           </div>
         </header>
 
@@ -548,10 +543,10 @@ export default function App() {
                               disabled={isDisabled}
                               onClick={() => { toggleTagSelection(tag.id); if (formErrors.tags) setFormErrors(p => ({ ...p, tags: undefined })); }}
                               className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium transition-colors border ${isSelected
-                                  ? `${tag.color} border-transparent ring-2 ring-offset-1 ring-indigo-400`
-                                  : isDisabled
-                                    ? "bg-gray-100 dark:bg-gray-800 text-gray-300 dark:text-gray-600 border-gray-200 dark:border-gray-700 opacity-40 cursor-not-allowed"
-                                    : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
+                                ? `${tag.color} border-transparent ring-2 ring-offset-1 ring-indigo-400`
+                                : isDisabled
+                                  ? "bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-400 border-gray-300 dark:border-gray-500 opacity-65 cursor-not-allowed"
+                                  : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
                                 }`}
                             >
                               <TagIcon size={14} />
@@ -565,68 +560,96 @@ export default function App() {
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                       <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                            Lyrics <span className="text-red-500">*</span>
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() => lyricsInputRef.current?.click()}
-                            className="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
-                            disabled={!!isOcrLoading}
-                          >
-                            {isOcrLoading === "lyrics" ? (
-                              <Loader2 size={14} className="animate-spin" />
-                            ) : (
-                              <ImagePlus size={14} />
-                            )}
-                            <span>Upload Screenshot</span>
-                          </button>
-                          <input
-                            type="file"
-                            ref={lyricsInputRef}
-                            onChange={(e) => handleImageUpload(e, "lyrics")}
-                            className="hidden"
-                            accept="image/*"
-                          />
-                        </div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          Lyrics <span className="text-red-500">*</span>
+                        </label>
+
+                        {/* Upload Zone — Lyrics */}
+                        <button
+                          type="button"
+                          onClick={() => lyricsInputRef.current?.click()}
+                          disabled={!!isOcrLoading}
+                          className="w-full mb-3 group relative flex flex-col items-center justify-center gap-2 px-4 py-5 rounded-xl border-2 border-dashed border-indigo-300 dark:border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/20 hover:border-indigo-500 dark:hover:border-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          {isOcrLoading === "lyrics" ? (
+                            <>
+                              <Loader2 size={28} className="text-indigo-500 animate-spin" />
+                              <p className="text-sm font-medium text-indigo-600 dark:text-indigo-400">Extracting text from image...</p>
+                            </>
+                          ) : (
+                            <>
+                              <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center group-hover:scale-110 transition-transform duration-200">
+                                <ImagePlus size={20} className="text-indigo-600 dark:text-indigo-400" />
+                              </div>
+                              <div className="text-center">
+                                <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">Drop an image or click to upload</p>
+                                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Supports PNG, JPG, WEBP — AI will extract lyrics</p>
+                              </div>
+                              <span className="px-3 py-1 text-xs font-medium bg-indigo-600 text-white rounded-full group-hover:bg-indigo-700 transition-colors">
+                                Upload Screenshot
+                              </span>
+                            </>
+                          )}
+                        </button>
+                        <input
+                          type="file"
+                          ref={lyricsInputRef}
+                          onChange={(e) => handleImageUpload(e, "lyrics")}
+                          className="hidden"
+                          accept="image/*"
+                        />
+
                         <textarea
                           value={editLyrics}
                           onChange={(e) => { setEditLyrics(e.target.value); if (formErrors.lyrics) setFormErrors(p => ({ ...p, lyrics: undefined })); }}
-                          rows={15}
+                          rows={12}
                           className={`w-full px-4 py-3 border ${formErrors.lyrics ? "border-red-400 focus:border-red-400 focus:ring-red-200" : "border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-indigo-200"} bg-white dark:bg-gray-700 rounded-xl focus:ring-2 outline-none font-sans resize-none`}
                           placeholder="Paste lyrics here..."
                         />
                         {formErrors.lyrics && <p className="mt-1 text-xs text-red-500">{formErrors.lyrics}</p>}
                       </div>
                       <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Chords</label>
-                          <button
-                            type="button"
-                            onClick={() => chordsInputRef.current?.click()}
-                            className="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
-                            disabled={!!isOcrLoading}
-                          >
-                            {isOcrLoading === "chords" ? (
-                              <Loader2 size={14} className="animate-spin" />
-                            ) : (
-                              <ImagePlus size={14} />
-                            )}
-                            <span>Upload Screenshot</span>
-                          </button>
-                          <input
-                            type="file"
-                            ref={chordsInputRef}
-                            onChange={(e) => handleImageUpload(e, "chords")}
-                            className="hidden"
-                            accept="image/*"
-                          />
-                        </div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Chords</label>
+
+                        {/* Upload Zone — Chords */}
+                        <button
+                          type="button"
+                          onClick={() => chordsInputRef.current?.click()}
+                          disabled={!!isOcrLoading}
+                          className="w-full mb-3 group relative flex flex-col items-center justify-center gap-2 px-4 py-5 rounded-xl border-2 border-dashed border-purple-300 dark:border-purple-700 bg-purple-50/50 dark:bg-purple-950/20 hover:border-purple-500 dark:hover:border-purple-500 hover:bg-purple-50 dark:hover:bg-purple-950/40 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          {isOcrLoading === "chords" ? (
+                            <>
+                              <Loader2 size={28} className="text-purple-500 animate-spin" />
+                              <p className="text-sm font-medium text-purple-600 dark:text-purple-400">Extracting chords from image...</p>
+                            </>
+                          ) : (
+                            <>
+                              <div className="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/50 flex items-center justify-center group-hover:scale-110 transition-transform duration-200">
+                                <ImagePlus size={20} className="text-purple-600 dark:text-purple-400" />
+                              </div>
+                              <div className="text-center">
+                                <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">Drop an image or click to upload</p>
+                                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Supports PNG, JPG, WEBP — AI will extract chords</p>
+                              </div>
+                              <span className="px-3 py-1 text-xs font-medium bg-purple-600 text-white rounded-full group-hover:bg-purple-700 transition-colors">
+                                Upload Screenshot
+                              </span>
+                            </>
+                          )}
+                        </button>
+                        <input
+                          type="file"
+                          ref={chordsInputRef}
+                          onChange={(e) => handleImageUpload(e, "chords")}
+                          className="hidden"
+                          accept="image/*"
+                        />
+
                         <textarea
                           value={editChords}
                           onChange={(e) => setEditChords(e.target.value)}
-                          rows={15}
+                          rows={12}
                           className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none font-mono text-sm resize-none"
                           placeholder="Paste chords here..."
                         />
@@ -651,101 +674,89 @@ export default function App() {
                   </div>
                 </div>
               ) : selectedSong ? (
-                <div className="max-w-4xl mx-auto bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 sm:p-8">
-                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-8">
-                    <div>
-                      <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-1">{selectedSong.title}</h2>
-                      {selectedSong.artist && (
-                        <p className="text-lg text-indigo-600 dark:text-indigo-400 font-medium mb-1">
-                          {selectedSong.artist}
-                        </p>
-                      )}
-                      <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">
-                        Added on {selectedSong.created_at ? new Date(selectedSong.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : "Unknown date"}
-                      </p>
-                      <p className="text-xs text-indigo-500 dark:text-indigo-400 mb-3 font-medium">
-                        Last updated: {selectedSong.updated_at ? new Date(selectedSong.updated_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : "Never"}
-                      </p>
-                      <div className="flex flex-wrap gap-2 mb-4">
-                        {selectedSong.tags.map((tag) => (
-                          <span key={tag.id} className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${tag.color}`}>
-                            {tag.name}
-                          </span>
+                <div className="max-w-4xl mx-auto space-y-4">
+
+                  {/* Minimalist Header Card */}
+                  <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6 sm:p-8">
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {selectedSong.tags.map((tag) => (
+                            <span key={tag.id} className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${tag.color}`}>
+                              {tag.name}
+                            </span>
+                          ))}
+                        </div>
+                        <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-1 leading-tight">{selectedSong.title}</h2>
+                        {selectedSong.artist && (
+                          <p className="text-indigo-600 dark:text-indigo-400 font-medium text-base">{selectedSong.artist}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {[
+                          { icon: <Printer size={18} />, label: "Print", onClick: () => handlePrint(selectedSong), hoverClass: "hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/40" },
+                          { icon: <Edit size={18} />, label: "Edit", onClick: () => openEditor(selectedSong), hoverClass: "hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/40" },
+                          { icon: <Trash2 size={18} />, label: "Delete", onClick: () => handleDeleteSong(selectedSong.id), hoverClass: "hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/40" },
+                          { icon: <X size={18} />, label: "Close", onClick: () => setSelectedSong(null), hoverClass: "hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700" },
+                        ].map(({ icon, label, onClick, hoverClass }) => (
+                          <button key={label} onClick={onClick} className={`relative group p-2.5 rounded-xl text-gray-400 dark:text-gray-500 ${hoverClass} transition-all duration-150`}>
+                            {icon}
+                            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">{label}</span>
+                          </button>
                         ))}
                       </div>
-                      {selectedSong.video_url && (
-                        <a
-                          href={selectedSong.video_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-xl hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors text-sm font-medium mb-4"
-                        >
-                          <CustomVideoBtnIcon size={20} />
-                          Watch Reference Video
-                          <ExternalLink size={14} className="opacity-50" />
-                        </a>
-                      )}
                     </div>
-                    <div className="flex items-center gap-2 self-end sm:self-auto">
-                      <button
-                        onClick={() => handlePrint(selectedSong)}
-                        className="p-2 text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 rounded-xl transition-colors relative group"
-                      >
-                        <Printer size={20} />
-                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">
-                          Print
-                        </span>
-                      </button>
-                      <button
-                        onClick={() => openEditor(selectedSong)}
-                        className="p-2 text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 rounded-xl transition-colors relative group"
-                      >
-                        <Edit size={20} />
-                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">
-                          Edit
-                        </span>
-                      </button>
-                      <button
-                        onClick={() => handleDeleteSong(selectedSong.id)}
-                        className="p-2 text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/50 rounded-xl transition-colors relative group"
-                      >
-                        <Trash2 size={20} />
-                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">
-                          Delete
-                        </span>
-                      </button>
-                      <button
-                        onClick={() => setSelectedSong(null)}
-                        className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors sm:ml-2 relative group"
-                      >
-                        <X size={20} />
-                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">
-                          Close
-                        </span>
-                      </button>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+                      <span className="text-xs text-gray-400 dark:text-gray-500">Added {selectedSong.created_at ? new Date(selectedSong.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : "Unknown"}</span>
+                      <span className="text-gray-200 dark:text-gray-600 text-xs hidden sm:inline">·</span>
+                      <span className="text-xs text-gray-400 dark:text-gray-500">Updated {selectedSong.updated_at ? new Date(selectedSong.updated_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : "Never"}</span>
+                      {selectedSong.video_url && (
+                        <>
+                          <span className="text-gray-200 dark:text-gray-600 text-xs hidden sm:inline">·</span>
+                          <a href={selectedSong.video_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 px-3 py-1 rounded-full transition-colors">
+                            <CustomVideoBtnIcon size={14} />
+                            Watch Reference Video
+                            <ExternalLink size={11} className="opacity-75" />
+                          </a>
+                        </>
+                      )}
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 border-t border-gray-200 dark:border-gray-700">
-                    <div className="p-6 sm:p-8 lg:border-r border-gray-200 dark:border-gray-700">
-                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-6 border-b border-gray-200 dark:border-gray-700 pb-2">
-                        Lyrics
-                      </h3>
-                      <pre className="whitespace-pre-wrap font-sans text-gray-700 dark:text-gray-300 leading-relaxed text-base sm:text-lg">
-                        {selectedSong.lyrics || "No lyrics added."}
-                      </pre>
+                  {/* Lyrics & Chords Cards */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col">
+                      <div className="flex items-center gap-2 px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+                        <div className="w-2 h-2 rounded-full bg-indigo-500" />
+                        <h3 className="font-bold text-gray-900 dark:text-white tracking-wide text-sm uppercase">Lyrics</h3>
+                      </div>
+                      <div className="p-6 flex-1 overflow-auto">
+                        <pre className="whitespace-pre-wrap font-sans text-gray-700 dark:text-gray-300 leading-relaxed text-base">{selectedSong.lyrics || "No lyrics added."}</pre>
+                      </div>
                     </div>
-                    <div className="p-6 sm:p-8">
-                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-6 border-b border-gray-200 dark:border-gray-700 pb-2">
-                        Chords
-                      </h3>
-                      <pre className="whitespace-pre-wrap font-mono text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
-                        {selectedSong.chords || "No chords added."}
-                      </pre>
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col">
+                      <div className="flex items-center gap-2 px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+                        <div className="w-2 h-2 rounded-full bg-purple-500" />
+                        <h3 className="font-bold text-gray-900 dark:text-white tracking-wide text-sm uppercase">Chords</h3>
+                      </div>
+                      <div className="p-6 flex-1 overflow-auto">
+                        {selectedSong.chords ? (
+                          <pre className="whitespace-pre-wrap font-mono text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{selectedSong.chords}</pre>
+                        ) : (
+                          <div className="h-full flex flex-col items-center justify-center text-center py-12 text-gray-400 dark:text-gray-600">
+                            <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center mb-3">
+                              <Music size={22} className="text-gray-400 dark:text-gray-500" />
+                            </div>
+                            <p className="text-sm font-medium">No chords added</p>
+                            <p className="text-xs mt-1 text-gray-300 dark:text-gray-600">Edit the song to add chord notations</p>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
               ) : (
+
                 <div className="space-y-6">
                   {/* Filter & Search Bar */}
                   {!isEditing && !selectedSong && (
@@ -806,87 +817,93 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* Row 2: Multi-select Filter Dropdown */}
-                      <div className="relative" ref={filterDropdownRef}>
-                        <button
-                          onClick={() => setIsFilterOpen(prev => !prev)}
-                          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-all ${selectedTagIds.length > 0
-                            ? "bg-indigo-600 text-white border-transparent shadow-sm"
-                            : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-indigo-300 hover:text-indigo-600 dark:hover:text-indigo-400"
-                            }`}
-                        >
-                          <Filter size={15} />
-                          <span>
-                            {selectedTagIds.length === 0
-                              ? "Filter"
-                              : `${selectedTagIds.length} Filter${selectedTagIds.length > 1 ? "s" : ""} Active`}
-                          </span>
-                          {selectedTagIds.length > 0 && (
-                            <span
-                              onClick={(e) => { e.stopPropagation(); setSelectedTagIds([]); }}
-                              className="ml-1 hover:opacity-70 transition-opacity"
-                              role="button"
-                              title="Clear filters"
-                            >
-                              <X size={13} />
+                      {/* Row 2: Multi-select Filter Dropdown + Total Songs */}
+                      <div className="flex items-center gap-3">
+                        <div className="relative" ref={filterDropdownRef}>
+                          <button
+                            onClick={() => setIsFilterOpen(prev => !prev)}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-all ${selectedTagIds.length > 0
+                              ? "bg-indigo-600 text-white border-transparent shadow-sm"
+                              : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-indigo-300 hover:text-indigo-600 dark:hover:text-indigo-400"
+                              }`}
+                          >
+                            <Filter size={15} />
+                            <span>
+                              {selectedTagIds.length === 0
+                                ? "Filter"
+                                : `${selectedTagIds.length} Filter${selectedTagIds.length > 1 ? "s" : ""} Active`}
                             </span>
-                          )}
-                          <ChevronDown size={15} className={`transition-transform ${isFilterOpen ? "rotate-180" : ""}`} />
-                        </button>
-
-                        {isFilterOpen && (
-                          <div className="absolute left-0 top-full mt-2 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-xl z-50 overflow-hidden">
-                            <div className="p-2">
-                              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-3 py-2">Sort</p>
-                              <button
-                                onClick={() => setSelectedTagIds(prev =>
-                                  prev.includes("recently-added") ? prev.filter(id => id !== "recently-added") : [...prev, "recently-added"]
-                                )}
-                                className="flex items-center gap-3 w-full px-3 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm text-gray-700 dark:text-gray-300"
+                            {selectedTagIds.length > 0 && (
+                              <span
+                                onClick={(e) => { e.stopPropagation(); setSelectedTagIds([]); }}
+                                className="ml-1 hover:opacity-70 transition-opacity"
+                                role="button"
+                                title="Clear filters"
                               >
-                                <div className={`w-4 h-4 rounded flex items-center justify-center border-2 transition-colors shrink-0 ${selectedTagIds.includes("recently-added")
-                                  ? "bg-indigo-600 border-indigo-600"
-                                  : "border-gray-300 dark:border-gray-600"
-                                  }`}>
-                                  {selectedTagIds.includes("recently-added") && <Check size={10} className="text-white" strokeWidth={3} />}
-                                </div>
-                                <span>Recently Added</span>
-                              </button>
+                                <X size={13} />
+                              </span>
+                            )}
+                            <ChevronDown size={15} className={`transition-transform ${isFilterOpen ? "rotate-180" : ""}`} />
+                          </button>
 
-                              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-3 pt-3 pb-2 mt-1 border-t border-gray-100 dark:border-gray-700">Tags</p>
-                              {Array.isArray(tags) && tags.map((tag) => (
+                          {isFilterOpen && (
+                            <div className="absolute left-0 top-full mt-2 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-xl z-50 overflow-hidden">
+                              <div className="p-2">
+                                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-3 py-2">Sort</p>
                                 <button
-                                  key={tag.id}
                                   onClick={() => setSelectedTagIds(prev =>
-                                    prev.includes(tag.id) ? prev.filter(id => id !== tag.id) : [...prev, tag.id]
+                                    prev.includes("recently-added") ? prev.filter(id => id !== "recently-added") : [...prev, "recently-added"]
                                   )}
                                   className="flex items-center gap-3 w-full px-3 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm text-gray-700 dark:text-gray-300"
                                 >
-                                  <div className={`w-4 h-4 rounded flex items-center justify-center border-2 transition-colors shrink-0 ${selectedTagIds.includes(tag.id)
+                                  <div className={`w-4 h-4 rounded flex items-center justify-center border-2 transition-colors shrink-0 ${selectedTagIds.includes("recently-added")
                                     ? "bg-indigo-600 border-indigo-600"
                                     : "border-gray-300 dark:border-gray-600"
                                     }`}>
-                                    {selectedTagIds.includes(tag.id) && <Check size={10} className="text-white" strokeWidth={3} />}
+                                    {selectedTagIds.includes("recently-added") && <Check size={10} className="text-white" strokeWidth={3} />}
                                   </div>
-                                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tag.color}`}>{tag.name}</span>
+                                  <span>Recently Added</span>
                                 </button>
-                              ))}
 
-                              {selectedTagIds.length > 0 && (
-                                <button
-                                  onClick={() => setSelectedTagIds([])}
-                                  className="w-full mt-2 px-3 py-2 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors font-medium border-t border-gray-100 dark:border-gray-700"
-                                >
-                                  Clear all filters
-                                </button>
-                              )}
+                                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-3 pt-3 pb-2 mt-1 border-t border-gray-100 dark:border-gray-700">Tags</p>
+                                {Array.isArray(tags) && tags.map((tag) => (
+                                  <button
+                                    key={tag.id}
+                                    onClick={() => setSelectedTagIds(prev =>
+                                      prev.includes(tag.id) ? prev.filter(id => id !== tag.id) : [...prev, tag.id]
+                                    )}
+                                    className="flex items-center gap-3 w-full px-3 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm text-gray-700 dark:text-gray-300"
+                                  >
+                                    <div className={`w-4 h-4 rounded flex items-center justify-center border-2 transition-colors shrink-0 ${selectedTagIds.includes(tag.id)
+                                      ? "bg-indigo-600 border-indigo-600"
+                                      : "border-gray-300 dark:border-gray-600"
+                                      }`}>
+                                      {selectedTagIds.includes(tag.id) && <Check size={10} className="text-white" strokeWidth={3} />}
+                                    </div>
+                                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tag.color}`}>{tag.name}</span>
+                                  </button>
+                                ))}
+
+                                {selectedTagIds.length > 0 && (
+                                  <button
+                                    onClick={() => setSelectedTagIds([])}
+                                    className="w-full mt-2 px-3 py-2 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors font-medium border-t border-gray-100 dark:border-gray-700"
+                                  >
+                                    Clear all filters
+                                  </button>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          )}
+                        </div>
+                        {/* Total Songs Count */}
+                        <div className="text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-xl whitespace-nowrap">
+                          {songs.length} {songs.length === 1 ? 'Song' : 'Songs'} Total
+                        </div>
                       </div>
+
                     </div>
                   )}
-
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
                     {Array.isArray(songs) && songs.map((song) => (
@@ -972,7 +989,7 @@ export default function App() {
             </div>
           </div>
         </main>
-      </div>
-    </div>
+      </div >
+    </div >
   );
 }
