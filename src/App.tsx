@@ -98,50 +98,45 @@ export default function App() {
   }, [isSelectionMode, selectedSong, isEditing]);
 
   const handlePrint = (song: Song) => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
+    const printHTML = `<!DOCTYPE html>
+<html>
+  <head>
+    <title>${song.title}${song.artist ? ` - ${song.artist}` : ''}</title>
+    <style>
+      body { font-family: sans-serif; padding: 32px; line-height: 1.6; color: #111; }
+      h1 { margin-bottom: 4px; font-size: 28px; }
+      h2 { color: #555; margin-top: 0; font-weight: normal; margin-bottom: 24px; font-size: 18px; }
+      .container { display: flex; gap: 40px; }
+      .column { flex: 1; min-width: 0; }
+      h3 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: #888; border-bottom: 1px solid #eee; padding-bottom: 6px; margin-bottom: 12px; }
+      pre { white-space: pre-wrap; font-family: inherit; font-size: 14px; margin: 0; }
+      .chords pre { font-family: monospace; background: #f5f5f5; padding: 12px; border-radius: 6px; font-size: 13px; }
+      @media (max-width: 500px) { .container { flex-direction: column; } }
+    </style>
+  </head>
+  <body>
+    <h1>${song.title}</h1>
+    ${song.artist ? `<h2>${song.artist}</h2>` : ''}
+    <div class="container">
+      <div class="column"><h3>Lyrics</h3><pre>${song.lyrics || 'No lyrics added.'}</pre></div>
+      <div class="column chords"><h3>Chords</h3><pre>${song.chords || 'No chords added.'}</pre></div>
+    </div>
+  </body>
+</html>`;
 
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>${song.title} - ${song.artist}</title>
-          <style>
-            body { font-family: sans-serif; padding: 40px; line-height: 1.6; }
-            h1 { margin-bottom: 5px; }
-            h2 { color: #666; margin-top: 0; font-weight: normal; margin-bottom: 20px; }
-            .container { display: flex; gap: 40px; }
-            .column { flex: 1; }
-            pre { white-space: pre-wrap; font-family: inherit; }
-            .chords { font-family: monospace; background: #f9f9f9; padding: 15px; border-radius: 5px; }
-            @media print {
-              .no-print { display: none; }
-            }
-          </style>
-        </head>
-        <body>
-          <h1>${song.title}</h1>
-          ${song.artist ? `<h2>${song.artist}</h2>` : ''}
-          <div class="container">
-            <div class="column">
-              <h3>Lyrics</h3>
-              <pre>${song.lyrics || 'No lyrics'}</pre>
-            </div>
-            <div class="column">
-              <h3>Chords</h3>
-              <pre class="chords">${song.chords || 'No chords'}</pre>
-            </div>
-          </div>
-          <script>
-            window.onload = () => {
-              window.print();
-              window.onafterprint = () => window.close();
-            };
-          </script>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
+    // Use hidden iframe — window.open is blocked on mobile browsers
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;border:none;visibility:hidden;';
+    document.body.appendChild(iframe);
+    const doc = iframe.contentWindow?.document;
+    if (!doc) { document.body.removeChild(iframe); return; }
+    doc.open(); doc.write(printHTML); doc.close();
+    setTimeout(() => {
+      try { iframe.contentWindow?.focus(); iframe.contentWindow?.print(); } catch (_) { }
+      setTimeout(() => { if (document.body.contains(iframe)) document.body.removeChild(iframe); }, 1000);
+    }, 300);
   };
+
 
   const fetchSongs = async () => {
     try {
