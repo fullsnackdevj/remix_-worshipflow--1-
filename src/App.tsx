@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, Youtube, ExternalLink, Printer, CheckSquare, Square, Check, Filter } from "lucide-react";
 import { Song, Tag } from "./types";
 
@@ -22,11 +22,15 @@ export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(true);
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const filterDropdownRef = useRef<HTMLDivElement>(null);
-  const [songs, setSongs] = useState<Song[]>([]);
+  // allSongs: the full cached list from server — never filtered directly
+  const [allSongs, setAllSongs] = useState<Song[]>([]);
+  const [isLoadingSongs, setIsLoadingSongs] = useState(true);
   const [tags, setTags] = useState<Tag[]>([]);
+  const fetchAbortRef = useRef<AbortController | null>(null);
 
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -61,13 +65,16 @@ export default function App() {
     }
   }, [isDarkMode]);
 
+  // Debounce the search query so filtering reacts ~300ms after the user stops typing
   useEffect(() => {
-    fetchTags();
-  }, []);
+    const timer = setTimeout(() => setDebouncedQuery(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   useEffect(() => {
+    fetchTags();
     fetchSongs();
-  }, [searchQuery, selectedTagIds]);
+  }, []); // load once on mount
 
   // Close filter dropdown on outside click
   useEffect(() => {
@@ -138,41 +145,71 @@ export default function App() {
   };
 
 
-  const fetchSongs = async () => {
+  const fetchSongs = useCallback(async () => {
+    // Cancel any in-flight request
+    if (fetchAbortRef.current) {
+      fetchAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    fetchAbortRef.current = controller;
+
+    setIsLoadingSongs(true);
     try {
       const url = new URL("/api/songs", window.location.origin);
-      if (searchQuery) url.searchParams.append("search", searchQuery);
-
-      const res = await fetch(url.toString());
+      const res = await fetch(url.toString(), { signal: controller.signal });
       const data = await res.json();
       if (Array.isArray(data)) {
-        let processedSongs = data;
-
-        // Apply multi-tag filter client-side
-        const tagFilters = selectedTagIds.filter(id => id !== "recently-added");
-        const recentlyAdded = selectedTagIds.includes("recently-added");
-
-        if (tagFilters.length > 0) {
-          processedSongs = processedSongs.filter((song: any) =>
-            tagFilters.every(tagId => song.tagIds?.includes(tagId))
-          );
-        }
-
-        if (recentlyAdded) {
-          processedSongs = [...processedSongs].sort((a, b) => {
-            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-          });
-        }
-
-        setSongs(processedSongs);
+        setAllSongs(data);
       } else {
-        setSongs([]);
+        setAllSongs([]);
       }
-    } catch (error) {
-      console.error("Failed to fetch songs", error);
-      setSongs([]);
+    } catch (error: any) {
+      if (error?.name !== "AbortError") {
+        console.error("Failed to fetch songs", error);
+        setAllSongs([]);
+      }
+    } finally {
+      if (!controller.signal.aborted) {
+        setIsLoadingSongs(false);
+      }
     }
-  };
+  }, []);
+
+  // Instant client-side filtering — no network, no stale results
+  const filteredSongs = useMemo(() => {
+    let result = allSongs;
+
+    // Text search across title, artist, lyrics, chords, and tags
+    if (debouncedQuery.trim()) {
+      const q = debouncedQuery.trim().toLowerCase();
+      result = result.filter(song =>
+        song.title?.toLowerCase().includes(q) ||
+        song.artist?.toLowerCase().includes(q) ||
+        (song.lyrics as any)?.toLowerCase().includes(q) ||
+        (song.chords as any)?.toLowerCase().includes(q) ||
+        song.tags?.some((t: any) => t.name?.toLowerCase().includes(q))
+      );
+    }
+
+    // Tag filters
+    const tagFilters = selectedTagIds.filter(id => id !== "recently-added");
+    const recentlyAdded = selectedTagIds.includes("recently-added");
+
+    if (tagFilters.length > 0) {
+      result = result.filter(song =>
+        tagFilters.every(tagId => (song as any).tagIds?.includes(tagId))
+      );
+    }
+
+    // Sort
+    if (recentlyAdded) {
+      result = [...result].sort((a, b) =>
+        new Date((b as any).created_at).getTime() - new Date((a as any).created_at).getTime()
+      );
+    }
+
+    return result;
+  }, [allSongs, debouncedQuery, selectedTagIds]);
 
   const fetchTags = async () => {
     try {
@@ -240,7 +277,7 @@ export default function App() {
 
       setIsEditing(false);
       setSelectedSong(null);
-      fetchSongs();
+      await fetchSongs(); // refresh the full cached list
     } catch (error: any) {
       console.error("Failed to save song", error);
       alert(error.message || "Failed to save song. Please check if Firebase is configured correctly.");
@@ -776,14 +813,33 @@ export default function App() {
                       {/* Row 1: Search + Actions */}
                       <div className="flex items-center gap-3">
                         <div className="relative flex-1">
-                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                          {/* Left icon: spinner while loading, search otherwise */}
+                          {isLoadingSongs ? (
+                            <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-indigo-400 animate-spin" width={18} height={18} viewBox="0 0 24 24" fill="none">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                            </svg>
+                          ) : (
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                          )}
                           <input
                             type="text"
                             placeholder="Search by title, artist, or tags..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900 transition-all outline-none text-sm dark:text-white"
+                            className="w-full pl-10 pr-8 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900 transition-all outline-none text-sm dark:text-white"
                           />
+                          {/* Clear button */}
+                          {searchQuery && (
+                            <button
+                              onClick={() => setSearchQuery("")}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                              title="Clear search"
+                              aria-label="Clear search"
+                            >
+                              <X size={14} />
+                            </button>
+                          )}
                         </div>
 
                         <div className="flex items-center gap-2 shrink-0">
@@ -911,7 +967,10 @@ export default function App() {
                         </div>
                         {/* Total Songs Count */}
                         <div className="text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-xl whitespace-nowrap">
-                          {songs.length} {songs.length === 1 ? 'Song' : 'Songs'} Total
+                          {debouncedQuery || selectedTagIds.length > 0
+                            ? <>{filteredSongs.length} of {allSongs.length} {allSongs.length === 1 ? 'Song' : 'Songs'}</>
+                            : <>{allSongs.length} {allSongs.length === 1 ? 'Song' : 'Songs'} Total</>
+                          }
                         </div>
                       </div>
 
@@ -919,7 +978,24 @@ export default function App() {
                   )}
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
-                    {Array.isArray(songs) && songs.map((song) => (
+                    {isLoadingSongs ? (
+                      // Skeleton loading cards
+                      Array.from({ length: 6 }).map((_, i) => (
+                        <div key={i} className="bg-white dark:bg-gray-800 rounded-2xl p-6 border border-gray-200 dark:border-gray-700 shadow-sm animate-pulse">
+                          <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded-lg mb-3 w-3/4" />
+                          <div className="h-3 bg-gray-100 dark:bg-gray-700 rounded-lg mb-4 w-1/2" />
+                          <div className="flex gap-2 mb-4">
+                            <div className="h-5 w-16 bg-gray-100 dark:bg-gray-700 rounded-full" />
+                            <div className="h-5 w-20 bg-gray-100 dark:bg-gray-700 rounded-full" />
+                          </div>
+                          <div className="space-y-2">
+                            <div className="h-3 bg-gray-100 dark:bg-gray-700 rounded w-full" />
+                            <div className="h-3 bg-gray-100 dark:bg-gray-700 rounded w-5/6" />
+                            <div className="h-3 bg-gray-100 dark:bg-gray-700 rounded w-4/6" />
+                          </div>
+                        </div>
+                      ))
+                    ) : Array.isArray(filteredSongs) && filteredSongs.map((song) => (
                       <div
                         key={song.id}
                         onClick={() => isSelectionMode ? toggleSongSelection(song.id) : setSelectedSong(song)}
@@ -987,13 +1063,23 @@ export default function App() {
                         </p>
                       </div>
                     ))}
-                    {(!Array.isArray(songs) || songs.length === 0) && (
+                    {!isLoadingSongs && (!Array.isArray(filteredSongs) || filteredSongs.length === 0) && (
                       <div className="col-span-full py-12 text-center">
                         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 mb-4">
                           <Search size={32} />
                         </div>
                         <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-1">No songs found</h3>
-                        <p className="text-gray-500 dark:text-gray-400">Try adjusting your search or filter.</p>
+                        <p className="text-gray-500 dark:text-gray-400">
+                          {debouncedQuery ? `No results for "${debouncedQuery}". Try a different search.` : "Try adjusting your search or filter."}
+                        </p>
+                        {debouncedQuery && (
+                          <button
+                            onClick={() => setSearchQuery("")}
+                            className="mt-3 px-4 py-2 text-sm text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-xl transition-colors font-medium"
+                          >
+                            Clear search
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
