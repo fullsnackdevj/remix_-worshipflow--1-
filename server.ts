@@ -352,6 +352,107 @@ app.delete("/api/tags/:id", async (req, res) => {
   }
 });
 
+// ─── Members API ────────────────────────────────────────────────────────────
+
+app.get("/api/members", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(500).json({ error: "Firebase not configured" });
+
+  try {
+    const snapshot = await firestore.collection("members").orderBy("name").get();
+    const members = snapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        created_at: data.created_at?.toDate?.()?.toISOString() || data.created_at,
+        updated_at: data.updated_at?.toDate?.()?.toISOString() || data.updated_at,
+      };
+    });
+    res.json(members);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to fetch members" });
+  }
+});
+
+app.post("/api/members", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(500).json({ error: "Firebase not configured" });
+
+  const { name, phone, photo, roles, status, notes } = req.body;
+
+  const missingFields: string[] = [];
+  if (!name?.trim()) missingFields.push("Name");
+  if (!phone?.trim()) missingFields.push("Phone");
+  if (missingFields.length > 0) {
+    return res.status(400).json({ error: `Missing required fields: ${missingFields.join(", ")}.` });
+  }
+
+  try {
+    const docRef = await firestore.collection("members").add({
+      name: toTitleCase(name),
+      phone: phone.trim(),
+      photo: photo || "",
+      roles: roles || [],
+      status: status || "active",
+      notes: notes || "",
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      updated_at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    res.status(201).json({ id: docRef.id });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to create member" });
+  }
+});
+
+app.put("/api/members/:id", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(500).json({ error: "Firebase not configured" });
+
+  const { id } = req.params;
+  const { name, phone, photo, roles, status, notes } = req.body;
+
+  const missingFields: string[] = [];
+  if (!name?.trim()) missingFields.push("Name");
+  if (!phone?.trim()) missingFields.push("Phone");
+  if (missingFields.length > 0) {
+    return res.status(400).json({ error: `Missing required fields: ${missingFields.join(", ")}.` });
+  }
+
+  try {
+    await firestore.collection("members").doc(id).update({
+      name: toTitleCase(name),
+      phone: phone.trim(),
+      photo: photo || "",
+      roles: roles || [],
+      status: status || "active",
+      notes: notes || "",
+      updated_at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to update member" });
+  }
+});
+
+app.delete("/api/members/:id", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(500).json({ error: "Firebase not configured" });
+
+  const { id } = req.params;
+  try {
+    await firestore.collection("members").doc(id).delete();
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to delete member" });
+  }
+});
+
+
 app.post("/api/ocr", async (req, res) => {
   try {
     const { base64Data, mimeType, type } = req.body;
