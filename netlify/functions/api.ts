@@ -325,5 +325,93 @@ Rules:
         }
     }
 
+    // ─── MEMBERS ────────────────────────────────────────────────────────────────
+    // GET /members
+    if (rawPath === "/members" && method === "GET") {
+        try {
+            const snapshot = await firestore.collection("members").orderBy("name").get();
+            const members = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    ...data,
+                    created_at: data.created_at?.toDate?.()?.toISOString() || data.created_at,
+                    updated_at: data.updated_at?.toDate?.()?.toISOString() || data.updated_at,
+                };
+            });
+            return json(200, members);
+        } catch (err) {
+            console.error(err);
+            return json(500, { error: "Failed to fetch members" });
+        }
+    }
+
+    // POST /members
+    if (rawPath === "/members" && method === "POST") {
+        const { name, phone, photo, roles, status, notes } = body;
+        const missingFields: string[] = [];
+        if (!name?.trim()) missingFields.push("Name");
+        if (!phone?.trim()) missingFields.push("Phone");
+        if (missingFields.length > 0) {
+            return json(400, { error: `Missing required fields: ${missingFields.join(", ")}.` });
+        }
+        try {
+            const docRef = await firestore.collection("members").add({
+                name: toTitleCase(name),
+                phone: phone.trim(),
+                photo: photo || "",
+                roles: roles || [],
+                status: status || "active",
+                notes: notes || "",
+                created_at: admin.firestore.FieldValue.serverTimestamp(),
+                updated_at: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            return json(201, { id: docRef.id });
+        } catch (err) {
+            console.error(err);
+            return json(500, { error: "Failed to create member" });
+        }
+    }
+
+    // PUT /members/:id  &  DELETE /members/:id
+    const memberMatch = rawPath.match(/^\/members\/([^/]+)$/);
+    if (memberMatch) {
+        const id = memberMatch[1];
+
+        if (method === "PUT") {
+            const { name, phone, photo, roles, status, notes } = body;
+            const missingFields: string[] = [];
+            if (!name?.trim()) missingFields.push("Name");
+            if (!phone?.trim()) missingFields.push("Phone");
+            if (missingFields.length > 0) {
+                return json(400, { error: `Missing required fields: ${missingFields.join(", ")}.` });
+            }
+            try {
+                await firestore.collection("members").doc(id).update({
+                    name: toTitleCase(name),
+                    phone: phone.trim(),
+                    photo: photo || "",
+                    roles: roles || [],
+                    status: status || "active",
+                    notes: notes || "",
+                    updated_at: admin.firestore.FieldValue.serverTimestamp(),
+                });
+                return json(200, { success: true });
+            } catch (err) {
+                return json(500, { error: "Failed to update member" });
+            }
+        }
+
+        if (method === "DELETE") {
+            try {
+                await firestore.collection("members").doc(id).delete();
+                return json(200, { success: true });
+            } catch (err) {
+                return json(500, { error: "Failed to delete member" });
+            }
+        }
+    }
+
     return json(404, { error: "Not found" });
 };
+
