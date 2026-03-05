@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera } from "lucide-react";
+import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, LayoutGrid, List, BookOpen, Mic2, Copy } from "lucide-react";
 import { Song, Tag } from "./types";
 
 // ── Member Role Constants ────────────────────────────────────────────────────
@@ -69,6 +69,33 @@ const CustomVideoBtnIcon = ({ size = 20, className = "" }: { size?: number, clas
   </svg>
 );
 
+// ── Chord Transposer ────────────────────────────────────────────────────────
+const CHROMATIC = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const ENHARMONIC: Record<string, string> = {
+  'Db': 'C#', 'Eb': 'D#', 'Fb': 'E', 'Gb': 'F#', 'Ab': 'G#', 'Bb': 'A#', 'Cb': 'B',
+};
+
+function transposeChords(text: string, steps: number): string {
+  if (!steps || !text) return text;
+  const n = ((steps % 12) + 12) % 12;
+  // Smarter regex:
+  //   (?<![A-Za-z])  - not preceded by a letter
+  //   ([A-G][#b]?)   - chord ROOT (group 1)
+  //   (quality)?     - optional chord quality: m, maj, min, dim, aug, sus, add, number (group 2)
+  //   (?![a-z])      - NOT followed by a plain lowercase letter
+  //                    -> rejects words: "Capo", "Chorus", "God", "Bridge"
+  //                    -> accepts chords: "C", "Am", "F#", "Gsus4"
+  return text.replace(
+    /(?<![A-Za-z])([A-G][#b]?)(m(?:aj\d*)?|maj\d*|min\d*|dim\d*|aug\d*|sus[24]?\d*|add\d+|\d+)?(?![a-z])/g,
+    (_: string, root: string, quality: string | undefined) => {
+      const normalized = ENHARMONIC[root] ?? root;
+      const idx = CHROMATIC.indexOf(normalized);
+      if (idx === -1) return _;
+      return CHROMATIC[(idx + n) % 12] + (quality ?? '');
+    }
+  );
+}
+
 export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -118,6 +145,8 @@ export default function App() {
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedSongIds, setSelectedSongIds] = useState<string[]>([]);
   const [formErrors, setFormErrors] = useState<{ title?: string; artist?: string; lyrics?: string; tags?: string }>({});
+  const [copiedField, setCopiedField] = useState<"lyrics" | "chords" | null>(null);
+  const [transposeSteps, setTransposeSteps] = useState(0);
 
   const lyricsInputRef = useRef<HTMLInputElement>(null);
   const chordsInputRef = useRef<HTMLInputElement>(null);
@@ -128,6 +157,49 @@ export default function App() {
   // Tag form states
   const [newTagName, setNewTagName] = useState("");
   const [newTagColor, setNewTagColor] = useState("bg-gray-100 text-gray-800");
+
+  // Song view mode: grid (default) or list
+  const [songView, setSongView] = useState<"grid" | "list">(() => {
+    try { return (localStorage.getItem("wf_song_view") as "grid" | "list") || "grid"; } catch { return "grid"; }
+  });
+  const toggleSongView = (v: "grid" | "list") => {
+    setSongView(v);
+    try { localStorage.setItem("wf_song_view", v); } catch { /* noop */ }
+  };
+
+  // Pagination (9 songs per page)
+  const SONGS_PER_PAGE = 9;
+  const [currentPage, setCurrentPage] = useState(1);
+
+
+  // ── Toast notifications ──────────────────────────────────────────────
+  type ToastType = "success" | "error" | "info" | "warning";
+  interface ToastItem { id: number; type: ToastType; message: string; }
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+
+  const showToast = (type: ToastType, message: string) => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, type, message }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3500);
+  };
+
+  const dismissToast = (id: number) =>
+    setToasts(prev => prev.filter(t => t.id !== id));
+
+  // ── Confirm dialog ─────────────────────────────────────────────────
+  interface ConfirmConfig {
+    title: string;
+    message: string;
+    detail?: string;
+    confirmText: string;
+    confirmClass?: string;
+    onConfirm: () => void;
+  }
+  const [confirmConfig, setConfirmConfig] = useState<ConfirmConfig | null>(null);
+
+  const showConfirm = (config: ConfirmConfig) => setConfirmConfig(config);
+  const closeConfirm = () => setConfirmConfig(null);
+
 
   useEffect(() => {
     if (isDarkMode) {
@@ -340,6 +412,15 @@ export default function App() {
     return result;
   }, [allSongs, debouncedQuery, selectedTagIds]);
 
+  // Pagination derived values — must come after filteredSongs
+  const totalPages = Math.max(1, Math.ceil(filteredSongs.length / SONGS_PER_PAGE));
+  const paginatedSongs = filteredSongs.slice((currentPage - 1) * SONGS_PER_PAGE, currentPage * SONGS_PER_PAGE);
+
+  // Reset to page 1 when search or filters change
+  useEffect(() => { setCurrentPage(1); }, [debouncedQuery, selectedTagIds]);
+  // Reset transposer when switching songs
+  useEffect(() => { setTransposeSteps(0); }, [selectedSong?.id]);
+
   // ── Member Functions ────────────────────────────────────────────────────────
   const MEMBERS_CACHE_KEY = "wf_members_cache";
   const MEMBERS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
@@ -462,28 +543,40 @@ export default function App() {
       setSelectedMember(null);
       clearMembersCache();
       await fetchMembers();
+      showToast("success", `Member "${payload.name}" saved successfully!`);
     } catch (error: any) {
       console.error("Failed to save member", error);
-      alert(error.message || "Failed to save member.");
+      showToast("error", error.message || "Failed to save member.");
     }
   };
 
   const handleDeleteMember = async (id: string) => {
-    if (!window.confirm("Are you sure you want to remove this member?")) return;
-    try {
-      const res = await fetch(`/api/members/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to delete member");
-      if (selectedMember?.id === id) {
-        setSelectedMember(null);
-        setIsEditingMember(false);
+    const member = allMembers.find(m => m.id === id);
+    showConfirm({
+      title: "Remove Member",
+      message: `Are you sure you want to remove "${member?.name || "this member"}"?`,
+      detail: "This will permanently remove their profile and roles from the worship team list.",
+      confirmText: "Yes, Remove",
+      confirmClass: "bg-red-500 hover:bg-red-600",
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/members/${id}`, { method: "DELETE" });
+          if (!res.ok) throw new Error("Failed to delete member");
+          if (selectedMember?.id === id) {
+            setSelectedMember(null);
+            setIsEditingMember(false);
+          }
+          clearMembersCache();
+          await fetchMembers();
+          showToast("success", "Member removed successfully.");
+          closeConfirm();
+        } catch (error) {
+          console.error("Failed to delete member", error);
+          showToast("error", "Failed to remove member. Please try again.");
+          closeConfirm();
+        }
       }
-      clearMembersCache();
-      await fetchMembers();
-
-    } catch (error) {
-      console.error("Failed to delete member", error);
-      alert("Failed to remove member. Please try again.");
-    }
+    });
   };
 
   const handleMemberPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -565,48 +658,75 @@ export default function App() {
         throw new Error(errorData.error || "Failed to save song");
       }
 
+      const isEdit = !!selectedSong?.id;
       setIsEditing(false);
       setSelectedSong(null);
       clearSongsCache();
       await fetchSongs(); // refresh + re-cache
+      showToast("success", isEdit
+        ? `Song "${payload.title}" updated successfully!`
+        : `Song "${payload.title}" saved successfully!`
+      );
     } catch (error: any) {
       console.error("Failed to save song", error);
-      alert(error.message || "Failed to save song. Please check if Firebase is configured correctly.");
+      showToast("error", error.message || "Failed to save song. Please check if Firebase is configured correctly.");
     }
   };
 
   const handleDeleteSong = async (id: string) => {
-    if (!window.confirm("Are you sure you want to delete this song?")) return;
-    try {
-      const res = await fetch(`/api/songs/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to delete song");
+    const song = allSongs.find(s => s.id === id);
+    showConfirm({
+      title: "Delete Song",
+      message: `Are you sure you want to delete "${song?.title || "this song"}"?`,
+      detail: "This action cannot be undone. The song will be permanently removed from the database.",
+      confirmText: "Yes, Delete",
+      confirmClass: "bg-red-500 hover:bg-red-600",
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/songs/${id}`, { method: "DELETE" });
+          if (!res.ok) throw new Error("Failed to delete song");
 
-      if (selectedSong?.id === id) {
-        setSelectedSong(null);
-        setIsEditing(false);
+          if (selectedSong?.id === id) {
+            setSelectedSong(null);
+            setIsEditing(false);
+          }
+          clearSongsCache();
+          fetchSongs();
+          showToast("success", "Song deleted successfully.");
+          closeConfirm();
+        } catch (error) {
+          console.error("Failed to delete song", error);
+          showToast("error", "Failed to delete song. Please try again.");
+          closeConfirm();
+        }
       }
-      clearSongsCache();
-      fetchSongs();
-    } catch (error) {
-      console.error("Failed to delete song", error);
-      alert("Failed to delete song. Please try again.");
-    }
+    });
   };
 
   const handleBulkDelete = async () => {
     if (selectedSongIds.length === 0) return;
-    if (!window.confirm(`Are you sure you want to delete ${selectedSongIds.length} selected song(s)?`)) return;
-
-    try {
-      await Promise.all(selectedSongIds.map(id => fetch(`/api/songs/${id}`, { method: "DELETE" })));
-      setSelectedSongIds([]);
-      setIsSelectionMode(false);
-      clearSongsCache();
-      fetchSongs();
-    } catch (error) {
-      console.error("Failed to delete songs", error);
-      alert("Failed to delete some songs. Please try again.");
-    }
+    showConfirm({
+      title: "Bulk Delete Songs",
+      message: `Are you sure you want to delete ${selectedSongIds.length} selected song(s)?`,
+      detail: "This will permanently remove all selected items from your directory.",
+      confirmText: `Delete ${selectedSongIds.length} Songs`,
+      confirmClass: "bg-red-500 hover:bg-red-600",
+      onConfirm: async () => {
+        try {
+          await Promise.all(selectedSongIds.map(id => fetch(`/api/songs/${id}`, { method: "DELETE" })));
+          setSelectedSongIds([]);
+          setIsSelectionMode(false);
+          clearSongsCache();
+          fetchSongs();
+          showToast("success", `${selectedSongIds.length} songs deleted successfully.`);
+          closeConfirm();
+        } catch (error) {
+          console.error("Failed to delete songs", error);
+          showToast("error", "Failed to delete some songs. Please try again.");
+          closeConfirm();
+        }
+      }
+    });
   };
 
   const toggleSongSelection = (id: string) => {
@@ -631,15 +751,26 @@ export default function App() {
   };
 
   const handleDeleteTag = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this tag?")) return;
-    try {
-      await fetch(`/api/tags/${id}`, { method: "DELETE" });
-      clearSongsCache();
-      fetchSongs(); // reloads both songs + tags fresh
-
-    } catch (error) {
-      console.error("Failed to delete tag", error);
-    }
+    showConfirm({
+      title: "Delete Tag",
+      message: "Are you sure you want to delete this tag?",
+      detail: "This will remove the tag from all songs that use it. This action cannot be undone.",
+      confirmText: "Delete Tag",
+      confirmClass: "bg-red-500 hover:bg-red-600",
+      onConfirm: async () => {
+        try {
+          await fetch(`/api/tags/${id}`, { method: "DELETE" });
+          clearSongsCache();
+          fetchSongs();
+          showToast("success", "Tag deleted successfully.");
+          closeConfirm();
+        } catch (error) {
+          console.error("Failed to delete tag", error);
+          showToast("error", "Failed to delete tag.");
+          closeConfirm();
+        }
+      }
+    });
   };
 
   const openEditor = (song?: Song) => {
@@ -713,7 +844,7 @@ export default function App() {
       }
     } catch (error) {
       console.error("OCR failed", error);
-      alert("Failed to extract text from image. Please try again.");
+      showToast("error", "Failed to extract text from image. Please try again.");
     } finally {
       setIsOcrLoading(null);
       if (e.target) e.target.value = "";
@@ -761,7 +892,7 @@ export default function App() {
               } ${isSidebarCollapsed ? "justify-center" : ""}`}
             title="Song Management"
           >
-            <Music size={20} className="shrink-0" />
+            <BookOpen size={20} className="shrink-0" />
             {!isSidebarCollapsed && <span>Song Management</span>}
           </button>
 
@@ -787,6 +918,20 @@ export default function App() {
             {!isSidebarCollapsed && (
               <span className="flex items-center gap-2">
                 Scheduling
+                <span className="text-[10px] font-bold uppercase tracking-wider bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded-full">Soon</span>
+              </span>
+            )}
+          </div>
+
+          {/* Preaching — disabled / coming soon */}
+          <div
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium opacity-40 cursor-not-allowed select-none text-gray-500 dark:text-gray-500 ${isSidebarCollapsed ? "justify-center" : ""}`}
+            title="Preaching — Coming Soon"
+          >
+            <Mic2 size={20} className="shrink-0" />
+            {!isSidebarCollapsed && (
+              <span className="flex items-center gap-2">
+                Preaching
                 <span className="text-[10px] font-bold uppercase tracking-wider bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded-full">Soon</span>
               </span>
             )}
@@ -1252,8 +1397,9 @@ export default function App() {
                           {formErrors.tags && <p className="mt-1 text-xs text-red-500">{formErrors.tags}</p>}
                         </div>
 
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                          <div>
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+                          {/* ── Lyrics Column ── */}
+                          <div className="flex flex-col">
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                               Lyrics <span className="text-red-500">*</span>
                             </label>
@@ -1293,16 +1439,21 @@ export default function App() {
                               accept="image/*"
                             />
 
-                            <textarea
-                              value={editLyrics}
-                              onChange={(e) => { setEditLyrics(e.target.value); if (formErrors.lyrics) setFormErrors(p => ({ ...p, lyrics: undefined })); }}
-                              rows={12}
-                              className={`w-full px-4 py-3 border ${formErrors.lyrics ? "border-red-400 focus:border-red-400 focus:ring-red-200" : "border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-indigo-200"} bg-white dark:bg-gray-700 rounded-xl focus:ring-2 outline-none font-sans resize-none`}
-                              placeholder="Paste lyrics here..."
-                            />
+                            {/* Seamless textarea box */}
+                            <div className={`rounded-xl overflow-hidden border ${formErrors.lyrics ? "border-red-400" : "border-gray-300 dark:border-gray-600"}`}>
+                              <textarea
+                                value={editLyrics}
+                                onChange={(e) => { setEditLyrics(e.target.value); if (formErrors.lyrics) setFormErrors(p => ({ ...p, lyrics: undefined })); }}
+                                rows={14}
+                                className="w-full h-full px-4 py-3 bg-gray-50 dark:bg-gray-900 outline-none font-sans resize-none focus:ring-2 focus:ring-inset focus:ring-indigo-300 dark:focus:ring-indigo-700"
+                                placeholder="Paste lyrics here..."
+                              />
+                            </div>
                             {formErrors.lyrics && <p className="mt-1 text-xs text-red-500">{formErrors.lyrics}</p>}
                           </div>
-                          <div>
+
+                          {/* ── Chords Column ── */}
+                          <div className="flex flex-col">
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Chords</label>
 
                             {/* Upload Zone — Chords */}
@@ -1340,13 +1491,16 @@ export default function App() {
                               accept="image/*"
                             />
 
-                            <textarea
-                              value={editChords}
-                              onChange={(e) => setEditChords(e.target.value)}
-                              rows={12}
-                              className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none font-mono text-sm resize-none"
-                              placeholder="Paste chords here..."
-                            />
+                            {/* Seamless textarea box */}
+                            <div className="rounded-xl overflow-hidden border border-gray-300 dark:border-gray-600">
+                              <textarea
+                                value={editChords}
+                                onChange={(e) => setEditChords(e.target.value)}
+                                rows={14}
+                                className="w-full h-full px-4 py-3 bg-gray-50 dark:bg-gray-900 outline-none font-sans text-sm resize-none focus:ring-2 focus:ring-inset focus:ring-purple-300 dark:focus:ring-purple-700"
+                                placeholder="Paste chords here..."
+                              />
+                            </div>
                           </div>
                         </div>
 
@@ -1435,24 +1589,90 @@ export default function App() {
 
 
                       {/* Lyrics & Chords Cards */}
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col">
-                          <div className="flex items-center gap-2 px-4 sm:px-6 py-4 border-b border-gray-100 dark:border-gray-700">
-                            <div className="w-2 h-2 rounded-full bg-indigo-500" />
-                            <h3 className="font-bold text-gray-900 dark:text-white tracking-wide text-sm uppercase">Lyrics</h3>
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+                        <div className="bg-white dark:bg-[#1E2938] rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col">
+                          <div className="flex items-center justify-between gap-2 px-4 sm:px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+                            <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full bg-indigo-500" />
+                              <h3 className="font-bold text-gray-900 dark:text-white tracking-wide text-sm uppercase">Lyrics</h3>
+                            </div>
+                            {selectedSong.lyrics && (
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(selectedSong.lyrics);
+                                  setCopiedField("lyrics");
+                                  setTimeout(() => setCopiedField(null), 1500);
+                                }}
+                                title="Copy lyrics"
+                                className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-500 dark:hover:text-indigo-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                              >
+                                {copiedField === "lyrics" ? <Check size={15} className="text-emerald-500" /> : <Copy size={15} />}
+                              </button>
+                            )}
                           </div>
                           <div className="p-4 sm:p-6 flex-1 overflow-auto">
-                            <pre className="whitespace-pre-wrap font-sans text-gray-700 dark:text-gray-300 leading-relaxed text-base">{selectedSong.lyrics || "No lyrics added."}</pre>
+                            <pre className="whitespace-pre-wrap font-sans text-sm text-gray-700 dark:text-gray-200 leading-relaxed">{selectedSong.lyrics || "No lyrics added."}</pre>
                           </div>
                         </div>
-                        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col">
-                          <div className="flex items-center gap-2 px-4 sm:px-6 py-4 border-b border-gray-100 dark:border-gray-700">
-                            <div className="w-2 h-2 rounded-full bg-purple-500" />
-                            <h3 className="font-bold text-gray-900 dark:text-white tracking-wide text-sm uppercase">Chords</h3>
+                        <div className="bg-white dark:bg-[#1E2938] rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col">
+                          {/* Chords Header with Transposer */}
+                          <div className="flex items-center justify-between gap-2 px-4 sm:px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+                            <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full bg-purple-500" />
+                              <h3 className="font-bold text-gray-900 dark:text-white tracking-wide text-sm uppercase">Chords</h3>
+                            </div>
+                            {selectedSong.chords && (
+                              <div className="flex items-center gap-1">
+                                {/* – semitone */}
+                                <button
+                                  onClick={() => setTransposeSteps(s => s - 1)}
+                                  title="Transpose down"
+                                  className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 hover:bg-purple-100 dark:hover:bg-purple-900/40 hover:text-purple-600 dark:hover:text-purple-400 font-bold text-base transition-colors"
+                                >−</button>
+
+                                {/* Key badge — click to reset */}
+                                <button
+                                  onClick={() => setTransposeSteps(0)}
+                                  title="Reset to original key"
+                                  className={`px-2 py-0.5 rounded-md text-xs font-semibold min-w-[52px] text-center transition-colors ${transposeSteps === 0
+                                      ? "bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
+                                      : "bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300"
+                                    }`}
+                                >
+                                  {transposeSteps === 0 ? "Original" : transposeSteps > 0 ? `+${transposeSteps}` : `${transposeSteps}`}
+                                </button>
+
+                                {/* + semitone */}
+                                <button
+                                  onClick={() => setTransposeSteps(s => s + 1)}
+                                  title="Transpose up"
+                                  className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 hover:bg-purple-100 dark:hover:bg-purple-900/40 hover:text-purple-600 dark:hover:text-purple-400 font-bold text-base transition-colors"
+                                >+</button>
+
+                                {/* Divider */}
+                                <div className="w-px h-4 bg-gray-200 dark:bg-gray-600 mx-1" />
+
+                                {/* Copy (copies transposed version) */}
+                                <button
+                                  onClick={() => {
+                                    const text = transposeChords(selectedSong.chords!, transposeSteps);
+                                    navigator.clipboard.writeText(text);
+                                    setCopiedField("chords");
+                                    setTimeout(() => setCopiedField(null), 1500);
+                                  }}
+                                  title="Copy chords"
+                                  className="p-1.5 rounded-lg text-gray-400 hover:text-purple-500 dark:hover:text-purple-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                                >
+                                  {copiedField === "chords" ? <Check size={15} className="text-emerald-500" /> : <Copy size={15} />}
+                                </button>
+                              </div>
+                            )}
                           </div>
                           <div className="p-4 sm:p-6 flex-1 overflow-auto">
                             {selectedSong.chords ? (
-                              <pre className="whitespace-pre-wrap font-mono text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{selectedSong.chords}</pre>
+                              <pre className="whitespace-pre-wrap font-sans text-sm text-gray-700 dark:text-gray-200 leading-relaxed">
+                                {transposeChords(selectedSong.chords, transposeSteps)}
+                              </pre>
                             ) : (
                               <div className="h-full flex flex-col items-center justify-center text-center py-12 text-gray-400 dark:text-gray-600">
                                 <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center mb-3">
@@ -1468,7 +1688,7 @@ export default function App() {
                     </div>
                   ) : (
 
-                    <div className="space-y-6">
+                    <div className="space-y-3">
                       {/* Filter & Search Bar */}
                       {!isEditing && !selectedSong && (
                         <div className="flex flex-col gap-3">
@@ -1549,202 +1769,331 @@ export default function App() {
                           </div>
 
                           {/* Row 2: Multi-select Filter Dropdown + Total Songs */}
-                          <div className="flex items-center flex-wrap gap-2">
-                            <div className="relative" ref={filterDropdownRef}>
-                              <button
-                                onClick={() => setIsFilterOpen(prev => !prev)}
-                                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-all ${selectedTagIds.length > 0
-                                  ? "bg-indigo-600 text-white border-transparent shadow-sm"
-                                  : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-indigo-300 hover:text-indigo-600 dark:hover:text-indigo-400"
-                                  }`}
-                              >
-                                <Filter size={15} />
-                                <span>
-                                  {selectedTagIds.length === 0
-                                    ? "Filter"
-                                    : `${selectedTagIds.length} Filter${selectedTagIds.length > 1 ? "s" : ""} Active`}
-                                </span>
-                                {selectedTagIds.length > 0 && (
-                                  <span
-                                    onClick={(e) => { e.stopPropagation(); setSelectedTagIds([]); }}
-                                    className="ml-1 hover:opacity-70 transition-opacity"
-                                    role="button"
-                                    title="Clear filters"
-                                  >
-                                    <X size={13} />
+                          <div className="flex items-center gap-2 py-3">
+                            {/* Left group: Filter + Count + Toggle — always on first line */}
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              <div className="relative flex-shrink-0" ref={filterDropdownRef}>
+                                <button
+                                  onClick={() => setIsFilterOpen(prev => !prev)}
+                                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border transition-all ${selectedTagIds.length > 0
+                                    ? "bg-indigo-600 text-white border-transparent shadow-sm"
+                                    : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-indigo-300 hover:text-indigo-600 dark:hover:text-indigo-400"
+                                    }`}
+                                >
+                                  <Filter size={15} />
+                                  {/* Show text on sm+, icon-only on xs */}
+                                  <span className="hidden xs:inline sm:inline">
+                                    {selectedTagIds.length === 0
+                                      ? "Filter"
+                                      : `${selectedTagIds.length} Filter${selectedTagIds.length > 1 ? "s" : ""}`}
                                   </span>
-                                )}
-                                <ChevronDown size={15} className={`transition-transform ${isFilterOpen ? "rotate-180" : ""}`} />
-                              </button>
-
-                              {isFilterOpen && (
-                                <div className="absolute left-0 top-full mt-2 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-xl z-50 overflow-hidden">
-                                  <div className="p-2">
-                                    <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-3 py-2">Sort</p>
-                                    <button
-                                      onClick={() => setSelectedTagIds(prev =>
-                                        prev.includes("recently-added") ? prev.filter(id => id !== "recently-added") : [...prev, "recently-added"]
-                                      )}
-                                      className="flex items-center gap-3 w-full px-3 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm text-gray-700 dark:text-gray-300"
+                                  {selectedTagIds.length > 0 && (
+                                    <span
+                                      onClick={(e) => { e.stopPropagation(); setSelectedTagIds([]); }}
+                                      className="ml-0.5 hover:opacity-70 transition-opacity"
+                                      role="button"
+                                      title="Clear filters"
                                     >
-                                      <div className={`w-4 h-4 rounded flex items-center justify-center border-2 transition-colors shrink-0 ${selectedTagIds.includes("recently-added")
-                                        ? "bg-indigo-600 border-indigo-600"
-                                        : "border-gray-300 dark:border-gray-600"
-                                        }`}>
-                                        {selectedTagIds.includes("recently-added") && <Check size={10} className="text-white" strokeWidth={3} />}
-                                      </div>
-                                      <span>Recently Added</span>
-                                    </button>
+                                      <X size={13} />
+                                    </span>
+                                  )}
+                                  <ChevronDown size={14} className={`transition-transform ${isFilterOpen ? "rotate-180" : ""}`} />
+                                </button>
 
-                                    <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-3 pt-3 pb-2 mt-1 border-t border-gray-100 dark:border-gray-700">Tags</p>
-                                    {Array.isArray(tags) && tags.map((tag) => (
+                                {isFilterOpen && (
+                                  <div className="absolute left-0 top-full mt-2 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-xl z-50 overflow-hidden">
+                                    <div className="p-2">
+                                      <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-3 py-2">Sort</p>
                                       <button
-                                        key={tag.id}
                                         onClick={() => setSelectedTagIds(prev =>
-                                          prev.includes(tag.id) ? prev.filter(id => id !== tag.id) : [...prev, tag.id]
+                                          prev.includes("recently-added") ? prev.filter(id => id !== "recently-added") : [...prev, "recently-added"]
                                         )}
                                         className="flex items-center gap-3 w-full px-3 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm text-gray-700 dark:text-gray-300"
                                       >
-                                        <div className={`w-4 h-4 rounded flex items-center justify-center border-2 transition-colors shrink-0 ${selectedTagIds.includes(tag.id)
+                                        <div className={`w-4 h-4 rounded flex items-center justify-center border-2 transition-colors shrink-0 ${selectedTagIds.includes("recently-added")
                                           ? "bg-indigo-600 border-indigo-600"
                                           : "border-gray-300 dark:border-gray-600"
                                           }`}>
-                                          {selectedTagIds.includes(tag.id) && <Check size={10} className="text-white" strokeWidth={3} />}
+                                          {selectedTagIds.includes("recently-added") && <Check size={10} className="text-white" strokeWidth={3} />}
                                         </div>
-                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tag.color}`}>{tag.name}</span>
+                                        <span>Recently Added</span>
                                       </button>
-                                    ))}
 
-                                    {selectedTagIds.length > 0 && (
-                                      <button
-                                        onClick={() => setSelectedTagIds([])}
-                                        className="w-full mt-2 px-3 py-2 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors font-medium border-t border-gray-100 dark:border-gray-700"
-                                      >
-                                        Clear all filters
-                                      </button>
-                                    )}
+                                      <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-3 pt-3 pb-2 mt-1 border-t border-gray-100 dark:border-gray-700">Tags</p>
+                                      {Array.isArray(tags) && tags.map((tag) => (
+                                        <button
+                                          key={tag.id}
+                                          onClick={() => setSelectedTagIds(prev =>
+                                            prev.includes(tag.id) ? prev.filter(id => id !== tag.id) : [...prev, tag.id]
+                                          )}
+                                          className="flex items-center gap-3 w-full px-3 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm text-gray-700 dark:text-gray-300"
+                                        >
+                                          <div className={`w-4 h-4 rounded flex items-center justify-center border-2 transition-colors shrink-0 ${selectedTagIds.includes(tag.id)
+                                            ? "bg-indigo-600 border-indigo-600"
+                                            : "border-gray-300 dark:border-gray-600"
+                                            }`}>
+                                            {selectedTagIds.includes(tag.id) && <Check size={10} className="text-white" strokeWidth={3} />}
+                                          </div>
+                                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tag.color}`}>{tag.name}</span>
+                                        </button>
+                                      ))}
+
+                                      {selectedTagIds.length > 0 && (
+                                        <button
+                                          onClick={() => setSelectedTagIds([])}
+                                          className="w-full mt-2 px-3 py-2 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors font-medium border-t border-gray-100 dark:border-gray-700"
+                                        >
+                                          Clear all filters
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
-                              )}
+                                )}
+                              </div>
+                              {/* Total Songs Count */}
+                              <div className="text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-xl whitespace-nowrap flex-shrink-0">
+                                {debouncedQuery || selectedTagIds.length > 0
+                                  ? <>{filteredSongs.length}<span className="hidden sm:inline"> of {allSongs.length}</span> <span className="hidden sm:inline">{allSongs.length === 1 ? 'Song' : 'Songs'}</span></>
+                                  : <>{allSongs.length} <span className="hidden sm:inline">{allSongs.length === 1 ? 'Song' : 'Songs'} Total</span><span className="sm:hidden">Songs</span></>
+                                }
+                              </div>
+                              {/* Grid / List toggle */}
+                              <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-xl p-0.5 gap-0.5 flex-shrink-0">
+                                <button
+                                  onClick={() => toggleSongView("grid")}
+                                  title="Grid view"
+                                  className={`p-1.5 rounded-lg transition-all ${songView === "grid"
+                                    ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                                    : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                    }`}
+                                >
+                                  <LayoutGrid size={16} />
+                                </button>
+                                <button
+                                  onClick={() => toggleSongView("list")}
+                                  title="List view"
+                                  className={`p-1.5 rounded-lg transition-all ${songView === "list"
+                                    ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                                    : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                    }`}
+                                >
+                                  <List size={16} />
+                                </button>
+                              </div>
                             </div>
-                            {/* Total Songs Count */}
-                            <div className="text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-xl whitespace-nowrap">
-                              {debouncedQuery || selectedTagIds.length > 0
-                                ? <>{filteredSongs.length} of {allSongs.length} {allSongs.length === 1 ? 'Song' : 'Songs'}</>
-                                : <>{allSongs.length} {allSongs.length === 1 ? 'Song' : 'Songs'} Total</>
-                              }
-                            </div>
+
+                            {/* Pagination — ml-auto on desktop, w-full justify-end on mobile wrap */}
+                            {totalPages > 1 && !isLoadingSongs && (
+                              <div className="flex items-center gap-1 ml-auto flex-shrink-0">
+                                <button
+                                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                  disabled={currentPage === 1}
+                                  className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                >
+                                  <ChevronLeft size={14} />
+                                </button>
+                                {(() => {
+                                  const pages: (number | "…")[] = [];
+                                  if (totalPages <= 5) {
+                                    for (let i = 1; i <= totalPages; i++) pages.push(i);
+                                  } else {
+                                    pages.push(1);
+                                    if (currentPage > 3) pages.push("…");
+                                    for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) pages.push(i);
+                                    if (currentPage < totalPages - 2) pages.push("…");
+                                    pages.push(totalPages);
+                                  }
+                                  return pages.map((p, idx) =>
+                                    p === "…" ? (
+                                      <span key={`el-${idx}`} className="text-[11px] text-gray-400 px-0.5 select-none">…</span>
+                                    ) : (
+                                      <button
+                                        key={p}
+                                        onClick={() => setCurrentPage(p as number)}
+                                        className={`w-7 h-7 rounded-lg text-xs font-semibold transition-all ${currentPage === p
+                                          ? "bg-indigo-600 text-white"
+                                          : "text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+                                          }`}
+                                      >{p}</button>
+                                    )
+                                  );
+                                })()}
+                                <button
+                                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                  disabled={currentPage === totalPages}
+                                  className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                >
+                                  <ChevronRight size={14} />
+                                </button>
+                              </div>
+                            )}
                           </div>
 
                         </div>
                       )}
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
-                        {isLoadingSongs ? (
-                          // Skeleton loading cards
-                          Array.from({ length: 6 }).map((_, i) => (
-                            <div key={i} className="bg-white dark:bg-gray-800 rounded-2xl p-6 border border-gray-200 dark:border-gray-700 shadow-sm animate-pulse">
-                              <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded-lg mb-3 w-3/4" />
-                              <div className="h-3 bg-gray-100 dark:bg-gray-700 rounded-lg mb-4 w-1/2" />
-                              <div className="flex gap-2 mb-4">
-                                <div className="h-5 w-16 bg-gray-100 dark:bg-gray-700 rounded-full" />
-                                <div className="h-5 w-20 bg-gray-100 dark:bg-gray-700 rounded-full" />
+
+                      {/* ── GRID VIEW ─────────────────────────────────── */}
+                      {songView === "grid" && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
+                          {isLoadingSongs ? (
+                            Array.from({ length: 6 }).map((_, i) => (
+                              <div key={i} className="bg-white dark:bg-gray-800 rounded-2xl p-6 border border-gray-200 dark:border-gray-700 shadow-sm animate-pulse">
+                                <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded-lg mb-3 w-3/4" />
+                                <div className="h-3 bg-gray-100 dark:bg-gray-700 rounded-lg mb-4 w-1/2" />
+                                <div className="flex gap-2 mb-4">
+                                  <div className="h-5 w-16 bg-gray-100 dark:bg-gray-700 rounded-full" />
+                                  <div className="h-5 w-20 bg-gray-100 dark:bg-gray-700 rounded-full" />
+                                </div>
+                                <div className="space-y-2">
+                                  <div className="h-3 bg-gray-100 dark:bg-gray-700 rounded w-full" />
+                                  <div className="h-3 bg-gray-100 dark:bg-gray-700 rounded w-5/6" />
+                                  <div className="h-3 bg-gray-100 dark:bg-gray-700 rounded w-4/6" />
+                                </div>
                               </div>
-                              <div className="space-y-2">
-                                <div className="h-3 bg-gray-100 dark:bg-gray-700 rounded w-full" />
-                                <div className="h-3 bg-gray-100 dark:bg-gray-700 rounded w-5/6" />
-                                <div className="h-3 bg-gray-100 dark:bg-gray-700 rounded w-4/6" />
-                              </div>
-                            </div>
-                          ))
-                        ) : Array.isArray(filteredSongs) && filteredSongs.map((song) => (
-                          <div
-                            key={song.id}
-                            onClick={() => isSelectionMode ? toggleSongSelection(song.id) : setSelectedSong(song)}
-                            className={`bg-white dark:bg-gray-800 rounded-2xl p-6 border transition-all cursor-pointer group flex flex-col h-full relative ${selectedSongIds.includes(song.id)
-                              ? "border-indigo-500 ring-2 ring-indigo-200 dark:ring-indigo-900 shadow-md"
-                              : "border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-500"
-                              }`}
-                          >
-                            {isSelectionMode && (
-                              <div className="absolute top-4 right-4 z-10">
-                                {selectedSongIds.includes(song.id) ? (
-                                  <div className="bg-indigo-600 text-white p-1 rounded-md">
-                                    <Check size={16} />
-                                  </div>
-                                ) : (
-                                  <div className="bg-white dark:bg-gray-700 border-2 border-gray-200 dark:border-gray-600 p-1 rounded-md w-6 h-6" />
-                                )}
-                              </div>
-                            )}
-                            <div className="flex items-start justify-between gap-2 mb-0.5">
-                              <h3 className="text-lg font-bold text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors line-clamp-1">
-                                {song.title}
-                              </h3>
-                              {!isSelectionMode && (
-                                <div className="flex items-center gap-1 shrink-0">
-                                  {song.video_url && (
-                                    <a
-                                      href={song.video_url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      onClick={(e) => e.stopPropagation()}
-                                      className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors relative group/tooltip"
-                                    >
-                                      <CustomYoutubeIcon size={24} />
-                                      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover/tooltip:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">
-                                        Watch Video
-                                      </span>
-                                    </a>
+                            ))
+                          ) : Array.isArray(filteredSongs) && paginatedSongs.map((song) => (
+
+                            <div
+                              key={song.id}
+                              onClick={() => isSelectionMode ? toggleSongSelection(song.id) : setSelectedSong(song)}
+                              className={`bg-white dark:bg-gray-800 rounded-2xl p-6 border transition-all cursor-pointer group flex flex-col h-full relative ${selectedSongIds.includes(song.id)
+                                ? "border-indigo-500 ring-2 ring-indigo-200 dark:ring-indigo-900 shadow-md"
+                                : "border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-500"
+                                }`}
+                            >
+                              {isSelectionMode && (
+                                <div className="absolute top-4 right-4 z-10">
+                                  {selectedSongIds.includes(song.id) ? (
+                                    <div className="bg-indigo-600 text-white p-1 rounded-md"><Check size={16} /></div>
+                                  ) : (
+                                    <div className="bg-white dark:bg-gray-700 border-2 border-gray-200 dark:border-gray-600 p-1 rounded-md w-6 h-6" />
                                   )}
                                 </div>
                               )}
-                            </div>
-                            {song.artist && (
-                              <p className="text-sm text-gray-500 dark:text-gray-400 mb-2 font-medium">
-                                {song.artist}
+                              <div className="flex items-start justify-between gap-2 mb-0.5">
+                                <h3 className="text-lg font-bold text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors line-clamp-1">
+                                  {song.title}
+                                </h3>
+                                {!isSelectionMode && (
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    {song.video_url && (
+                                      <a href={song.video_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors relative group/tooltip">
+                                        <CustomYoutubeIcon size={24} />
+                                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover/tooltip:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">Watch Video</span>
+                                      </a>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                              {song.artist && <p className="text-sm text-gray-500 dark:text-gray-400 mb-2 font-medium">{song.artist}</p>}
+                              <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-3 uppercase tracking-wider font-medium">
+                                {song.created_at ? new Date(song.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : ""}
                               </p>
-                            )}
-                            <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-3 uppercase tracking-wider font-medium">
-                              {song.created_at ? new Date(song.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : ""}
-                            </p>
-                            <div className="flex flex-wrap gap-2 mb-4">
-                              {Array.isArray(song.tags) && song.tags.slice(0, 3).map((tag) => (
-                                <span key={tag.id} className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${tag.color}`}>
-                                  {tag.name}
-                                </span>
-                              ))}
-                              {Array.isArray(song.tags) && song.tags.length > 3 && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">
-                                  +{song.tags.length - 3}
-                                </span>
-                              )}
+                              <div className="flex flex-wrap gap-2 mb-4">
+                                {Array.isArray(song.tags) && song.tags.slice(0, 3).map((tag) => (
+                                  <span key={tag.id} className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${tag.color}`}>{tag.name}</span>
+                                ))}
+                                {Array.isArray(song.tags) && song.tags.length > 3 && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">+{song.tags.length - 3}</span>
+                                )}
+                              </div>
+                              <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-3 mt-auto">{song.lyrics}</p>
                             </div>
-                            <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-3 mt-auto">
-                              {song.lyrics}
-                            </p>
-                          </div>
-                        ))}
-                        {!isLoadingSongs && (!Array.isArray(filteredSongs) || filteredSongs.length === 0) && (
-                          <div className="col-span-full py-12 text-center">
-                            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 mb-4">
-                              <Search size={32} />
+                          ))}
+                          {!isLoadingSongs && (!Array.isArray(filteredSongs) || filteredSongs.length === 0) && (
+                            <div className="col-span-full py-12 text-center">
+                              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 mb-4"><Search size={32} /></div>
+                              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-1">No songs found</h3>
+                              <p className="text-gray-500 dark:text-gray-400">{debouncedQuery ? `No results for "${debouncedQuery}". Try a different search.` : "Try adjusting your search or filter."}</p>
+                              {debouncedQuery && <button onClick={() => setSearchQuery("")} className="mt-3 px-4 py-2 text-sm text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-xl transition-colors font-medium">Clear search</button>}
                             </div>
-                            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-1">No songs found</h3>
-                            <p className="text-gray-500 dark:text-gray-400">
-                              {debouncedQuery ? `No results for "${debouncedQuery}". Try a different search.` : "Try adjusting your search or filter."}
-                            </p>
-                            {debouncedQuery && (
-                              <button
-                                onClick={() => setSearchQuery("")}
-                                className="mt-3 px-4 py-2 text-sm text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-xl transition-colors font-medium"
-                              >
-                                Clear search
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* ── LIST VIEW ─────────────────────────────────── */}
+                      {songView === "list" && (
+                        <div className="flex flex-col gap-1">
+                          {/* List header */}
+                          {!isLoadingSongs && Array.isArray(filteredSongs) && filteredSongs.length > 0 && (
+                            <div className="hidden sm:grid grid-cols-[1fr_auto_auto_auto] gap-4 px-4 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                              <span>Title / Artist</span>
+                              <span className="w-40 text-left">Tags</span>
+                              <span className="w-32 text-left">Added</span>
+                              <span className="w-6" />
+                            </div>
+                          )}
+
+                          {isLoadingSongs ? (
+                            Array.from({ length: 8 }).map((_, i) => (
+                              <div key={i} className="flex items-center gap-4 px-4 py-3 rounded-xl animate-pulse">
+                                <div className="flex-1 space-y-1.5">
+                                  <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-2/5" />
+                                  <div className="h-3 bg-gray-100 dark:bg-gray-700 rounded w-1/4" />
+                                </div>
+                                <div className="h-5 w-20 bg-gray-100 dark:bg-gray-700 rounded-full" />
+                                <div className="h-3 w-24 bg-gray-100 dark:bg-gray-700 rounded" />
+                              </div>
+                            ))
+                          ) : Array.isArray(filteredSongs) && paginatedSongs.map((song) => (
+
+                            <div
+                              key={song.id}
+                              onClick={() => isSelectionMode ? toggleSongSelection(song.id) : setSelectedSong(song)}
+                              className={`grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-2 sm:gap-4 items-center px-4 py-3 rounded-xl border cursor-pointer group transition-all ${selectedSongIds.includes(song.id)
+                                ? "bg-indigo-50 dark:bg-indigo-900/20 border-indigo-300 dark:border-indigo-700"
+                                : "bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700/60 hover:bg-gray-50 dark:hover:bg-gray-700/50 hover:border-indigo-200 dark:hover:border-indigo-700"
+                                }`}
+                            >
+                              {/* Title + Artist */}
+                              <div className="flex items-center gap-3 min-w-0">
+                                {isSelectionMode && (
+                                  <div className="shrink-0">
+                                    {selectedSongIds.includes(song.id)
+                                      ? <div className="bg-indigo-600 text-white p-1 rounded-md"><Check size={14} /></div>
+                                      : <div className="bg-white dark:bg-gray-700 border-2 border-gray-200 dark:border-gray-600 rounded-md w-5 h-5" />}
+                                  </div>
+                                )}
+                                <div className="min-w-0">
+                                  <p className="font-semibold text-sm text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate">{song.title}</p>
+                                  {song.artist && <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{song.artist}</p>}
+                                </div>
+                              </div>
+                              {/* Tags */}
+                              <div className="flex flex-wrap gap-1 w-40">
+                                {Array.isArray(song.tags) && song.tags.slice(0, 2).map((tag) => (
+                                  <span key={tag.id} className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${tag.color}`}>{tag.name}</span>
+                                ))}
+                                {Array.isArray(song.tags) && song.tags.length > 2 && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">+{song.tags.length - 2}</span>
+                                )}
+                              </div>
+                              {/* Date */}
+                              <p className="text-[11px] text-gray-400 dark:text-gray-500 w-32 whitespace-nowrap">
+                                {song.created_at ? new Date(song.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : "—"}
+                              </p>
+                              {/* Video icon */}
+                              <div className="w-6 flex items-center justify-end">
+                                {song.video_url && !isSelectionMode && (
+                                  <a href={song.video_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <CustomYoutubeIcon size={18} />
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+
+                          {!isLoadingSongs && (!Array.isArray(filteredSongs) || filteredSongs.length === 0) && (
+                            <div className="py-12 text-center">
+                              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 mb-4"><Search size={32} /></div>
+                              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-1">No songs found</h3>
+                              <p className="text-gray-500 dark:text-gray-400">{debouncedQuery ? `No results for "${debouncedQuery}". Try a different search.` : "Try adjusting your search or filter."}</p>
+                              {debouncedQuery && <button onClick={() => setSearchQuery("")} className="mt-3 px-4 py-2 text-sm text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-xl transition-colors font-medium">Clear search</button>}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1752,7 +2101,84 @@ export default function App() {
             </div>
           </div>
         </main>
-      </div >
+      </div>
+
+      {/* ── Toast Notification Stack ──────────────────────────────────────── */}
+      <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none">
+        {toasts.map(toast => {
+          const styles = {
+            success: { bar: "bg-emerald-500", icon: "✓", text: "text-emerald-400" },
+            error: { bar: "bg-red-500", icon: "✕", text: "text-red-400" },
+            warning: { bar: "bg-amber-500", icon: "!", text: "text-amber-400" },
+            info: { bar: "bg-indigo-500", icon: "i", text: "text-indigo-400" },
+          }[toast.type];
+          return (
+            <div
+              key={toast.id}
+              className="pointer-events-auto flex items-start gap-3 min-w-[280px] max-w-[360px] bg-gray-900/95 dark:bg-gray-950/95 backdrop-blur border border-white/10 rounded-xl shadow-2xl px-4 py-3 animate-[slideInRight_0.25s_ease-out]"
+              style={{ animation: "slideInRight 0.25s ease-out" }}
+            >
+              <span className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded-full ${styles.bar} flex items-center justify-center text-white text-[11px] font-bold`}>
+                {styles.icon}
+              </span>
+              <p className="text-sm text-gray-100 leading-snug flex-1">{toast.message}</p>
+              <button
+                onClick={() => dismissToast(toast.id)}
+                className="flex-shrink-0 text-gray-500 hover:text-gray-200 transition-colors ml-1"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── Confirm Dialog ────────────────────────────────────────────────── */}
+      {confirmConfig && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={closeConfirm}
+          />
+          {/* Panel */}
+          <div className="relative w-full max-w-sm bg-gray-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-white/10">
+              <h2 className="text-lg font-bold text-white">{confirmConfig.title}</h2>
+              <button
+                onClick={closeConfirm}
+                className="text-gray-400 hover:text-white transition-colors p-1 rounded-lg hover:bg-white/10"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            {/* Body */}
+            <div className="px-6 py-5 space-y-2">
+              <p className="text-gray-300 text-sm leading-relaxed">{confirmConfig.message}</p>
+              {confirmConfig.detail && (
+                <p className="text-gray-400 text-sm font-semibold">{confirmConfig.detail}</p>
+              )}
+            </div>
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-3 px-6 pb-6">
+              <button
+                onClick={closeConfirm}
+                className="px-5 py-2 text-sm text-gray-400 hover:text-white transition-colors rounded-xl hover:bg-white/10 font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmConfig.onConfirm}
+                className={`px-5 py-2 text-sm text-white rounded-xl font-semibold transition-colors ${confirmConfig.confirmClass || "bg-red-500 hover:bg-red-600"}`}
+              >
+                {confirmConfig.confirmText}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div >
   );
 }
