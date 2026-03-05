@@ -129,6 +129,7 @@ export default function App() {
   const [editMemberStatus, setEditMemberStatus] = useState<"active" | "on-leave" | "inactive">("active");
   const [editMemberNotes, setEditMemberNotes] = useState("");
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [isSavingMember, setIsSavingMember] = useState(false);
   const memberPhotoInputRef = useRef<HTMLInputElement>(null);
 
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
@@ -505,11 +506,37 @@ export default function App() {
   };
 
   const handleSaveMember = async () => {
+    if (isSavingMember) return; // guard against double-click
     const errors: { name?: string; phone?: string } = {};
     if (!editMemberName.trim()) errors.name = "Name is required.";
     if (!editMemberPhone.trim()) errors.phone = "Phone number is required.";
     if (Object.keys(errors).length > 0) { setMemberFormErrors(errors); return; }
     setMemberFormErrors({});
+
+    // ── Duplicate detection (new members only) ──────────────────────────────
+    if (!selectedMember?.id) {
+      // Always fetch fresh list to avoid stale-state false negatives
+      let freshMembers = allMembers;
+      try {
+        const res = await fetch("/api/members");
+        if (res.ok) {
+          const data = await res.json();
+          freshMembers = Array.isArray(data) ? data : allMembers;
+        }
+      } catch { /* fall back to cached allMembers */ }
+
+      // Normalize: strip ALL non-digit chars from phone for comparison
+      const nameLower = editMemberName.trim().toLowerCase().replace(/\s+/g, ' ');
+      const phoneDigits = editMemberPhone.trim().replace(/\D/g, '');
+      const duplicate = freshMembers.find((m: any) =>
+        m.name.trim().toLowerCase().replace(/\s+/g, ' ') === nameLower &&
+        m.phone.replace(/\D/g, '') === phoneDigits
+      );
+      if (duplicate) {
+        showToast("error", `A member named "${duplicate.name}" with the same phone number already exists.`);
+        return;
+      }
+    }
 
     const payload = {
       name: editMemberName,
@@ -520,6 +547,7 @@ export default function App() {
       notes: editMemberNotes,
     };
 
+    setIsSavingMember(true);
     try {
       let response;
       if (selectedMember?.id) {
@@ -539,14 +567,20 @@ export default function App() {
         const err = await response.json();
         throw new Error(err.error || "Failed to save member");
       }
+      const isEdit = !!selectedMember?.id;
       setIsEditingMember(false);
       setSelectedMember(null);
       clearMembersCache();
       await fetchMembers();
-      showToast("success", `Member "${payload.name}" saved successfully!`);
+      showToast("success", isEdit
+        ? `Member "${payload.name}" updated successfully!`
+        : `Member "${payload.name}" added successfully!`
+      );
     } catch (error: any) {
       console.error("Failed to save member", error);
       showToast("error", error.message || "Failed to save member.");
+    } finally {
+      setIsSavingMember(false);
     }
   };
 
@@ -579,9 +613,16 @@ export default function App() {
     });
   };
 
+  const MAX_PHOTO_SIZE_MB = 2;
   const handleMemberPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    // ── Photo size guard ──────────────────────────────────────────────────────
+    if (file.size > MAX_PHOTO_SIZE_MB * 1024 * 1024) {
+      showToast("error", `Photo is too large. Please use an image under ${MAX_PHOTO_SIZE_MB}MB.`);
+      if (e.target) e.target.value = "";
+      return;
+    }
     setIsUploadingPhoto(true);
     try {
       const reader = new FileReader();
@@ -1112,7 +1153,14 @@ export default function App() {
                         {/* Actions */}
                         <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-700">
                           <button onClick={() => setIsEditingMember(false)} className="px-6 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 font-medium transition-colors">Cancel</button>
-                          <button onClick={handleSaveMember} className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-medium transition-colors"><Save size={16} /> Save Member</button>
+                          <button
+                            onClick={handleSaveMember}
+                            disabled={isSavingMember}
+                            className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                          >
+                            {isSavingMember ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                            {isSavingMember ? "Saving..." : "Save Member"}
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -1635,8 +1683,8 @@ export default function App() {
                                   onClick={() => setTransposeSteps(0)}
                                   title="Reset to original key"
                                   className={`px-2 py-0.5 rounded-md text-xs font-semibold min-w-[52px] text-center transition-colors ${transposeSteps === 0
-                                      ? "bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
-                                      : "bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300"
+                                    ? "bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
+                                    : "bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300"
                                     }`}
                                 >
                                   {transposeSteps === 0 ? "Original" : transposeSteps > 0 ? `+${transposeSteps}` : `${transposeSteps}`}
@@ -1858,7 +1906,7 @@ export default function App() {
                                 }
                               </div>
                               {/* Grid / List toggle */}
-                              <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-xl p-0.5 gap-0.5 flex-shrink-0">
+                              <div className="hidden sm:flex items-center bg-gray-100 dark:bg-gray-800 rounded-xl p-0.5 gap-0.5 flex-shrink-0">
                                 <button
                                   onClick={() => toggleSongView("grid")}
                                   title="Grid view"
@@ -1872,7 +1920,7 @@ export default function App() {
                                 <button
                                   onClick={() => toggleSongView("list")}
                                   title="List view"
-                                  className={`p-1.5 rounded-lg transition-all ${songView === "list"
+                                  className={`hidden sm:flex p-1.5 rounded-lg transition-all ${songView === "list"
                                     ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm"
                                     : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                                     }`}
