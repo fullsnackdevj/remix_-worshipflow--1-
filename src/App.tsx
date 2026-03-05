@@ -144,9 +144,8 @@ export default function App() {
   }, [searchQuery]);
 
   useEffect(() => {
-    fetchTags();
-    fetchSongs();
-  }, []); // load once on mount
+    fetchSongs(); // loads songs + tags in parallel, reads cache first
+  }, []);
 
   useEffect(() => {
     if (currentView === "members" && allMembers.length === 0 && !isLoadingMembers) {
@@ -223,35 +222,87 @@ export default function App() {
   };
 
 
-  const fetchSongs = useCallback(async () => {
-    // Cancel any in-flight request
-    if (fetchAbortRef.current) {
-      fetchAbortRef.current.abort();
+  // ── Cache helpers ───────────────────────────────────────────────────────────
+  const CACHE_KEY = "wf_songs_cache";
+  const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+  const readCache = (): { songs: any[]; tags: any[] } | null => {
+    try {
+      const raw = localStorage.getItem(CACHE_KEY);
+      if (!raw) return null;
+      const { songs, tags, ts } = JSON.parse(raw);
+      if (Date.now() - ts > CACHE_TTL_MS) return null;
+      return { songs, tags };
+    } catch {
+      return null;
     }
+  };
+
+  const writeCache = (songs: any[], tags: any[]) => {
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ songs, tags, ts: Date.now() }));
+    } catch {
+      // storage quota exceeded — ignore
+    }
+  };
+
+  const clearSongsCache = () => {
+    try { localStorage.removeItem(CACHE_KEY); } catch { /* noop */ }
+  };
+
+  // ── Fetch: songs + tags in parallel, with localStorage cache ────────────────
+  const fetchSongs = useCallback(async ({ background = false } = {}) => {
+    if (fetchAbortRef.current) fetchAbortRef.current.abort();
     const controller = new AbortController();
     fetchAbortRef.current = controller;
 
-    setIsLoadingSongs(true);
-    try {
-      const url = new URL("/api/songs", window.location.origin);
-      const res = await fetch(url.toString(), { signal: controller.signal });
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        setAllSongs(data);
-      } else {
-        setAllSongs([]);
+    // 1. Serve from cache immediately (stale-while-revalidate)
+    if (!background) {
+      const cached = readCache();
+      if (cached) {
+        setAllSongs(cached.songs);
+        setTags(cached.tags);
+        setIsLoadingSongs(false);
+        // Revalidate silently in background
+        fetchSongs({ background: true });
+        return;
       }
+      setIsLoadingSongs(true);
+    }
+
+    try {
+      // 2. Fetch songs + tags in parallel
+      const [songsRes, tagsRes] = await Promise.all([
+        fetch("/api/songs", { signal: controller.signal }),
+        fetch("/api/tags", { signal: controller.signal }),
+      ]);
+
+      const [songsData, tagsData] = await Promise.all([
+        songsRes.json(),
+        tagsRes.json(),
+      ]);
+
+      const songs = Array.isArray(songsData) ? songsData : [];
+      const tags = Array.isArray(tagsData) ? tagsData : [];
+
+      setAllSongs(songs);
+      setTags(tags);
+      writeCache(songs, tags);
     } catch (error: any) {
       if (error?.name !== "AbortError") {
-        console.error("Failed to fetch songs", error);
-        setAllSongs([]);
+        console.error("Failed to load songs/tags", error);
+        if (!background) {
+          setAllSongs([]);
+          setTags([]);
+        }
       }
     } finally {
-      if (!controller.signal.aborted) {
-        setIsLoadingSongs(false);
-      }
+      if (!controller.signal.aborted) setIsLoadingSongs(false);
     }
   }, []);
+
+  const fetchTags = fetchSongs; // aliases — tags are always loaded together
+
 
   // Instant client-side filtering — no network, no stale results
   const filteredSongs = useMemo(() => {
@@ -290,19 +341,55 @@ export default function App() {
   }, [allSongs, debouncedQuery, selectedTagIds]);
 
   // ── Member Functions ────────────────────────────────────────────────────────
-  const fetchMembers = useCallback(async () => {
-    setIsLoadingMembers(true);
+  const MEMBERS_CACHE_KEY = "wf_members_cache";
+  const MEMBERS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+  const readMembersCache = (): any[] | null => {
+    try {
+      const raw = localStorage.getItem(MEMBERS_CACHE_KEY);
+      if (!raw) return null;
+      const { members, ts } = JSON.parse(raw);
+      if (Date.now() - ts > MEMBERS_CACHE_TTL_MS) return null;
+      return members;
+    } catch { return null; }
+  };
+
+  const writeMembersCache = (members: any[]) => {
+    try {
+      localStorage.setItem(MEMBERS_CACHE_KEY, JSON.stringify({ members, ts: Date.now() }));
+    } catch { /* quota exceeded — ignore */ }
+  };
+
+  const clearMembersCache = () => {
+    try { localStorage.removeItem(MEMBERS_CACHE_KEY); } catch { /* noop */ }
+  };
+
+  const fetchMembers = useCallback(async ({ background = false } = {}) => {
+    // Serve from cache instantly, then revalidate in background
+    if (!background) {
+      const cached = readMembersCache();
+      if (cached) {
+        setAllMembers(cached);
+        setIsLoadingMembers(false);
+        fetchMembers({ background: true }); // silent refresh
+        return;
+      }
+      setIsLoadingMembers(true);
+    }
     try {
       const res = await fetch("/api/members");
       const data = await res.json();
-      setAllMembers(Array.isArray(data) ? data : []);
+      const members = Array.isArray(data) ? data : [];
+      setAllMembers(members);
+      writeMembersCache(members);
     } catch (error) {
       console.error("Failed to fetch members", error);
-      setAllMembers([]);
+      if (!background) setAllMembers([]);
     } finally {
-      setIsLoadingMembers(false);
+      if (!background) setIsLoadingMembers(false);
     }
   }, []);
+
 
   const filteredMembers = useMemo(() => {
     if (!memberSearchQuery.trim()) return allMembers;
@@ -373,6 +460,7 @@ export default function App() {
       }
       setIsEditingMember(false);
       setSelectedMember(null);
+      clearMembersCache();
       await fetchMembers();
     } catch (error: any) {
       console.error("Failed to save member", error);
@@ -389,7 +477,9 @@ export default function App() {
         setSelectedMember(null);
         setIsEditingMember(false);
       }
+      clearMembersCache();
       await fetchMembers();
+
     } catch (error) {
       console.error("Failed to delete member", error);
       alert("Failed to remove member. Please try again.");
@@ -421,20 +511,10 @@ export default function App() {
   };
 
 
-  const fetchTags = async () => {
-    try {
-      const res = await fetch("/api/tags");
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        setTags(data);
-      } else {
-        setTags([]);
-      }
-    } catch (error) {
-      console.error("Failed to fetch tags", error);
-      setTags([]);
-    }
+  const fetchTagsStandalone = async () => {
+    // No-op: tags are now always loaded as part of fetchSongs (parallel)
   };
+
 
 
   const validateForm = () => {
@@ -487,7 +567,8 @@ export default function App() {
 
       setIsEditing(false);
       setSelectedSong(null);
-      await fetchSongs(); // refresh the full cached list
+      clearSongsCache();
+      await fetchSongs(); // refresh + re-cache
     } catch (error: any) {
       console.error("Failed to save song", error);
       alert(error.message || "Failed to save song. Please check if Firebase is configured correctly.");
@@ -504,6 +585,7 @@ export default function App() {
         setSelectedSong(null);
         setIsEditing(false);
       }
+      clearSongsCache();
       fetchSongs();
     } catch (error) {
       console.error("Failed to delete song", error);
@@ -519,6 +601,7 @@ export default function App() {
       await Promise.all(selectedSongIds.map(id => fetch(`/api/songs/${id}`, { method: "DELETE" })));
       setSelectedSongIds([]);
       setIsSelectionMode(false);
+      clearSongsCache();
       fetchSongs();
     } catch (error) {
       console.error("Failed to delete songs", error);
@@ -551,8 +634,9 @@ export default function App() {
     if (!confirm("Are you sure you want to delete this tag?")) return;
     try {
       await fetch(`/api/tags/${id}`, { method: "DELETE" });
-      fetchTags();
-      fetchSongs();
+      clearSongsCache();
+      fetchSongs(); // reloads both songs + tags fresh
+
     } catch (error) {
       console.error("Failed to delete tag", error);
     }

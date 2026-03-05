@@ -2,6 +2,7 @@ import * as dotenv from "dotenv";
 dotenv.config();
 
 import express from "express";
+import compression from "compression";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -14,7 +15,9 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = 3000;
 
+app.use(compression()); // gzip all API responses
 app.use(express.json({ limit: "50mb" }));
+
 
 // Text formatting helpers
 const toTitleCase = (str: string) =>
