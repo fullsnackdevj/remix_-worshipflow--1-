@@ -29,6 +29,25 @@ function json(statusCode: number, body: unknown) {
 const toTitleCase = (str: string) =>
     str.trim().replace(/\b\w/g, (char) => char.toUpperCase());
 
+function normalizeLyrics(text: string): string {
+    return text
+        .toLowerCase()
+        .replace(/\b(verse|chorus|bridge|pre[-\s]?chorus|outro|intro|tag|refrain|hook|interlude)\b/gi, "")
+        .replace(/[^a-z0-9]/g, "");
+}
+
+function lyricsAreDuplicate(a: string, b: string): boolean {
+    const na = normalizeLyrics(a);
+    const nb = normalizeLyrics(b);
+    if (!na || !nb) return false;
+    if (na === nb) return true;
+    const wordsOf = (s: string) => new Set(s.toLowerCase().split(/\s+/).filter(w => w.length > 3));
+    const wa = wordsOf(a);
+    const wb = wordsOf(b);
+    const intersection = [...wa].filter(w => wb.has(w)).length;
+    const union = new Set([...wa, ...wb]).size;
+    return union > 0 && intersection / union >= 0.85;
+}
 
 export const handler: Handler = async (event: HandlerEvent, _context: HandlerContext) => {
     // Parse path: strip /.netlify/functions/api OR /api prefix
@@ -142,20 +161,25 @@ Rules:
         }
 
         try {
-            // Duplicate check: same Title + Artist (case-insensitive)
+            // Duplicate check: same title+artist OR highly similar lyrics
             const existing = await firestore.collection("songs").get();
             const normalizedTitle = title.trim().toLowerCase();
             const normalizedArtist = artist.trim().toLowerCase();
+            const incomingLyrics = lyrics.trim();
+
             const duplicate = existing.docs.find((doc) => {
                 const d = doc.data();
-                return (
+                const sameTA =
                     (d.title || "").trim().toLowerCase() === normalizedTitle &&
-                    (d.artist || "").trim().toLowerCase() === normalizedArtist
-                );
+                    (d.artist || "").trim().toLowerCase() === normalizedArtist;
+                const sameLyrics = lyricsAreDuplicate(incomingLyrics, d.lyrics || "");
+                return sameTA || sameLyrics;
             });
+
             if (duplicate) {
+                const d = duplicate.data();
                 return json(409, {
-                    error: `Duplicate song detected! "${title}" by "${artist}" already exists in the database.`,
+                    error: `Duplicate song detected! This appears to be the same song as "${d.title}" by "${d.artist}" already in the database. Please check the existing entry before adding.`,
                 });
             }
 
@@ -217,21 +241,26 @@ Rules:
             }
 
             try {
-                // Duplicate check: exclude self
+                // Duplicate check: same title+artist OR highly similar lyrics (excluding self)
                 const existing = await firestore.collection("songs").get();
                 const normalizedTitle = title.trim().toLowerCase();
                 const normalizedArtist = artist.trim().toLowerCase();
+                const incomingLyrics = lyrics.trim();
+
                 const duplicate = existing.docs.find((doc) => {
                     if (doc.id === id) return false;
                     const d = doc.data();
-                    return (
+                    const sameTA =
                         (d.title || "").trim().toLowerCase() === normalizedTitle &&
-                        (d.artist || "").trim().toLowerCase() === normalizedArtist
-                    );
+                        (d.artist || "").trim().toLowerCase() === normalizedArtist;
+                    const sameLyrics = lyricsAreDuplicate(incomingLyrics, d.lyrics || "");
+                    return sameTA || sameLyrics;
                 });
+
                 if (duplicate) {
+                    const d = duplicate.data();
                     return json(409, {
-                        error: `Duplicate song detected! "${title}" by "${artist}" already exists in the database.`,
+                        error: `Duplicate song detected! This appears to be the same song as "${d.title}" by "${d.artist}" already in the database. Please check the existing entry before adding.`,
                     });
                 }
 

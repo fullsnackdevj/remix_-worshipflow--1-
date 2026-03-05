@@ -20,6 +20,40 @@ app.use(express.json({ limit: "50mb" }));
 const toTitleCase = (str: string) =>
   str.trim().replace(/\b\w/g, (char) => char.toUpperCase());
 
+/**
+ * Normalize lyrics for comparison:
+ *  - lowercase
+ *  - strip section labels (Verse, Chorus, Bridge, etc.)
+ *  - remove all non-alphanumeric characters
+ */
+function normalizeLyrics(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/\b(verse|chorus|bridge|pre[-\s]?chorus|outro|intro|tag|refrain|hook|interlude)\b/gi, "")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * Returns true if two lyrics bodies are duplicates.
+ * Strategy:
+ *  1. Exact match after normalization.
+ *  2. Jaccard similarity of significant words (>3 chars) ≥ 85%.
+ */
+function lyricsAreDuplicate(a: string, b: string): boolean {
+  const na = normalizeLyrics(a);
+  const nb = normalizeLyrics(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+
+  // Word-bag Jaccard similarity
+  const wordsOf = (s: string) =>
+    new Set(s.toLowerCase().split(/\s+/).filter(w => w.length > 3));
+  const wa = wordsOf(a);
+  const wb = wordsOf(b);
+  const intersection = [...wa].filter(w => wb.has(w)).length;
+  const union = new Set([...wa, ...wb]).size;
+  return union > 0 && intersection / union >= 0.85;
+}
 
 // Firebase Initialization
 let db: FirebaseFirestore.Firestore | null = null;
@@ -166,20 +200,27 @@ app.post("/api/songs", async (req, res) => {
   }
 
   try {
-    // Duplicate check: same title (case-insensitive) AND same artist (case-insensitive)
+    // Duplicate check: same title+artist OR highly similar lyrics
     const existing = await firestore.collection("songs").get();
     const normalizedTitle = title.trim().toLowerCase();
     const normalizedArtist = artist.trim().toLowerCase();
+    const incomingLyrics = lyrics.trim();
+
     const duplicate = existing.docs.find((doc) => {
       const d = doc.data();
-      return (
+      const sameTA =
         (d.title || "").trim().toLowerCase() === normalizedTitle &&
-        (d.artist || "").trim().toLowerCase() === normalizedArtist
-      );
+        (d.artist || "").trim().toLowerCase() === normalizedArtist;
+      const sameLyrics = lyricsAreDuplicate(incomingLyrics, d.lyrics || "");
+      return sameTA || sameLyrics;
     });
+
     if (duplicate) {
+      const d = duplicate.data();
+      const matchedTitle = d.title || title;
+      const matchedArtist = d.artist || artist;
       return res.status(409).json({
-        error: `Duplicate song detected! "${title}" by "${artist}" already exists in the database.`,
+        error: `Duplicate song detected! This appears to be the same song as "${matchedTitle}" by "${matchedArtist}" already in the database. Please check the existing entry before adding.`,
       });
     }
 
@@ -221,21 +262,28 @@ app.put("/api/songs/:id", async (req, res) => {
   }
 
   try {
-    // Duplicate check: same title + artist as another song (exclude self)
+    // Duplicate check: same title+artist OR highly similar lyrics (excluding self)
     const existing = await firestore.collection("songs").get();
     const normalizedTitle = title.trim().toLowerCase();
     const normalizedArtist = artist.trim().toLowerCase();
+    const incomingLyrics = lyrics.trim();
+
     const duplicate = existing.docs.find((doc) => {
       if (doc.id === id) return false; // skip self
       const d = doc.data();
-      return (
+      const sameTA =
         (d.title || "").trim().toLowerCase() === normalizedTitle &&
-        (d.artist || "").trim().toLowerCase() === normalizedArtist
-      );
+        (d.artist || "").trim().toLowerCase() === normalizedArtist;
+      const sameLyrics = lyricsAreDuplicate(incomingLyrics, d.lyrics || "");
+      return sameTA || sameLyrics;
     });
+
     if (duplicate) {
+      const d = duplicate.data();
+      const matchedTitle = d.title || title;
+      const matchedArtist = d.artist || artist;
       return res.status(409).json({
-        error: `Duplicate song detected! "${title}" by "${artist}" already exists in the database.`,
+        error: `Duplicate song detected! This appears to be the same song as "${matchedTitle}" by "${matchedArtist}" already in the database. Please check the existing entry before adding.`,
       });
     }
 
