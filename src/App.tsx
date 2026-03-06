@@ -119,10 +119,12 @@ export default function App() {
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [isEditingMember, setIsEditingMember] = useState(false);
   const [memberSearchQuery, setMemberSearchQuery] = useState("");
-  const [memberFormErrors, setMemberFormErrors] = useState<{ name?: string; phone?: string }>({});
+  const [memberFormErrors, setMemberFormErrors] = useState<{ firstName?: string; lastName?: string; phone?: string }>({});
 
   // Member form fields
-  const [editMemberName, setEditMemberName] = useState("");
+  const [editMemberFirstName, setEditMemberFirstName] = useState("");
+  const [editMemberMiddleInitial, setEditMemberMiddleInitial] = useState("");
+  const [editMemberLastName, setEditMemberLastName] = useState("");
   const [editMemberPhone, setEditMemberPhone] = useState("");
   const [editMemberPhoto, setEditMemberPhoto] = useState("");
   const [editMemberRoles, setEditMemberRoles] = useState<string[]>([]);
@@ -217,9 +219,13 @@ export default function App() {
   }, [searchQuery]);
 
   useEffect(() => {
-    fetchSongs(); // loads songs + tags in parallel, reads cache first
+    // Prefetch both songs and members in parallel on mount.
+    // Members will be cache-ready when user navigates to Team Members tab.
+    fetchSongs();
+    fetchMembers({ background: true });
   }, []);
 
+  // Keep this for when the user switches to members and cache is empty (edge case)
   useEffect(() => {
     if (currentView === "members" && allMembers.length === 0 && !isLoadingMembers) {
       fetchMembers();
@@ -399,7 +405,7 @@ export default function App() {
 
     if (tagFilters.length > 0) {
       result = result.filter(song =>
-        tagFilters.every(tagId => (song as any).tagIds?.includes(tagId))
+        tagFilters.some(tagId => (song as any).tagIds?.includes(tagId))
       );
     }
 
@@ -486,7 +492,16 @@ export default function App() {
   const openMemberEditor = (member?: Member) => {
     if (member) {
       setSelectedMember(member);
-      setEditMemberName(member.name);
+      const parts = (member.name || "").trim().split(/\s+/);
+      setEditMemberFirstName(parts[0] || "");
+      // If the second part is a single letter (with or without dot) treat it as middle initial
+      if (parts.length >= 3 && /^[A-Za-z]\.?$/.test(parts[1])) {
+        setEditMemberMiddleInitial(parts[1].replace('.', ''));
+        setEditMemberLastName(parts.slice(2).join(" ") || "");
+      } else {
+        setEditMemberMiddleInitial("");
+        setEditMemberLastName(parts.slice(1).join(" ") || "");
+      }
       setEditMemberPhone(member.phone);
       setEditMemberPhoto(member.photo || "");
       setEditMemberRoles(member.roles || []);
@@ -494,7 +509,9 @@ export default function App() {
       setEditMemberNotes(member.notes || "");
     } else {
       setSelectedMember(null);
-      setEditMemberName("");
+      setEditMemberFirstName("");
+      setEditMemberMiddleInitial("");
+      setEditMemberLastName("");
       setEditMemberPhone("");
       setEditMemberPhoto("");
       setEditMemberRoles([]);
@@ -507,39 +524,44 @@ export default function App() {
 
   const handleSaveMember = async () => {
     if (isSavingMember) return; // guard against double-click
-    const errors: { name?: string; phone?: string } = {};
-    if (!editMemberName.trim()) errors.name = "Name is required.";
+    const errors: { firstName?: string; lastName?: string; phone?: string } = {};
+    if (!editMemberFirstName.trim()) errors.firstName = "First name is required.";
+    if (!editMemberLastName.trim()) errors.lastName = "Last name is required.";
     if (!editMemberPhone.trim()) errors.phone = "Phone number is required.";
     if (Object.keys(errors).length > 0) { setMemberFormErrors(errors); return; }
     setMemberFormErrors({});
 
-    // ── Duplicate detection (new members only) ──────────────────────────────
-    if (!selectedMember?.id) {
-      // Always fetch fresh list to avoid stale-state false negatives
-      let freshMembers = allMembers;
-      try {
-        const res = await fetch("/api/members");
-        if (res.ok) {
-          const data = await res.json();
-          freshMembers = Array.isArray(data) ? data : allMembers;
-        }
-      } catch { /* fall back to cached allMembers */ }
+    // Build full name: "First [M.] Last"
+    const mi = editMemberMiddleInitial.trim().replace(/\.$/, '');
+    const fullName = `${editMemberFirstName.trim()}${mi ? ' ' + mi.toUpperCase() + '.' : ''} ${editMemberLastName.trim()}`;
 
-      // Normalize: strip ALL non-digit chars from phone for comparison
-      const nameLower = editMemberName.trim().toLowerCase().replace(/\s+/g, ' ');
+    // ── Duplicate detection (new members only) ──────────────────────────────
+    // allMembers is always current via optimistic updates — no network call needed
+    if (!selectedMember?.id) {
+      const firstLower = editMemberFirstName.trim().toLowerCase();
+      const lastLower = editMemberLastName.trim().toLowerCase();
       const phoneDigits = editMemberPhone.trim().replace(/\D/g, '');
-      const duplicate = freshMembers.find((m: any) =>
-        m.name.trim().toLowerCase().replace(/\s+/g, ' ') === nameLower &&
-        m.phone.replace(/\D/g, '') === phoneDigits
-      );
+      const duplicate = allMembers.find((m: any) => {
+        const parts = (m.name || "").trim().split(/\s+/);
+        const mFirst = (parts[0] || "").toLowerCase();
+        // Skip middle initial (single letter ± dot) — same logic as openMemberEditor
+        let mLast: string;
+        if (parts.length >= 3 && /^[A-Za-z]\.?$/.test(parts[1])) {
+          mLast = parts.slice(2).join(" ").toLowerCase();
+        } else {
+          mLast = parts.slice(1).join(" ").toLowerCase();
+        }
+        return mFirst === firstLower && mLast === lastLower &&
+          m.phone.replace(/\D/g, '') === phoneDigits;
+      });
       if (duplicate) {
-        showToast("error", `A member named "${duplicate.name}" with the same phone number already exists.`);
+        showToast("error", `"${duplicate.name}" with the same phone number already exists.`);
         return;
       }
     }
 
     const payload = {
-      name: editMemberName,
+      name: fullName,
       phone: editMemberPhone,
       photo: editMemberPhoto,
       roles: editMemberRoles,
@@ -549,9 +571,10 @@ export default function App() {
 
     setIsSavingMember(true);
     try {
+      const editingId = selectedMember?.id;
       let response;
-      if (selectedMember?.id) {
-        response = await fetch(`/api/members/${selectedMember.id}`, {
+      if (editingId) {
+        response = await fetch(`/api/members/${editingId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -567,12 +590,37 @@ export default function App() {
         const err = await response.json();
         throw new Error(err.error || "Failed to save member");
       }
-      const isEdit = !!selectedMember?.id;
+      const responseData = await response.json();
+
+      // ── Optimistic update: mutate local state instantly, no re-fetch ──────
+      setAllMembers(prev => {
+        let updated: Member[];
+        if (editingId) {
+          // Replace in-place
+          updated = prev.map(m => m.id === editingId
+            ? { ...m, ...payload, name: responseData.name ?? payload.name }
+            : m
+          );
+        } else {
+          // Prepend new member from server response
+          const newMember: Member = {
+            id: responseData.id,
+            name: responseData.name ?? payload.name,
+            phone: payload.phone,
+            photo: payload.photo,
+            roles: payload.roles,
+            status: payload.status,
+            notes: payload.notes,
+          };
+          updated = [newMember, ...prev];
+        }
+        writeMembersCache(updated); // keep cache in sync
+        return updated;
+      });
+
       setIsEditingMember(false);
       setSelectedMember(null);
-      clearMembersCache();
-      await fetchMembers();
-      showToast("success", isEdit
+      showToast("success", editingId
         ? `Member "${payload.name}" updated successfully!`
         : `Member "${payload.name}" added successfully!`
       );
@@ -593,21 +641,30 @@ export default function App() {
       confirmText: "Yes, Remove",
       confirmClass: "bg-red-500 hover:bg-red-600",
       onConfirm: async () => {
+        // ── Optimistic: remove from state instantly before API responds ──────
+        const memberName = member?.name || "Member";
+        setAllMembers(prev => {
+          const updated = prev.filter(m => m.id !== id);
+          writeMembersCache(updated);
+          return updated;
+        });
+        if (selectedMember?.id === id) {
+          setSelectedMember(null);
+          setIsEditingMember(false);
+        }
+        closeConfirm();
+        showToast("success", `"${memberName}" removed successfully.`);
+
+        // Fire-and-forget: delete on server in background
         try {
           const res = await fetch(`/api/members/${id}`, { method: "DELETE" });
           if (!res.ok) throw new Error("Failed to delete member");
-          if (selectedMember?.id === id) {
-            setSelectedMember(null);
-            setIsEditingMember(false);
-          }
-          clearMembersCache();
-          await fetchMembers();
-          showToast("success", "Member removed successfully.");
-          closeConfirm();
         } catch (error) {
           console.error("Failed to delete member", error);
-          showToast("error", "Failed to remove member. Please try again.");
-          closeConfirm();
+          // Rollback: re-fetch to restore correct state
+          showToast("error", "Failed to remove member. Restoring list...");
+          clearMembersCache();
+          fetchMembers();
         }
       }
     });
@@ -1058,33 +1115,55 @@ export default function App() {
                           <input type="file" ref={memberPhotoInputRef} onChange={handleMemberPhotoUpload} className="hidden" accept="image/*" />
                         </div>
 
-                        {/* Name + Phone */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* First Name | MI | Last Name */}
+                        <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 72px 1fr' }}>
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Full Name <span className="text-red-500">*</span></label>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">First Name <span className="text-red-500">*</span></label>
                             <input
                               type="text"
-                              value={editMemberName}
-                              onChange={e => { setEditMemberName(e.target.value); if (memberFormErrors.name) setMemberFormErrors(p => ({ ...p, name: undefined })); }}
-                              className={`w-full px-4 py-2 border ${memberFormErrors.name ? "border-red-400 focus:border-red-400 focus:ring-red-200" : "border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-indigo-200"} bg-white dark:bg-gray-700 rounded-xl focus:ring-2 outline-none`}
-                              placeholder="Juan dela Cruz"
+                              value={editMemberFirstName}
+                              onChange={e => { setEditMemberFirstName(e.target.value); if (memberFormErrors.firstName) setMemberFormErrors(p => ({ ...p, firstName: undefined })); }}
+                              className={`w-full px-4 py-2 border ${memberFormErrors.firstName ? "border-red-400 focus:border-red-400 focus:ring-red-200" : "border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-indigo-200"} bg-white dark:bg-gray-700 rounded-xl focus:ring-2 outline-none`}
+                              placeholder="Juan"
                             />
-                            {memberFormErrors.name && <p className="mt-1 text-xs text-red-500">{memberFormErrors.name}</p>}
+                            {memberFormErrors.firstName && <p className="mt-1 text-xs text-red-500">{memberFormErrors.firstName}</p>}
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Phone Number <span className="text-red-500">*</span></label>
-                            <div className="relative">
-                              <Phone size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                              <input
-                                type="tel"
-                                value={editMemberPhone}
-                                onChange={e => { setEditMemberPhone(e.target.value); if (memberFormErrors.phone) setMemberFormErrors(p => ({ ...p, phone: undefined })); }}
-                                className={`w-full pl-9 pr-4 py-2 border ${memberFormErrors.phone ? "border-red-400 focus:border-red-400 focus:ring-red-200" : "border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-indigo-200"} bg-white dark:bg-gray-700 rounded-xl focus:ring-2 outline-none`}
-                                placeholder="+63 912 345 6789"
-                              />
-                            </div>
-                            {memberFormErrors.phone && <p className="mt-1 text-xs text-red-500">{memberFormErrors.phone}</p>}
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">M.I. <span className="text-gray-400 font-normal text-xs">(opt.)</span></label>
+                            <input
+                              type="text"
+                              maxLength={2}
+                              value={editMemberMiddleInitial}
+                              onChange={e => setEditMemberMiddleInitial(e.target.value.replace(/[^a-zA-Z]/g, '').toUpperCase())}
+                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-indigo-200 bg-white dark:bg-gray-700 rounded-xl focus:ring-2 outline-none text-center uppercase tracking-widest"
+                              placeholder="M"
+                            />
                           </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Last Name <span className="text-red-500">*</span></label>
+                            <input
+                              type="text"
+                              value={editMemberLastName}
+                              onChange={e => { setEditMemberLastName(e.target.value); if (memberFormErrors.lastName) setMemberFormErrors(p => ({ ...p, lastName: undefined })); }}
+                              className={`w-full px-4 py-2 border ${memberFormErrors.lastName ? "border-red-400 focus:border-red-400 focus:ring-red-200" : "border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-indigo-200"} bg-white dark:bg-gray-700 rounded-xl focus:ring-2 outline-none`}
+                              placeholder="dela Cruz"
+                            />
+                            {memberFormErrors.lastName && <p className="mt-1 text-xs text-red-500">{memberFormErrors.lastName}</p>}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Phone Number <span className="text-red-500">*</span></label>
+                          <div className="relative">
+                            <Phone size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                            <input
+                              type="tel"
+                              value={editMemberPhone}
+                              onChange={e => { setEditMemberPhone(e.target.value); if (memberFormErrors.phone) setMemberFormErrors(p => ({ ...p, phone: undefined })); }}
+                              className={`w-full pl-9 pr-4 py-2 border ${memberFormErrors.phone ? "border-red-400 focus:border-red-400 focus:ring-red-200" : "border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-indigo-200"} bg-white dark:bg-gray-700 rounded-xl focus:ring-2 outline-none`}
+                              placeholder="+63 912 345 6789"
+                            />
+                          </div>
+                          {memberFormErrors.phone && <p className="mt-1 text-xs text-red-500">{memberFormErrors.phone}</p>}
                         </div>
 
                         {/* Status */}

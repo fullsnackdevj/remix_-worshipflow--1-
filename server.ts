@@ -441,8 +441,9 @@ app.post("/api/members", async (req, res) => {
   }
 
   try {
+    const savedName = toTitleCase(name);
     const docRef = await firestore.collection("members").add({
-      name: toTitleCase(name),
+      name: savedName,
       phone: phone.trim(),
       photo: photo || "",
       roles: roles || [],
@@ -451,7 +452,15 @@ app.post("/api/members", async (req, res) => {
       created_at: admin.firestore.FieldValue.serverTimestamp(),
       updated_at: admin.firestore.FieldValue.serverTimestamp(),
     });
-    res.status(201).json({ id: docRef.id });
+    res.status(201).json({
+      id: docRef.id,
+      name: savedName,
+      phone: phone.trim(),
+      photo: photo || "",
+      roles: roles || [],
+      status: status || "active",
+      notes: notes || "",
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to create member" });
