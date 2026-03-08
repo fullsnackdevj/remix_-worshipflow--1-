@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WorshipFlow — Offline</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0f172a;
+            color: #e2e8f0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            gap: 16px;
+            padding: 24px;
+            text-align: center;
+        }
+
+        img {
+            width: 80px;
+            height: 80px;
+            border-radius: 20px;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        p {
+            color: #94a3b8;
+            font-size: 0.95rem;
+            max-width: 280px;
+        }
+
+        button {
+            margin-top: 8px;
+            padding: 12px 28px;
+            background: #6366f1;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+    <img src="/icon-192x192.png" alt="WorshipFlow" />
+    <h1>You're Offline</h1>
+    <p>No internet connection right now. Please check your connection and try again.</p>
+    <button onclick="window.location.reload()">Try Again</button>
+</body>
+
+</html>
