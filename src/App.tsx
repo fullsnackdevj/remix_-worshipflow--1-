@@ -2138,12 +2138,16 @@ export default function App() {
                           </div>
                         ) : (
                           <>
-                            <div className="relative bg-black aspect-video">
+                            <div className="relative bg-black" style={{ aspectRatio: "3/4" }}>
                               <video ref={cameraVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-                              {/* Circular face guide */}
-                              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                <div className="w-40 h-40 rounded-full border-2 border-white/40 border-dashed" />
-                              </div>
+                              {/* Rule-of-thirds grid */}
+                              <div className="absolute inset-0 pointer-events-none" style={{
+                                backgroundImage: `
+                                  linear-gradient(to right, rgba(255,255,255,0.25) 1px, transparent 1px),
+                                  linear-gradient(to bottom, rgba(255,255,255,0.25) 1px, transparent 1px)
+                                `,
+                                backgroundSize: "33.333% 33.333%"
+                              }} />
                             </div>
                             <div className="flex items-center justify-center gap-4 p-4">
                               <button onClick={closeCamera} className="px-4 py-2 rounded-xl bg-gray-700 text-white text-sm hover:bg-gray-600 transition-colors">Cancel</button>
@@ -2172,23 +2176,32 @@ export default function App() {
 
                       <div className="space-y-6">
                         {/* Photo upload */}
-                        <div className="flex flex-col items-center gap-3">
-                          {/* Avatar preview */}
-                          <div className="relative w-28 h-28 rounded-full overflow-hidden border-4 border-indigo-200 dark:border-indigo-700 bg-gray-100 dark:bg-gray-700">
+                        <div className="flex flex-col items-center gap-2">
+                          {/* Avatar — click to open camera */}
+                          <div
+                            onClick={openCamera}
+                            className="relative w-28 h-28 rounded-full overflow-hidden border-4 border-indigo-200 dark:border-indigo-700 bg-gray-100 dark:bg-gray-700 cursor-pointer hover:border-indigo-400 transition-colors group"
+                          >
                             {editMemberPhoto ? (
                               <img src={editMemberPhoto} alt="Preview" className="w-full h-full object-cover" />
                             ) : (
-                              <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
-                                <Camera size={28} />
+                              <div className="w-full h-full flex flex-col items-center justify-center gap-1 text-gray-400 group-hover:text-indigo-400 transition-colors px-2">
+                                <Camera size={24} />
+                                <span className="text-[9px] text-center leading-tight">Click to open camera</span>
                               </div>
                             )}
+                            {/* Hover overlay */}
+                            <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                              <Camera size={20} className="text-white" />
+                            </div>
                             {isUploadingPhoto && (
                               <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
                                 <Loader2 size={22} className="text-white animate-spin" />
                               </div>
                             )}
                           </div>
-                          {/* Two buttons: Gallery + Camera */}
+
+                          {/* Secondary actions */}
                           <div className="flex items-center gap-2">
                             <button
                               type="button"
@@ -2196,13 +2209,6 @@ export default function App() {
                               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                             >
                               <ImagePlus size={14} /> Gallery
-                            </button>
-                            <button
-                              type="button"
-                              onClick={openCamera}
-                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-indigo-300 dark:border-indigo-600 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"
-                            >
-                              <Camera size={14} /> Camera
                             </button>
                             {editMemberPhoto && (
                               <button
@@ -2215,7 +2221,6 @@ export default function App() {
                               </button>
                             )}
                           </div>
-                          {/* Hidden gallery input only */}
                           <input type="file" ref={memberPhotoInputRef} onChange={handleMemberPhotoUpload} className="hidden" accept="image/*" />
                         </div>
 
