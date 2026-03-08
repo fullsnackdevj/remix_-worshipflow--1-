@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, LayoutGrid, List, BookOpen, Mic2, Copy, Pencil } from "lucide-react";
+import { useAuth } from "./AuthContext";
+import AdminPanel from "./AdminPanel";
+import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, LayoutGrid, List, BookOpen, Mic2, Copy, Pencil, Shield } from "lucide-react";
 import { Song, Tag } from "./types";
 
 // ── Member Role Constants ────────────────────────────────────────────────────
@@ -135,11 +137,48 @@ function transposeChords(text: string, steps: number): string {
   );
 }
 
+// ── UserMenu ─────────────────────────────────────────────────────────────────
+function UserMenu() {
+  const { user, logOut, isAdmin } = useAuth();
+  const [open, setOpen] = React.useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+  if (!user) return null;
+  return (
+    <div ref={ref} className="relative flex-shrink-0">
+      <button onClick={() => setOpen(o => !o)} className="flex items-center gap-2 p-1 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+        {user.photoURL
+          ? <img src={user.photoURL} alt={user.displayName ?? ""} className="w-8 h-8 rounded-full border-2 border-indigo-500" />
+          : <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-sm font-semibold">{user.displayName?.[0] ?? user.email?.[0]?.toUpperCase()}</div>
+        }
+        <ChevronDown size={14} className="text-gray-400 hidden sm:block" />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50 py-1 overflow-hidden">
+          <div className="px-3 py-2.5 border-b border-gray-100 dark:border-gray-700">
+            <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{user.displayName}</p>
+            <p className="text-xs text-gray-400 truncate">{user.email}</p>
+            {isAdmin && <span className="inline-block mt-1 text-[10px] bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full font-semibold">Admin</span>}
+          </div>
+          <button onClick={() => { setOpen(false); logOut(); }} className="w-full text-left px-3 py-2.5 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center gap-2">
+            <X size={14} /> Sign out
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
-  const [currentView, setCurrentView] = useState<"songs" | "members" | "schedule">("songs");
+  const [currentView, setCurrentView] = useState<"songs" | "members" | "schedule" | "admin">("songs");
+  const { isAdmin } = useAuth();
 
   // ── Scheduling state ─────────────────────────────────────────────────────
   const [allSchedules, setAllSchedules] = useState<Schedule[]>([]);
@@ -1324,6 +1363,21 @@ export default function App() {
             )}
           </button>
 
+          {/* Admin Panel — admin only */}
+          {isAdmin && (
+            <button
+              onClick={() => { setCurrentView("admin"); setIsMobileMenuOpen(false); }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "admin"
+                ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300"
+                : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                } ${isSidebarCollapsed ? "justify-center" : ""}`}
+              title="Team Access"
+            >
+              <Shield size={20} className="shrink-0" />
+              {!isSidebarCollapsed && <span>Team Access</span>}
+            </button>
+          )}
+
           {/* Preaching — disabled / coming soon */}
           <div
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium opacity-40 cursor-not-allowed select-none text-gray-500 dark:text-gray-500 ${isSidebarCollapsed ? "justify-center" : ""}`}
@@ -1370,9 +1424,10 @@ export default function App() {
 
           <div className="flex-1 flex items-center">
             <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-              {currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : "Song Management"}
+              {currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : "Song Management"}
             </h1>
           </div>
+          <UserMenu />
         </header>
 
         {/* Content Area */}
@@ -1431,9 +1486,9 @@ export default function App() {
                           const disabledTitle = isListView
                             ? "Switch to Month view to add events"
                             : isEditingExistingEvent ? "Finish editing before adding a new event"
-                            : hasExisting ? "This date already has events — open a card to edit"
-                            : isPast ? "Past date — cannot add events"
-                            : "Select an empty date on the calendar first";
+                              : hasExisting ? "This date already has events — open a card to edit"
+                                : isPast ? "Past date — cannot add events"
+                                  : "Select an empty date on the calendar first";
                           if (canAdd) {
                             return (
                               <button onClick={() => { setSelectedEventId(null); setSchedPanelMode("edit"); openBlankEventForm(selectedScheduleDate!); }}
@@ -2231,9 +2286,11 @@ export default function App() {
               })() : null}
 
               {/* ══════════════════════════════════════════════════════════════
-                   TEAM MEMBERS VIEW
+                   ADMIN PANEL VIEW
               ══════════════════════════════════════════════════════════════ */}
-              {currentView === "members" ? (
+              {currentView === "admin" ? (
+                <AdminPanel />
+              ) : currentView === "members" ? (
                 <div className="max-w-5xl mx-auto">
 
                   {/* ── Camera Modal ── */}

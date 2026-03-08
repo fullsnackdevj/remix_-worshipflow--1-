@@ -59,8 +59,42 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
 
     const firestore = getDb();
 
+    // ─── AUTH ────────────────────────────────────────────────────────────────────
+    if (rawPath === "/auth/check" && method === "GET") {
+        const email = event.queryStringParameters?.email ?? "";
+        if (!email) return json(400, { error: "Missing email" });
+        const ADMIN_EMAIL = "jayfullsnackdev@gmail.com";
+        if (email === ADMIN_EMAIL) return json(200, { approved: true, role: "admin" });
+        try {
+            const doc = await firestore?.collection("approved_users").doc(email).get();
+            if (doc?.exists) return json(200, { approved: true, role: doc.data()?.role ?? "member" });
+            return json(200, { approved: false });
+        } catch { return json(200, { approved: false }); }
+    }
+
+    if (rawPath === "/auth/approve" && method === "POST") {
+        const { email, role = "member" } = body;
+        if (!email) return json(400, { error: "Missing email" });
+        await firestore?.collection("approved_users").doc(email).set({ email, role, approvedAt: new Date().toISOString() });
+        return json(200, { success: true });
+    }
+
+    if (rawPath === "/auth/revoke" && method === "DELETE") {
+        const { email } = body;
+        if (!email) return json(400, { error: "Missing email" });
+        await firestore?.collection("approved_users").doc(email).delete();
+        return json(200, { success: true });
+    }
+
+    if (rawPath === "/auth/users" && method === "GET") {
+        const snap = await firestore?.collection("approved_users").get();
+        const users = snap?.docs.map(d => d.data()) ?? [];
+        return json(200, users);
+    }
+
     // ─── OCR ────────────────────────────────────────────────────────────────────
     if (rawPath === "/ocr" && method === "POST") {
+
         try {
             const { base64Data, mimeType, type } = body;
             if (!base64Data || !mimeType || !type) return json(400, { error: "Missing required fields" });
