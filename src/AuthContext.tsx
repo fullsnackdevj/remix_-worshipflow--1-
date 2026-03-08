@@ -7,7 +7,7 @@ import {
 } from "firebase/auth";
 import { auth, googleProvider } from "./firebase";
 
-const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL as string;
+const ADMIN_EMAIL = "jayfullsnackdev@gmail.com";
 
 export type AuthStatus = "loading" | "unauthenticated" | "pending" | "approved" | "denied";
 
