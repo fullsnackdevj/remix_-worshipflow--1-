@@ -441,6 +441,93 @@ Rules:
         }
     }
 
+    // ─── SCHEDULES ───────────────────────────────────────────────────────────────
+    // GET /schedules
+    if (rawPath === "/schedules" && method === "GET") {
+        try {
+            const snapshot = await firestore.collection("schedules").orderBy("date").get();
+            const schedules = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    ...data,
+                    created_at: data.created_at?.toDate?.()?.toISOString() || data.created_at,
+                    updated_at: data.updated_at?.toDate?.()?.toISOString() || data.updated_at,
+                };
+            });
+            return json(200, schedules);
+        } catch (err) {
+            console.error(err);
+            return json(500, { error: "Failed to fetch schedules" });
+        }
+    }
+
+    // POST /schedules
+    if (rawPath === "/schedules" && method === "POST") {
+        const { date, serviceType, worshipLeader, backupSingers, musicians, songLineup, notes, eventName, assignments } = body;
+        if (!date) return json(400, { error: "Date is required." });
+        const stripPhoto = (m: any) => m ? { memberId: m.memberId, name: m.name, role: m.role || "" } : null;
+        try {
+            const docRef = await firestore.collection("schedules").add({
+                date,
+                serviceType: serviceType || "sunday",
+                eventName: eventName || "",
+                worshipLeader: stripPhoto(worshipLeader),
+                backupSingers: (backupSingers || []).map(stripPhoto),
+                musicians: (musicians || []).map(stripPhoto),
+                assignments: (assignments || []).map((a: any) => ({ role: a.role, members: (a.members || []).map(stripPhoto) })),
+                songLineup: songLineup || { joyful: "", solemn: "" },
+                notes: notes || "",
+                created_at: admin.firestore.FieldValue.serverTimestamp(),
+                updated_at: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            return json(201, { id: docRef.id });
+        } catch (err) {
+            console.error(err);
+            return json(500, { error: "Failed to create schedule" });
+        }
+    }
+
+    // PUT /schedules/:id  &  DELETE /schedules/:id
+    const schedMatch = rawPath.match(/^\/schedules\/([^/]+)$/);
+    if (schedMatch) {
+        const id = schedMatch[1];
+        const stripPhoto = (m: any) => m ? { memberId: m.memberId, name: m.name, role: m.role || "" } : null;
+
+        if (method === "PUT") {
+            const { date, serviceType, worshipLeader, backupSingers, musicians, songLineup, notes, eventName, assignments } = body;
+            if (!date) return json(400, { error: "Date is required." });
+            try {
+                await firestore.collection("schedules").doc(id).update({
+                    date,
+                    serviceType: serviceType || "sunday",
+                    eventName: eventName || "",
+                    worshipLeader: stripPhoto(worshipLeader),
+                    backupSingers: (backupSingers || []).map(stripPhoto),
+                    musicians: (musicians || []).map(stripPhoto),
+                    assignments: (assignments || []).map((a: any) => ({ role: a.role, members: (a.members || []).map(stripPhoto) })),
+                    songLineup: songLineup || { joyful: "", solemn: "" },
+                    notes: notes || "",
+                    updated_at: admin.firestore.FieldValue.serverTimestamp(),
+                });
+                return json(200, { success: true });
+            } catch (err) {
+                console.error(err);
+                return json(500, { error: "Failed to update schedule" });
+            }
+        }
+
+        if (method === "DELETE") {
+            try {
+                await firestore.collection("schedules").doc(id).delete();
+                return json(200, { success: true });
+            } catch (err) {
+                console.error(err);
+                return json(500, { error: "Failed to delete schedule" });
+            }
+        }
+    }
+
     return json(404, { error: "Not found" });
 };
 
