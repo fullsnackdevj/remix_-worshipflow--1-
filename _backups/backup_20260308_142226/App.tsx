@@ -196,12 +196,6 @@ export default function App() {
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [isSavingMember, setIsSavingMember] = useState(false);
   const memberPhotoInputRef = useRef<HTMLInputElement>(null);
-  const memberCameraInputRef = useRef<HTMLInputElement>(null); // kept for mobile fallback
-  // Camera modal
-  const [showCameraModal, setShowCameraModal] = useState(false);
-  const [cameraError, setCameraError] = useState("");
-  const cameraVideoRef = useRef<HTMLVideoElement>(null);
-  const cameraStreamRef = useRef<MediaStream | null>(null);
 
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -947,44 +941,6 @@ export default function App() {
     } finally {
       if (e.target) e.target.value = "";
     }
-  };
-
-  const openCamera = async () => {
-    setCameraError("");
-    setShowCameraModal(true);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
-      cameraStreamRef.current = stream;
-      setTimeout(() => {
-        if (cameraVideoRef.current) {
-          cameraVideoRef.current.srcObject = stream;
-          cameraVideoRef.current.play().catch(() => { });
-        }
-      }, 120);
-    } catch {
-      setCameraError("Camera access was denied or is unavailable. Please allow camera permission and try again.");
-    }
-  };
-
-  const closeCamera = () => {
-    if (cameraStreamRef.current) {
-      cameraStreamRef.current.getTracks().forEach(t => t.stop());
-      cameraStreamRef.current = null;
-    }
-    setShowCameraModal(false);
-    setCameraError("");
-  };
-
-  const snapPhoto = () => {
-    const video = cameraVideoRef.current;
-    if (!video) return;
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
-    canvas.getContext("2d")?.drawImage(video, 0, 0);
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
-    setEditMemberPhoto(dataUrl);
-    closeCamera();
   };
 
   const toggleMemberRole = (role: string) => {
@@ -2122,46 +2078,6 @@ export default function App() {
               {currentView === "members" ? (
                 <div className="max-w-5xl mx-auto">
 
-                  {/* ── Camera Modal ── */}
-                  {showCameraModal && (
-                    <div className="fixed inset-0 bg-black/80 z-[999] flex items-center justify-center p-4" onClick={closeCamera}>
-                      <div className="bg-gray-900 rounded-2xl overflow-hidden w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700">
-                          <p className="text-white font-semibold flex items-center gap-2"><Camera size={16} className="text-indigo-400" /> Take a Photo</p>
-                          <button onClick={closeCamera} className="p-1.5 text-gray-400 hover:text-white rounded-lg transition-colors"><X size={18} /></button>
-                        </div>
-                        {cameraError ? (
-                          <div className="p-8 text-center">
-                            <Camera size={40} className="mx-auto mb-3 text-gray-600" />
-                            <p className="text-sm text-red-400">{cameraError}</p>
-                            <button onClick={closeCamera} className="mt-4 px-4 py-2 bg-gray-700 text-white rounded-xl text-sm hover:bg-gray-600 transition-colors">Close</button>
-                          </div>
-                        ) : (
-                          <>
-                            <div className="relative bg-black aspect-video">
-                              <video ref={cameraVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-                              {/* Circular face guide */}
-                              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                <div className="w-40 h-40 rounded-full border-2 border-white/40 border-dashed" />
-                              </div>
-                            </div>
-                            <div className="flex items-center justify-center gap-4 p-4">
-                              <button onClick={closeCamera} className="px-4 py-2 rounded-xl bg-gray-700 text-white text-sm hover:bg-gray-600 transition-colors">Cancel</button>
-                              <button
-                                onClick={snapPhoto}
-                                className="w-14 h-14 rounded-full bg-white border-4 border-indigo-500 flex items-center justify-center hover:bg-indigo-50 transition-colors shadow-lg"
-                                title="Take Photo"
-                              >
-                                <Camera size={22} className="text-indigo-600" />
-                              </button>
-                              <div className="w-20" /> {/* spacer for balance */}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
                   {/* ── Member Form ── */}
                   {isEditingMember ? (
                     <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
@@ -2173,8 +2089,10 @@ export default function App() {
                       <div className="space-y-6">
                         {/* Photo upload */}
                         <div className="flex flex-col items-center gap-3">
-                          {/* Avatar preview */}
-                          <div className="relative w-28 h-28 rounded-full overflow-hidden border-4 border-indigo-200 dark:border-indigo-700 bg-gray-100 dark:bg-gray-700">
+                          <div
+                            onClick={() => memberPhotoInputRef.current?.click()}
+                            className="relative w-28 h-28 rounded-full overflow-hidden border-4 border-indigo-200 dark:border-indigo-700 bg-gray-100 dark:bg-gray-700 cursor-pointer hover:border-indigo-400 transition-colors group"
+                          >
                             {editMemberPhoto ? (
                               <img src={editMemberPhoto} alt="Preview" className="w-full h-full object-cover" />
                             ) : (
@@ -2182,40 +2100,13 @@ export default function App() {
                                 <Camera size={28} />
                               </div>
                             )}
-                            {isUploadingPhoto && (
-                              <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                                <Loader2 size={22} className="text-white animate-spin" />
-                              </div>
-                            )}
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                              {isUploadingPhoto
+                                ? <Loader2 size={22} className="text-white animate-spin" />
+                                : <Camera size={22} className="text-white" />}
+                            </div>
                           </div>
-                          {/* Two buttons: Gallery + Camera */}
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => memberPhotoInputRef.current?.click()}
-                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                            >
-                              <ImagePlus size={14} /> Gallery
-                            </button>
-                            <button
-                              type="button"
-                              onClick={openCamera}
-                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-indigo-300 dark:border-indigo-600 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"
-                            >
-                              <Camera size={14} /> Camera
-                            </button>
-                            {editMemberPhoto && (
-                              <button
-                                type="button"
-                                onClick={() => setEditMemberPhoto("")}
-                                className="flex items-center gap-1 px-2 py-1.5 text-xs font-medium rounded-lg text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                                title="Remove photo"
-                              >
-                                <X size={13} />
-                              </button>
-                            )}
-                          </div>
-                          {/* Hidden gallery input only */}
+                          <p className="text-xs text-gray-400">Click to upload photo</p>
                           <input type="file" ref={memberPhotoInputRef} onChange={handleMemberPhotoUpload} className="hidden" accept="image/*" />
                         </div>
 
