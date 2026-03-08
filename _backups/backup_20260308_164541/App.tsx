@@ -1390,30 +1390,20 @@ export default function App() {
                 });
                 return (
                   <div className="max-w-5xl mx-auto">
-                    {/* ── Scheduling Header ── */}
-                    <div className="flex flex-col gap-2 mb-4">
-                      {/* Row 1: centered month navigation */}
-                      <div className="flex items-center justify-center gap-2">
+                    {/* Header row */}
+                    <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                      <div className="flex items-center gap-3">
                         <button onClick={() => setCalendarMonth(new Date(year, month - 1, 1))} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-600 dark:text-gray-400"><ChevronLeft size={18} /></button>
                         <h2 className="font-bold text-gray-900 dark:text-white text-lg min-w-[140px] text-center">
                           {calendarMonth.toLocaleDateString("en", { month: "long", year: "numeric" })}
                         </h2>
                         <button onClick={() => setCalendarMonth(new Date(year, month + 1, 1))} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-600 dark:text-gray-400"><ChevronRight size={18} /></button>
                       </div>
-                      {/* Row 2: view toggles left | add event right */}
-                      <div className="flex items-center justify-between">
-                        {/* View toggle — icon-only on <xs, icon+label on sm+ */}
+                      <div className="flex items-center gap-2">
                         <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-xl p-0.5 gap-0.5">
-                          <button onClick={() => setScheduleView("month")} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-all ${scheduleView === "month" ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-white"}`}>
-                            <Calendar size={14} />
-                            <span className="hidden min-[375px]:inline">Month</span>
-                          </button>
-                          <button onClick={() => setScheduleView("list")} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-all ${scheduleView === "list" ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-white"}`}>
-                            <List size={14} />
-                            <span className="hidden min-[375px]:inline">List</span>
-                          </button>
+                          <button onClick={() => setScheduleView("month")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${scheduleView === "month" ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-white"}`}><Calendar size={14} />Month</button>
+                          <button onClick={() => setScheduleView("list")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${scheduleView === "list" ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-white"}`}><List size={14} />List</button>
                         </div>
-                        {/* Add Event button */}
                         {selectedScheduleDate && selectedScheduleDate >= todayStr ? (
                           <button onClick={() => { setSelectedEventId(null); setSchedPanelMode("edit"); openBlankEventForm(selectedScheduleDate); }}
                             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-medium transition-colors">
