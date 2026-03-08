@@ -1,13 +1,14 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 
+// Firebase client config — safe to expose (restricted by authorized domains)
 const firebaseConfig = {
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-    appId: import.meta.env.VITE_FIREBASE_APP_ID,
+    apiKey: "AIzaSyDiFuHQ3qUTdvZ7qppCqJRlCBgxJM3vhw0",
+    authDomain: "worshipflow-1fbe0.firebaseapp.com",
+    projectId: "worshipflow-1fbe0",
+    storageBucket: "worshipflow-1fbe0.firebasestorage.app",
+    messagingSenderId: "1007052719455",
+    appId: "1:1007052719455:web:e0d6c338a503cdefcfe2ea",
 };
 
 const app = initializeApp(firebaseConfig);
