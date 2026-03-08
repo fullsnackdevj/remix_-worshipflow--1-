@@ -134,26 +134,27 @@ export default function AdminPanel() {
                     ) : (
                         <ul className="divide-y divide-amber-500/10">
                             {pending.map(u => (
-                                <li key={u.email} className="flex items-center gap-3 px-4 py-3">
-                                    {/* Avatar */}
-                                    {u.photo
-                                        ? <img src={u.photo} alt={u.name} className="w-9 h-9 rounded-full flex-shrink-0" />
-                                        : <div className="w-9 h-9 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-600 font-bold text-sm flex-shrink-0">{u.email[0].toUpperCase()}</div>
-                                    }
-                                    {/* Info */}
-                                    <div className="flex-1 min-w-0">
-                                        {u.name && <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{u.name}</p>}
-                                        <p className="text-xs text-gray-400 truncate">{u.email}</p>
-                                        <p className="text-[10px] text-gray-500 mt-0.5">
-                                            Requested {new Date(u.requestedAt).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}
-                                        </p>
+                                <li key={u.email} className="px-4 py-3 space-y-3">
+                                    {/* Top row: avatar + info */}
+                                    <div className="flex items-center gap-3">
+                                        {u.photo
+                                            ? <img src={u.photo} alt={u.name} className="w-10 h-10 rounded-full flex-shrink-0 ring-2 ring-amber-500/30" />
+                                            : <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-600 font-bold flex-shrink-0">{u.email[0].toUpperCase()}</div>
+                                        }
+                                        <div className="min-w-0">
+                                            {u.name && <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{u.name}</p>}
+                                            <p className="text-xs text-gray-400 truncate">{u.email}</p>
+                                            <p className="text-[10px] text-gray-500 mt-0.5">
+                                                Requested {new Date(u.requestedAt).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}
+                                            </p>
+                                        </div>
                                     </div>
-                                    {/* Actions */}
-                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                    {/* Bottom row: role + approve + dismiss */}
+                                    <div className="flex items-center gap-2">
                                         <select
-                                            defaultValue="member"
                                             id={`role-${u.email}`}
-                                            className="text-xs px-2 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 focus:outline-none"
+                                            defaultValue="member"
+                                            className="flex-1 text-sm px-3 py-2 rounded-xl bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 focus:outline-none"
                                         >
                                             <option value="member">Member</option>
                                             <option value="leader">Worship Leader</option>
@@ -165,17 +166,17 @@ export default function AdminPanel() {
                                                 approve(u.email, sel?.value ?? "member", true);
                                             }}
                                             disabled={approvingEmail === u.email}
-                                            className="flex items-center gap-1 px-3 py-1.5 bg-green-500 text-white text-xs font-semibold rounded-lg hover:bg-green-600 disabled:opacity-50 transition-colors"
+                                            className="flex items-center gap-1.5 px-4 py-2 bg-green-500 text-white text-sm font-semibold rounded-xl hover:bg-green-600 disabled:opacity-50 transition-colors flex-shrink-0"
                                         >
-                                            {approvingEmail === u.email ? <Loader2 size={12} className="animate-spin" /> : <UserCheck size={12} />}
+                                            {approvingEmail === u.email ? <Loader2 size={14} className="animate-spin" /> : <UserCheck size={14} />}
                                             Approve
                                         </button>
                                         <button
                                             onClick={() => dismissPending(u.email)}
-                                            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                            className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors flex-shrink-0"
                                             title="Dismiss"
                                         >
-                                            <X size={14} />
+                                            <X size={16} />
                                         </button>
                                     </div>
                                 </li>
