@@ -418,7 +418,11 @@ export default function App() {
     if (!selectedScheduleDate || isSavingSchedule) return;
     if (!editSchedEventName.trim()) { showToast("error", "Event name is required."); return; }
     const isServiceEvent = ["sunday service", "midweek service"].includes(editSchedEventName.toLowerCase());
+    const isMidweekSvc = editSchedEventName.toLowerCase() === "midweek service";
+    const isSundaySvc = editSchedEventName.toLowerCase() === "sunday service";
     if (isServiceEvent && !editSchedWorshipLeader) { showToast("error", "Worship Leader is required for service events."); return; }
+    if (isMidweekSvc && !editSchedSongLineup.solemn) { showToast("error", "A Solemn song is required for Midweek Service."); return; }
+    if (isSundaySvc && !editSchedSongLineup.joyful) { showToast("error", "A Joyful song is required for Sunday Service."); return; }
     setIsSavingSchedule(true);
     const payload: any = {
       date: selectedScheduleDate,
@@ -1694,7 +1698,7 @@ export default function App() {
                                 )}
                                 {editSchedAssignments.length > 0 && !isServiceEvent && (
                                   <div className="space-y-3">
-                                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">👥 Team / In-charge</p>
+                                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">👥 Lead Facilitators</p>
                                     {editSchedAssignments.map((asgn, gi) => (
                                       <div key={gi} className="bg-gray-50 dark:bg-gray-700/40 rounded-xl p-3 border border-gray-100 dark:border-gray-700">
                                         <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-2">{asgn.role}</p>
@@ -1742,7 +1746,7 @@ export default function App() {
                                 {editSchedEventName.trim() && !isServiceEvent && (
                                   <div className="space-y-3">
                                     <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                      👥 Team / In-charge
+                                      👥 Lead Facilitators
                                     </label>
 
                                     {/* Existing role assignment groups */}
