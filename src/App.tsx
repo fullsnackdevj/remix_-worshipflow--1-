@@ -422,10 +422,10 @@ export default function App() {
     const isMidweekSvc = editSchedEventName.toLowerCase() === "midweek service";
     const isSundaySvc = editSchedEventName.toLowerCase() === "sunday service";
     if (isServiceEvent && !editSchedWorshipLeader) { showToast("error", "Worship Leader is required for service events."); return; }
-     if (isServiceEvent && editSchedMusicians.length === 0) { showToast("error", "At least one Musician is required for service events."); return; }
+    if (isServiceEvent && editSchedMusicians.length === 0) { showToast("error", "At least one Musician is required for service events."); return; }
     if (isMidweekSvc && !editSchedSongLineup.solemn) { showToast("error", "A Solemn song is required for Midweek Service."); return; }
     if (isSundaySvc && !editSchedSongLineup.joyful) { showToast("error", "A Joyful song is required for Sunday Service."); return; }
-     if (isSundaySvc && !editSchedSongLineup.solemn) { showToast("error", "A Solemn song is required for Sunday Service."); return; }
+    if (isSundaySvc && !editSchedSongLineup.solemn) { showToast("error", "A Solemn song is required for Sunday Service."); return; }
     setIsSavingSchedule(true);
     const payload: any = {
       date: selectedScheduleDate,
@@ -1416,18 +1416,28 @@ export default function App() {
                             <span className="hidden min-[375px]:inline">List</span>
                           </button>
                         </div>
-                        {/* Add Event button */}
-                        {selectedScheduleDate && selectedScheduleDate >= todayStr ? (
-                          <button onClick={() => { setSelectedEventId(null); setSchedPanelMode("edit"); openBlankEventForm(selectedScheduleDate); }}
-                            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-medium transition-colors">
-                            <Plus size={16} /> Add Event
-                          </button>
-                        ) : (
-                          <button disabled title={selectedScheduleDate && selectedScheduleDate < todayStr ? "Past date — cannot add events" : "Select a date on the calendar first"}
-                            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed select-none">
-                            <Plus size={16} /> Add Event
-                          </button>
-                        )}
+                        {/* Add Event button — disabled while editing */}
+                        {(() => {
+                          const isEditingExistingEvent = schedPanelMode === "edit" && !!selectedEventId;
+                          const hasDate = !!selectedScheduleDate && selectedScheduleDate >= todayStr;
+                          const isPast = !!selectedScheduleDate && selectedScheduleDate < todayStr;
+                          const hasExisting = selectedDateEvents.length > 0;
+                          const label = hasExisting ? "Add Another Event" : "Add Event";
+                          if (!isEditingExistingEvent && hasDate) {
+                            return (
+                              <button onClick={() => { setSelectedEventId(null); setSchedPanelMode("edit"); openBlankEventForm(selectedScheduleDate!); }}
+                                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-medium transition-colors">
+                                <Plus size={16} /> {label}
+                              </button>
+                            );
+                          }
+                          return (
+                            <button disabled title={isEditingExistingEvent ? "Finish editing before adding a new event" : isPast ? "Past date — cannot add events" : "Select a date on the calendar first"}
+                              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed select-none">
+                              <Plus size={16} /> {label}
+                            </button>
+                          );
+                        })()}
                       </div>
                     </div>
 
@@ -2047,75 +2057,75 @@ export default function App() {
                                         </div>
                                       </div>
 
-                                       {/* ── MUSICIANS / INSTRUMENTS ─────────────── */}
-                                       <div>
-                                         <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Musicians / Instruments</p>
-                                         {editSchedMusicians.length > 0 && (
-                                           <div className="space-y-1.5 mb-2">
-                                             {editSchedMusicians.map((mu, i) => (
-                                               <div key={i} className="flex items-center gap-3 bg-indigo-600/10 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700 rounded-xl px-3 py-2">
-                                                 {mu.photo
-                                                   ? <img src={mu.photo} className="w-8 h-8 rounded-full object-cover shrink-0" alt="" />
-                                                   : <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-bold shrink-0">{mu.name[0]}</div>
-                                                 }
-                                                 <div className="flex-1 min-w-0">
-                                                   <p className="font-semibold text-sm text-gray-900 dark:text-white truncate">{mu.name}</p>
-                                                   <p className="text-[11px] text-indigo-500 dark:text-indigo-400 truncate">{mu.role}</p>
-                                                 </div>
-                                                 <button onClick={() => setEditSchedMusicians(prev => prev.filter((_, j) => j !== i))} className="text-gray-400 hover:text-red-400 shrink-0"><X size={15} /></button>
-                                               </div>
-                                             ))}
-                                           </div>
-                                         )}
-                                         <div className="space-y-0.5 max-h-44 overflow-y-auto pr-1">
-                                           {muCandidates.map(m => {
-                                             const memberRoles: string[] = ((m as any).roles || []).filter((r: string) => r.trim());
-                                             const isPending = pendingRolePick?.m.id === m.id;
-                                             return (
-                                               <div key={m.id}>
-                                                 <button type="button"
-                                                   onClick={() => {
-                                                     if (memberRoles.length <= 1) {
-                                                       setEditSchedMusicians(prev => [...prev, { memberId: m.id, name: m.name, photo: m.photo, role: memberRoles[0] || "Musician" }]);
-                                                       setPendingRolePick(null);
-                                                     } else {
-                                                       setPendingRolePick(isPending ? null : { m, roles: memberRoles });
-                                                     }
-                                                   }}
-                                                   className={`w-full flex items-center gap-3 px-2.5 py-2 rounded-xl transition-colors ${isPending ? "bg-indigo-50 dark:bg-indigo-900/30" : "hover:bg-gray-50 dark:hover:bg-gray-700/60"}`}>
-                                                   {m.photo
-                                                     ? <img src={m.photo} className="w-9 h-9 rounded-full object-cover shrink-0" alt="" />
-                                                     : <div className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-400 to-indigo-600 flex items-center justify-center text-white text-sm font-bold shrink-0">{m.name[0]}</div>
-                                                   }
-                                                   <div className="flex-1 text-left min-w-0">
-                                                     <p className="font-semibold text-sm truncate text-gray-900 dark:text-white">{m.name}</p>
-                                                     <p className="text-[10px] text-gray-400 truncate">{memberRoles.join(", ") || "Musician"}</p>
-                                                   </div>
-                                                   {memberRoles.length > 1
-                                                     ? <span className="text-[10px] text-indigo-400 shrink-0 font-medium">{isPending ? "▲ pick role" : "▼ pick role"}</span>
-                                                     : <Plus size={18} className="text-gray-400 shrink-0" />
-                                                   }
-                                                 </button>
-                                                 {isPending && (
-                                                   <div className="px-2.5 pb-2 pt-1 flex flex-wrap gap-1.5">
-                                                     {memberRoles.map(role => (
-                                                       <button key={role} type="button"
-                                                         onClick={() => {
-                                                           setEditSchedMusicians(prev => [...prev, { memberId: m.id, name: m.name, photo: m.photo, role }]);
-                                                           setPendingRolePick(null);
-                                                         }}
-                                                         className="px-2.5 py-1 text-[11px] font-medium rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-800 transition-colors border border-indigo-200 dark:border-indigo-700">
-                                                         {role}
-                                                       </button>
-                                                     ))}
-                                                   </div>
-                                                 )}
-                                               </div>
-                                             );
-                                           })}
-                                           {muCandidates.length === 0 && editSchedMusicians.length === 0 && <p className="text-xs text-gray-400 italic px-2">No members with instrument roles found</p>}
-                                         </div>
-                                       </div>
+                                      {/* ── MUSICIANS / INSTRUMENTS ─────────────── */}
+                                      <div>
+                                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Musicians / Instruments</p>
+                                        {editSchedMusicians.length > 0 && (
+                                          <div className="space-y-1.5 mb-2">
+                                            {editSchedMusicians.map((mu, i) => (
+                                              <div key={i} className="flex items-center gap-3 bg-indigo-600/10 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700 rounded-xl px-3 py-2">
+                                                {mu.photo
+                                                  ? <img src={mu.photo} className="w-8 h-8 rounded-full object-cover shrink-0" alt="" />
+                                                  : <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-bold shrink-0">{mu.name[0]}</div>
+                                                }
+                                                <div className="flex-1 min-w-0">
+                                                  <p className="font-semibold text-sm text-gray-900 dark:text-white truncate">{mu.name}</p>
+                                                  <p className="text-[11px] text-indigo-500 dark:text-indigo-400 truncate">{mu.role}</p>
+                                                </div>
+                                                <button onClick={() => setEditSchedMusicians(prev => prev.filter((_, j) => j !== i))} className="text-gray-400 hover:text-red-400 shrink-0"><X size={15} /></button>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                        <div className="space-y-0.5 max-h-44 overflow-y-auto pr-1">
+                                          {muCandidates.map(m => {
+                                            const memberRoles: string[] = ((m as any).roles || []).filter((r: string) => r.trim());
+                                            const isPending = pendingRolePick?.m.id === m.id;
+                                            return (
+                                              <div key={m.id}>
+                                                <button type="button"
+                                                  onClick={() => {
+                                                    if (memberRoles.length <= 1) {
+                                                      setEditSchedMusicians(prev => [...prev, { memberId: m.id, name: m.name, photo: m.photo, role: memberRoles[0] || "Musician" }]);
+                                                      setPendingRolePick(null);
+                                                    } else {
+                                                      setPendingRolePick(isPending ? null : { m, roles: memberRoles });
+                                                    }
+                                                  }}
+                                                  className={`w-full flex items-center gap-3 px-2.5 py-2 rounded-xl transition-colors ${isPending ? "bg-indigo-50 dark:bg-indigo-900/30" : "hover:bg-gray-50 dark:hover:bg-gray-700/60"}`}>
+                                                  {m.photo
+                                                    ? <img src={m.photo} className="w-9 h-9 rounded-full object-cover shrink-0" alt="" />
+                                                    : <div className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-400 to-indigo-600 flex items-center justify-center text-white text-sm font-bold shrink-0">{m.name[0]}</div>
+                                                  }
+                                                  <div className="flex-1 text-left min-w-0">
+                                                    <p className="font-semibold text-sm truncate text-gray-900 dark:text-white">{m.name}</p>
+                                                    <p className="text-[10px] text-gray-400 truncate">{memberRoles.join(", ") || "Musician"}</p>
+                                                  </div>
+                                                  {memberRoles.length > 1
+                                                    ? <span className="text-[10px] text-indigo-400 shrink-0 font-medium">{isPending ? "▲ pick role" : "▼ pick role"}</span>
+                                                    : <Plus size={18} className="text-gray-400 shrink-0" />
+                                                  }
+                                                </button>
+                                                {isPending && (
+                                                  <div className="px-2.5 pb-2 pt-1 flex flex-wrap gap-1.5">
+                                                    {memberRoles.map(role => (
+                                                      <button key={role} type="button"
+                                                        onClick={() => {
+                                                          setEditSchedMusicians(prev => [...prev, { memberId: m.id, name: m.name, photo: m.photo, role }]);
+                                                          setPendingRolePick(null);
+                                                        }}
+                                                        className="px-2.5 py-1 text-[11px] font-medium rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-800 transition-colors border border-indigo-200 dark:border-indigo-700">
+                                                        {role}
+                                                      </button>
+                                                    ))}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            );
+                                          })}
+                                          {muCandidates.length === 0 && editSchedMusicians.length === 0 && <p className="text-xs text-gray-400 italic px-2">No members with instrument roles found</p>}
+                                        </div>
+                                      </div>
 
                                       {/* ── SONG LINE-UP ─────────────────────────── */}
                                       <div>
