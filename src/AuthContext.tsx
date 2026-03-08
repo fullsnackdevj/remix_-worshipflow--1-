@@ -42,7 +42,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             try {
                 const res = await fetch(`/api/auth/check?email=${encodeURIComponent(u.email ?? "")}`);
                 const data = await res.json();
-                setStatus(data.approved ? "approved" : "denied");
+                if (data.approved) {
+                    setStatus("approved");
+                } else {
+                    setStatus("denied");
+                    // Auto-log this user as a pending request for admin review
+                    fetch("/api/auth/request", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            email: u.email,
+                            name: u.displayName ?? "",
+                            photo: u.photoURL ?? "",
+                        }),
+                    }).catch(() => { });
+                }
             } catch {
                 setStatus("denied");
             }

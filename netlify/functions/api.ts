@@ -76,13 +76,41 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
         const { email, role = "member" } = body;
         if (!email) return json(400, { error: "Missing email" });
         await firestore?.collection("approved_users").doc(email).set({ email, role, approvedAt: new Date().toISOString() });
+        // Remove from pending once approved
+        await firestore?.collection("pending_users").doc(email).delete().catch(() => { });
         return json(200, { success: true });
+    }
+
+    if (rawPath === "/auth/request" && method === "POST") {
+        const { email, name = "", photo = "" } = body;
+        if (!email) return json(400, { error: "Missing email" });
+        // Only log if not already approved
+        const existing = await firestore?.collection("approved_users").doc(email).get();
+        if (existing?.exists) return json(200, { skipped: true });
+        await firestore?.collection("pending_users").doc(email).set({
+            email, name, photo,
+            requestedAt: new Date().toISOString(),
+        });
+        return json(200, { success: true });
+    }
+
+    if (rawPath === "/auth/pending" && method === "GET") {
+        const snap = await firestore?.collection("pending_users").orderBy("requestedAt", "desc").get();
+        const users = snap?.docs.map(d => d.data()) ?? [];
+        return json(200, users);
     }
 
     if (rawPath === "/auth/revoke" && method === "DELETE") {
         const { email } = body;
         if (!email) return json(400, { error: "Missing email" });
         await firestore?.collection("approved_users").doc(email).delete();
+        return json(200, { success: true });
+    }
+
+    if (rawPath === "/auth/revoke-pending" && method === "DELETE") {
+        const { email } = body;
+        if (!email) return json(400, { error: "Missing email" });
+        await firestore?.collection("pending_users").doc(email).delete();
         return json(200, { success: true });
     }
 
