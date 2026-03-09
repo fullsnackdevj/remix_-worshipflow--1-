@@ -372,7 +372,7 @@ export default function App() {
   const canSelectSongs = isAdmin; // selection mode leads to bulk delete
 
   // Members — admin only
-  const canWriteMembers = isAdmin;
+  const canWriteMembers = true; // TODO: restrict to own-profile edit only
 
   // Schedule helpers
   // Returns true if dateStr falls on a Sunday (0) or Wednesday (3)
