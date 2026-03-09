@@ -229,10 +229,16 @@ export default function App() {
     await fetch("/api/notifications/read", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: user.uid }) });
   };
 
-  const markOneRead = async (notifId: string) => {
+  const markOneRead = async (notifId: string, type: string) => {
     if (!user) return;
     setNotifications(prev => prev.map(n => n.id === notifId ? { ...n, isRead: true } : n));
     await fetch("/api/notifications/read", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: user.uid, notifId }) });
+    // Navigate to the relevant section
+    const navMap: Record<string, "songs" | "members" | "schedule" | "admin"> = {
+      new_song: "songs", new_event: "schedule", updated_event: "schedule", access_request: "admin",
+    };
+    if (navMap[type]) setCurrentView(navMap[type]);
+    setNotifOpen(false);
   };
 
   const timeAgo = (iso: string) => {
@@ -565,6 +571,7 @@ export default function App() {
     if (isSundaySvc && !editSchedSongLineup.joyful) { showToast("error", "A Joyful song is required for Sunday Service."); return; }
     if (isSundaySvc && !editSchedSongLineup.solemn) { showToast("error", "A Solemn song is required for Sunday Service."); return; }
     setIsSavingSchedule(true);
+    const actorDisplayName = user?.displayName || user?.email?.split("@")[0] || "Worship Team";
     const payload: any = {
       date: selectedScheduleDate,
       serviceType: editSchedServiceType,
@@ -575,8 +582,7 @@ export default function App() {
       assignments: editSchedAssignments.map(({ role, members }) => ({ role, members })),
       songLineup: editSchedSongLineup,
       notes: editSchedNotes,
-      // Actor info for notification
-      actorName: user?.displayName || user?.email || "Someone",
+      actorName: actorDisplayName,
       actorPhoto: user?.photoURL || "",
     };
     try {
@@ -1179,8 +1185,7 @@ export default function App() {
       chords: editChords,
       tags: editTags,
       video_url: editVideoUrl,
-      // Actor info for notification
-      actorName: user?.displayName || user?.email || "Someone",
+      actorName: user?.displayName || user?.email?.split("@")[0] || "Worship Team",
       actorPhoto: user?.photoURL || "",
     };
 
@@ -1573,8 +1578,9 @@ export default function App() {
                     ) : notifications.map(n => (
                       <button
                         key={n.id}
-                        onClick={() => markOneRead(n.id)}
-                        className={`w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${n.isRead ? "opacity-60" : ""}`}
+                        onClick={() => markOneRead(n.id, n.type)}
+                        className={`w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer ${n.isRead ? "opacity-60" : "bg-indigo-50/30 dark:bg-indigo-900/10"}`}
+                        title={`Click to view ${n.type === "new_song" ? "songs" : n.type === "access_request" ? "admin panel" : "schedule"}`}
                       >
                         {/* Actor photo or icon */}
                         <div className="shrink-0 mt-0.5">
