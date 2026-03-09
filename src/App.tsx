@@ -265,6 +265,28 @@ export default function App() {
     return `${Math.floor(diff / 86400)}d ago`;
   };
 
+  const [notifActionFor, setNotifActionFor] = useState<string | null>(null);
+
+  const markOneUnread = async (notifId: string) => {
+    if (!user) return;
+    setNotifications(prev => prev.map(n => n.id === notifId ? { ...n, isRead: false } : n));
+    setNotifActionFor(null);
+    await fetch("/api/notifications/unread", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: user.uid, notifId }) });
+  };
+
+  const deleteNotif = async (notifId: string) => {
+    if (!user) return;
+    setNotifications(prev => prev.filter(n => n.id !== notifId));
+    setNotifActionFor(null);
+    await fetch(`/api/notifications/${notifId}`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: user.uid }) });
+  };
+
+  const clearAllNotifs = async () => {
+    if (!user) return;
+    setNotifications([]);
+    await fetch("/api/notifications/clear-all", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: user.uid }) });
+  };
+
   const notifIcon: Record<string, string> = {
     new_song: "🎵", new_event: "📅", updated_event: "✏️", access_request: "🔔",
   };
@@ -600,7 +622,8 @@ export default function App() {
       songLineup: editSchedSongLineup,
       notes: editSchedNotes,
       actorName: actorDisplayName,
-      actorPhoto: user?.photoURL || "",
+      actorPhoto: cu?.photoURL || user?.photoURL || "",
+      actorUserId: cu?.uid || user?.uid || "",
     };
     try {
       let res: Response;
@@ -1205,6 +1228,7 @@ export default function App() {
       video_url: editVideoUrl,
       actorName: cu?.displayName || cu?.email?.split("@")[0] || user?.displayName || "Worship Team",
       actorPhoto: cu?.photoURL || user?.photoURL || "",
+      actorUserId: cu?.uid || user?.uid || "",
     };
 
     try {
@@ -1577,49 +1601,89 @@ export default function App() {
               </button>
 
               {notifOpen && (
-                <div className="absolute right-0 top-full mt-2 w-80 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl z-50 overflow-hidden">
+                <div className="absolute right-0 top-full mt-2 w-84 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl z-50 overflow-hidden" style={{ width: "340px" }}>
                   {/* Header */}
                   <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700">
-                    <h3 className="text-sm font-bold text-gray-900 dark:text-white">🔔 Notifications</h3>
-                    {unreadCount > 0 && (
-                      <button onClick={markAllRead} className="text-xs text-indigo-500 hover:text-indigo-700 font-medium transition-colors">Mark all read</button>
-                    )}
+                    <h3 className="text-sm font-bold text-gray-900 dark:text-white">🔔 Notifications
+                      {unreadCount > 0 && <span className="ml-2 text-[10px] bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-300 px-1.5 py-0.5 rounded-full font-bold">{unreadCount} new</span>}
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      {unreadCount > 0 && (
+                        <button onClick={markAllRead} className="text-xs text-indigo-500 hover:text-indigo-700 font-medium transition-colors">Mark all read</button>
+                      )}
+                      {notifications.length > 0 && (
+                        <button onClick={clearAllNotifs} className="text-xs text-red-400 hover:text-red-600 font-medium transition-colors" title="Clear all notifications">Clear all</button>
+                      )}
+                    </div>
                   </div>
 
                   {/* List */}
-                  <div className="max-h-96 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700">
+                  <div className="max-h-[420px] overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700/60">
                     {notifications.length === 0 ? (
-                      <div className="px-4 py-8 text-center">
-                        <p className="text-2xl mb-2">🎉</p>
+                      <div className="px-4 py-10 text-center">
+                        <p className="text-3xl mb-2">🎉</p>
                         <p className="text-sm text-gray-400">You're all caught up!</p>
                       </div>
                     ) : notifications.map(n => (
-                      <button
+                      <div
                         key={n.id}
-                        onClick={() => markOneRead(n.id, n.type, n.resourceId, n.resourceDate)}
-                        className={`w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer ${n.isRead ? "opacity-60" : "bg-indigo-50/30 dark:bg-indigo-900/10"}`}
-                        title={`Click to open ${n.type === "new_song" ? "song detail" : n.type === "access_request" ? "admin panel" : "event detail"}`}
+                        className={`group relative flex items-start gap-3 px-4 py-3 transition-colors ${n.isRead ? "hover:bg-gray-50 dark:hover:bg-gray-700/30" : "bg-indigo-50/40 dark:bg-indigo-900/10 hover:bg-indigo-50/70 dark:hover:bg-indigo-900/20"}`}
                       >
-                        {/* Actor photo or icon */}
-                        <div className="shrink-0 mt-0.5">
-                          {n.actorPhoto
-                            ? <img src={n.actorPhoto} alt={n.actorName} className="w-8 h-8 rounded-full border-2 border-indigo-400" />
-                            : <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-sm font-bold">{notifIcon[n.type] || "🔔"}</div>
-                          }
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-1">
-                            <p className="text-xs font-semibold text-gray-900 dark:text-white leading-tight">{n.message}</p>
-                            {!n.isRead && <span className="shrink-0 w-2 h-2 rounded-full bg-indigo-500 mt-1" />}
+                        {/* Clickable main area */}
+                        <button
+                          onClick={() => markOneRead(n.id, n.type, n.resourceId, n.resourceDate)}
+                          className="flex items-start gap-3 flex-1 min-w-0 text-left"
+                          title={`Open ${n.type === "new_song" ? "song" : n.type === "access_request" ? "admin panel" : "event"}`}
+                        >
+                          {/* Actor photo */}
+                          <div className="shrink-0 mt-0.5">
+                            {n.actorPhoto
+                              ? <img src={n.actorPhoto} alt={n.actorName} className="w-8 h-8 rounded-full border-2 border-indigo-400 object-cover" />
+                              : <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-sm">{notifIcon[n.type] || "🔔"}</div>
+                            }
                           </div>
-                          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 leading-tight">{n.subMessage}</p>
-                          <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">{timeAgo(n.createdAt)}</p>
+                          <div className="flex-1 min-w-0 pr-6">
+                            <div className="flex items-start gap-1">
+                              <p className="text-xs font-semibold text-gray-900 dark:text-white leading-tight flex-1">{n.message}</p>
+                              {!n.isRead && <span className="shrink-0 w-2 h-2 rounded-full bg-indigo-500 mt-1" />}
+                            </div>
+                            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 leading-tight">{n.subMessage}</p>
+                            <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">{timeAgo(n.createdAt)}</p>
+                          </div>
+                        </button>
+
+                        {/* Per-item action menu button */}
+                        <div className="absolute right-3 top-3">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setNotifActionFor(notifActionFor === n.id ? null : n.id); }}
+                            className="opacity-0 group-hover:opacity-100 p-1 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-all text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                            title="More options"
+                          >
+                            <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><circle cx="8" cy="2" r="1.5" /><circle cx="8" cy="8" r="1.5" /><circle cx="8" cy="14" r="1.5" /></svg>
+                          </button>
+                          {notifActionFor === n.id && (
+                            <div className="absolute right-0 top-6 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg z-10 overflow-hidden min-w-[140px]">
+                              {n.isRead ? (
+                                <button onClick={() => markOneUnread(n.id)} className="w-full text-left px-3 py-2 text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 flex items-center gap-2">
+                                  <span>🔵</span> Mark as unread
+                                </button>
+                              ) : (
+                                <button onClick={() => { setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, isRead: true } : x)); setNotifActionFor(null); fetch("/api/notifications/read", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: user?.uid, notifId: n.id }) }); }} className="w-full text-left px-3 py-2 text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 flex items-center gap-2">
+                                  <span>✅</span> Mark as read
+                                </button>
+                              )}
+                              <button onClick={() => deleteNotif(n.id)} className="w-full text-left px-3 py-2 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2">
+                                <span>🗑️</span> Delete
+                              </button>
+                            </div>
+                          )}
                         </div>
-                      </button>
+                      </div>
                     ))}
                   </div>
                 </div>
               )}
+
             </div>
             <UserMenu />
           </div>

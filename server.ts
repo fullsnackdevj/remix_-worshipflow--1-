@@ -108,6 +108,7 @@ async function writeNotification(firestore: admin.firestore.Firestore, payload: 
   subMessage: string;
   actorName: string;
   actorPhoto: string;
+  actorUserId?: string;
   targetAudience: "all" | "non_member" | "admin_only";
   resourceId?: string;
   resourceType?: string;
@@ -117,6 +118,7 @@ async function writeNotification(firestore: admin.firestore.Firestore, payload: 
     await firestore.collection("notifications").add({
       ...payload,
       readBy: [],
+      deletedBy: [],
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
   } catch (e) {
@@ -124,7 +126,7 @@ async function writeNotification(firestore: admin.firestore.Firestore, payload: 
   }
 }
 
-// GET /api/notifications — fetch notifications for a given role+userId
+// GET /api/notifications
 app.get("/api/notifications", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.json([]);
@@ -132,38 +134,37 @@ app.get("/api/notifications", async (req, res) => {
   const userId = (req.query.userId as string) || "";
   try {
     const snap = await firestore.collection("notifications")
-      .orderBy("createdAt", "desc")
-      .limit(30)
-      .get();
+      .orderBy("createdAt", "desc").limit(50).get();
     const all = snap.docs.map(d => {
       const data = d.data() as Record<string, any>;
       const readBy: string[] = data.readBy || [];
-      return { id: d.id, ...data, isRead: readBy.includes(userId), createdAt: data.createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString() } as Record<string, any>;
+      const deletedBy: string[] = data.deletedBy || [];
+      return { id: d.id, ...data, isRead: readBy.includes(userId), createdAt: data.createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(), _deletedBy: deletedBy } as Record<string, any>;
     });
-    // Filter by targetAudience
     const filtered = all.filter(n => {
+      // Self-exclusion: actor should not see their own notification
+      if (userId && n["actorUserId"] === userId) return false;
+      // Soft-deleted for this user
+      if (n["_deletedBy"].includes(userId)) return false;
+      // Audience filter
       if (n["targetAudience"] === "all") return true;
       if (n["targetAudience"] === "admin_only") return role === "admin";
       if (n["targetAudience"] === "non_member") return role !== "member";
       return false;
     });
     res.json(filtered);
-  } catch (e) {
-    res.json([]);
-  }
+  } catch (e) { res.json([]); }
 });
 
-// PATCH /api/notifications/read — mark one or all as read for a userId
+// PATCH /api/notifications/read — mark one or all as read
 app.patch("/api/notifications/read", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.json({ success: true });
-  const { userId, notifId } = req.body; // notifId optional = mark all
+  const { userId, notifId } = req.body;
   if (!userId) return res.status(400).json({ error: "userId required" });
   try {
     if (notifId) {
-      await firestore.collection("notifications").doc(notifId).update({
-        readBy: admin.firestore.FieldValue.arrayUnion(userId),
-      });
+      await firestore.collection("notifications").doc(notifId).update({ readBy: admin.firestore.FieldValue.arrayUnion(userId) });
     } else {
       const snap = await firestore.collection("notifications").get();
       const batch = firestore.batch();
@@ -171,9 +172,47 @@ app.patch("/api/notifications/read", async (req, res) => {
       await batch.commit();
     }
     res.json({ success: true });
-  } catch (e) {
-    res.status(500).json({ error: "Failed to mark read" });
-  }
+  } catch (e) { res.status(500).json({ error: "Failed to mark read" }); }
+});
+
+// PATCH /api/notifications/unread — mark one as unread
+app.patch("/api/notifications/unread", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.json({ success: true });
+  const { userId, notifId } = req.body;
+  if (!userId || !notifId) return res.status(400).json({ error: "userId and notifId required" });
+  try {
+    await firestore.collection("notifications").doc(notifId).update({ readBy: admin.firestore.FieldValue.arrayRemove(userId) });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: "Failed to mark unread" }); }
+});
+
+// DELETE /api/notifications/:id — soft-delete for this user
+app.delete("/api/notifications/:id", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.json({ success: true });
+  const { id } = req.params;
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ error: "userId required" });
+  try {
+    await firestore.collection("notifications").doc(id).update({ deletedBy: admin.firestore.FieldValue.arrayUnion(userId) });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: "Failed to delete" }); }
+});
+
+// DELETE /api/notifications — soft-delete all visible for this user
+app.delete("/api/notifications", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.json({ success: true });
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ error: "userId required" });
+  try {
+    const snap = await firestore.collection("notifications").get();
+    const batch = firestore.batch();
+    snap.docs.forEach(d => batch.update(d.ref, { deletedBy: admin.firestore.FieldValue.arrayUnion(userId) }));
+    await batch.commit();
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: "Failed to clear" }); }
 });
 
 // API Routes
@@ -329,12 +368,12 @@ app.post("/api/songs", async (req, res) => {
     });
 
     // Fire-and-forget notification
-    const { actorName = "Someone", actorPhoto = "" } = req.body;
+    const { actorName = "Someone", actorPhoto = "", actorUserId = "" } = req.body;
     writeNotification(firestore, {
       type: "new_song",
       message: `${actorName} added a new song`,
       subMessage: `🎵 "${toTitleCase(title)}" by ${toTitleCase(artist)}`,
-      actorName, actorPhoto,
+      actorName, actorPhoto, actorUserId,
       targetAudience: "non_member",
       resourceId: docRef.id,
       resourceType: "song",
@@ -661,13 +700,13 @@ app.post("/api/schedules", async (req, res) => {
     });
 
     // Fire-and-forget notification
-    const { actorName: aN1 = "Someone", actorPhoto: aP1 = "" } = req.body;
+    const { actorName: aN1 = "Someone", actorPhoto: aP1 = "", actorUserId: aU1 = "" } = req.body;
     const dateLabel1 = new Date(date + "T00:00:00").toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
     writeNotification(firestore, {
       type: "new_event",
       message: `${aN1} created a new event`,
       subMessage: `📅 ${eventName || "Event"} — ${dateLabel1}`,
-      actorName: aN1, actorPhoto: aP1,
+      actorName: aN1, actorPhoto: aP1, actorUserId: aU1,
       targetAudience: "all",
       resourceId: docRef.id,
       resourceType: "event",
@@ -702,13 +741,13 @@ app.put("/api/schedules/:id", async (req, res) => {
     });
 
     // Fire-and-forget notification
-    const { actorName: aN2 = "Someone", actorPhoto: aP2 = "" } = req.body;
+    const { actorName: aN2 = "Someone", actorPhoto: aP2 = "", actorUserId: aU2 = "" } = req.body;
     const dateLabel2 = new Date(date + "T00:00:00").toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
     writeNotification(firestore, {
       type: "updated_event",
       message: `${aN2} updated an event`,
       subMessage: `📅 ${eventName || "Event"} — ${dateLabel2}`,
-      actorName: aN2, actorPhoto: aP2,
+      actorName: aN2, actorPhoto: aP2, actorUserId: aU2,
       targetAudience: "all",
       resourceId: id,
       resourceType: "event",

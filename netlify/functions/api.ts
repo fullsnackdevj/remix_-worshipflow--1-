@@ -52,13 +52,13 @@ function lyricsAreDuplicate(a: string, b: string): boolean {
 // ── Notification helper ─────────────────────────────────────────────────────
 async function writeNotif(firestore: FirebaseFirestore.Firestore | null, payload: {
     type: string; message: string; subMessage: string;
-    actorName: string; actorPhoto: string; targetAudience: string;
+    actorName: string; actorPhoto: string; actorUserId?: string; targetAudience: string;
     resourceId?: string; resourceType?: string; resourceDate?: string;
 }) {
     if (!firestore) return;
     try {
         await firestore.collection("notifications").add({
-            ...payload, readBy: [],
+            ...payload, readBy: [], deletedBy: [],
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
         });
     } catch (e) { console.error("notif write failed", e); }
@@ -67,7 +67,7 @@ async function writeNotif(firestore: FirebaseFirestore.Firestore | null, payload
 export const handler: Handler = async (event: HandlerEvent, _context: HandlerContext) => {
     // Parse path: strip /.netlify/functions/api OR /api prefix
     const rawPath = event.path
-        .replace(/^\/.netlify\/functions\/api/, "")
+        .replace(/^\/\.netlify\/functions\/api/, "")
         .replace(/^\/api/, "") || "/";
     const method = event.httpMethod;
     const body = event.body ? JSON.parse(event.body) : {};
@@ -122,13 +122,16 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
         const role = event.queryStringParameters?.role || "member";
         const userId = event.queryStringParameters?.userId || "";
         try {
-            const snap = await firestore?.collection("notifications").orderBy("createdAt", "desc").limit(30).get();
+            const snap = await firestore?.collection("notifications").orderBy("createdAt", "desc").limit(50).get();
             const all = (snap?.docs || []).map(d => {
                 const data = d.data() as Record<string, any>;
                 const readBy: string[] = data.readBy || [];
-                return { id: d.id, ...data, isRead: readBy.includes(userId), createdAt: data.createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString() } as Record<string, any>;
+                const deletedBy: string[] = data.deletedBy || [];
+                return { id: d.id, ...data, isRead: readBy.includes(userId), _deletedBy: deletedBy, createdAt: data.createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString() } as Record<string, any>;
             });
             const filtered = all.filter(n => {
+                if (userId && n["actorUserId"] === userId) return false; // self-exclusion
+                if (n["_deletedBy"].includes(userId)) return false; // soft-deleted
                 if (n["targetAudience"] === "all") return true;
                 if (n["targetAudience"] === "admin_only") return role === "admin";
                 if (n["targetAudience"] === "non_member") return role !== "member";
@@ -151,6 +154,41 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
                 snap?.docs.forEach(d => batch?.update(d.ref, { readBy: admin.firestore.FieldValue.arrayUnion(userId) }));
                 await batch?.commit();
             }
+            return json(200, { success: true });
+        } catch { return json(500, { error: "Failed" }); }
+    }
+
+    // PATCH /notifications/unread
+    if (rawPath === "/notifications/unread" && method === "PATCH") {
+        const { userId, notifId } = body;
+        if (!userId || !notifId) return json(400, { error: "userId and notifId required" });
+        try {
+            await firestore?.collection("notifications").doc(notifId).update({ readBy: admin.firestore.FieldValue.arrayRemove(userId) });
+            return json(200, { success: true });
+        } catch { return json(500, { error: "Failed" }); }
+    }
+
+    // DELETE /notifications/clear-all — soft delete all for user
+    if (rawPath === "/notifications/clear-all" && method === "DELETE") {
+        const { userId } = body;
+        if (!userId) return json(400, { error: "userId required" });
+        try {
+            const snap = await firestore?.collection("notifications").get();
+            const batch = firestore?.batch();
+            snap?.docs.forEach(d => batch?.update(d.ref, { deletedBy: admin.firestore.FieldValue.arrayUnion(userId) }));
+            await batch?.commit();
+            return json(200, { success: true });
+        } catch { return json(500, { error: "Failed" }); }
+    }
+
+    // DELETE /notifications/:id — soft delete one for user
+    const notifDeleteMatch = rawPath.match(/^\/notifications\/([^/]+)$/);
+    if (notifDeleteMatch && method === "DELETE") {
+        const id = notifDeleteMatch[1];
+        const { userId } = body;
+        if (!userId) return json(400, { error: "userId required" });
+        try {
+            await firestore?.collection("notifications").doc(id).update({ deletedBy: admin.firestore.FieldValue.arrayUnion(userId) });
             return json(200, { success: true });
         } catch { return json(500, { error: "Failed" }); }
     }
@@ -328,12 +366,12 @@ Rules:
                 created_at: admin.firestore.FieldValue.serverTimestamp(),
                 updated_at: admin.firestore.FieldValue.serverTimestamp(),
             });
-            const { actorName = "Someone", actorPhoto = "" } = body;
+            const { actorName = "Someone", actorPhoto = "", actorUserId = "" } = body;
             writeNotif(firestore, {
                 type: "new_song",
                 message: `${actorName} added a new song`,
                 subMessage: `🎵 "${toTitleCase(title)}" by ${toTitleCase(artist)}`,
-                actorName, actorPhoto, targetAudience: "non_member",
+                actorName, actorPhoto, actorUserId, targetAudience: "non_member",
                 resourceId: docRef.id, resourceType: "song",
             });
             return json(201, { id: docRef.id });
@@ -626,9 +664,9 @@ Rules:
                 created_at: admin.firestore.FieldValue.serverTimestamp(),
                 updated_at: admin.firestore.FieldValue.serverTimestamp(),
             });
-            const { actorName: aN1 = "Someone", actorPhoto: aP1 = "" } = body;
+            const { actorName: aN1 = "Someone", actorPhoto: aP1 = "", actorUserId: aU1 = "" } = body;
             const dl1 = new Date(date + "T00:00:00").toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
-            writeNotif(firestore, { type: "new_event", message: `${aN1} created a new event`, subMessage: `📅 ${eventName || "Event"} — ${dl1}`, actorName: aN1, actorPhoto: aP1, targetAudience: "all", resourceId: docRef.id, resourceType: "event", resourceDate: date });
+            writeNotif(firestore, { type: "new_event", message: `${aN1} created a new event`, subMessage: `📅 ${eventName || "Event"} — ${dl1}`, actorName: aN1, actorPhoto: aP1, actorUserId: aU1, targetAudience: "all", resourceId: docRef.id, resourceType: "event", resourceDate: date });
             return json(201, { id: docRef.id });
         } catch (err) {
             console.error(err);
@@ -658,9 +696,9 @@ Rules:
                     notes: notes || "",
                     updated_at: admin.firestore.FieldValue.serverTimestamp(),
                 });
-                const { actorName: aN2 = "Someone", actorPhoto: aP2 = "" } = body;
+                const { actorName: aN2 = "Someone", actorPhoto: aP2 = "", actorUserId: aU2 = "" } = body;
                 const dl2 = new Date(date + "T00:00:00").toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
-                writeNotif(firestore, { type: "updated_event", message: `${aN2} updated an event`, subMessage: `📅 ${eventName || "Event"} — ${dl2}`, actorName: aN2, actorPhoto: aP2, targetAudience: "all", resourceId: id, resourceType: "event", resourceDate: date });
+                writeNotif(firestore, { type: "updated_event", message: `${aN2} updated an event`, subMessage: `📅 ${eventName || "Event"} — ${dl2}`, actorName: aN2, actorPhoto: aP2, actorUserId: aU2, targetAudience: "all", resourceId: id, resourceType: "event", resourceDate: date });
                 return json(200, { success: true });
             } catch (err) {
                 console.error(err);
