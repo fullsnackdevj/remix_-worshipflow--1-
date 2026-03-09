@@ -59,7 +59,7 @@ export default function BroadcastOverlay() {
                             className="w-28 h-28 shadow-2xl shadow-amber-500/10"
                         />
                         {/* Animated wrench badge — top right corner */}
-                        <div className="absolute -top-2 -right-2 w-9 h-9 rounded-full bg-amber-500 shadow-lg shadow-amber-500/50 flex items-center justify-center animate-bounce" style={{ animationDuration: "1.5s" }}>
+                        <div className="absolute -top-2 -right-2 w-9 h-9 rounded-full bg-amber-500/70 shadow-lg shadow-amber-500/50 flex items-center justify-center animate-bounce" style={{ animationDuration: "1.5s" }}>
                             <span className="text-lg">🔧</span>
                         </div>
                     </div>
