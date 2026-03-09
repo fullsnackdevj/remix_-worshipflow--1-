@@ -1,0 +1,91 @@
+import { useEffect, useState } from "react";
+import { useAuth } from "./AuthContext";
+
+export default function WelcomeToast() {
+    const { user } = useAuth();
+    const [visible, setVisible] = useState(false);
+    const [exiting, setExiting] = useState(false);
+
+    useEffect(() => {
+        if (!user?.uid) return;
+
+        // Only show once per user — track with localStorage
+        const key = `wf_welcomed_${user.uid}`;
+        if (localStorage.getItem(key)) return;
+
+        // Mark as welcomed so it won't show again
+        localStorage.setItem(key, "1");
+
+        // Small delay so the app finishes loading first
+        const t = setTimeout(() => setVisible(true), 800);
+        return () => clearTimeout(t);
+    }, [user?.uid]);
+
+    useEffect(() => {
+        if (!visible) return;
+        // Auto-dismiss after 5 seconds
+        const t = setTimeout(() => dismiss(), 5000);
+        return () => clearTimeout(t);
+    }, [visible]);
+
+    const dismiss = () => {
+        setExiting(true);
+        setTimeout(() => { setVisible(false); setExiting(false); }, 400);
+    };
+
+    if (!visible || !user) return null;
+
+    const firstName = user.displayName?.split(" ")[0] || user.email?.split("@")[0] || "there";
+
+    return (
+        <div
+            className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[300] w-[calc(100%-2rem)] max-w-sm transition-all duration-400 ${exiting ? "opacity-0 translate-y-4" : "opacity-100 translate-y-0"}`}
+            style={{ animation: exiting ? undefined : "welcomeSlideUp 0.45s cubic-bezier(0.34,1.56,0.64,1) forwards" }}
+        >
+            <div className="bg-gray-900 border border-gray-700/60 rounded-2xl shadow-2xl overflow-hidden">
+                {/* Rainbow top stripe */}
+                <div className="h-1 w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" />
+
+                <div className="flex items-center gap-3 px-4 py-3.5">
+                    {/* Avatar */}
+                    <div className="shrink-0 relative">
+                        {user.photoURL ? (
+                            <img
+                                src={user.photoURL}
+                                alt={user.displayName ?? ""}
+                                className="w-11 h-11 rounded-full border-2 border-indigo-500/50"
+                            />
+                        ) : (
+                            <div className="w-11 h-11 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-base">
+                                {firstName[0]?.toUpperCase()}
+                            </div>
+                        )}
+                        {/* Wave emoji badge */}
+                        <span className="absolute -bottom-1 -right-1 text-base leading-none">👋</span>
+                    </div>
+
+                    {/* Message */}
+                    <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-white leading-tight">
+                            Welcome, {firstName}!
+                        </p>
+                        <p className="text-xs text-gray-400 leading-snug mt-0.5">
+                            You're now part of the WorshipFlow team. 🎵
+                        </p>
+                    </div>
+
+                    {/* Dismiss */}
+                    <button
+                        onClick={dismiss}
+                        className="shrink-0 p-1.5 text-gray-500 hover:text-gray-300 rounded-lg hover:bg-white/5 transition-colors"
+                        aria-label="Dismiss"
+                    >
+                        <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                            <path d="M18 6L6 18M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
