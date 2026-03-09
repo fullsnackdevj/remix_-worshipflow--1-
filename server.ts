@@ -229,7 +229,99 @@ app.post("/api/fcm-token", async (req, res) => {
   } catch (e) { res.status(500).json({ error: "Failed to store token" }); }
 });
 
+// ── Broadcast / App Announcement endpoints ────────────────────────────────
+
+// GET /api/broadcasts — check if there's an active broadcast for this user
+app.get("/api/broadcasts", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.json(null);
+  const email = (req.query.email as string) || "";
+  if (!email) return res.json(null);
+  try {
+    const snap = await firestore.collection("broadcasts")
+      .where("active", "==", true)
+      .orderBy("createdAt", "desc").limit(10).get();
+    for (const doc of snap.docs) {
+      const data = doc.data();
+      const targets: string[] = data.targetEmails || [];
+      const isAll = targets.includes("__all__");
+      const isTargeted = targets.includes(email);
+      if (!isAll && !isTargeted) continue;
+      // For "whats_new" — skip if already dismissed
+      if (data.type === "whats_new") {
+        const dismissed: string[] = data.dismissedBy || [];
+        if (dismissed.includes(email)) continue;
+      }
+      return res.json({ id: doc.id, ...data });
+    }
+    return res.json(null);
+  } catch (e) { res.status(500).json(null); }
+});
+
+// GET /api/broadcasts/all — admin list all broadcasts
+app.get("/api/broadcasts/all", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.json([]);
+  try {
+    const snap = await firestore.collection("broadcasts").orderBy("createdAt", "desc").limit(20).get();
+    return res.json(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  } catch (e) { res.status(500).json([]); }
+});
+
+// POST /api/broadcasts — create a new broadcast (admin only)
+app.post("/api/broadcasts", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { type, title, message, bulletPoints, targetEmails } = req.body;
+  if (!type || !title || !targetEmails) return res.status(400).json({ error: "Missing fields" });
+  try {
+    const ref = await firestore.collection("broadcasts").add({
+      type, title, message: message || "", bulletPoints: bulletPoints || [],
+      targetEmails, active: true, dismissedBy: [],
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    res.json({ id: ref.id });
+  } catch (e) { res.status(500).json({ error: "Failed to create" }); }
+});
+
+// PATCH /api/broadcasts/:id — activate or deactivate
+app.patch("/api/broadcasts/:id", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { id } = req.params;
+  const { active } = req.body;
+  try {
+    await firestore.collection("broadcasts").doc(id).update({ active });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: "Failed to update" }); }
+});
+
+// DELETE /api/broadcasts/:id — delete a broadcast
+app.delete("/api/broadcasts/:id", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  try {
+    await firestore.collection("broadcasts").doc(req.params.id).delete();
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: "Failed to delete" }); }
+});
+
+// POST /api/broadcasts/:id/dismiss — user dismissed "What's New"
+app.post("/api/broadcasts/:id/dismiss", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: "Missing email" });
+  try {
+    await firestore.collection("broadcasts").doc(req.params.id).update({
+      dismissedBy: admin.firestore.FieldValue.arrayUnion(email),
+    });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: "Failed to dismiss" }); }
+});
+
 // GET /api/notifications
+
 app.get("/api/notifications", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.json([]);

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useAuth } from "./AuthContext";
 import { getAuth } from "firebase/auth";
 import { usePushNotifications } from "./usePushNotifications";
+import BroadcastOverlay from "./BroadcastOverlay";
 import AdminPanel from "./AdminPanel";
 import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, LayoutGrid, List, BookOpen, Mic2, Copy, Pencil, Shield, Mail, Bell } from "lucide-react";
 import { Song, Tag } from "./types";
@@ -1521,6 +1522,9 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* 📢 Broadcast Overlay — maintenance / what's new screens */}
+      <BroadcastOverlay />
 
       {/* Mobile Overlay */}
       {isMobileMenuOpen && (

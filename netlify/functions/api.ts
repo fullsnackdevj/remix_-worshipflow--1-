@@ -266,6 +266,67 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
         } catch (e) { return json(500, { error: "Failed to store token" }); }
     }
 
+    // ── Broadcasts ─────────────────────────────────────────────────────────
+    if (rawPath === "/broadcasts" && method === "GET") {
+        const email = event.queryStringParameters?.email || "";
+        if (!email) return json(200, null);
+        try {
+            const snap = await firestore?.collection("broadcasts").where("active", "==", true).orderBy("createdAt", "desc").limit(10).get();
+            for (const doc of (snap?.docs || [])) {
+                const data = doc.data();
+                const targets: string[] = data.targetEmails || [];
+                if (!targets.includes("__all__") && !targets.includes(email)) continue;
+                if (data.type === "whats_new" && (data.dismissedBy || []).includes(email)) continue;
+                return json(200, { id: doc.id, ...data });
+            }
+            return json(200, null);
+        } catch (e) { return json(200, null); }
+    }
+
+    if (rawPath === "/broadcasts/all" && method === "GET") {
+        try {
+            const snap = await firestore?.collection("broadcasts").orderBy("createdAt", "desc").limit(20).get();
+            return json(200, snap?.docs.map(d => ({ id: d.id, ...d.data() })) ?? []);
+        } catch (e) { return json(200, []); }
+    }
+
+    if (rawPath === "/broadcasts" && method === "POST") {
+        const { type, title, message, bulletPoints, targetEmails } = body;
+        if (!type || !title || !targetEmails) return json(400, { error: "Missing fields" });
+        try {
+            const ref = await firestore?.collection("broadcasts").add({
+                type, title, message: message || "", bulletPoints: bulletPoints || [],
+                targetEmails, active: true, dismissedBy: [],
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            return json(201, { id: ref?.id });
+        } catch (e) { return json(500, { error: "Failed to create" }); }
+    }
+
+    const broadcastMatch = rawPath.match(/^\/broadcasts\/([^/]+)$/);
+    if (broadcastMatch) {
+        const bId = broadcastMatch[1];
+        if (method === "PATCH") {
+            try { await firestore?.collection("broadcasts").doc(bId).update({ active: body.active }); return json(200, { success: true }); }
+            catch (e) { return json(500, { error: "Failed" }); }
+        }
+        if (method === "DELETE") {
+            try { await firestore?.collection("broadcasts").doc(bId).delete(); return json(200, { success: true }); }
+            catch (e) { return json(500, { error: "Failed" }); }
+        }
+    }
+
+    const dismissMatch = rawPath.match(/^\/broadcasts\/([^/]+)\/dismiss$/);
+    if (dismissMatch && method === "POST") {
+        const bId = dismissMatch[1];
+        const { email } = body;
+        if (!email) return json(400, { error: "Missing email" });
+        try {
+            await firestore?.collection("broadcasts").doc(bId).update({ dismissedBy: admin.firestore.FieldValue.arrayUnion(email) });
+            return json(200, { success: true });
+        } catch (e) { return json(500, { error: "Failed" }); }
+    }
+
     if (rawPath === "/auth/pending" && method === "GET") {
         const snap = await firestore?.collection("pending_users").orderBy("requestedAt", "desc").get();
         const users = snap?.docs.map(d => d.data()) ?? [];
