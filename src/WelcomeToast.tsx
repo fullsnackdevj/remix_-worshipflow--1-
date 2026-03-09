@@ -7,19 +7,34 @@ export default function WelcomeToast() {
     const [exiting, setExiting] = useState(false);
 
     useEffect(() => {
-        if (!user?.uid) return;
+        if (!user?.uid || !user?.email) return;
 
         // Only show once per user — track with localStorage
         const key = `wf_welcomed_${user.uid}`;
         if (localStorage.getItem(key)) return;
 
-        // Mark as welcomed so it won't show again
-        localStorage.setItem(key, "1");
-
-        // Small delay so the app finishes loading first
-        const t = setTimeout(() => setVisible(true), 800);
-        return () => clearTimeout(t);
-    }, [user?.uid]);
+        // First check: is there a live broadcast for this user?
+        // If yes — don't show the welcome toast (broadcast takes priority)
+        fetch(`/api/broadcasts?email=${encodeURIComponent(user.email)}`)
+            .then(r => r.json())
+            .then(broadcast => {
+                if (broadcast?.id) {
+                    // Broadcast is live — skip welcome toast entirely
+                    // (We don't mark as seen yet so they still get it later
+                    // once the broadcast is turned off and they log in again)
+                    return;
+                }
+                // No active broadcast — safe to show the welcome toast
+                localStorage.setItem(key, "1");
+                const t = setTimeout(() => setVisible(true), 800);
+                return () => clearTimeout(t);
+            })
+            .catch(() => {
+                // If check fails, just show the toast normally
+                localStorage.setItem(key, "1");
+                setTimeout(() => setVisible(true), 800);
+            });
+    }, [user?.uid, user?.email]);
 
     useEffect(() => {
         if (!visible) return;
