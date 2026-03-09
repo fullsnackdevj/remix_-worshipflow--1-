@@ -142,6 +142,7 @@ function transposeChords(text: string, steps: number): string {
 const ROLE_BADGE: Record<string, { label: string; className: string }> = {
   admin: { label: "Admin", className: "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400" },
   leader: { label: "Worship Leader", className: "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-400" },
+  planning_lead: { label: "Planning Lead", className: "bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-400" },
   musician: { label: "Musician", className: "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400" },
   audio_tech: { label: "Audio / Tech", className: "bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-400" },
   member: { label: "Member", className: "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300" },
@@ -194,11 +195,12 @@ export default function App() {
   // ── Role-based permission flags ───────────────────────────────────────────
   // musician & audio_tech share identical restrictions
   const isLeader = userRole === "leader";
+  const isPlanningLead = userRole === "planning_lead";
 
   // Songs
-  const canAddSong = isAdmin || ["musician", "audio_tech", "leader"].includes(userRole);
-  const canEditSong = isAdmin || ["musician", "audio_tech", "leader"].includes(userRole);
-  const canDeleteSong = isAdmin; // leader cannot bulk-delete or individually delete
+  const canAddSong = isAdmin || ["musician", "audio_tech", "leader", "planning_lead"].includes(userRole);
+  const canEditSong = isAdmin || ["musician", "audio_tech", "leader", "planning_lead"].includes(userRole);
+  const canDeleteSong = isAdmin; // only admin can delete songs
   const canSelectSongs = isAdmin; // selection mode leads to bulk delete
 
   // Members — admin only
@@ -208,8 +210,8 @@ export default function App() {
   // Returns true if dateStr falls on a Sunday (0) or Wednesday (3)
   const isServiceDay = (d: string) => { const dow = new Date(d + "T00:00:00").getDay(); return dow === 0 || dow === 3; };
 
-  // Full schedule write — admin only
-  const canWriteSchedule = isAdmin;
+  // Full schedule write — admin & Planning Lead have identical full access
+  const canWriteSchedule = isAdmin || isPlanningLead;
 
   // ── Scheduling state ─────────────────────────────────────────────────────
   const [allSchedules, setAllSchedules] = useState<Schedule[]>([]);
