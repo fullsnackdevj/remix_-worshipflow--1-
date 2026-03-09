@@ -6,6 +6,7 @@ import BroadcastOverlay from "./BroadcastOverlay";
 import WelcomeToast from "./WelcomeToast";
 import AdminPanel from "./AdminPanel";
 import HelpPanel from "./HelpPanel";
+import NotesPanel from "./NotesPanel";
 import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, LayoutGrid, List, BookOpen, Mic2, Copy, Pencil, Shield, Mail, Bell, Guitar, Sliders, Palette, Lock, AlertTriangle, CheckCircle, BookMarked, HandMetal, Headphones, HelpCircle } from "lucide-react";
 import { Song, Tag } from "./types";
 
@@ -1743,6 +1744,13 @@ export default function App() {
             </h1>
           </div>
           <div className="flex items-center gap-2">
+            {/* Team Notes */}
+            <NotesPanel
+              userId={user?.uid ?? ""}
+              userName={user?.displayName ?? user?.email ?? "Unknown"}
+              userPhoto={user?.photoURL ?? ""}
+            />
+
             {/* Help & Knowledge Base */}
             <HelpPanel isAdmin={isAdmin} />
 

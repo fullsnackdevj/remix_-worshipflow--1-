@@ -905,6 +905,64 @@ Rules:
             }
         }
     }
+    // ── TEAM NOTES ────────────────────────────────────────────────────────────
+
+    // GET /notes
+    if (rawPath === "/notes" && method === "GET") {
+        try {
+            const snap = await firestore?.collection("team_notes").orderBy("createdAt", "desc").get();
+            const notes = snap?.docs.map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(), updatedAt: d.data().updatedAt?.toDate?.()?.toISOString() ?? null })) ?? [];
+            return json(200, notes);
+        } catch (e) { return json(500, { error: "Failed to fetch notes" }); }
+    }
+
+    // POST /notes
+    if (rawPath === "/notes" && method === "POST") {
+        const { authorId, authorName, authorPhoto, type, content, imageData } = body;
+        if (!authorId || !content?.trim()) return json(400, { error: "Missing required fields" });
+        try {
+            const ref = await firestore?.collection("team_notes").add({
+                authorId, authorName: authorName || "Unknown", authorPhoto: authorPhoto || "",
+                type: type || "general", content: content.trim(),
+                imageData: imageData || null,
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            return json(201, { id: ref?.id });
+        } catch (e) { return json(500, { error: "Failed to create note" }); }
+    }
+
+    // PUT /notes/:id  &  DELETE /notes/:id
+    const noteMatch = rawPath.match(/^\/notes\/([^/]+)$/);
+    if (noteMatch) {
+        const nid = noteMatch[1];
+        if (method === "PUT") {
+            const { authorId, content, type, imageData } = body;
+            if (!authorId || !content?.trim()) return json(400, { error: "Missing required fields" });
+            try {
+                const doc = await firestore?.collection("team_notes").doc(nid).get();
+                if (!doc?.exists) return json(404, { error: "Note not found" });
+                if (doc.data()?.authorId !== authorId) return json(403, { error: "Not your note" });
+                await firestore?.collection("team_notes").doc(nid).update({
+                    content: content.trim(), type: type || "general",
+                    imageData: imageData ?? doc.data()?.imageData ?? null,
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                });
+                return json(200, { success: true });
+            } catch (e) { return json(500, { error: "Failed to update note" }); }
+        }
+        if (method === "DELETE") {
+            const { authorId } = body;
+            if (!authorId) return json(400, { error: "Missing authorId" });
+            try {
+                const doc = await firestore?.collection("team_notes").doc(nid).get();
+                if (!doc?.exists) return json(404, { error: "Note not found" });
+                if (doc.data()?.authorId !== authorId) return json(403, { error: "Not your note" });
+                await firestore?.collection("team_notes").doc(nid).delete();
+                return json(200, { success: true });
+            } catch (e) { return json(500, { error: "Failed to delete note" }); }
+        }
+    }
 
     return json(404, { error: "Not found" });
 };

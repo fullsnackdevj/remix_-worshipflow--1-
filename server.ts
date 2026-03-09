@@ -1124,6 +1124,72 @@ app.put("/api/auth/update-role", async (req, res) => {
   }
 });
 
+
+// ── TEAM NOTES ───────────────────────────────────────────────────────────────
+
+// GET /api/notes — fetch all notes ordered by newest first
+app.get("/api/notes", async (_req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.json([]);
+  try {
+    const snap = await firestore.collection("team_notes").orderBy("createdAt", "desc").get();
+    const notes = snap.docs.map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(), updatedAt: d.data().updatedAt?.toDate?.()?.toISOString() ?? null }));
+    res.json(notes);
+  } catch (e) { res.status(500).json({ error: "Failed to fetch notes" }); }
+});
+
+// POST /api/notes — create a new note
+app.post("/api/notes", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { authorId, authorName, authorPhoto, type, content, imageData } = req.body;
+  if (!authorId || !content?.trim()) return res.status(400).json({ error: "Missing required fields" });
+  try {
+    const ref = await firestore.collection("team_notes").add({
+      authorId, authorName: authorName || "Unknown", authorPhoto: authorPhoto || "",
+      type: type || "general", content: content.trim(),
+      imageData: imageData || null,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    res.status(201).json({ id: ref.id });
+  } catch (e) { res.status(500).json({ error: "Failed to create note" }); }
+});
+
+// PUT /api/notes/:id — edit note (author only)
+app.put("/api/notes/:id", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { authorId, content, type, imageData } = req.body;
+  if (!authorId || !content?.trim()) return res.status(400).json({ error: "Missing required fields" });
+  try {
+    const doc = await firestore.collection("team_notes").doc(req.params.id).get();
+    if (!doc.exists) return res.status(404).json({ error: "Note not found" });
+    if (doc.data()?.authorId !== authorId) return res.status(403).json({ error: "Not your note" });
+    await firestore.collection("team_notes").doc(req.params.id).update({
+      content: content.trim(), type: type || "general",
+      imageData: imageData ?? doc.data()?.imageData ?? null,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: "Failed to update note" }); }
+});
+
+// DELETE /api/notes/:id — delete note (author only)
+app.delete("/api/notes/:id", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { authorId } = req.body;
+  if (!authorId) return res.status(400).json({ error: "Missing authorId" });
+  try {
+    const doc = await firestore.collection("team_notes").doc(req.params.id).get();
+    if (!doc.exists) return res.status(404).json({ error: "Note not found" });
+    if (doc.data()?.authorId !== authorId) return res.status(403).json({ error: "Not your note" });
+    await firestore.collection("team_notes").doc(req.params.id).delete();
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: "Failed to delete note" }); }
+});
+
 app.post("/api/ocr", async (req, res) => {
   try {
     const { base64Data, mimeType, type } = req.body;
