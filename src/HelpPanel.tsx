@@ -224,13 +224,10 @@ export default function HelpPanel({ isAdmin }: HelpPanelProps) {
             {/* Panel */}
             {open && (
                 <div
-                    className="fixed z-[200] bg-gray-900 border border-gray-700/60 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+                    className="fixed top-[72px] left-1/2 -translate-x-1/2 sm:absolute sm:top-full sm:mt-2 sm:left-auto sm:translate-x-0 sm:right-0 z-[200] bg-gray-900 border border-gray-700/60 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
                     style={{
                         width: "min(460px, calc(100vw - 20px))",
                         maxHeight: "min(520px, calc(100dvh - 90px))",
-                        top: "72px",
-                        left: "50%",
-                        transform: "translateX(-50%)",
                     }}
                 >
                     {/* Header */}

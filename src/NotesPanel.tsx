@@ -355,13 +355,10 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
             {/* Panel — centered, responsive */}
             {open && (
                 <div
-                    className="fixed z-[200] bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700/60 rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+                    className="fixed top-[72px] left-1/2 -translate-x-1/2 sm:absolute sm:top-full sm:mt-2 sm:left-auto sm:translate-x-0 sm:right-0 z-[200] bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700/60 rounded-2xl shadow-2xl flex flex-col overflow-hidden"
                     style={{
                         width: "min(520px, calc(100vw - 20px))",
                         maxHeight: "min(600px, calc(100dvh - 90px))",
-                        top: "72px",
-                        left: "50%",
-                        transform: "translateX(-50%)",
                     }}
                 >
                     {/* ── Header ── */}
