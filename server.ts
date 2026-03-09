@@ -220,13 +220,36 @@ app.post("/api/fcm-token", async (req, res) => {
   const { userId, role, token } = req.body;
   if (!userId || !token) return res.status(400).json({ error: "userId and token required" });
   try {
-    // Store by userId so each user can have one active token (latest device wins)
     await firestore.collection("fcm_tokens").doc(userId).set({
       userId, role: role || "member", token,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: "Failed to store token" }); }
+});
+
+// GET /api/user-flags?userId=xxx — get per-user boolean flags (cross-device)
+app.get("/api/user-flags", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.json({});
+  const userId = (req.query.userId as string) || "";
+  if (!userId) return res.json({});
+  try {
+    const doc = await firestore.collection("user_flags").doc(userId).get();
+    return res.json(doc.exists ? doc.data() : {});
+  } catch (e) { res.json({}); }
+});
+
+// POST /api/user-flags — set a flag for a user
+app.post("/api/user-flags", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.json({ success: true });
+  const { userId, ...flags } = req.body;
+  if (!userId) return res.status(400).json({ error: "userId required" });
+  try {
+    await firestore.collection("user_flags").doc(userId).set(flags, { merge: true });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: "Failed to set flag" }); }
 });
 
 // ── Broadcast / App Announcement endpoints ────────────────────────────────

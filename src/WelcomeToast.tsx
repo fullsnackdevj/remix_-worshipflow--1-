@@ -9,30 +9,35 @@ export default function WelcomeToast() {
     useEffect(() => {
         if (!user?.uid || !user?.email) return;
 
-        // Only show once per user — track with localStorage
-        const key = `wf_welcomed_${user.uid}`;
-        if (localStorage.getItem(key)) return;
-
-        // First check: is there a live broadcast for this user?
-        // If yes — don't show the welcome toast (broadcast takes priority)
-        fetch(`/api/broadcasts?email=${encodeURIComponent(user.email)}`)
+        // Check Firestore (cross-device) instead of localStorage
+        fetch(`/api/user-flags?userId=${user.uid}`)
             .then(r => r.json())
-            .then(broadcast => {
-                if (broadcast?.id) {
-                    // Broadcast is live — skip welcome toast entirely
-                    // (We don't mark as seen yet so they still get it later
-                    // once the broadcast is turned off and they log in again)
-                    return;
-                }
-                // No active broadcast — safe to show the welcome toast
-                localStorage.setItem(key, "1");
-                const t = setTimeout(() => setVisible(true), 800);
-                return () => clearTimeout(t);
+            .then(async flags => {
+                // Already welcomed on any device before — skip
+                if (flags?.welcomed) return;
+
+                // Check if there's a live broadcast — if yes, defer welcome toast
+                const broadcastRes = await fetch(`/api/broadcasts?email=${encodeURIComponent(user.email!)}`);
+                const broadcast = await broadcastRes.json();
+                if (broadcast?.id) return; // Broadcast takes priority — skip for now
+
+                // Mark as welcomed in Firestore (works on ALL devices)
+                await fetch("/api/user-flags", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ userId: user.uid, welcomed: true }),
+                });
+
+                // Show the toast
+                setTimeout(() => setVisible(true), 800);
             })
             .catch(() => {
-                // If check fails, just show the toast normally
-                localStorage.setItem(key, "1");
-                setTimeout(() => setVisible(true), 800);
+                // If API fails, fall back to localStorage so we don't break anything
+                const key = `wf_welcomed_${user.uid}`;
+                if (!localStorage.getItem(key)) {
+                    localStorage.setItem(key, "1");
+                    setTimeout(() => setVisible(true), 800);
+                }
             });
     }, [user?.uid, user?.email]);
 

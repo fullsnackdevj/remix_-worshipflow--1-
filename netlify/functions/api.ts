@@ -266,6 +266,25 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
         } catch (e) { return json(500, { error: "Failed to store token" }); }
     }
 
+    // GET /api/user-flags — cross-device user flags stored in Firestore
+    if (rawPath === "/user-flags" && method === "GET") {
+        const userId = event.queryStringParameters?.userId || "";
+        if (!userId) return json(200, {});
+        try {
+            const doc = await firestore?.collection("user_flags").doc(userId).get();
+            return json(200, doc?.exists ? doc.data() : {});
+        } catch (e) { return json(200, {}); }
+    }
+
+    if (rawPath === "/user-flags" && method === "POST") {
+        const { userId, ...flags } = body;
+        if (!userId) return json(400, { error: "userId required" });
+        try {
+            await firestore?.collection("user_flags").doc(userId).set(flags, { merge: true });
+            return json(200, { success: true });
+        } catch (e) { return json(500, { error: "Failed to set flag" }); }
+    }
+
     // ── Broadcasts ─────────────────────────────────────────────────────────
     if (rawPath === "/broadcasts" && method === "GET") {
         const email = event.queryStringParameters?.email || "";
