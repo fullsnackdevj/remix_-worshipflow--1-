@@ -446,7 +446,7 @@ app.post("/api/members", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(500).json({ error: "Firebase not configured" });
 
-  const { name, phone, photo, roles, status, notes } = req.body;
+  const { name, phone, email, photo, roles, status, notes } = req.body;
 
   const missingFields: string[] = [];
   if (!name?.trim()) missingFields.push("Name");
@@ -460,6 +460,7 @@ app.post("/api/members", async (req, res) => {
     const docRef = await firestore.collection("members").add({
       name: savedName,
       phone: phone.trim(),
+      email: (email || "").trim().toLowerCase(),
       photo: photo || "",
       roles: roles || [],
       status: status || "active",
@@ -471,6 +472,7 @@ app.post("/api/members", async (req, res) => {
       id: docRef.id,
       name: savedName,
       phone: phone.trim(),
+      email: (email || "").trim().toLowerCase(),
       photo: photo || "",
       roles: roles || [],
       status: status || "active",
@@ -487,7 +489,7 @@ app.put("/api/members/:id", async (req, res) => {
   if (!firestore) return res.status(500).json({ error: "Firebase not configured" });
 
   const { id } = req.params;
-  const { name, phone, photo, roles, status, notes } = req.body;
+  const { name, phone, email, photo, roles, status, notes } = req.body;
 
   const missingFields: string[] = [];
   if (!name?.trim()) missingFields.push("Name");
@@ -500,6 +502,7 @@ app.put("/api/members/:id", async (req, res) => {
     await firestore.collection("members").doc(id).update({
       name: toTitleCase(name),
       phone: phone.trim(),
+      email: (email || "").trim().toLowerCase(),
       photo: photo || "",
       roles: roles || [],
       status: status || "active",

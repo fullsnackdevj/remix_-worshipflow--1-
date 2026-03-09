@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useAuth } from "./AuthContext";
 import AdminPanel from "./AdminPanel";
-import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, LayoutGrid, List, BookOpen, Mic2, Copy, Pencil, Shield } from "lucide-react";
+import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, LayoutGrid, List, BookOpen, Mic2, Copy, Pencil, Shield, Mail } from "lucide-react";
 import { Song, Tag } from "./types";
 
 // ── Member Role Constants ────────────────────────────────────────────────────
@@ -49,6 +49,7 @@ interface Member {
   id: string;
   name: string;
   phone: string;
+  email: string;
   photo: string;
   roles: string[];
   status: "active" | "on-leave" | "inactive";
@@ -222,13 +223,14 @@ export default function App() {
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [isEditingMember, setIsEditingMember] = useState(false);
   const [memberSearchQuery, setMemberSearchQuery] = useState("");
-  const [memberFormErrors, setMemberFormErrors] = useState<{ firstName?: string; lastName?: string; phone?: string }>({});
+  const [memberFormErrors, setMemberFormErrors] = useState<{ firstName?: string; lastName?: string; phone?: string; email?: string }>({});
 
   // Member form fields
   const [editMemberFirstName, setEditMemberFirstName] = useState("");
   const [editMemberMiddleInitial, setEditMemberMiddleInitial] = useState("");
   const [editMemberLastName, setEditMemberLastName] = useState("");
   const [editMemberPhone, setEditMemberPhone] = useState("");
+  const [editMemberEmail, setEditMemberEmail] = useState("");
   const [editMemberPhoto, setEditMemberPhoto] = useState("");
   const [editMemberRoles, setEditMemberRoles] = useState<string[]>([]);
   const [editMemberStatus, setEditMemberStatus] = useState<"active" | "on-leave" | "inactive">("active");
@@ -805,6 +807,7 @@ export default function App() {
         setEditMemberLastName(parts.slice(1).join(" ") || "");
       }
       setEditMemberPhone(member.phone);
+      setEditMemberEmail((member as any).email || "");
       setEditMemberPhoto(member.photo || "");
       setEditMemberRoles(member.roles || []);
       setEditMemberStatus(member.status || "active");
@@ -815,6 +818,7 @@ export default function App() {
       setEditMemberMiddleInitial("");
       setEditMemberLastName("");
       setEditMemberPhone("");
+      setEditMemberEmail("");
       setEditMemberPhoto("");
       setEditMemberRoles([]);
       setEditMemberStatus("active");
@@ -826,10 +830,12 @@ export default function App() {
 
   const handleSaveMember = async () => {
     if (isSavingMember) return; // guard against double-click
-    const errors: { firstName?: string; lastName?: string; phone?: string } = {};
+    const errors: { firstName?: string; lastName?: string; phone?: string; email?: string } = {};
     if (!editMemberFirstName.trim()) errors.firstName = "First name is required.";
     if (!editMemberLastName.trim()) errors.lastName = "Last name is required.";
     if (!editMemberPhone.trim()) errors.phone = "Phone number is required.";
+    if (!editMemberEmail.trim()) errors.email = "Email address is required.";
+    else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(editMemberEmail.trim())) errors.email = "Please enter a valid email address.";
     if (Object.keys(errors).length > 0) { setMemberFormErrors(errors); return; }
     setMemberFormErrors({});
 
@@ -865,6 +871,7 @@ export default function App() {
     const payload = {
       name: fullName,
       phone: editMemberPhone,
+      email: editMemberEmail.trim().toLowerCase(),
       photo: editMemberPhoto,
       roles: editMemberRoles,
       status: editMemberStatus,
@@ -909,6 +916,7 @@ export default function App() {
             id: responseData.id,
             name: responseData.name ?? payload.name,
             phone: payload.phone,
+            email: payload.email,
             photo: payload.photo,
             roles: payload.roles,
             status: payload.status,
@@ -2446,6 +2454,28 @@ export default function App() {
                           {memberFormErrors.phone && <p className="mt-1 text-xs text-red-500">{memberFormErrors.phone}</p>}
                         </div>
 
+                        {/* Email */}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email Address <span className="text-red-500">*</span></label>
+                          <div className="relative">
+                            <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                            <input
+                              type="email"
+                              value={editMemberEmail}
+                              onChange={e => { setEditMemberEmail(e.target.value); if (memberFormErrors.email) setMemberFormErrors(p => ({ ...p, email: undefined })); }}
+                              className={`w-full pl-9 pr-4 py-2 border ${memberFormErrors.email ? "border-red-400 focus:border-red-400 focus:ring-red-200" : "border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-indigo-200"} bg-white dark:bg-gray-700 rounded-xl focus:ring-2 outline-none`}
+                              placeholder="member@gmail.com"
+                            />
+                          </div>
+                          {memberFormErrors.email
+                            ? <p className="mt-1 text-xs text-red-500">{memberFormErrors.email}</p>
+                            : <p className="mt-1.5 flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40 rounded-lg px-2.5 py-1.5">
+                              <span className="shrink-0 mt-0.5">⚠️</span>
+                              <span>Make sure this is the same email address this person will use to <strong>sign in to the app</strong>. This is how their access is linked to their profile.</span>
+                            </p>
+                          }
+                        </div>
+
                         {/* Status */}
                         <div>
                           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Status</label>
@@ -2567,6 +2597,12 @@ export default function App() {
                               <a href={`tel:${selectedMember.phone}`} className="inline-flex items-center gap-1.5 mt-1 text-indigo-500 dark:text-indigo-400 hover:text-indigo-600 font-medium text-sm">
                                 <Phone size={14} />{selectedMember.phone}
                               </a>
+                              {/* Email */}
+                              {(selectedMember as any).email && (
+                                <a href={`mailto:${(selectedMember as any).email}`} className="inline-flex items-center gap-1.5 mt-1 ml-3 text-gray-500 dark:text-gray-400 hover:text-indigo-500 dark:hover:text-indigo-400 font-medium text-sm">
+                                  <Mail size={14} />{(selectedMember as any).email}
+                                </a>
+                              )}
                             </div>
 
                             {/* Roles */}

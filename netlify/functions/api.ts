@@ -451,7 +451,7 @@ Rules:
 
     // POST /members
     if (rawPath === "/members" && method === "POST") {
-        const { name, phone, photo, roles, status, notes } = body;
+        const { name, phone, email, photo, roles, status, notes } = body;
         const missingFields: string[] = [];
         if (!name?.trim()) missingFields.push("Name");
         if (!phone?.trim()) missingFields.push("Phone");
@@ -462,6 +462,7 @@ Rules:
             const docRef = await firestore.collection("members").add({
                 name: toTitleCase(name),
                 phone: phone.trim(),
+                email: (email || "").trim().toLowerCase(),
                 photo: photo || "",
                 roles: roles || [],
                 status: status || "active",
@@ -482,7 +483,7 @@ Rules:
         const id = memberMatch[1];
 
         if (method === "PUT") {
-            const { name, phone, photo, roles, status, notes } = body;
+            const { name, phone, email, photo, roles, status, notes } = body;
             const missingFields: string[] = [];
             if (!name?.trim()) missingFields.push("Name");
             if (!phone?.trim()) missingFields.push("Phone");
@@ -493,6 +494,7 @@ Rules:
                 await firestore.collection("members").doc(id).update({
                     name: toTitleCase(name),
                     phone: phone.trim(),
+                    email: (email || "").trim().toLowerCase(),
                     photo: photo || "",
                     roles: roles || [],
                     status: status || "active",
