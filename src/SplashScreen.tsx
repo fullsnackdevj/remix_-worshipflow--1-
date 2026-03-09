@@ -138,6 +138,8 @@ export default function SplashScreen() {
                         color: "rgba(255,255,255,0.18)",
                         letterSpacing: "0.08em",
                         fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+                        textAlign: "center",
+                        whiteSpace: "nowrap",
                     }}
                 >
                     © 2026 WorshipFlow. All rights reserved.
