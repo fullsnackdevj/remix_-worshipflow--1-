@@ -1739,7 +1739,7 @@ export default function App() {
           </button>
 
           <div className="flex-1 flex items-center">
-            <h1 className="text-xl font-bold text-gray-900 dark:text-white">
+            <h1 className="text-base sm:text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap">
               {currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : "Song Management"}
             </h1>
           </div>
