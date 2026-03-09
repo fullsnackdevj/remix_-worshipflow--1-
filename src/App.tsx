@@ -1749,6 +1749,7 @@ export default function App() {
               userId={user?.uid ?? ""}
               userName={user?.displayName ?? user?.email ?? "Unknown"}
               userPhoto={user?.photoURL ?? ""}
+              userRole={userRole}
             />
 
             {/* Help & Knowledge Base */}

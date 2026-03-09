@@ -976,6 +976,40 @@ Rules:
         }
     }
 
+    // PATCH /notes/:id/react
+    const reactMatch = rawPath.match(/^\/notes\/([^/]+)\/react$/);
+    if (reactMatch && method === "PATCH") {
+        const nid = reactMatch[1];
+        const { userId, emoji } = body;
+        if (!userId || !emoji) return json(400, { error: "Missing userId or emoji" });
+        try {
+            const ref = firestore?.collection("team_notes").doc(nid);
+            const doc = await ref?.get();
+            if (!doc?.exists) return json(404, { error: "Note not found" });
+            const reactions = doc.data()?.reactions || {};
+            const users: string[] = reactions[emoji] || [];
+            const already = users.includes(userId);
+            reactions[emoji] = already ? users.filter((u: string) => u !== userId) : [...users, userId];
+            await ref?.update({ reactions });
+            return json(200, { success: true, reactions });
+        } catch (e) { return json(500, { error: "Failed to react" }); }
+    }
+
+    // PATCH /notes/:id/resolve
+    const resolveMatch = rawPath.match(/^\/notes\/([^/]+)\/resolve$/);
+    if (resolveMatch && method === "PATCH") {
+        const nid = resolveMatch[1];
+        const { userId, resolved } = body;
+        if (!userId) return json(400, { error: "Missing userId" });
+        try {
+            const ref = firestore?.collection("team_notes").doc(nid);
+            const doc = await ref?.get();
+            if (!doc?.exists) return json(404, { error: "Note not found" });
+            await ref?.update({ resolved: !!resolved, resolvedBy: resolved ? userId : null, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+            return json(200, { success: true });
+        } catch (e) { return json(500, { error: "Failed to resolve" }); }
+    }
+
     return json(404, { error: "Not found" });
 };
 

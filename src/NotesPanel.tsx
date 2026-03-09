@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { X, PenLine, Trash2, ImagePlus, Loader2, ChevronLeft, Bug, Lightbulb, MessageSquare, Pencil, Check, AlertCircle } from "lucide-react";
+import { X, PenLine, Trash2, ImagePlus, Loader2, Bug, Lightbulb, MessageSquare, Pencil, Check, CheckCircle2, ChevronDown } from "lucide-react";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 export interface TeamNote {
@@ -12,22 +12,30 @@ export interface TeamNote {
     imageData?: string | null;
     createdAt: string;
     updatedAt?: string | null;
+    resolved?: boolean;
+    resolvedBy?: string | null;
+    reactions?: Record<string, string[]>;
 }
 
 interface NotesPanelProps {
     userId: string;
     userName: string;
     userPhoto: string;
+    userRole?: string;
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const NOTE_TYPES = [
-    { value: "bug", label: "Bug", icon: <Bug size={12} />, cls: "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800" },
-    { value: "feature", label: "Feature", icon: <Lightbulb size={12} />, cls: "bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800" },
-    { value: "general", label: "General", icon: <MessageSquare size={12} />, cls: "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800" },
+    { value: "bug", label: "Bug", icon: <Bug size={12} />, cls: "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800" },
+    { value: "feature", label: "Feature", icon: <Lightbulb size={12} />, cls: "bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800" },
+    { value: "general", label: "General", icon: <MessageSquare size={12} />, cls: "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800" },
 ] as const;
 
-const MAX_IMAGE_BYTES = 300 * 1024; // 300 KB after compression
+const EMOJI_REACTIONS = ["👍", "❤️", "👀", "😂", "🙏"];
+const MAX_IMAGE_BYTES = 300 * 1024;
+
+type StatusTab = "active" | "resolved" | "all";
+type SortMode = "newest" | "oldest" | "most_reacted";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function typeConfig(type: string) {
@@ -49,375 +57,448 @@ function relativeTime(iso: string) {
 async function compressImage(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = e => {
+        reader.readAsDataURL(file);
+        reader.onload = () => {
             const img = new Image();
+            img.src = reader.result as string;
             img.onload = () => {
                 const canvas = document.createElement("canvas");
                 let { width, height } = img;
-                const MAX_DIM = 1200;
-                if (width > MAX_DIM || height > MAX_DIM) {
-                    if (width > height) { height = Math.round((height / width) * MAX_DIM); width = MAX_DIM; }
-                    else { width = Math.round((width / height) * MAX_DIM); height = MAX_DIM; }
+                const MAX = 1200;
+                if (width > MAX || height > MAX) {
+                    if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+                    else { width = Math.round(width * MAX / height); height = MAX; }
                 }
                 canvas.width = width; canvas.height = height;
-                const ctx = canvas.getContext("2d")!;
-                ctx.drawImage(img, 0, 0, width, height);
-                // Try progressive quality reduction
-                let q = 0.8;
-                let result = canvas.toDataURL("image/jpeg", q);
-                while (result.length > MAX_IMAGE_BYTES * 1.37 && q > 0.2) { q -= 0.1; result = canvas.toDataURL("image/jpeg", q); }
-                if (result.length > MAX_IMAGE_BYTES * 1.37) reject(new Error("Image too large even after compression. Please use a smaller screenshot."));
-                else resolve(result);
+                canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
+                let quality = 0.8;
+                const tryCompress = () => {
+                    const data = canvas.toDataURL("image/jpeg", quality);
+                    if (data.length * 0.75 <= MAX_IMAGE_BYTES || quality <= 0.3) { resolve(data); return; }
+                    quality -= 0.1;
+                    tryCompress();
+                };
+                tryCompress();
             };
-            img.onerror = () => reject(new Error("Invalid image"));
-            img.src = e.target!.result as string;
+            img.onerror = reject;
         };
-        reader.onerror = () => reject(new Error("Failed to read file"));
-        reader.readAsDataURL(file);
+        reader.onerror = reject;
     });
 }
 
-// ── Note Form ────────────────────────────────────────────────────────────────
-function NoteForm({ userId, userName, userPhoto, initial, onSave, onCancel }: {
-    userId: string; userName: string; userPhoto: string;
-    initial?: TeamNote; onSave: (n: TeamNote) => void; onCancel: () => void;
-}) {
-    const [content, setContent] = useState(initial?.content ?? "");
-    const [type, setType] = useState<"bug" | "feature" | "general">(initial?.type ?? "general");
-    const [imageData, setImageData] = useState<string | null>(initial?.imageData ?? null);
-    const [saving, setSaving] = useState(false);
-    const [imgError, setImgError] = useState("");
-    const fileRef = useRef<HTMLInputElement>(null);
-    const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-    useEffect(() => { textareaRef.current?.focus(); }, []);
-
-    const handleImageFile = async (file: File) => {
-        setImgError("");
-        if (!file.type.startsWith("image/")) { setImgError("Only image files are supported."); return; }
-        try { setImageData(await compressImage(file)); }
-        catch (e: any) { setImgError(e.message ?? "Failed to process image"); }
-    };
-
-    // Paste handler
-    const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-        const items = Array.from(e.clipboardData.items) as DataTransferItem[];
-        const imgItem = items.find((i: DataTransferItem) => i.type.startsWith("image/"));
-        if (imgItem) {
-            e.preventDefault();
-            const file = imgItem.getAsFile();
-            if (file) await handleImageFile(file);
-        }
-    };
-
-    const handleSave = async () => {
-        if (!content.trim()) return;
-        setSaving(true);
-        try {
-            const url = initial ? `/api/notes/${initial.id}` : "/api/notes";
-            const method = initial ? "PUT" : "POST";
-            const res = await fetch(url, {
-                method,
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ authorId: userId, authorName: userName, authorPhoto: userPhoto, type, content, imageData }),
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error ?? "Failed");
-            onSave({
-                id: initial?.id ?? data.id,
-                authorId: userId, authorName: userName, authorPhoto: userPhoto,
-                type, content: content.trim(), imageData,
-                createdAt: initial?.createdAt ?? new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-            });
-        } catch (e: any) {
-            setImgError(e.message ?? "Failed to save");
-        } finally { setSaving(false); }
-    };
-
-    return (
-        <div className="space-y-3">
-            {/* Type picker */}
-            <div className="flex gap-2">
-                {NOTE_TYPES.map(t => (
-                    <button
-                        key={t.value}
-                        onClick={() => setType(t.value as any)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${type === t.value ? t.cls : "bg-transparent border-gray-200 dark:border-gray-700 text-gray-500 hover:border-gray-400"}`}
-                    >
-                        {t.icon} {t.label}
-                    </button>
-                ))}
-            </div>
-
-            {/* Textarea */}
-            <textarea
-                ref={textareaRef}
-                value={content}
-                onChange={e => setContent(e.target.value)}
-                onPaste={handlePaste}
-                placeholder="Describe the bug, feature idea, or note... (paste a screenshot directly here)"
-                rows={4}
-                className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-
-            {/* Image preview */}
-            {imageData && (
-                <div className="relative inline-block">
-                    <img src={imageData} alt="attachment" className="max-h-36 rounded-xl border border-gray-200 dark:border-gray-700 object-cover" />
-                    <button onClick={() => setImageData(null)} className="absolute -top-2 -right-2 w-5 h-5 bg-gray-900 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors">
-                        <X size={11} />
-                    </button>
-                </div>
-            )}
-
-            {imgError && (
-                <p className="text-xs text-red-500 flex items-center gap-1"><AlertCircle size={12} /> {imgError}</p>
-            )}
-
-            {/* Actions */}
-            <div className="flex items-center justify-between gap-2">
-                <button
-                    onClick={() => fileRef.current?.click()}
-                    className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-indigo-500 transition-colors"
-                >
-                    <ImagePlus size={14} /> Attach image
-                </button>
-                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleImageFile(f); e.target.value = ""; }} />
-                <div className="flex gap-2">
-                    <button onClick={onCancel} className="px-3 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">Cancel</button>
-                    <button
-                        onClick={handleSave}
-                        disabled={saving || !content.trim()}
-                        className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-                    >
-                        {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-                        {initial ? "Update" : "Save Note"}
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
+// ── NoteCard ─────────────────────────────────────────────────────────────────
+interface NoteCardProps {
+    note: TeamNote;
+    userId: string;
+    userRole?: string;
+    onEdit: (note: TeamNote) => void;
+    onDelete: (id: string) => void;
+    onReact: (id: string, emoji: string) => void;
+    onResolve: (id: string, resolved: boolean) => void;
 }
 
-// ── Note Card ────────────────────────────────────────────────────────────────
-function NoteCard({ note, userId, onEdit, onDelete }: { note: TeamNote; userId: string; onEdit: () => void; onDelete: () => void; key?: string }) {
-    const [deleting, setDeleting] = useState(false);
-    const [expanded, setExpanded] = useState(false);
-    const tc = typeConfig(note.type);
-    const isOwn = note.authorId === userId;
-
-    const doDelete = async () => {
-        if (!confirm("Delete this note?")) return;
-        setDeleting(true);
-        try {
-            await fetch(`/api/notes/${note.id}`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ authorId: userId }) });
-            onDelete();
-        } catch { setDeleting(false); }
-    };
+function NoteCard({ note, userId, userRole, onEdit, onDelete, onReact, onResolve }: NoteCardProps) {
+    const [imgExpanded, setImgExpanded] = useState(false);
+    const cfg = typeConfig(note.type);
+    const isAuthor = note.authorId === userId;
+    const isAdmin = userRole === "admin" || userRole === "leader";
+    const canResolve = (isAuthor || isAdmin) && (note.type === "bug" || note.type === "feature");
+    const totalReactions = Object.values(note.reactions || {}).reduce((s, arr) => s + arr.length, 0);
 
     return (
-        <div className="bg-white dark:bg-gray-800/60 rounded-2xl border border-gray-100 dark:border-gray-700/60 p-4 space-y-3 hover:border-gray-200 dark:hover:border-gray-600 transition-colors">
-            {/* Header */}
-            <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
-                    {note.authorPhoto
-                        ? <img src={note.authorPhoto} alt={note.authorName} className="w-7 h-7 rounded-full shrink-0" />
-                        : <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-bold shrink-0">{note.authorName?.[0]?.toUpperCase()}</div>
-                    }
+        <div className={`rounded-2xl border p-4 transition-all ${note.resolved ? "border-green-500/20 bg-green-500/5 dark:bg-green-900/5 opacity-80" : "border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/50"}`}>
+            {/* Header row */}
+            <div className="flex items-start justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                    {note.authorPhoto ? (
+                        <img src={note.authorPhoto} alt={note.authorName} className="w-8 h-8 rounded-full shrink-0 border-2 border-indigo-500/30 object-cover" />
+                    ) : (
+                        <div className="w-8 h-8 rounded-full shrink-0 bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold">
+                            {note.authorName?.[0]?.toUpperCase()}
+                        </div>
+                    )}
                     <div className="min-w-0">
                         <p className="text-xs font-semibold text-gray-900 dark:text-white truncate">{note.authorName}</p>
-                        <p className="text-[10px] text-gray-400">{relativeTime(note.updatedAt ?? note.createdAt)}{note.updatedAt && note.updatedAt !== note.createdAt ? " (edited)" : ""}</p>
+                        <p className="text-[10px] text-gray-400">
+                            {relativeTime(note.createdAt)}{note.updatedAt ? " (edited)" : ""}
+                        </p>
                     </div>
                 </div>
-                <span className={`shrink-0 flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-bold ${tc.cls}`}>
-                    {tc.icon} {tc.label}
-                </span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                    {note.resolved && (
+                        <span className="flex items-center gap-1 text-[10px] font-semibold bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 px-2 py-0.5 rounded-full border border-green-200 dark:border-green-800">
+                            <CheckCircle2 size={10} /> Resolved
+                        </span>
+                    )}
+                    <span className={`flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${cfg.cls}`}>
+                        {cfg.icon} {cfg.label}
+                    </span>
+                </div>
             </div>
 
             {/* Content */}
-            <div>
-                <p className={`text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed ${!expanded && note.content.length > 200 ? "line-clamp-4" : ""}`}>
-                    {note.content}
-                </p>
-                {note.content.length > 200 && (
-                    <button onClick={() => setExpanded(e => !e)} className="text-xs text-indigo-500 hover:text-indigo-400 mt-1 transition-colors">
-                        {expanded ? "Show less" : "Show more"}
-                    </button>
-                )}
-            </div>
+            <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words leading-relaxed mb-3">{note.content}</p>
 
             {/* Image */}
             {note.imageData && (
-                <img
-                    src={note.imageData}
-                    alt="attachment"
-                    className="w-full max-h-48 object-cover rounded-xl border border-gray-200 dark:border-gray-700 cursor-pointer"
-                    onClick={() => window.open(note.imageData!, "_blank")}
-                />
-            )}
-
-            {/* Own-note actions */}
-            {isOwn && (
-                <div className="flex items-center gap-2 pt-1 border-t border-gray-100 dark:border-gray-700/50">
-                    <button onClick={onEdit} className="flex items-center gap-1 text-xs text-gray-400 hover:text-indigo-500 transition-colors">
-                        <Pencil size={12} /> Edit
-                    </button>
-                    <button onClick={doDelete} disabled={deleting} className="flex items-center gap-1 text-xs text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50">
-                        {deleting ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />} Delete
-                    </button>
+                <div className="mb-3">
+                    <img
+                        src={note.imageData}
+                        alt="attachment"
+                        onClick={() => setImgExpanded(v => !v)}
+                        className={`rounded-xl border border-gray-200 dark:border-gray-700 cursor-pointer transition-all object-cover w-full ${imgExpanded ? "max-h-none" : "max-h-40 object-top"}`}
+                    />
+                    {!imgExpanded && <p className="text-[10px] text-gray-400 mt-1 text-center">Tap image to expand</p>}
                 </div>
             )}
+
+            {/* Reactions */}
+            <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                {EMOJI_REACTIONS.map(emoji => {
+                    const users = note.reactions?.[emoji] || [];
+                    const reacted = users.includes(userId);
+                    return (
+                        <button
+                            key={emoji}
+                            onClick={() => onReact(note.id, emoji)}
+                            title={reacted ? "Remove reaction" : "React"}
+                            className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border transition-all select-none ${reacted
+                                ? "bg-indigo-100 dark:bg-indigo-900/40 border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 scale-105"
+                                : "bg-gray-100 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
+                                }`}
+                        >
+                            <span>{emoji}</span>
+                            {users.length > 0 && <span className="font-medium">{users.length}</span>}
+                        </button>
+                    );
+                })}
+
+                {/* Action buttons */}
+                <div className="ml-auto flex items-center gap-1">
+                    {canResolve && (
+                        <button
+                            onClick={() => onResolve(note.id, !note.resolved)}
+                            title={note.resolved ? "Reopen" : "Mark resolved"}
+                            className={`p-1.5 rounded-lg text-xs transition-all ${note.resolved ? "text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20" : "text-gray-400 hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20"}`}
+                        >
+                            <CheckCircle2 size={14} />
+                        </button>
+                    )}
+                    {isAuthor && !note.resolved && (
+                        <button onClick={() => onEdit(note)} title="Edit" className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-all">
+                            <Pencil size={13} />
+                        </button>
+                    )}
+                    {isAuthor && (
+                        <button onClick={() => onDelete(note.id)} title="Delete" className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all">
+                            <Trash2 size={13} />
+                        </button>
+                    )}
+                </div>
+            </div>
         </div>
     );
 }
 
-// ── Main Panel ───────────────────────────────────────────────────────────────
-export default function NotesPanel({ userId, userName, userPhoto }: NotesPanelProps) {
+// ── Main Component ────────────────────────────────────────────────────────────
+export default function NotesPanel({ userId, userName, userPhoto, userRole }: NotesPanelProps) {
     const [open, setOpen] = useState(false);
     const [notes, setNotes] = useState<TeamNote[]>([]);
     const [loading, setLoading] = useState(false);
     const [showForm, setShowForm] = useState(false);
-    const [editingNote, setEditingNote] = useState<TeamNote | null>(null);
-    const [filter, setFilter] = useState<string>("all");
+    const [editing, setEditing] = useState<TeamNote | null>(null);
+    const [saving, setSaving] = useState(false);
+
+    // Form state
+    const [fType, setFType] = useState<"bug" | "feature" | "general">("general");
+    const [fContent, setFContent] = useState("");
+    const [fImage, setFImage] = useState<string | null>(null);
+    const [imageUploading, setImageUploading] = useState(false);
+
+    // Filter/sort state
+    const [statusTab, setStatusTab] = useState<StatusTab>("active");
+    const [typeFilter, setTypeFilter] = useState<string>("all");
+    const [sort, setSort] = useState<SortMode>("newest");
+    const [showSort, setShowSort] = useState(false);
+
+    const fileRef = useRef<HTMLInputElement>(null);
     const panelRef = useRef<HTMLDivElement>(null);
-
-    const loadNotes = useCallback(async () => {
-        setLoading(true);
-        try {
-            const res = await fetch("/api/notes");
-            if (res.ok) setNotes(await res.json());
-        } finally { setLoading(false); }
-    }, []);
-
-    useEffect(() => {
-        if (open) loadNotes();
-        else { setShowForm(false); setEditingNote(null); }
-    }, [open, loadNotes]);
+    const textRef = useRef<HTMLTextAreaElement>(null);
 
     // Close on outside click
     useEffect(() => {
-        if (!open) return;
         const handler = (e: MouseEvent) => {
-            if (panelRef.current && !panelRef.current.contains(e.target as Node)) setOpen(false);
+            if (open && panelRef.current && !panelRef.current.contains(e.target as Node)) setOpen(false);
         };
         document.addEventListener("mousedown", handler);
         return () => document.removeEventListener("mousedown", handler);
     }, [open]);
 
-    const handleSaved = (note: TeamNote) => {
-        if (editingNote) setNotes(prev => prev.map(n => n.id === note.id ? note : n));
-        else setNotes(prev => [note, ...prev]);
-        setShowForm(false); setEditingNote(null);
+    const fetchNotes = useCallback(async () => {
+        setLoading(true);
+        try {
+            const res = await fetch("/api/notes");
+            setNotes(await res.json());
+        } catch { setNotes([]); }
+        finally { setLoading(false); }
+    }, []);
+
+    useEffect(() => { if (open) fetchNotes(); }, [open, fetchNotes]);
+
+    // Clipboard paste for images
+    useEffect(() => {
+        if (!showForm) return;
+        const handler = async (e: ClipboardEvent) => {
+            const items = Array.from(e.clipboardData?.items || []) as DataTransferItem[];
+            const imgItem = items.find(i => i.type.startsWith("image/"));
+            if (!imgItem) return;
+            const file = imgItem.getAsFile();
+            if (!file) return;
+            setImageUploading(true);
+            try { setFImage(await compressImage(file)); } finally { setImageUploading(false); }
+        };
+        window.addEventListener("paste", handler);
+        return () => window.removeEventListener("paste", handler);
+    }, [showForm]);
+
+    const openForm = (note?: TeamNote) => {
+        if (note) {
+            setEditing(note); setFType(note.type); setFContent(note.content); setFImage(note.imageData ?? null);
+        } else {
+            setEditing(null); setFType("general"); setFContent(""); setFImage(null);
+        }
+        setShowForm(true);
+        setTimeout(() => textRef.current?.focus(), 100);
     };
 
-    const filtered = filter === "all" ? notes : notes.filter(n => n.type === filter);
+    const closeForm = () => { setShowForm(false); setEditing(null); setFContent(""); setFImage(null); };
+
+    const handleImageFile = async (file: File) => {
+        if (!file.type.startsWith("image/")) return;
+        setImageUploading(true);
+        try { setFImage(await compressImage(file)); } finally { setImageUploading(false); }
+    };
+
+    const submit = async () => {
+        if (!fContent.trim()) return;
+        setSaving(true);
+        try {
+            if (editing) {
+                await fetch(`/api/notes/${editing.id}`, {
+                    method: "PUT", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ authorId: userId, content: fContent, type: fType, imageData: fImage }),
+                });
+            } else {
+                await fetch("/api/notes", {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ authorId: userId, authorName: userName, authorPhoto: userPhoto, type: fType, content: fContent, imageData: fImage }),
+                });
+            }
+            closeForm(); fetchNotes();
+        } finally { setSaving(false); }
+    };
+
+    const deleteNote = async (id: string) => {
+        if (!confirm("Delete this note?")) return;
+        await fetch(`/api/notes/${id}`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ authorId: userId }) });
+        fetchNotes();
+    };
+
+    const reactToNote = async (id: string, emoji: string) => {
+        const res = await fetch(`/api/notes/${id}/react`, {
+            method: "PATCH", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId, emoji }),
+        });
+        if (res.ok) {
+            const { reactions } = await res.json();
+            setNotes(prev => prev.map(n => n.id === id ? { ...n, reactions } : n));
+        }
+    };
+
+    const resolveNote = async (id: string, resolved: boolean) => {
+        await fetch(`/api/notes/${id}/resolve`, {
+            method: "PATCH", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId, resolved }),
+        });
+        setNotes(prev => prev.map(n => n.id === id ? { ...n, resolved } : n));
+    };
+
+    // Filter + sort
+    const filtered = notes
+        .filter(n => statusTab === "active" ? !n.resolved : statusTab === "resolved" ? !!n.resolved : true)
+        .filter(n => typeFilter === "all" ? true : n.type === typeFilter)
+        .sort((a, b) => {
+            if (sort === "oldest") return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+            if (sort === "most_reacted") return Object.values(b.reactions || {}).reduce((s: number, a: string[]) => s + a.length, 0) - Object.values(a.reactions || {}).reduce((s: number, arr: string[]) => s + arr.length, 0);
+            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(); // newest
+        });
+
+    const activeCount = notes.filter(n => !n.resolved).length;
+    const hasNewNotes = activeCount > 0;
+
+    const SORT_LABELS: Record<SortMode, string> = { newest: "Newest", oldest: "Oldest", most_reacted: "Most Reacted" };
 
     return (
         <div ref={panelRef} className="relative">
             {/* Trigger */}
             <button
-                onClick={() => setOpen(o => !o)}
-                className="relative p-2 rounded-xl text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
+                onClick={() => setOpen(v => !v)}
                 title="Team Notes"
+                className={`relative p-2 rounded-xl transition-all ${open ? "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400" : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
             >
-                <PenLine size={20} />
-                {notes.length > 0 && !open && (
-                    <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-indigo-500" />
+                <PenLine size={18} />
+                {hasNewNotes && !open && (
+                    <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-indigo-500" />
                 )}
             </button>
 
-            {/* Panel */}
+            {/* Panel — centered, responsive */}
             {open && (
                 <div
-                    className="fixed sm:absolute right-2 sm:right-0 top-auto sm:top-full mt-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700/60 rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden"
+                    className="fixed z-[200] bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700/60 rounded-2xl shadow-2xl flex flex-col overflow-hidden"
                     style={{
-                        width: "min(380px, calc(100vw - 1rem))",
-                        maxHeight: "min(580px, calc(100dvh - 120px))",
-                        top: "calc(var(--header-h, 64px) + 8px)",
+                        width: "min(520px, calc(100vw - 20px))",
+                        maxHeight: "min(600px, calc(100dvh - 90px))",
+                        top: "72px",
+                        left: "50%",
+                        transform: "translateX(-50%)",
                     }}
                 >
-                    {/* Header */}
+                    {/* ── Header ── */}
                     <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/60 shrink-0">
-                        {editingNote ? (
-                            <button onClick={() => setEditingNote(null)} className="flex items-center gap-1.5 text-xs text-indigo-500 hover:text-indigo-400 font-medium transition-colors">
-                                <ChevronLeft size={14} /> Back
-                            </button>
-                        ) : (
-                            <div className="flex items-center gap-2">
-                                <PenLine size={14} className="text-indigo-500" />
-                                <h3 className="text-sm font-bold text-gray-900 dark:text-white">Team Notes</h3>
-                                <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 px-2 py-0.5 rounded-full">{notes.length}</span>
-                            </div>
-                        )}
                         <div className="flex items-center gap-2">
-                            {!editingNote && !showForm && (
-                                <button
-                                    onClick={() => setShowForm(true)}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
-                                >
-                                    <PenLine size={12} /> New Note
+                            <PenLine size={15} className="text-indigo-500" />
+                            <span className="text-sm font-bold text-gray-900 dark:text-white">Team Notes</span>
+                            {activeCount > 0 && (
+                                <span className="text-[10px] font-bold bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded-full">{activeCount}</span>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            {!showForm && (
+                                <button onClick={() => openForm()} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl transition-all">
+                                    <Pencil size={11} /> New Note
                                 </button>
                             )}
-                            <button onClick={() => setOpen(false)} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg transition-colors">
-                                <X size={14} />
+                            <button onClick={() => setOpen(false)} className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all">
+                                <X size={15} />
                             </button>
                         </div>
                     </div>
 
-                    {/* Form / Edit */}
-                    {(showForm || editingNote) && (
-                        <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/40 shrink-0">
-                            <NoteForm
-                                userId={userId} userName={userName} userPhoto={userPhoto}
-                                initial={editingNote ?? undefined}
-                                onSave={handleSaved}
-                                onCancel={() => { setShowForm(false); setEditingNote(null); }}
+                    {/* ── Form ── */}
+                    {showForm && (
+                        <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/40 shrink-0 space-y-3">
+                            {/* Type selector */}
+                            <div className="flex gap-2">
+                                {NOTE_TYPES.map(t => (
+                                    <button key={t.value} onClick={() => setFType(t.value as any)}
+                                        className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-xl text-xs font-semibold border transition-all ${fType === t.value ? t.cls : "border-gray-200 dark:border-gray-700 text-gray-500 hover:border-gray-300 dark:hover:border-gray-600"}`}>
+                                        {t.icon} {t.label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Text */}
+                            <textarea
+                                ref={textRef}
+                                value={fContent}
+                                onChange={e => setFContent(e.target.value)}
+                                placeholder="Describe the bug, feature idea, or general note… (paste images here)"
+                                rows={4}
+                                className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
                             />
+
+                            {/* Image preview */}
+                            {imageUploading && <div className="flex items-center gap-2 text-xs text-gray-400"><Loader2 size={12} className="animate-spin" /> Compressing image…</div>}
+                            {fImage && (
+                                <div className="relative inline-block">
+                                    <img src={fImage} alt="preview" className="max-h-28 rounded-xl border border-gray-200 dark:border-gray-700 object-cover" />
+                                    <button onClick={() => setFImage(null)} className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center shadow">
+                                        <X size={10} />
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* Actions */}
+                            <div className="flex items-center gap-2">
+                                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleImageFile(e.target.files[0])} />
+                                <button onClick={() => fileRef.current?.click()} className="p-2 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-xl border border-gray-200 dark:border-gray-700 transition-all" title="Attach image">
+                                    <ImagePlus size={15} />
+                                </button>
+                                <div className="flex-1" />
+                                <button onClick={closeForm} className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-xl transition-all">Cancel</button>
+                                <button onClick={submit} disabled={saving || !fContent.trim()} className="flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-all">
+                                    {saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                                    {editing ? "Save" : "Post"}
+                                </button>
+                            </div>
                         </div>
                     )}
 
-                    {/* Filter tabs */}
-                    {!showForm && !editingNote && (
-                        <div className="flex gap-1 px-3 py-2 border-b border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/40 shrink-0">
+                    {/* ── Status Tabs + Filters ── */}
+                    <div className="px-4 pt-3 pb-2 border-b border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/30 shrink-0 space-y-2">
+                        {/* Status tabs */}
+                        <div className="flex items-center gap-1">
+                            {(["active", "resolved", "all"] as StatusTab[]).map(tab => (
+                                <button key={tab} onClick={() => setStatusTab(tab)}
+                                    className={`px-3 py-1 rounded-lg text-xs font-semibold capitalize transition-all ${statusTab === tab ? "bg-indigo-600 text-white" : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"}`}>
+                                    {tab === "active" ? `Active${activeCount > 0 ? ` (${activeCount})` : ""}` : tab === "resolved" ? `Resolved (${notes.filter(n => n.resolved).length})` : "All"}
+                                </button>
+                            ))}
+                            {/* Sort */}
+                            <div className="relative ml-auto">
+                                <button onClick={() => setShowSort(v => !v)} className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 px-2 py-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all">
+                                    {SORT_LABELS[sort]} <ChevronDown size={11} />
+                                </button>
+                                {showSort && (
+                                    <div className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg z-10 overflow-hidden min-w-[130px]">
+                                        {(Object.keys(SORT_LABELS) as SortMode[]).map(s => (
+                                            <button key={s} onClick={() => { setSort(s); setShowSort(false); }}
+                                                className={`w-full text-left px-3 py-2 text-xs transition-all ${sort === s ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-semibold" : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"}`}>
+                                                {SORT_LABELS[s]}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Type filter */}
+                        <div className="flex gap-1.5 overflow-x-auto pb-0.5 no-scrollbar">
                             {["all", "bug", "feature", "general"].map(f => (
-                                <button
-                                    key={f}
-                                    onClick={() => setFilter(f)}
-                                    className={`px-2.5 py-1 text-xs rounded-lg font-medium capitalize transition-colors ${filter === f ? "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300" : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"}`}
-                                >
-                                    {f === "all" ? `All (${notes.length})` : f}
+                                <button key={f} onClick={() => setTypeFilter(f)}
+                                    className={`shrink-0 px-2.5 py-1 rounded-lg text-xs font-medium capitalize transition-all ${typeFilter === f ? "bg-gray-900 dark:bg-white text-white dark:text-gray-900" : "text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"}`}>
+                                    {f === "all" ? `All (${notes.length})` : f.charAt(0).toUpperCase() + f.slice(1)}
                                 </button>
                             ))}
                         </div>
-                    )}
+                    </div>
 
-                    {/* Notes list */}
-                    {!editingNote && (
-                        <div className="overflow-y-auto flex-1 p-3 space-y-3">
-                            {loading ? (
-                                <div className="flex items-center justify-center py-12 text-gray-400">
-                                    <Loader2 size={20} className="animate-spin mr-2" /> Loading notes...
-                                </div>
-                            ) : filtered.length === 0 ? (
-                                <div className="text-center py-12">
-                                    <PenLine size={28} className="text-gray-300 dark:text-gray-700 mx-auto mb-2" />
-                                    <p className="text-sm text-gray-400">{filter === "all" ? "No notes yet" : `No ${filter} notes`}</p>
-                                    {filter === "all" && <p className="text-xs text-gray-500 mt-1">Be the first to add a note!</p>}
-                                </div>
-                            ) : (
-                                filtered.map(note => (
-                                    <NoteCard
-                                        key={note.id}
-                                        note={note}
-                                        userId={userId}
-                                        onEdit={() => { setEditingNote(note); setShowForm(false); }}
-                                        onDelete={() => setNotes(prev => prev.filter(n => n.id !== note.id))}
-                                    />
-                                ))
-                            )}
-                        </div>
-                    )}
+                    {/* ── Notes list ── */}
+                    <div className="overflow-y-auto flex-1 p-3 space-y-3">
+                        {loading ? (
+                            <div className="flex items-center justify-center py-10"><Loader2 size={20} className="animate-spin text-indigo-400" /></div>
+                        ) : filtered.length === 0 ? (
+                            <div className="text-center py-10 space-y-2">
+                                <p className="text-3xl">📝</p>
+                                <p className="text-sm text-gray-400">{statusTab === "resolved" ? "No resolved notes yet" : "No notes yet"}</p>
+                                {statusTab === "active" && <button onClick={() => openForm()} className="mt-1 text-xs text-indigo-500 hover:underline">Add the first note</button>}
+                            </div>
+                        ) : (
+                            filtered.map(note => (
+                                <NoteCard
+                                    key={note.id}
+                                    note={note}
+                                    userId={userId}
+                                    userRole={userRole}
+                                    onEdit={openForm}
+                                    onDelete={deleteNote}
+                                    onReact={reactToNote}
+                                    onResolve={resolveNote}
+                                />
+                            ))
+                        )}
+                    </div>
                 </div>
             )}
         </div>

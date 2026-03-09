@@ -1206,6 +1206,41 @@ app.delete("/api/notes/:id", async (req, res) => {
   } catch (e) { res.status(500).json({ error: "Failed to delete note" }); }
 });
 
+// PATCH /api/notes/:id/react — toggle an emoji reaction
+app.patch("/api/notes/:id/react", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { userId, emoji } = req.body;
+  if (!userId || !emoji) return res.status(400).json({ error: "Missing userId or emoji" });
+  try {
+    const ref = firestore.collection("team_notes").doc(req.params.id);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).json({ error: "Note not found" });
+    const reactions = doc.data()?.reactions || {};
+    const users: string[] = reactions[emoji] || [];
+    const already = users.includes(userId);
+    reactions[emoji] = already ? users.filter((u: string) => u !== userId) : [...users, userId];
+    await ref.update({ reactions });
+    res.json({ success: true, reactions });
+  } catch (e) { res.status(500).json({ error: "Failed to react" }); }
+});
+
+// PATCH /api/notes/:id/resolve — mark/unmark resolved (author or admin)
+app.patch("/api/notes/:id/resolve", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { userId, resolved } = req.body;
+  if (!userId) return res.status(400).json({ error: "Missing userId" });
+  try {
+    const ref = firestore.collection("team_notes").doc(req.params.id);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).json({ error: "Note not found" });
+    // Allow author or admin-role users (role check is frontend-enforced for now)
+    await ref.update({ resolved: !!resolved, resolvedBy: resolved ? userId : null, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: "Failed to resolve" }); }
+});
+
 app.post("/api/ocr", async (req, res) => {
   try {
     const { base64Data, mimeType, type } = req.body;
