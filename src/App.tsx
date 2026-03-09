@@ -139,8 +139,16 @@ function transposeChords(text: string, steps: number): string {
 }
 
 // ── UserMenu ─────────────────────────────────────────────────────────────────
+const ROLE_BADGE: Record<string, { label: string; className: string }> = {
+  admin: { label: "Admin", className: "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400" },
+  leader: { label: "Worship Leader", className: "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-400" },
+  musician: { label: "Musician", className: "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400" },
+  audio_tech: { label: "Audio / Tech", className: "bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-400" },
+  member: { label: "Member", className: "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300" },
+};
+
 function UserMenu() {
-  const { user, logOut, isAdmin } = useAuth();
+  const { user, logOut, userRole } = useAuth();
   const [open, setOpen] = React.useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -149,6 +157,7 @@ function UserMenu() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
   if (!user) return null;
+  const badge = ROLE_BADGE[userRole] ?? ROLE_BADGE.member;
   return (
     <div ref={ref} className="relative flex-shrink-0">
       <button onClick={() => setOpen(o => !o)} className="flex items-center gap-2 p-1 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
@@ -163,7 +172,9 @@ function UserMenu() {
           <div className="px-3 py-2.5 border-b border-gray-100 dark:border-gray-700">
             <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{user.displayName}</p>
             <p className="text-xs text-gray-400 truncate">{user.email}</p>
-            {isAdmin && <span className="inline-block mt-1 text-[10px] bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full font-semibold">Admin</span>}
+            <span className={`inline-block mt-1.5 text-[10px] px-2 py-0.5 rounded-full font-semibold ${badge.className}`}>
+              {badge.label}
+            </span>
           </div>
           <button onClick={() => { setOpen(false); logOut(); }} className="w-full text-left px-3 py-2.5 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center gap-2">
             <X size={14} /> Sign out
