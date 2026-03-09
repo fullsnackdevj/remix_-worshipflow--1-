@@ -365,6 +365,22 @@ app.delete("/api/broadcasts/:id", async (req, res) => {
   } catch (e) { res.status(500).json({ error: "Failed to delete" }); }
 });
 
+// PUT /api/broadcasts/:id — edit an existing broadcast (title, message, bullets, targets)
+app.put("/api/broadcasts/:id", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { title, message, bulletPoints, targetEmails, type } = req.body;
+  if (!title?.trim()) return res.status(400).json({ error: "Title is required" });
+  try {
+    await firestore.collection("broadcasts").doc(req.params.id).update({
+      title: title.trim(), message: message || "", bulletPoints: bulletPoints || [],
+      targetEmails: targetEmails || ["__all__"], type: type,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: "Failed to update broadcast" }); }
+});
+
 // POST /api/broadcasts/:id/dismiss — user dismissed "What's New"
 app.post("/api/broadcasts/:id/dismiss", async (req, res) => {
   const firestore = getDb();

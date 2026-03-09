@@ -64,6 +64,7 @@ export default function AdminPanel() {
     const [showForm, setShowForm] = useState(false);
     const [bAutoGenerating, setBAutoGenerating] = useState(false);
     const [previewBroadcast, setPreviewBroadcast] = useState<any | null>(null);
+    const [editingBroadcastId, setEditingBroadcastId] = useState<string | null>(null);
 
     const autoGenerate = async () => {
         setBAutoGenerating(true);
@@ -127,13 +128,33 @@ export default function AdminPanel() {
         const targetEmails = bTargetAll ? ["__all__"] : bSelected;
         if (!bTargetAll && targetEmails.length === 0) { setBCreating(false); return; }
         const bulletPoints = bBullets.filter(b => b.trim());
-        await fetch("/api/broadcasts", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ type: bType, title: bTitle, message: bMessage, bulletPoints, targetEmails }),
-        });
+        if (editingBroadcastId) {
+            // — Edit mode: PUT to update existing
+            await fetch(`/api/broadcasts/${editingBroadcastId}`, {
+                method: "PUT", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ type: bType, title: bTitle, message: bMessage, bulletPoints, targetEmails }),
+            });
+        } else {
+            // — Create mode: POST new
+            await fetch("/api/broadcasts", {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ type: bType, title: bTitle, message: bMessage, bulletPoints, targetEmails }),
+            });
+        }
         setBTitle(""); setBMessage(""); setBBullets(["", "", ""]); setBTargetAll(true); setBSelected([]);
-        setShowForm(false); setBCreating(false);
+        setShowForm(false); setBCreating(false); setEditingBroadcastId(null);
         fetchBroadcasts();
+    };
+
+    const openEditBroadcast = (b: any) => {
+        setEditingBroadcastId(b.id);
+        setBType(b.type ?? "whats_new");
+        setBTitle(b.title ?? "");
+        setBMessage(b.message ?? "");
+        setBBullets(b.bulletPoints?.length ? b.bulletPoints : [""]);
+        setBTargetAll(b.targetEmails?.includes("__all__") ?? true);
+        setBSelected(b.targetEmails?.includes("__all__") ? [] : (b.targetEmails ?? []));
+        setShowForm(true);
     };
 
     const toggleUserSelect = (email: string) =>
@@ -364,9 +385,10 @@ export default function AdminPanel() {
 
                             <div className="flex gap-2 pt-1">
                                 <button onClick={createBroadcast} disabled={bCreating || !bTitle.trim()} className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2">
-                                    {bCreating ? <Loader2 size={14} className="animate-spin" /> : <Megaphone size={14} />} Broadcast Now
+                                    {bCreating ? <Loader2 size={14} className="animate-spin" /> : <Megaphone size={14} />}
+                                    {editingBroadcastId ? "Save Changes" : "Broadcast Now"}
                                 </button>
-                                <button onClick={() => setShowForm(false)} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-xl transition-all">Cancel</button>
+                                <button onClick={() => { setShowForm(false); setEditingBroadcastId(null); setBTitle(""); setBMessage(""); setBBullets(["", "", ""]); }} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-xl transition-all">Cancel</button>
                             </div>
                         </div>
                     )}
@@ -394,6 +416,7 @@ export default function AdminPanel() {
                                             <button onClick={() => toggleBroadcast(b.id, !b.active)} title={b.active ? "Deactivate" : "Activate"} className={`p-1.5 rounded-lg transition-all ${b.active ? "text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20" : "text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"}`}>
                                                 {b.active ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
                                             </button>
+                                            <button onClick={() => openEditBroadcast(b)} title="Edit broadcast" className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-all"><Pencil size={14} /></button>
                                             <button onClick={() => deleteBroadcast(b.id)} title="Delete" className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"><Trash2 size={14} /></button>
                                         </div>
                                     </div>

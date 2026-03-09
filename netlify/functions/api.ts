@@ -365,6 +365,18 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
             try { await firestore?.collection("broadcasts").doc(bId).update({ active: body.active }); return json(200, { success: true }); }
             catch (e) { return json(500, { error: "Failed" }); }
         }
+        if (method === "PUT") {
+            const { title, message, bulletPoints, targetEmails, type } = body;
+            if (!title?.trim()) return json(400, { error: "Title is required" });
+            try {
+                await firestore?.collection("broadcasts").doc(bId).update({
+                    title: title.trim(), message: message || "", bulletPoints: bulletPoints || [],
+                    targetEmails: targetEmails || ["__all__"], type,
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                });
+                return json(200, { success: true });
+            } catch (e) { return json(500, { error: "Failed to update broadcast" }); }
+        }
         if (method === "DELETE") {
             try { await firestore?.collection("broadcasts").doc(bId).delete(); return json(200, { success: true }); }
             catch (e) { return json(500, { error: "Failed" }); }
