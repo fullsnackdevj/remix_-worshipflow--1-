@@ -13,12 +13,12 @@ interface Broadcast {
 }
 
 export default function BroadcastOverlay() {
-    const { user } = useAuth();
+    const { user, isAdmin } = useAuth();
     const [broadcast, setBroadcast] = useState<Broadcast | null>(null);
     const [dismissing, setDismissing] = useState(false);
 
     useEffect(() => {
-        if (!user?.email) return;
+        if (!user?.email || isAdmin) return; // 👑 Admins are never blocked — they control broadcasts
         fetch(`/api/broadcasts?email=${encodeURIComponent(user.email)}`)
             .then(r => r.json())
             .then(data => { if (data?.id) setBroadcast(data); })
