@@ -429,8 +429,13 @@ export default function App() {
     setSelectedScheduleDate(dateStr);
     setSelectedEventId(null);
     setSchedPanelMode("edit");
-    setEditSchedEventName("");
-    setEditSchedServiceType("sunday");
+    // Auto-select event name for Worship Leaders based on day of week
+    const dow = new Date(dateStr + "T00:00:00").getDay();
+    const autoName = isLeader
+      ? (dow === 0 ? "Sunday Service" : "Midweek Service")
+      : "";
+    setEditSchedEventName(autoName);
+    setEditSchedServiceType(dow === 3 ? "midweek" : "sunday");
     setEditSchedWorshipLeader(null);
     setEditSchedBackupSingers([]);
     setEditSchedMusicians([]);
@@ -1522,21 +1527,21 @@ export default function App() {
                           const hasDate = !!selectedScheduleDate && selectedScheduleDate >= todayStr;
                           const isPast = !!selectedScheduleDate && selectedScheduleDate < todayStr;
                           const isEditingExistingEvent = schedPanelMode === "edit" && !!selectedEventId;
-                          // Enable only in month view, future empty date selected, not editing existing
-                          const canAdd = (canWriteSchedule || leaderCanAddOnDate) && !isListView && hasDate && !hasExisting && !isEditingExistingEvent;
+                          const isFormOpen = schedPanelMode === "edit"; // true for both new & existing event form
+                          // Enable only in month view, future empty date, form not already open
+                          const canAdd = (canWriteSchedule || leaderCanAddOnDate) && !isListView && hasDate && !hasExisting && !isFormOpen;
                           const label = isListView || hasExisting ? "Add Another Event" : "Add Event";
                           const disabledTitle = (!canWriteSchedule && !isLeader)
                             ? "You don't have permission to add events"
                             : (isLeader && !leaderCanAddOnDate)
                               ? "Worship Leaders can only add Sunday or Midweek Service events"
-                              : isListView
-                                ? "You don't have permission to add events"
+                              : isFormOpen
+                                ? "Close the current form before adding a new event"
                                 : isListView
                                   ? "Switch to Month view to add events"
-                                  : isEditingExistingEvent ? "Finish editing before adding a new event"
-                                    : hasExisting ? "This date already has events — open a card to edit"
-                                      : isPast ? "Past date — cannot add events"
-                                        : "Select an empty date on the calendar first";
+                                  : hasExisting ? "This date already has events — open a card to edit"
+                                    : isPast ? "Past date — cannot add events"
+                                      : "Select an empty date on the calendar first";
                           if (canAdd) {
                             return (
                               <button onClick={() => { setSelectedEventId(null); setSchedPanelMode("edit"); openBlankEventForm(selectedScheduleDate!); }}
@@ -1742,9 +1747,12 @@ export default function App() {
                         // Single event panel
                         const isServiceEvent = ["sunday service", "midweek service"].includes(editSchedEventName.toLowerCase());
                         const dow = selectedScheduleDate ? new Date(selectedScheduleDate + "T00:00:00").getDay() : -1;
-                        const presets = dow === 0
-                          ? ["Sunday Service", "Prayer Night", "Worship Night", "Youth Service", "Revival"]
-                          : ["Midweek Service", "Prayer Night", "Worship Night", "Youth Service", "Revival"];
+                        // Leaders see only the relevant service preset; others see full list
+                        const presets = isLeader
+                          ? (dow === 0 ? ["Sunday Service"] : ["Midweek Service"])
+                          : dow === 0
+                            ? ["Sunday Service", "Prayer Night", "Worship Night", "Youth Service", "Revival"]
+                            : ["Midweek Service", "Prayer Night", "Worship Night", "Youth Service", "Revival"];
                         const pickerMembers = schedMemberSearch.trim()
                           ? allMembers.filter(m => m.name.toLowerCase().includes(schedMemberSearch.toLowerCase()))
                           : allMembers;
@@ -1921,11 +1929,14 @@ export default function App() {
                                       ));
                                     })()}
                                   </div>
-                                  <input
-                                    type="text" value={editSchedEventName} onChange={e => setEditSchedEventName(e.target.value)}
-                                    placeholder="Or type a custom event name…"
-                                    className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder-gray-400"
-                                  />
+                                  {/* Custom event name input — hidden for Worship Leaders */}
+                                  {!isLeader && (
+                                    <input
+                                      type="text" value={editSchedEventName} onChange={e => setEditSchedEventName(e.target.value)}
+                                      placeholder="Or type a custom event name…"
+                                      className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder-gray-400"
+                                    />
+                                  )}
                                 </div>
 
                                 {/* Grouped Role Assignments — only for NON-service events */}
