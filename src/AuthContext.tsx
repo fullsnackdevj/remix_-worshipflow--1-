@@ -15,6 +15,7 @@ interface AuthContextValue {
     user: User | null;
     status: AuthStatus;
     isAdmin: boolean;
+    userRole: string;  // e.g. "member", "musician", "leader", "audio_tech", "admin"
     signInWithGoogle: () => Promise<void>;
     logOut: () => Promise<void>;
 }
@@ -24,6 +25,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [status, setStatus] = useState<AuthStatus>("loading");
+    const [userRole, setUserRole] = useState<string>("member");
 
     useEffect(() => {
         const unsub = onAuthStateChanged(auth, async (u) => {
@@ -36,6 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             // Admin always has access
             if (u.email === ADMIN_EMAIL) {
                 setStatus("approved");
+                setUserRole("admin");
                 return;
             }
             // Check if user is in approved list
@@ -44,8 +47,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 const data = await res.json();
                 if (data.approved) {
                     setStatus("approved");
+                    setUserRole(data.role ?? "member");
                 } else {
                     setStatus("denied");
+                    setUserRole("member");
                     // Auto-log this user as a pending request for admin review
                     fetch("/api/auth/request", {
                         method: "POST",
@@ -82,6 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 user,
                 status,
                 isAdmin: user?.email === ADMIN_EMAIL,
+                userRole,
                 signInWithGoogle,
                 logOut,
             }}
