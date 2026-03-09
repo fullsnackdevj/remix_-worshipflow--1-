@@ -151,9 +151,19 @@ const ROLE_BADGE: Record<string, { label: string; className: string }> = {
   musician: { label: "Musician", className: "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400" },
   audio_tech: { label: "Audio / Tech", className: "bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-400" },
   member: { label: "Member", className: "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300" },
+  qa_specialist: { label: "QA Specialist", className: "bg-fuchsia-100 dark:bg-fuchsia-900/40 text-fuchsia-700 dark:text-fuchsia-400" },
 };
 
-function UserMenu() {
+const QA_SWITCH_ROLES = [
+  { value: "qa_specialist", label: "QA Specialist (default)" },
+  { value: "leader", label: "Worship Leader" },
+  { value: "planning_lead", label: "Planning Lead" },
+  { value: "musician", label: "Musician" },
+  { value: "audio_tech", label: "Audio / Tech" },
+  { value: "member", label: "Member" },
+];
+
+function UserMenu({ simulatedRole, onRoleSwitch }: { simulatedRole: string; onRoleSwitch: (r: string) => void }) {
   const { user, logOut, userRole } = useAuth();
   const [open, setOpen] = React.useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -163,7 +173,12 @@ function UserMenu() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
   if (!user) return null;
-  const badge = ROLE_BADGE[userRole] ?? ROLE_BADGE.member;
+
+  const isQA = userRole === "qa_specialist";
+  const effectiveDisplay = isQA && simulatedRole !== "qa_specialist" ? simulatedRole : userRole;
+  const badge = ROLE_BADGE[effectiveDisplay] ?? ROLE_BADGE.member;
+  const qaBadge = ROLE_BADGE.qa_specialist;
+
   return (
     <div ref={ref} className="relative flex-shrink-0">
       <button onClick={() => setOpen(o => !o)} className="flex items-center gap-2 p-1 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
@@ -174,14 +189,48 @@ function UserMenu() {
         <ChevronDown size={14} className="text-gray-400 hidden sm:block" />
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50 py-1 overflow-hidden">
+        <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50 py-1 overflow-hidden">
+          {/* Identity */}
           <div className="px-3 py-2.5 border-b border-gray-100 dark:border-gray-700">
             <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{user.displayName}</p>
             <p className="text-xs text-gray-400 truncate">{user.email}</p>
-            <span className={`inline-block mt-1.5 text-[10px] px-2 py-0.5 rounded-full font-semibold ${badge.className}`}>
-              {badge.label}
-            </span>
+            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+              {isQA && (
+                <span className={`inline-block text-[10px] px-2 py-0.5 rounded-full font-semibold ${qaBadge.className}`}>
+                  {qaBadge.label}
+                </span>
+              )}
+              <span className={`inline-block text-[10px] px-2 py-0.5 rounded-full font-semibold ${badge.className}`}>
+                {isQA && simulatedRole !== "qa_specialist" ? `Testing: ${badge.label}` : badge.label}
+              </span>
+            </div>
           </div>
+
+          {/* QA Role Switcher */}
+          {isQA && (
+            <div className="px-3 py-2.5 border-b border-gray-100 dark:border-gray-700">
+              <p className="text-[10px] font-bold text-fuchsia-500 uppercase tracking-wider mb-1.5">Test as role</p>
+              <select
+                value={simulatedRole}
+                onChange={e => { onRoleSwitch(e.target.value); setOpen(false); }}
+                className="w-full text-xs px-2.5 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
+              >
+                {QA_SWITCH_ROLES.map(r => (
+                  <option key={r.value} value={r.value}>{r.label}</option>
+                ))}
+              </select>
+              {simulatedRole !== "qa_specialist" && (
+                <button
+                  onClick={() => { onRoleSwitch("qa_specialist"); setOpen(false); }}
+                  className="mt-1.5 w-full text-[10px] text-fuchsia-500 hover:text-fuchsia-400 font-medium transition-colors"
+                >
+                  Reset to QA Specialist
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Sign out */}
           <button onClick={() => { setOpen(false); logOut(); }} className="w-full text-left px-3 py-2.5 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center gap-2">
             <X size={14} /> Sign out
           </button>
@@ -197,6 +246,18 @@ export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [currentView, setCurrentView] = useState<"songs" | "members" | "schedule" | "admin">("songs");
   const { isAdmin, userRole, user } = useAuth();
+
+  // ── QA Specialist simulated role ──────────────────────────────────────────
+  const isQA = userRole === "qa_specialist";
+  const [simulatedRole, setSimulatedRole] = useState<string>(() => {
+    try { return localStorage.getItem(`wf_qa_role_${user?.uid}`) || "qa_specialist"; } catch { return "qa_specialist"; }
+  });
+  const handleRoleSwitch = (role: string) => {
+    setSimulatedRole(role);
+    try { localStorage.setItem(`wf_qa_role_${user?.uid}`, role); } catch { /* noop */ }
+  };
+  // The role used for ALL permission checks
+  const effectiveRole = isQA ? simulatedRole : userRole;
 
   // 🔔 Push notifications — iOS-safe: user must tap "Enable" button
   const { showPrompt: showPushPrompt, requestPushPermission, dismissPrompt: dismissPushPrompt } =
@@ -299,13 +360,13 @@ export default function App() {
     new_song: <Music size={14} />, new_event: <Calendar size={14} />, updated_event: <Pencil size={14} />, access_request: <Bell size={14} />,
   };
   // ── Role-based permission flags ───────────────────────────────────────────
-  // musician & audio_tech share identical restrictions
-  const isLeader = userRole === "leader";
-  const isPlanningLead = userRole === "planning_lead";
+  // All flags use effectiveRole so QA Specialist simulation works correctly
+  const isLeader = effectiveRole === "leader";
+  const isPlanningLead = effectiveRole === "planning_lead";
 
   // Songs
-  const canAddSong = isAdmin || ["musician", "audio_tech", "leader", "planning_lead"].includes(userRole);
-  const canEditSong = isAdmin || ["musician", "audio_tech", "leader", "planning_lead"].includes(userRole);
+  const canAddSong = isAdmin || ["musician", "audio_tech", "leader", "planning_lead", "qa_specialist"].includes(effectiveRole);
+  const canEditSong = isAdmin || ["musician", "audio_tech", "leader", "planning_lead", "qa_specialist"].includes(effectiveRole);
   const canDeleteSong = isAdmin; // only admin can delete songs
   const canSelectSongs = isAdmin; // selection mode leads to bulk delete
 
@@ -1617,8 +1678,8 @@ export default function App() {
             )}
           </button>
 
-          {/* Admin Panel — admin only */}
-          {isAdmin && (
+          {/* Admin Panel — admin only, always hidden for QA Specialist */}
+          {isAdmin && !isQA && (
             <button
               onClick={() => { setCurrentView("admin"); setIsMobileMenuOpen(false); }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "admin"
@@ -1786,9 +1847,21 @@ export default function App() {
               )}
 
             </div>
-            <UserMenu />
+            <UserMenu simulatedRole={simulatedRole} onRoleSwitch={handleRoleSwitch} />
           </div>
         </header>
+
+        {/* QA Specialist floating testing indicator */}
+        {isQA && simulatedRole !== "qa_specialist" && (
+          <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[300] pointer-events-none">
+            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-fuchsia-600/90 backdrop-blur-sm shadow-lg border border-fuchsia-400/30">
+              <span className="w-2 h-2 rounded-full bg-fuchsia-300 animate-pulse" />
+              <span className="text-xs font-semibold text-white tracking-wide">
+                Testing as: {ROLE_BADGE[simulatedRole]?.label ?? simulatedRole}
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Content Area */}
         <main className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-900">

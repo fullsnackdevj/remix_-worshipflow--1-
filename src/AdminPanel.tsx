@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "./AuthContext";
-import { UserPlus, Trash2, Shield, Users, Loader2, Check, X, Clock, UserCheck, Pencil, ShieldCheck, ShieldAlert, Megaphone, Plus, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, Eye, Sparkles, User, Guitar, Mic2, ClipboardList, Sliders, Wrench, ThumbsUp } from "lucide-react";
+import { UserPlus, Trash2, Shield, Users, Loader2, Check, X, Clock, UserCheck, Pencil, ShieldCheck, ShieldAlert, Megaphone, Plus, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, Eye, Sparkles, User, Guitar, Mic2, ClipboardList, Sliders, Wrench, ThumbsUp, FlaskConical } from "lucide-react";
 
 interface ApprovedUser {
     email: string;
@@ -22,6 +22,7 @@ const ROLE_OPTIONS = [
     { value: "planning_lead", label: "Planning Lead", color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-50 dark:bg-rose-900/20", icon: <ClipboardList size={12} /> },
     { value: "audio_tech", label: "Audio / Tech", color: "text-teal-600 dark:text-teal-400", bg: "bg-teal-50 dark:bg-teal-900/20", icon: <Sliders size={12} /> },
     { value: "admin", label: "Admin", color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-900/20", icon: <Shield size={12} /> },
+    { value: "qa_specialist", label: "QA Specialist", color: "text-fuchsia-600 dark:text-fuchsia-400", bg: "bg-fuchsia-50 dark:bg-fuchsia-900/20", icon: <FlaskConical size={12} /> },
 ];
 
 function RoleBadge({ role }: { role: string }) {
