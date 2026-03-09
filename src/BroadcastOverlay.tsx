@@ -149,7 +149,7 @@ export default function BroadcastOverlay() {
                     <button
                         onClick={handleDismiss}
                         disabled={dismissing}
-                        className="w-full py-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-semibold text-sm transition-all active:scale-[0.98] shadow-lg disabled:opacity-60"
+                        className="w-full py-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-semibold text-sm transition-all active:scale-[0.98] shadow-lg disabled:opacity-60 flex items-center justify-center gap-2"
                     >
                         {dismissing ? <Loader2 size={14} className="animate-spin" /> : <><ThumbsUp size={14} /> Got it!</>}
                     </button>
