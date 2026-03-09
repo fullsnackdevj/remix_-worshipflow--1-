@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useAuth } from "./AuthContext";
 import AdminPanel from "./AdminPanel";
-import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, LayoutGrid, List, BookOpen, Mic2, Copy, Pencil, Shield, Mail } from "lucide-react";
+import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, LayoutGrid, List, BookOpen, Mic2, Copy, Pencil, Shield, Mail, Bell } from "lucide-react";
 import { Song, Tag } from "./types";
 
 // ── Member Role Constants ────────────────────────────────────────────────────
@@ -191,7 +191,61 @@ export default function App() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [currentView, setCurrentView] = useState<"songs" | "members" | "schedule" | "admin">("songs");
-  const { isAdmin, userRole } = useAuth();
+  const { isAdmin, userRole, user } = useAuth();
+
+  // ── Notification state ───────────────────────────────────────────
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const notifRef = useRef<HTMLDivElement>(null);
+
+  const fetchNotifications = async () => {
+    if (!user) return;
+    try {
+      const res = await fetch(`/api/notifications?role=${userRole}&userId=${user.uid}`);
+      if (res.ok) setNotifications(await res.json());
+    } catch { /* silent */ }
+  };
+
+  useEffect(() => {
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 60_000); // poll every 60s
+    const onFocus = () => fetchNotifications();
+    window.addEventListener("focus", onFocus);
+    return () => { clearInterval(interval); window.removeEventListener("focus", onFocus); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, userRole]);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => { if (notifRef.current && !notifRef.current.contains(e.target as Node)) setNotifOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const unreadCount = notifications.filter(n => !n.isRead).length;
+
+  const markAllRead = async () => {
+    if (!user) return;
+    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+    await fetch("/api/notifications/read", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: user.uid }) });
+  };
+
+  const markOneRead = async (notifId: string) => {
+    if (!user) return;
+    setNotifications(prev => prev.map(n => n.id === notifId ? { ...n, isRead: true } : n));
+    await fetch("/api/notifications/read", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: user.uid, notifId }) });
+  };
+
+  const timeAgo = (iso: string) => {
+    const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+    if (diff < 60) return "just now";
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
+  };
+
+  const notifIcon: Record<string, string> = {
+    new_song: "🎵", new_event: "📅", updated_event: "✏️", access_request: "🔔",
+  };
   // ── Role-based permission flags ───────────────────────────────────────────
   // musician & audio_tech share identical restrictions
   const isLeader = userRole === "leader";
@@ -521,6 +575,9 @@ export default function App() {
       assignments: editSchedAssignments.map(({ role, members }) => ({ role, members })),
       songLineup: editSchedSongLineup,
       notes: editSchedNotes,
+      // Actor info for notification
+      actorName: user?.displayName || user?.email || "Someone",
+      actorPhoto: user?.photoURL || "",
     };
     try {
       let res: Response;
@@ -1122,6 +1179,9 @@ export default function App() {
       chords: editChords,
       tags: editTags,
       video_url: editVideoUrl,
+      // Actor info for notification
+      actorName: user?.displayName || user?.email || "Someone",
+      actorPhoto: user?.photoURL || "",
     };
 
     try {
@@ -1476,7 +1536,69 @@ export default function App() {
               {currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : "Song Management"}
             </h1>
           </div>
-          <UserMenu />
+          <div className="flex items-center gap-2">
+            {/* Notification Bell */}
+            <div ref={notifRef} className="relative">
+              <button
+                id="notif-bell-btn"
+                onClick={() => { setNotifOpen(o => !o); if (!notifOpen && unreadCount > 0) { } }}
+                className="relative p-2 rounded-xl text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
+                title="Notifications"
+              >
+                <Bell size={20} />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[17px] h-[17px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-0.5 shadow-md animate-pulse">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {notifOpen && (
+                <div className="absolute right-0 top-full mt-2 w-80 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl z-50 overflow-hidden">
+                  {/* Header */}
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+                    <h3 className="text-sm font-bold text-gray-900 dark:text-white">🔔 Notifications</h3>
+                    {unreadCount > 0 && (
+                      <button onClick={markAllRead} className="text-xs text-indigo-500 hover:text-indigo-700 font-medium transition-colors">Mark all read</button>
+                    )}
+                  </div>
+
+                  {/* List */}
+                  <div className="max-h-96 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700">
+                    {notifications.length === 0 ? (
+                      <div className="px-4 py-8 text-center">
+                        <p className="text-2xl mb-2">🎉</p>
+                        <p className="text-sm text-gray-400">You're all caught up!</p>
+                      </div>
+                    ) : notifications.map(n => (
+                      <button
+                        key={n.id}
+                        onClick={() => markOneRead(n.id)}
+                        className={`w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${n.isRead ? "opacity-60" : ""}`}
+                      >
+                        {/* Actor photo or icon */}
+                        <div className="shrink-0 mt-0.5">
+                          {n.actorPhoto
+                            ? <img src={n.actorPhoto} alt={n.actorName} className="w-8 h-8 rounded-full border-2 border-indigo-400" />
+                            : <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-sm font-bold">{notifIcon[n.type] || "🔔"}</div>
+                          }
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-1">
+                            <p className="text-xs font-semibold text-gray-900 dark:text-white leading-tight">{n.message}</p>
+                            {!n.isRead && <span className="shrink-0 w-2 h-2 rounded-full bg-indigo-500 mt-1" />}
+                          </div>
+                          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 leading-tight">{n.subMessage}</p>
+                          <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">{timeAgo(n.createdAt)}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <UserMenu />
+          </div>
         </header>
 
         {/* Content Area */}

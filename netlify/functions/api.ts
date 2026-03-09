@@ -49,6 +49,20 @@ function lyricsAreDuplicate(a: string, b: string): boolean {
     return union > 0 && intersection / union >= 0.85;
 }
 
+// ── Notification helper ─────────────────────────────────────────────────────
+async function writeNotif(firestore: FirebaseFirestore.Firestore | null, payload: {
+    type: string; message: string; subMessage: string;
+    actorName: string; actorPhoto: string; targetAudience: string;
+}) {
+    if (!firestore) return;
+    try {
+        await firestore.collection("notifications").add({
+            ...payload, readBy: [],
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+    } catch (e) { console.error("notif write failed", e); }
+}
+
 export const handler: Handler = async (event: HandlerEvent, _context: HandlerContext) => {
     // Parse path: strip /.netlify/functions/api OR /api prefix
     const rawPath = event.path
@@ -91,7 +105,53 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
             email, name, photo,
             requestedAt: new Date().toISOString(),
         });
+        // Notify admin
+        writeNotif(firestore, {
+            type: "access_request",
+            message: "New access request",
+            subMessage: `${name || email} is requesting access to WorshipFlow`,
+            actorName: name || email, actorPhoto: photo,
+            targetAudience: "admin_only",
+        });
         return json(200, { success: true });
+    }
+
+    // GET /notifications
+    if (rawPath === "/notifications" && method === "GET") {
+        const role = event.queryStringParameters?.role || "member";
+        const userId = event.queryStringParameters?.userId || "";
+        try {
+            const snap = await firestore?.collection("notifications").orderBy("createdAt", "desc").limit(30).get();
+            const all = (snap?.docs || []).map(d => {
+                const data = d.data() as Record<string, any>;
+                const readBy: string[] = data.readBy || [];
+                return { id: d.id, ...data, isRead: readBy.includes(userId), createdAt: data.createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString() } as Record<string, any>;
+            });
+            const filtered = all.filter(n => {
+                if (n["targetAudience"] === "all") return true;
+                if (n["targetAudience"] === "admin_only") return role === "admin";
+                if (n["targetAudience"] === "non_member") return role !== "member";
+                return false;
+            });
+            return json(200, filtered);
+        } catch { return json(200, []); }
+    }
+
+    // PATCH /notifications/read
+    if (rawPath === "/notifications/read" && method === "PATCH") {
+        const { userId, notifId } = body;
+        if (!userId) return json(400, { error: "userId required" });
+        try {
+            if (notifId) {
+                await firestore?.collection("notifications").doc(notifId).update({ readBy: admin.firestore.FieldValue.arrayUnion(userId) });
+            } else {
+                const snap = await firestore?.collection("notifications").get();
+                const batch = firestore?.batch();
+                snap?.docs.forEach(d => batch?.update(d.ref, { readBy: admin.firestore.FieldValue.arrayUnion(userId) }));
+                await batch?.commit();
+            }
+            return json(200, { success: true });
+        } catch { return json(500, { error: "Failed" }); }
     }
 
     if (rawPath === "/auth/pending" && method === "GET") {
@@ -266,6 +326,13 @@ Rules:
                 video_url: video_url || "",
                 created_at: admin.firestore.FieldValue.serverTimestamp(),
                 updated_at: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            const { actorName = "Someone", actorPhoto = "" } = body;
+            writeNotif(firestore, {
+                type: "new_song",
+                message: `${actorName} added a new song`,
+                subMessage: `🎵 "${toTitleCase(title)}" by ${toTitleCase(artist)}`,
+                actorName, actorPhoto, targetAudience: "non_member",
             });
             return json(201, { id: docRef.id });
         } catch (err) {
@@ -557,6 +624,9 @@ Rules:
                 created_at: admin.firestore.FieldValue.serverTimestamp(),
                 updated_at: admin.firestore.FieldValue.serverTimestamp(),
             });
+            const { actorName: aN1 = "Someone", actorPhoto: aP1 = "" } = body;
+            const dl1 = new Date(date + "T00:00:00").toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+            writeNotif(firestore, { type: "new_event", message: `${aN1} created a new event`, subMessage: `📅 ${eventName || "Event"} — ${dl1}`, actorName: aN1, actorPhoto: aP1, targetAudience: "all" });
             return json(201, { id: docRef.id });
         } catch (err) {
             console.error(err);
@@ -586,6 +656,9 @@ Rules:
                     notes: notes || "",
                     updated_at: admin.firestore.FieldValue.serverTimestamp(),
                 });
+                const { actorName: aN2 = "Someone", actorPhoto: aP2 = "" } = body;
+                const dl2 = new Date(date + "T00:00:00").toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+                writeNotif(firestore, { type: "updated_event", message: `${aN2} updated an event`, subMessage: `📅 ${eventName || "Event"} — ${dl2}`, actorName: aN2, actorPhoto: aP2, targetAudience: "all" });
                 return json(200, { success: true });
             } catch (err) {
                 console.error(err);
