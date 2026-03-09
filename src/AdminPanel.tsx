@@ -297,7 +297,7 @@ export default function AdminPanel() {
                             {/* Type toggle */}
                             <div className="flex gap-2">
                                 {[{ v: "whats_new", label: "🎉 What's New", desc: "Users can dismiss" }, { v: "maintenance", label: "🔧 Maintenance", desc: "Blocks app access" }].map(t => (
-                                    <button key={t.v} onClick={() => setBType(t.v as any)}
+                                    <button key={t.v} onClick={() => { setBType(t.v as any); setBTitle(""); setBMessage(""); setBBullets(["", "", ""]); }}
                                         className={`flex-1 px-3 py-2 rounded-xl border text-left transition-all ${bType === t.v ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20" : "border-gray-200 dark:border-gray-700 hover:border-gray-300"}`}>
                                         <p className="text-xs font-semibold text-gray-900 dark:text-white">{t.label}</p>
                                         <p className="text-[10px] text-gray-400 mt-0.5">{t.desc}</p>
