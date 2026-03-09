@@ -195,8 +195,9 @@ export default function App() {
   const [currentView, setCurrentView] = useState<"songs" | "members" | "schedule" | "admin">("songs");
   const { isAdmin, userRole, user } = useAuth();
 
-  // 🔔 Push notifications — request permission + store FCM token
-  usePushNotifications(user?.uid ?? null, userRole ?? null);
+  // 🔔 Push notifications — iOS-safe: user must tap "Enable" button
+  const { showPrompt: showPushPrompt, requestPushPermission, dismissPrompt: dismissPushPrompt } =
+    usePushNotifications(user?.uid ?? null, userRole ?? null);
 
   // ── Notification state ───────────────────────────────────────────
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -1490,6 +1491,37 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-900 font-sans text-gray-900 dark:text-gray-100 overflow-hidden">
+
+      {/* 🔔 Push Notification Permission Banner — iOS-safe (requires user tap) */}
+      {showPushPrompt && (
+        <div className="fixed top-0 left-0 right-0 z-[100] animate-slide-down">
+          <div className="mx-3 mt-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 shadow-2xl border border-indigo-500/30 overflow-hidden">
+            <div className="flex items-center gap-3 px-4 py-3.5">
+              <div className="shrink-0 w-9 h-9 rounded-full bg-white/20 flex items-center justify-center">
+                <span className="text-lg">🔔</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-white leading-tight">Stay notified!</p>
+                <p className="text-[11px] text-indigo-200 leading-tight mt-0.5">Get alerts for new songs & events directly on your phone.</p>
+              </div>
+              <button
+                onClick={requestPushPermission}
+                className="shrink-0 px-3.5 py-1.5 bg-white text-indigo-700 text-xs font-bold rounded-xl hover:bg-indigo-50 active:scale-95 transition-all shadow-md"
+              >
+                Enable
+              </button>
+              <button
+                onClick={dismissPushPrompt}
+                className="shrink-0 p-1.5 text-white/70 hover:text-white transition-colors rounded-lg hover:bg-white/10"
+                aria-label="Dismiss"
+              >
+                <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" /></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Mobile Overlay */}
       {isMobileMenuOpen && (
         <div

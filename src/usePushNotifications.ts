@@ -1,87 +1,71 @@
-import { useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { messaging, getToken, onMessage, VAPID_KEY } from "./firebase";
 
 /**
  * usePushNotifications
- * - Requests notification permission from the browser
- * - Gets FCM token and stores it in Firestore (via API)
- * - Listens for foreground messages and shows them as browser notifications
+ *
+ * iOS Safari REQUIRES that Notification.requestPermission() is called from
+ * a user gesture (tap/click). Auto-calling it on page load is silently blocked.
+ *
+ * Solution: expose a `requestPushPermission` function + `showPrompt` flag.
+ * The App UI renders a banner with an "Enable" button — when tapped, it calls
+ * `requestPushPermission()` which satisfies the iOS user-gesture requirement.
  */
 export function usePushNotifications(userId: string | null, userRole: string | null) {
+    const [showPrompt, setShowPrompt] = useState(false);
+    const [pushEnabled, setPushEnabled] = useState(false);
+
+    // Determine if we should show the prompt
     useEffect(() => {
         if (!userId || !userRole) return;
+        if (!("Notification" in window)) return; // browser doesn't support it
+        if (!("serviceWorker" in navigator)) return;
 
-        // Small delay so the app fully loads before showing the permission dialog
-        const timer = setTimeout(async () => {
-            try {
-                // 1. Check if browser supports notifications
-                if (!("Notification" in window)) {
-                    console.log("[Push] Browser does not support notifications.");
-                    return;
-                }
-
-                console.log("[Push] Current permission:", Notification.permission);
-
-                // 2. Request permission (shows the dialog to user)
-                const permission = await Notification.requestPermission();
-                console.log("[Push] Permission response:", permission);
-
-                if (permission !== "granted") {
-                    console.log("[Push] Permission not granted.");
-                    return;
-                }
-
-                // 3. Register the Firebase messaging service worker
-                if (!("serviceWorker" in navigator)) {
-                    console.log("[Push] Service workers not supported.");
-                    return;
-                }
-
-                const registration = await navigator.serviceWorker.register(
-                    "/firebase-messaging-sw.js",
-                    { scope: "/" }
-                );
-                console.log("[Push] Service worker registered:", registration.scope);
-
-                // Wait for service worker to be ready
-                await navigator.serviceWorker.ready;
-
-                // 4. Get FCM token
-                const token = await getToken(messaging, {
-                    vapidKey: VAPID_KEY,
-                    serviceWorkerRegistration: registration,
-                });
-
-                if (!token) {
-                    console.log("[Push] No FCM token received.");
-                    return;
-                }
-
-                console.log("[Push] FCM token obtained, storing...");
-
-                // 5. Store token in Firestore via API
-                await fetch("/api/fcm-token", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ userId, role: userRole, token }),
-                });
-
-                console.log("✅ [Push] Push notifications fully enabled!");
-
-            } catch (err) {
-                console.warn("[Push] Setup failed (non-critical):", err);
-            }
-        }, 3000); // 3 second delay after login
-
-        return () => clearTimeout(timer);
+        if (Notification.permission === "granted") {
+            // Already granted — just register silently (re-login scenario)
+            registerAndStoreToken(userId, userRole).catch(() => { });
+            setPushEnabled(true);
+        } else if (Notification.permission === "default") {
+            // Not yet asked — show our in-app banner after 2 seconds
+            const t = setTimeout(() => setShowPrompt(true), 2000);
+            return () => clearTimeout(t);
+        }
+        // If "denied" — do nothing, respect user's choice
     }, [userId, userRole]);
 
-    // Listen for foreground messages (app is open and in focus)
-    useEffect(() => {
-        if (!userId) return;
+    // Called when user taps "Enable" in our banner — iOS user gesture satisfied ✅
+    const requestPushPermission = useCallback(async () => {
+        setShowPrompt(false);
+        try {
+            const permission = await Notification.requestPermission();
+            if (permission === "granted") {
+                setPushEnabled(true);
+                await registerAndStoreToken(userId!, userRole!);
+                console.log("✅ [Push] Notifications enabled!");
+            }
+        } catch (err) {
+            console.warn("[Push] Permission request failed:", err);
+        }
+    }, [userId, userRole]);
 
+    const dismissPrompt = useCallback(() => {
+        setShowPrompt(false);
+        // Re-show after 24 hours via localStorage
+        localStorage.setItem("pushPromptDismissed", String(Date.now()));
+    }, []);
+
+    // Don't re-show if dismissed within last 24 hours
+    useEffect(() => {
+        const dismissed = localStorage.getItem("pushPromptDismissed");
+        if (dismissed && Date.now() - Number(dismissed) < 86400000) {
+            setShowPrompt(false);
+        }
+    }, []);
+
+    // Listen for foreground messages (app open)
+    useEffect(() => {
+        if (!userId || !pushEnabled) return;
         const unsubscribe = onMessage(messaging, (payload) => {
-            console.log("[Push] Foreground message received:", payload);
             const { title, body } = payload.notification || {};
             if (Notification.permission === "granted" && title) {
                 new Notification(title, {
@@ -91,7 +75,31 @@ export function usePushNotifications(userId: string | null, userRole: string | n
                 });
             }
         });
-
         return () => unsubscribe();
-    }, [userId]);
+    }, [userId, pushEnabled]);
+
+    return { showPrompt, pushEnabled, requestPushPermission, dismissPrompt };
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+async function registerAndStoreToken(userId: string, userRole: string) {
+    const registration = await navigator.serviceWorker.register(
+        "/firebase-messaging-sw.js",
+        { scope: "/" }
+    );
+    await navigator.serviceWorker.ready;
+
+    const token = await getToken(messaging, {
+        vapidKey: VAPID_KEY,
+        serviceWorkerRegistration: registration,
+    });
+
+    if (!token) return;
+
+    await fetch("/api/fcm-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, role: userRole, token }),
+    });
 }
