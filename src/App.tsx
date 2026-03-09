@@ -1560,6 +1560,20 @@ export default function App() {
             <p className="px-3 text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 mt-2">Worship</p>
           )}
 
+          {/* Dashboard — coming soon */}
+          <div
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium opacity-40 cursor-not-allowed select-none text-gray-500 dark:text-gray-500 ${isSidebarCollapsed ? "justify-center" : ""}`}
+            title="Dashboard — Coming Soon"
+          >
+            <LayoutGrid size={20} className="shrink-0" />
+            {!isSidebarCollapsed && (
+              <span className="flex items-center gap-2">
+                Dashboard
+                <span className="text-[10px] font-bold uppercase tracking-wider bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded-full">Soon</span>
+              </span>
+            )}
+          </div>
+
           {/* Song Management */}
           <button
             onClick={() => { setCurrentView("songs"); setIsMobileMenuOpen(false); }}
