@@ -5,7 +5,8 @@ import { usePushNotifications } from "./usePushNotifications";
 import BroadcastOverlay from "./BroadcastOverlay";
 import WelcomeToast from "./WelcomeToast";
 import AdminPanel from "./AdminPanel";
-import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, LayoutGrid, List, BookOpen, Mic2, Copy, Pencil, Shield, Mail, Bell, Guitar, Sliders, Palette, Lock, AlertTriangle, CheckCircle, BookMarked, HandMetal, Headphones } from "lucide-react";
+import HelpPanel from "./HelpPanel";
+import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, LayoutGrid, List, BookOpen, Mic2, Copy, Pencil, Shield, Mail, Bell, Guitar, Sliders, Palette, Lock, AlertTriangle, CheckCircle, BookMarked, HandMetal, Headphones, HelpCircle } from "lucide-react";
 import { Song, Tag } from "./types";
 
 // ── Member Role Constants ────────────────────────────────────────────────────
@@ -1681,6 +1682,9 @@ export default function App() {
             </h1>
           </div>
           <div className="flex items-center gap-2">
+            {/* Help & Knowledge Base */}
+            <HelpPanel isAdmin={isAdmin} />
+
             {/* Notification Bell */}
             <div ref={notifRef} className="relative">
               <button
