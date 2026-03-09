@@ -7,7 +7,7 @@ import LoginPage from './LoginPage.tsx';
 import AccessDenied from './AccessDenied.tsx';
 import SplashScreen from './SplashScreen.tsx';
 
-const MIN_SPLASH_MS = 1500;
+const MIN_SPLASH_MS = 5000;
 
 function Root() {
   const { status } = useAuth();

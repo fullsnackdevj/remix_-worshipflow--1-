@@ -12,15 +12,17 @@ export default function SplashScreen() {
         return () => { clearTimeout(t1); clearTimeout(t2); };
     }, []);
 
-    // Animate the progress bar
+    // Animate the progress bar — fills slowly over ~4.5s to match 5s splash
     useEffect(() => {
         if (phase !== "bar") return;
         let p = 0;
         const interval = setInterval(() => {
-            p += Math.random() * 18 + 8; // random increments feel organic
-            if (p >= 100) { p = 100; clearInterval(interval); }
+            // Slows down as it approaches 90% (natural loading feel)
+            const remaining = 90 - p;
+            p += Math.random() * (remaining * 0.12) + 1.5;
+            if (p >= 90) { p = 90; clearInterval(interval); } // hold at 90% until app is ready
             setProgress(p);
-        }, 100);
+        }, 150);
         return () => clearInterval(interval);
     }, [phase]);
 
@@ -104,36 +106,42 @@ export default function SplashScreen() {
                             fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
                         }}
                     >
-                        For the team behind worship
+                        Glorifying God in Every Flow
                     </p>
                 </div>
             </div>
 
-            {/* Bottom progress bar */}
+            {/* Bottom: copyright + progress bar */}
             <div
-                className="absolute bottom-12 left-1/2 -translate-x-1/2"
-                style={{
-                    width: "160px",
-                    opacity: phase === "bar" ? 1 : 0,
-                    transition: "opacity 0.4s ease",
-                }}
+                className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3"
+                style={{ opacity: phase === "bar" ? 1 : 0, transition: "opacity 0.6s ease" }}
             >
-                {/* Track */}
+                {/* Progress bar */}
                 <div
-                    className="w-full rounded-full overflow-hidden"
-                    style={{ height: "2px", background: "rgba(255,255,255,0.08)" }}
+                    className="rounded-full overflow-hidden"
+                    style={{ width: "160px", height: "2px", background: "rgba(255,255,255,0.08)" }}
                 >
-                    {/* Fill */}
                     <div
                         className="h-full rounded-full"
                         style={{
                             width: `${progress}%`,
-                            transition: "width 0.15s ease-out",
+                            transition: "width 0.2s ease-out",
                             background: "linear-gradient(90deg, #6366f1, #a855f7)",
                             boxShadow: "0 0 8px rgba(99,102,241,0.8)",
                         }}
                     />
                 </div>
+                {/* Copyright */}
+                <p
+                    style={{
+                        fontSize: "10px",
+                        color: "rgba(255,255,255,0.18)",
+                        letterSpacing: "0.08em",
+                        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+                    }}
+                >
+                    © 2026 WorshipFlow. All rights reserved.
+                </p>
             </div>
 
             {/* Keyframe injection */}
