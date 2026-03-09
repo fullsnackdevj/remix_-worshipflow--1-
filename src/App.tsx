@@ -1772,7 +1772,15 @@ export default function App() {
               </button>
 
               {notifOpen && (
-                <div className="fixed sm:absolute right-2 sm:right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl z-50 overflow-hidden" style={{ width: "min(340px, calc(100vw - 1rem))", top: "calc(var(--header-h, 64px) + 8px)" }}>
+                <div
+                  className="fixed z-[200] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl overflow-hidden"
+                  style={{
+                    width: "min(370px, calc(100vw - 20px))",
+                    top: "72px",
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                  }}
+                >
                   {/* Header */}
                   <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700">
                     <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-1.5"><Bell size={14} /> Notifications
