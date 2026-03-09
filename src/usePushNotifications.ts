@@ -11,26 +11,40 @@ export function usePushNotifications(userId: string | null, userRole: string | n
     useEffect(() => {
         if (!userId || !userRole) return;
 
-        async function setupPush() {
+        // Small delay so the app fully loads before showing the permission dialog
+        const timer = setTimeout(async () => {
             try {
                 // 1. Check if browser supports notifications
                 if (!("Notification" in window)) {
-                    console.log("This browser does not support notifications.");
+                    console.log("[Push] Browser does not support notifications.");
                     return;
                 }
 
-                // 2. Request permission
+                console.log("[Push] Current permission:", Notification.permission);
+
+                // 2. Request permission (shows the dialog to user)
                 const permission = await Notification.requestPermission();
+                console.log("[Push] Permission response:", permission);
+
                 if (permission !== "granted") {
-                    console.log("Notification permission denied.");
+                    console.log("[Push] Permission not granted.");
                     return;
                 }
 
-                // 3. Register service worker (our FCM background handler)
+                // 3. Register the Firebase messaging service worker
+                if (!("serviceWorker" in navigator)) {
+                    console.log("[Push] Service workers not supported.");
+                    return;
+                }
+
                 const registration = await navigator.serviceWorker.register(
                     "/firebase-messaging-sw.js",
                     { scope: "/" }
                 );
+                console.log("[Push] Service worker registered:", registration.scope);
+
+                // Wait for service worker to be ready
+                await navigator.serviceWorker.ready;
 
                 // 4. Get FCM token
                 const token = await getToken(messaging, {
@@ -39,35 +53,36 @@ export function usePushNotifications(userId: string | null, userRole: string | n
                 });
 
                 if (!token) {
-                    console.log("No FCM token received.");
+                    console.log("[Push] No FCM token received.");
                     return;
                 }
 
-                // 5. Store token in Firestore via API (linked to this user + role)
+                console.log("[Push] FCM token obtained, storing...");
+
+                // 5. Store token in Firestore via API
                 await fetch("/api/fcm-token", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ userId, role: userRole, token }),
                 });
 
-                console.log("✅ Push notifications enabled. FCM token stored.");
+                console.log("✅ [Push] Push notifications fully enabled!");
 
             } catch (err) {
-                // Silently fail — push notifications are optional
-                console.warn("Push notification setup failed:", err);
+                console.warn("[Push] Setup failed (non-critical):", err);
             }
-        }
+        }, 3000); // 3 second delay after login
 
-        setupPush();
+        return () => clearTimeout(timer);
     }, [userId, userRole]);
 
-    // Listen for foreground messages (app is open)
+    // Listen for foreground messages (app is open and in focus)
     useEffect(() => {
         if (!userId) return;
 
         const unsubscribe = onMessage(messaging, (payload) => {
+            console.log("[Push] Foreground message received:", payload);
             const { title, body } = payload.notification || {};
-            // Show native browser notification even when app is open
             if (Notification.permission === "granted" && title) {
                 new Notification(title, {
                     body: body || "",
