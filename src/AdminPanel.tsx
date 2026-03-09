@@ -18,6 +18,7 @@ interface PendingUser {
 const ROLE_OPTIONS = [
     { value: "member", label: "Member", color: "text-gray-500 dark:text-gray-400", bg: "bg-gray-100 dark:bg-gray-700", icon: "👤" },
     { value: "leader", label: "Worship Leader", color: "text-indigo-500 dark:text-indigo-400", bg: "bg-indigo-50 dark:bg-indigo-900/30", icon: "🎤" },
+    { value: "audio_tech", label: "Audio / Tech", color: "text-teal-600 dark:text-teal-400", bg: "bg-teal-50 dark:bg-teal-900/20", icon: "🎛️" },
     { value: "admin", label: "Admin", color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-900/20", icon: "🛡️" },
 ];
 
