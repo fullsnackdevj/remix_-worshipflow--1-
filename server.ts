@@ -109,6 +109,9 @@ async function writeNotification(firestore: admin.firestore.Firestore, payload: 
   actorName: string;
   actorPhoto: string;
   targetAudience: "all" | "non_member" | "admin_only";
+  resourceId?: string;
+  resourceType?: string;
+  resourceDate?: string;
 }) {
   try {
     await firestore.collection("notifications").add({
@@ -333,6 +336,8 @@ app.post("/api/songs", async (req, res) => {
       subMessage: `🎵 "${toTitleCase(title)}" by ${toTitleCase(artist)}`,
       actorName, actorPhoto,
       targetAudience: "non_member",
+      resourceId: docRef.id,
+      resourceType: "song",
     });
 
     res.status(201).json({ id: docRef.id });
@@ -664,6 +669,9 @@ app.post("/api/schedules", async (req, res) => {
       subMessage: `📅 ${eventName || "Event"} — ${dateLabel1}`,
       actorName: aN1, actorPhoto: aP1,
       targetAudience: "all",
+      resourceId: docRef.id,
+      resourceType: "event",
+      resourceDate: date,
     });
 
     res.status(201).json({ id: docRef.id, date, serviceType: serviceType || "sunday", eventName: eventName || "", worshipLeader: worshipLeader || null, backupSingers: backupSingers || [], musicians: musicians || [], songLineup: songLineup || { joyful: "", solemn: "" }, notes: notes || "" });
@@ -702,6 +710,9 @@ app.put("/api/schedules/:id", async (req, res) => {
       subMessage: `📅 ${eventName || "Event"} — ${dateLabel2}`,
       actorName: aN2, actorPhoto: aP2,
       targetAudience: "all",
+      resourceId: id,
+      resourceType: "event",
+      resourceDate: date,
     });
 
     res.json({ success: true });

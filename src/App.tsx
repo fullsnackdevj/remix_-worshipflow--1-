@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useAuth } from "./AuthContext";
+import { getAuth } from "firebase/auth";
 import AdminPanel from "./AdminPanel";
 import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, LayoutGrid, List, BookOpen, Mic2, Copy, Pencil, Shield, Mail, Bell } from "lucide-react";
 import { Song, Tag } from "./types";
@@ -229,16 +230,31 @@ export default function App() {
     await fetch("/api/notifications/read", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: user.uid }) });
   };
 
-  const markOneRead = async (notifId: string, type: string) => {
+  const markOneRead = async (notifId: string, type: string, resourceId?: string, resourceDate?: string) => {
     if (!user) return;
     setNotifications(prev => prev.map(n => n.id === notifId ? { ...n, isRead: true } : n));
-    await fetch("/api/notifications/read", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: user.uid, notifId }) });
-    // Navigate to the relevant section
-    const navMap: Record<string, "songs" | "members" | "schedule" | "admin"> = {
-      new_song: "songs", new_event: "schedule", updated_event: "schedule", access_request: "admin",
-    };
-    if (navMap[type]) setCurrentView(navMap[type]);
     setNotifOpen(false);
+    await fetch("/api/notifications/read", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: user.uid, notifId }) });
+    // Deep-link navigation
+    if (type === "new_song" && resourceId) {
+      setCurrentView("songs");
+      // Find song in local state or fetch it
+      const found = allSongs.find(s => s.id === resourceId);
+      if (found) {
+        setSelectedSong(found);
+        setIsEditing(false);
+      } else {
+        // Song not in cache yet — switch to songs view and let user see it
+        setCurrentView("songs");
+      }
+    } else if ((type === "new_event" || type === "updated_event") && resourceId && resourceDate) {
+      setCurrentView("schedule");
+      setSelectedScheduleDate(resourceDate);
+      setSelectedEventId(resourceId);
+      setSchedPanelMode("view");
+    } else if (type === "access_request") {
+      setCurrentView("admin");
+    }
   };
 
   const timeAgo = (iso: string) => {
@@ -571,7 +587,8 @@ export default function App() {
     if (isSundaySvc && !editSchedSongLineup.joyful) { showToast("error", "A Joyful song is required for Sunday Service."); return; }
     if (isSundaySvc && !editSchedSongLineup.solemn) { showToast("error", "A Solemn song is required for Sunday Service."); return; }
     setIsSavingSchedule(true);
-    const actorDisplayName = user?.displayName || user?.email?.split("@")[0] || "Worship Team";
+    const cu = getAuth().currentUser;
+    const actorDisplayName = cu?.displayName || cu?.email?.split("@")[0] || user?.displayName || "Worship Team";
     const payload: any = {
       date: selectedScheduleDate,
       serviceType: editSchedServiceType,
@@ -1178,6 +1195,7 @@ export default function App() {
     }
     setFormErrors({});
 
+    const cu = getAuth().currentUser;
     const payload = {
       title: editTitle,
       artist: editArtist,
@@ -1185,8 +1203,8 @@ export default function App() {
       chords: editChords,
       tags: editTags,
       video_url: editVideoUrl,
-      actorName: user?.displayName || user?.email?.split("@")[0] || "Worship Team",
-      actorPhoto: user?.photoURL || "",
+      actorName: cu?.displayName || cu?.email?.split("@")[0] || user?.displayName || "Worship Team",
+      actorPhoto: cu?.photoURL || user?.photoURL || "",
     };
 
     try {
@@ -1578,9 +1596,9 @@ export default function App() {
                     ) : notifications.map(n => (
                       <button
                         key={n.id}
-                        onClick={() => markOneRead(n.id, n.type)}
+                        onClick={() => markOneRead(n.id, n.type, n.resourceId, n.resourceDate)}
                         className={`w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer ${n.isRead ? "opacity-60" : "bg-indigo-50/30 dark:bg-indigo-900/10"}`}
-                        title={`Click to view ${n.type === "new_song" ? "songs" : n.type === "access_request" ? "admin panel" : "schedule"}`}
+                        title={`Click to open ${n.type === "new_song" ? "song detail" : n.type === "access_request" ? "admin panel" : "event detail"}`}
                       >
                         {/* Actor photo or icon */}
                         <div className="shrink-0 mt-0.5">

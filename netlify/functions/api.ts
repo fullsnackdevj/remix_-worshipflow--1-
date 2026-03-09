@@ -53,6 +53,7 @@ function lyricsAreDuplicate(a: string, b: string): boolean {
 async function writeNotif(firestore: FirebaseFirestore.Firestore | null, payload: {
     type: string; message: string; subMessage: string;
     actorName: string; actorPhoto: string; targetAudience: string;
+    resourceId?: string; resourceType?: string; resourceDate?: string;
 }) {
     if (!firestore) return;
     try {
@@ -333,6 +334,7 @@ Rules:
                 message: `${actorName} added a new song`,
                 subMessage: `🎵 "${toTitleCase(title)}" by ${toTitleCase(artist)}`,
                 actorName, actorPhoto, targetAudience: "non_member",
+                resourceId: docRef.id, resourceType: "song",
             });
             return json(201, { id: docRef.id });
         } catch (err) {
@@ -626,7 +628,7 @@ Rules:
             });
             const { actorName: aN1 = "Someone", actorPhoto: aP1 = "" } = body;
             const dl1 = new Date(date + "T00:00:00").toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
-            writeNotif(firestore, { type: "new_event", message: `${aN1} created a new event`, subMessage: `📅 ${eventName || "Event"} — ${dl1}`, actorName: aN1, actorPhoto: aP1, targetAudience: "all" });
+            writeNotif(firestore, { type: "new_event", message: `${aN1} created a new event`, subMessage: `📅 ${eventName || "Event"} — ${dl1}`, actorName: aN1, actorPhoto: aP1, targetAudience: "all", resourceId: docRef.id, resourceType: "event", resourceDate: date });
             return json(201, { id: docRef.id });
         } catch (err) {
             console.error(err);
@@ -658,7 +660,7 @@ Rules:
                 });
                 const { actorName: aN2 = "Someone", actorPhoto: aP2 = "" } = body;
                 const dl2 = new Date(date + "T00:00:00").toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
-                writeNotif(firestore, { type: "updated_event", message: `${aN2} updated an event`, subMessage: `📅 ${eventName || "Event"} — ${dl2}`, actorName: aN2, actorPhoto: aP2, targetAudience: "all" });
+                writeNotif(firestore, { type: "updated_event", message: `${aN2} updated an event`, subMessage: `📅 ${eventName || "Event"} — ${dl2}`, actorName: aN2, actorPhoto: aP2, targetAudience: "all", resourceId: id, resourceType: "event", resourceDate: date });
                 return json(200, { success: true });
             } catch (err) {
                 console.error(err);
