@@ -13,7 +13,7 @@ interface Broadcast {
 }
 
 export default function BroadcastOverlay() {
-    const { user, isAdmin } = useAuth();
+    const { user, isAdmin, logOut } = useAuth();
     const [broadcast, setBroadcast] = useState<Broadcast | null>(null);
     const [dismissing, setDismissing] = useState(false);
 
@@ -42,16 +42,26 @@ export default function BroadcastOverlay() {
     if (broadcast.type === "maintenance") {
         return (
             <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-gray-950 px-6">
-                {/* Animated background */}
+                {/* Animated background glows */}
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
                     <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[500px] h-[500px] rounded-full bg-amber-500/5 blur-3xl animate-pulse" />
                     <div className="absolute bottom-1/4 left-1/4 w-[300px] h-[300px] rounded-full bg-orange-500/5 blur-3xl animate-pulse" style={{ animationDelay: "1s" }} />
                 </div>
 
                 <div className="relative z-10 max-w-sm w-full text-center space-y-6">
-                    {/* Icon */}
-                    <div className="mx-auto w-24 h-24 rounded-3xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
-                        <span className="text-5xl animate-bounce" style={{ animationDuration: "2s" }}>🔧</span>
+
+                    {/* Logo + Wrench badge */}
+                    <div className="relative mx-auto w-28 h-28">
+                        {/* App icon */}
+                        <img
+                            src="/icon-192x192.png"
+                            alt="WorshipFlow"
+                            className="w-28 h-28 rounded-3xl shadow-2xl shadow-amber-500/10"
+                        />
+                        {/* Animated wrench badge — top right corner */}
+                        <div className="absolute -top-2 -right-2 w-9 h-9 rounded-full bg-amber-500 shadow-lg shadow-amber-500/50 flex items-center justify-center animate-bounce" style={{ animationDuration: "1.5s" }}>
+                            <span className="text-lg">🔧</span>
+                        </div>
                     </div>
 
                     {/* Text */}
@@ -68,8 +78,19 @@ export default function BroadcastOverlay() {
                         <span className="text-xs text-amber-400 font-medium">Maintenance in progress</span>
                     </div>
 
-                    {/* Branding */}
-                    <p className="text-xs text-gray-600 mt-8">WorshipFlow — Please check back soon</p>
+                    {/* Sign out button — so users aren't fully stuck */}
+                    <div className="pt-4">
+                        <button
+                            onClick={logOut}
+                            className="flex items-center gap-2 mx-auto px-5 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-gray-600 text-gray-400 hover:text-gray-200 text-sm font-medium transition-all active:scale-95"
+                        >
+                            <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
+                            </svg>
+                            Sign out
+                        </button>
+                        <p className="text-xs text-gray-700 mt-3">WorshipFlow — Please check back soon</p>
+                    </div>
                 </div>
             </div>
         );
