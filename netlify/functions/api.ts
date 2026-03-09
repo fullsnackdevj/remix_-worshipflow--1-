@@ -50,6 +50,47 @@ function lyricsAreDuplicate(a: string, b: string): boolean {
 }
 
 // ── Notification helper ─────────────────────────────────────────────────────
+// Send FCM push to relevant devices
+async function sendPush(firestore: FirebaseFirestore.Firestore | null, payload: {
+    title: string; body: string; actorUserId?: string; targetAudience: string;
+}) {
+    if (!firestore) return;
+    try {
+        const tokensSnap = await firestore.collection("fcm_tokens").get();
+        if (tokensSnap.empty) return;
+        const tokens: string[] = [];
+        tokensSnap.docs.forEach(doc => {
+            const data = doc.data();
+            const token: string = data.token;
+            const role: string = data.role || "member";
+            const tokenUserId: string = data.userId || "";
+            if (!token) return;
+            if (payload.actorUserId && tokenUserId === payload.actorUserId) return; // self-exclusion
+            if (payload.targetAudience === "admin_only" && role !== "admin") return;
+            if (payload.targetAudience === "non_member" && role === "member") return;
+            tokens.push(token);
+        });
+        if (tokens.length === 0) return;
+        for (let i = 0; i < tokens.length; i += 500) {
+            const batch = tokens.slice(i, i + 500);
+            const response = await admin.messaging().sendEachForMulticast({
+                tokens: batch,
+                notification: { title: payload.title, body: payload.body },
+                webpush: {
+                    notification: { title: payload.title, body: payload.body, icon: "/icon-192x192.png", badge: "/favicon-32.png", vibrate: [200, 100, 200] },
+                    fcmOptions: { link: "/" },
+                },
+            });
+            response.responses.forEach((r, idx) => {
+                if (!r.success && (r.error?.code === "messaging/invalid-registration-token" || r.error?.code === "messaging/registration-token-not-registered")) {
+                    firestore.collection("fcm_tokens").where("token", "==", batch[idx]).get()
+                        .then(snap => snap.docs.forEach(d => d.ref.delete())).catch(() => { });
+                }
+            });
+        }
+    } catch (e) { console.error("Push send failed:", e); }
+}
+
 async function writeNotif(firestore: FirebaseFirestore.Firestore | null, payload: {
     type: string; message: string; subMessage: string;
     actorName: string; actorPhoto: string; actorUserId?: string; targetAudience: string;
@@ -61,6 +102,7 @@ async function writeNotif(firestore: FirebaseFirestore.Firestore | null, payload
             ...payload, readBy: [], deletedBy: [],
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
         });
+        sendPush(firestore, { title: payload.message, body: payload.subMessage, actorUserId: payload.actorUserId, targetAudience: payload.targetAudience });
     } catch (e) { console.error("notif write failed", e); }
 }
 
@@ -191,6 +233,19 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
             await firestore?.collection("notifications").doc(id).update({ deletedBy: admin.firestore.FieldValue.arrayUnion(userId) });
             return json(200, { success: true });
         } catch { return json(500, { error: "Failed" }); }
+    }
+
+    // POST /fcm-token — store FCM push token for a user
+    if (rawPath === "/fcm-token" && method === "POST") {
+        const { userId, role, token } = body;
+        if (!userId || !token) return json(400, { error: "userId and token required" });
+        try {
+            await firestore?.collection("fcm_tokens").doc(userId).set({
+                userId, role: role || "member", token,
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            return json(200, { success: true });
+        } catch (e) { return json(500, { error: "Failed to store token" }); }
     }
 
     if (rawPath === "/auth/pending" && method === "GET") {

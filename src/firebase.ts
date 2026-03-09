@@ -1,5 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { getMessaging, getToken, onMessage } from "firebase/messaging";
 
 // Firebase client config — safe to expose (restricted by authorized domains)
 const firebaseConfig = {
@@ -14,3 +15,10 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
+
+// Firebase Cloud Messaging — for push notifications
+export const messaging = getMessaging(app);
+export { getToken, onMessage };
+
+// VAPID key for web push
+export const VAPID_KEY = "BAg369pso0CcSa_8hXoSf3Ff3eUPPRQEb50Jl8CRfXAuIR1UpGzqVq4GG1qcyO8Sttya_PeqJQmyoeQxolnyYtE";
