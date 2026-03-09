@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { X, HelpCircle, ChevronRight, ChevronLeft, Bell, BookOpen, Calendar, Users, Shield, Smartphone } from "lucide-react";
+import { X, HelpCircle, ChevronRight, ChevronLeft, Bell, BookOpen, Calendar, Users, Shield, Smartphone, Search } from "lucide-react";
 
 // ── Article definitions ──────────────────────────────────────────────────────
 interface Article {
@@ -185,9 +185,17 @@ interface HelpPanelProps {
 export default function HelpPanel({ isAdmin }: HelpPanelProps) {
     const [open, setOpen] = useState(false);
     const [activeArticle, setActiveArticle] = useState<Article | null>(null);
+    const [query, setQuery] = useState("");
     const panelRef = useRef<HTMLDivElement>(null);
+    const searchRef = useRef<HTMLInputElement>(null);
 
     const visibleArticles = ARTICLES.filter(a => !a.adminOnly || isAdmin);
+    const filteredArticles = query.trim()
+        ? visibleArticles.filter(a =>
+            a.title.toLowerCase().includes(query.toLowerCase()) ||
+            a.summary.toLowerCase().includes(query.toLowerCase())
+        )
+        : visibleArticles;
 
     // Close on outside click
     useEffect(() => {
@@ -206,7 +214,7 @@ export default function HelpPanel({ isAdmin }: HelpPanelProps) {
         <div ref={panelRef} className="relative">
             {/* Trigger button */}
             <button
-                onClick={() => { setOpen(o => !o); setActiveArticle(null); }}
+                onClick={() => { setOpen(o => !o); setActiveArticle(null); setQuery(""); }}
                 className="relative p-2 rounded-xl text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
                 title="Help & Knowledge Base"
             >
@@ -241,7 +249,31 @@ export default function HelpPanel({ isAdmin }: HelpPanelProps) {
                         </button>
                     </div>
 
-                    {/* Content */}
+                    {/* Search — only shown on article list, not inside an article */}
+                    {!activeArticle && (
+                        <div className="px-3 py-2.5 border-b border-gray-700/60 shrink-0">
+                            <div className="relative">
+                                <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+                                <input
+                                    ref={searchRef}
+                                    type="text"
+                                    value={query}
+                                    onChange={e => setQuery(e.target.value)}
+                                    placeholder="Search guides..."
+                                    className="w-full pl-8 pr-3 py-2 text-xs rounded-xl bg-gray-800 border border-gray-700/60 text-gray-200 placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-colors"
+                                />
+                                {query && (
+                                    <button
+                                        onClick={() => setQuery("")}
+                                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors"
+                                    >
+                                        <X size={12} />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
                     <div className="overflow-y-auto flex-1">
                         {activeArticle ? (
                             /* ── Article view ── */
@@ -256,27 +288,37 @@ export default function HelpPanel({ isAdmin }: HelpPanelProps) {
                         ) : (
                             /* ── Article list ── */
                             <div className="py-2">
-                                {visibleArticles.map(article => (
-                                    <button
-                                        key={article.id}
-                                        onClick={() => setActiveArticle(article)}
-                                        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-800/60 transition-colors text-left group"
-                                    >
-                                        <span className="shrink-0 w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 group-hover:bg-indigo-500/20 transition-colors">
-                                            {article.icon}
-                                        </span>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-medium text-gray-200 leading-tight">{article.title}</p>
-                                            <p className="text-xs text-gray-500 mt-0.5 truncate">{article.summary}</p>
-                                        </div>
-                                        <ChevronRight size={14} className="shrink-0 text-gray-600 group-hover:text-indigo-400 transition-colors" />
-                                    </button>
-                                ))}
+                                {filteredArticles.length === 0 ? (
+                                    <div className="px-4 py-10 text-center">
+                                        <Search size={24} className="text-gray-700 mx-auto mb-2" />
+                                        <p className="text-sm text-gray-500">No guides found for</p>
+                                        <p className="text-xs text-gray-600 mt-0.5">"{query}"</p>
+                                    </div>
+                                ) : (
+                                    filteredArticles.map(article => (
+                                        <button
+                                            key={article.id}
+                                            onClick={() => { setActiveArticle(article); setQuery(""); }}
+                                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-800/60 transition-colors text-left group"
+                                        >
+                                            <span className="shrink-0 w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 group-hover:bg-indigo-500/20 transition-colors">
+                                                {article.icon}
+                                            </span>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-medium text-gray-200 leading-tight">{article.title}</p>
+                                                <p className="text-xs text-gray-500 mt-0.5 truncate">{article.summary}</p>
+                                            </div>
+                                            <ChevronRight size={14} className="shrink-0 text-gray-600 group-hover:text-indigo-400 transition-colors" />
+                                        </button>
+                                    ))
+                                )}
 
-                                {/* Footer */}
-                                <div className="px-4 pt-3 pb-2 border-t border-gray-800 mt-1">
-                                    <p className="text-[11px] text-gray-600 text-center">More guides coming soon</p>
-                                </div>
+                                {/* Footer — only when not searching */}
+                                {!query && (
+                                    <div className="px-4 pt-3 pb-2 border-t border-gray-800 mt-1">
+                                        <p className="text-[11px] text-gray-600 text-center">More guides coming soon</p>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
