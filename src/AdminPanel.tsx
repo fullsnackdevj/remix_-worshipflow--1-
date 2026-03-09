@@ -261,8 +261,12 @@ export default function AdminPanel() {
                     {/* Create button */}
                     <div className="flex items-center justify-between">
                         <p className="text-sm text-gray-500 dark:text-gray-400">{broadcasts.length === 0 ? "No broadcasts yet." : `${broadcasts.length} broadcast${broadcasts.length !== 1 ? "s" : ""}`}</p>
-                        <button onClick={() => setShowForm(f => !f)} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl transition-all">
-                            <Plus size={14} /> New Broadcast
+                        <button
+                            onClick={() => setShowForm(f => !f)}
+                            disabled={showForm}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold rounded-xl transition-all"
+                        >
+                            <Plus size={14} /> Create Broadcast
                         </button>
                     </div>
 
