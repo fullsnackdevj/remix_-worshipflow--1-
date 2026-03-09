@@ -319,49 +319,30 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
     // GET /api/release-notes — auto-generate What's New from GitHub commits
     if (rawPath === "/release-notes" && method === "GET") {
         try {
-            const REPO = "fullsnackdevj/remix_-worshipflow--1-";
-            const ghRes = await fetch(`https://api.github.com/repos/${REPO}/commits?per_page=30`, {
-                headers: { "User-Agent": "WorshipFlow-App", "Accept": "application/vnd.github.v3+json" },
-            });
-            if (!ghRes.ok) throw new Error("GitHub API error");
-            const commits: any[] = await ghRes.json();
+            // Fetch our curated release-notes.json from the public directory
+            const siteUrl = event.headers?.host
+                ? `https://${event.headers.host}`
+                : "https://worshipflow.netlify.app";
+            const fileRes = await fetch(`${siteUrl}/release-notes.json`);
+            if (!fileRes.ok) throw new Error("Could not load release-notes.json");
+            const data = await fileRes.json();
 
-            const features: string[] = [];
-            const fixes: string[] = [];
-            const seen = new Set<string>();
-
-            for (const commit of commits) {
-                const msg: string = commit.commit?.message?.split("\n")[0]?.trim() || "";
-                if (!msg) continue;
-                if (/^Merge|^chore|^style|^refactor|^test|^docs|^ci/i.test(msg)) continue;
-
-                const featMatch = msg.match(/^feat[:(]\s*(.+)/i);
-                const fixMatch = msg.match(/^fix[:(]\s*(.+)/i);
-                let clean = "";
-                let type = "";
-
-                if (featMatch) { clean = featMatch[1].replace(/\)$/, "").trim(); type = "feat"; }
-                else if (fixMatch) { clean = fixMatch[1].replace(/\)$/, "").trim(); type = "fix"; }
-                else { clean = msg; type = "feat"; }
-
-                clean = clean.charAt(0).toUpperCase() + clean.slice(1);
-                if (clean.length > 80) clean = clean.slice(0, 77) + "...";
-                if (seen.has(clean)) continue;
-                seen.add(clean);
-
-                if (type === "fix") fixes.push(`🐛 ${clean}`);
-                else features.push(`✨ ${clean}`);
-                if (features.length >= 5 && fixes.length >= 3) break;
+            // Collect all highlights across all releases (newest first)
+            const allHighlights: string[] = [];
+            for (const release of (data.releases ?? [])) {
+                for (const h of (release.highlights ?? [])) {
+                    allHighlights.push(h);
+                }
             }
 
-            const bullets = [...features.slice(0, 5), ...fixes.slice(0, 3)];
+            const bulletPoints = allHighlights.slice(0, 8);
             const today = new Date().toLocaleDateString("en", { month: "long", day: "numeric", year: "numeric" });
             return json(200, {
-                title: `What's New — ${today}`,
-                message: "Here's what we've been working on for your worship team:",
-                bulletPoints: bullets,
+                title: data.title ?? `What's New — ${today}`,
+                message: data.message ?? "Here's what's new in WorshipFlow:",
+                bulletPoints,
             });
-        } catch (e) { return json(500, { error: "Could not fetch release notes" }); }
+        } catch (e) { return json(500, { error: "Could not load release notes" }); }
     }
 
     if (rawPath === "/broadcasts" && method === "POST") {
