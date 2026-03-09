@@ -104,10 +104,18 @@ export default function BroadcastOverlay() {
                 <div className="h-1.5 w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" />
 
                 <div className="px-6 pt-6 pb-8 space-y-5">
-                    {/* Icon + title */}
+                    {/* Logo + Confetti badge */}
                     <div className="flex items-start gap-4">
-                        <div className="shrink-0 w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg">
-                            <span className="text-2xl">🎉</span>
+                        <div className="relative shrink-0 w-14 h-14">
+                            <img
+                                src="/icon-192x192.png"
+                                alt="WorshipFlow"
+                                className="w-14 h-14"
+                            />
+                            {/* Animated confetti badge — top right corner */}
+                            <div className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-indigo-500/70 shadow-lg shadow-indigo-500/50 flex items-center justify-center animate-bounce" style={{ animationDuration: "1.8s" }}>
+                                <span className="text-base">🎉</span>
+                            </div>
                         </div>
                         <div>
                             <p className="text-[11px] text-indigo-400 font-bold uppercase tracking-wider mb-0.5">What's New</p>

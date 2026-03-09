@@ -9,7 +9,7 @@ export default function AccessDenied() {
                 <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-red-600/10 rounded-full blur-3xl" />
             </div>
             <div className="relative z-10 w-full max-w-sm flex flex-col items-center gap-6 text-center">
-                <img src="/icon-192x192.png" alt="WorshipFlow" className="w-20 h-20 rounded-3xl shadow-xl opacity-60" />
+                <img src="/icon-192x192.png" alt="WorshipFlow" className="w-20 h-20 opacity-60" />
                 <div>
                     <h1 className="text-2xl font-bold text-white">Access Denied</h1>
                     <p className="text-gray-400 mt-2 text-sm">

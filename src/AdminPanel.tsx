@@ -644,8 +644,11 @@ export default function AdminPanel() {
                                 /* ── What's New Preview ── */
                                 <>
                                     <div className="flex items-start gap-4">
-                                        <div className="shrink-0 w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg">
-                                            <span className="text-2xl">🎉</span>
+                                        <div className="relative shrink-0 w-14 h-14">
+                                            <img src="/icon-192x192.png" alt="WorshipFlow" className="w-14 h-14" />
+                                            <div className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-indigo-500/70 flex items-center justify-center animate-bounce" style={{ animationDuration: "1.8s" }}>
+                                                <span className="text-base">🎉</span>
+                                            </div>
                                         </div>
                                         <div>
                                             <p className="text-[11px] text-indigo-400 font-bold uppercase tracking-wider mb-0.5">What's New</p>

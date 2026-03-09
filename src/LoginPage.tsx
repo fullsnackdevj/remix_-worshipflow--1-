@@ -16,7 +16,7 @@ export default function LoginPage() {
                     <img
                         src="/icon-192x192.png"
                         alt="WorshipFlow"
-                        className="w-24 h-24 rounded-3xl shadow-2xl shadow-indigo-500/30"
+                        className="w-24 h-24"
                     />
                     <div className="text-center">
                         <h1 className="text-3xl font-bold text-white tracking-tight">WorshipFlow</h1>
