@@ -1773,12 +1773,10 @@ export default function App() {
 
               {notifOpen && (
                 <div
-                  className="fixed z-[200] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl overflow-hidden"
+                  className="fixed left-1/2 -translate-x-1/2 sm:absolute sm:left-auto sm:translate-x-0 sm:right-0 sm:top-full sm:mt-2 z-[200] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl overflow-hidden"
                   style={{
                     width: "min(370px, calc(100vw - 20px))",
                     top: "72px",
-                    left: "50%",
-                    transform: "translateX(-50%)",
                   }}
                 >
                   {/* Header */}
