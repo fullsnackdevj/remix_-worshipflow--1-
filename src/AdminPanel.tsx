@@ -67,11 +67,35 @@ export default function AdminPanel() {
     const autoGenerate = async () => {
         setBAutoGenerating(true);
         try {
-            const res = await fetch("/api/release-notes");
-            const data = await res.json();
-            if (data.title) setBTitle(data.title);
-            if (data.message) setBMessage(data.message);
-            if (data.bulletPoints?.length) setBBullets(data.bulletPoints);
+            if (bType === "maintenance") {
+                // Maintenance — fill with a friendly pre-written template instantly
+                const templates = [
+                    {
+                        title: "Scheduled Maintenance In Progress 🔧",
+                        message: "We're currently making improvements to WorshipFlow. The app will be back shortly — thank you for your patience! 🙏",
+                    },
+                    {
+                        title: "Brief Maintenance Underway 🛠️",
+                        message: "WorshipFlow is undergoing a quick update to bring you a better experience. We'll be back online very soon!",
+                    },
+                    {
+                        title: "App Update In Progress ⚡",
+                        message: "We're upgrading WorshipFlow right now. Hang tight — exciting improvements are coming your way!",
+                    },
+                ];
+                // Rotate through templates based on current time so it's not always the same
+                const pick = templates[Math.floor(Date.now() / 1000) % templates.length];
+                setBTitle(pick.title);
+                setBMessage(pick.message);
+                setBBullets([]);
+            } else {
+                // What's New — fetch from curated release-notes.json via API
+                const res = await fetch("/api/release-notes");
+                const data = await res.json();
+                if (data.title) setBTitle(data.title);
+                if (data.message) setBMessage(data.message);
+                if (data.bulletPoints?.length) setBBullets(data.bulletPoints);
+            }
         } catch { /* silent fail */ }
         finally { setBAutoGenerating(false); }
     };
@@ -257,18 +281,16 @@ export default function AdminPanel() {
                                     >
                                         <Eye size={14} />
                                     </button>
-                                    {/* ✨ Auto-generate — What's New only */}
-                                    {bType === "whats_new" && (
-                                        <button
-                                            onClick={autoGenerate}
-                                            disabled={bAutoGenerating}
-                                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-60 text-white transition-all active:scale-95"
-                                        >
-                                            {bAutoGenerating
-                                                ? <><Loader2 size={12} className="animate-spin" /> Generating...</>
-                                                : <>✨ Auto-generate</>}
-                                        </button>
-                                    )}
+                                    {/* ✨ Auto-generate — works for both types */}
+                                    <button
+                                        onClick={autoGenerate}
+                                        disabled={bAutoGenerating}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-60 text-white transition-all active:scale-95"
+                                    >
+                                        {bAutoGenerating
+                                            ? <><Loader2 size={12} className="animate-spin" /> Generating...</>
+                                            : <>✨ Auto-generate</>}
+                                    </button>
                                 </div>
                             </div>
 
