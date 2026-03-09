@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "./AuthContext";
-import { UserPlus, Trash2, Shield, Users, Loader2, Check, X, Clock, UserCheck, Pencil, ShieldCheck, ShieldAlert, Megaphone, Plus, ToggleLeft, ToggleRight, ChevronDown, ChevronUp } from "lucide-react";
+import { UserPlus, Trash2, Shield, Users, Loader2, Check, X, Clock, UserCheck, Pencil, ShieldCheck, ShieldAlert, Megaphone, Plus, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, Eye } from "lucide-react";
 
 interface ApprovedUser {
     email: string;
@@ -62,6 +62,7 @@ export default function AdminPanel() {
     const [bCreating, setBCreating] = useState(false);
     const [showForm, setShowForm] = useState(false);
     const [bAutoGenerating, setBAutoGenerating] = useState(false);
+    const [previewBroadcast, setPreviewBroadcast] = useState<any | null>(null);
 
     const autoGenerate = async () => {
         setBAutoGenerating(true);
@@ -337,6 +338,11 @@ export default function AdminPanel() {
                                             </p>
                                         </div>
                                         <div className="flex items-center gap-1 shrink-0">
+                                            {b.type === "whats_new" && (
+                                                <button onClick={() => setPreviewBroadcast(b)} title="Preview" className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-all">
+                                                    <Eye size={14} />
+                                                </button>
+                                            )}
                                             <button onClick={() => toggleBroadcast(b.id, !b.active)} title={b.active ? "Deactivate" : "Activate"} className={`p-1.5 rounded-lg transition-all ${b.active ? "text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20" : "text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"}`}>
                                                 {b.active ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
                                             </button>
@@ -561,6 +567,64 @@ export default function AdminPanel() {
                     )}
                 </div>
             </>}
+
+            {/* ── What's New Preview Modal ─────────────────────────────────── */}
+            {previewBroadcast && (
+                <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4" onClick={() => setPreviewBroadcast(null)}>
+                    <div className="relative bg-gray-900 border border-gray-700/60 rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
+                        {/* Header gradient strip */}
+                        <div className="h-1.5 w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" />
+
+                        {/* Preview badge */}
+                        <div className="flex items-center justify-between px-5 pt-4 pb-0">
+                            <span className="text-[10px] font-bold tracking-widest text-indigo-400 uppercase">Preview — what your team sees</span>
+                            <button onClick={() => setPreviewBroadcast(null)} className="p-1 text-gray-500 hover:text-gray-300 rounded-lg transition-colors">
+                                <X size={14} />
+                            </button>
+                        </div>
+
+                        <div className="px-6 pt-4 pb-8 space-y-5">
+                            {/* Icon + title */}
+                            <div className="flex items-start gap-4">
+                                <div className="shrink-0 w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg">
+                                    <span className="text-2xl">🎉</span>
+                                </div>
+                                <div>
+                                    <p className="text-[11px] text-indigo-400 font-bold uppercase tracking-wider mb-0.5">What's New</p>
+                                    <h2 className="text-lg font-bold text-white leading-tight">{previewBroadcast.title}</h2>
+                                </div>
+                            </div>
+
+                            {/* Message */}
+                            {previewBroadcast.message && (
+                                <p className="text-sm text-gray-400 leading-relaxed">{previewBroadcast.message}</p>
+                            )}
+
+                            {/* Bullet points */}
+                            {previewBroadcast.bulletPoints?.filter(Boolean).length > 0 && (
+                                <ul className="space-y-2.5">
+                                    {previewBroadcast.bulletPoints.filter(Boolean).map((point: string, i: number) => (
+                                        <li key={i} className="flex items-start gap-3">
+                                            <span className="shrink-0 w-5 h-5 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center mt-0.5">
+                                                <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" className="text-indigo-400">
+                                                    <path d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            </span>
+                                            <span className="text-sm text-gray-300 leading-snug">{point}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+
+                            {/* Dismiss button (non-functional in preview) */}
+                            <button className="w-full py-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold text-sm shadow-lg opacity-70 cursor-default">
+                                Got it! 🙌
+                            </button>
+                            <p className="text-center text-[10px] text-gray-600">This is a preview — the button does nothing here</p>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
