@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "./AuthContext";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Wrench, ThumbsUp, Loader2 } from "lucide-react";
 
 interface Broadcast {
     id: string;
@@ -61,7 +61,7 @@ export default function BroadcastOverlay() {
                         />
                         {/* Animated wrench badge — top right corner */}
                         <div className="absolute -top-2 -right-2 w-9 h-9 rounded-full bg-amber-500/70 shadow-lg shadow-amber-500/50 flex items-center justify-center animate-bounce" style={{ animationDuration: "1.5s" }}>
-                            <span className="text-lg">🔧</span>
+                            <Wrench size={16} className="text-white" />
                         </div>
                     </div>
 
@@ -151,7 +151,7 @@ export default function BroadcastOverlay() {
                         disabled={dismissing}
                         className="w-full py-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-semibold text-sm transition-all active:scale-[0.98] shadow-lg disabled:opacity-60"
                     >
-                        {dismissing ? "..." : "Got it! 🙌"}
+                        {dismissing ? <Loader2 size={14} className="animate-spin" /> : <><ThumbsUp size={14} /> Got it!</>}
                     </button>
                 </div>
             </div>

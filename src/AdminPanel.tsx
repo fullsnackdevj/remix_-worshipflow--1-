@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "./AuthContext";
-import { UserPlus, Trash2, Shield, Users, Loader2, Check, X, Clock, UserCheck, Pencil, ShieldCheck, ShieldAlert, Megaphone, Plus, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, Eye, Sparkles } from "lucide-react";
+import { UserPlus, Trash2, Shield, Users, Loader2, Check, X, Clock, UserCheck, Pencil, ShieldCheck, ShieldAlert, Megaphone, Plus, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, Eye, Sparkles, User, Guitar, Mic2, ClipboardList, Sliders, Wrench, ThumbsUp } from "lucide-react";
 
 interface ApprovedUser {
     email: string;
@@ -16,12 +16,12 @@ interface PendingUser {
 }
 
 const ROLE_OPTIONS = [
-    { value: "member", label: "Member", color: "text-gray-500 dark:text-gray-400", bg: "bg-gray-100 dark:bg-gray-700", icon: "👤" },
-    { value: "musician", label: "Musician", color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-50 dark:bg-purple-900/20", icon: "🎸" },
-    { value: "leader", label: "Worship Leader", color: "text-indigo-500 dark:text-indigo-400", bg: "bg-indigo-50 dark:bg-indigo-900/30", icon: "🎤" },
-    { value: "planning_lead", label: "Planning Lead", color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-50 dark:bg-rose-900/20", icon: "📋" },
-    { value: "audio_tech", label: "Audio / Tech", color: "text-teal-600 dark:text-teal-400", bg: "bg-teal-50 dark:bg-teal-900/20", icon: "🎛️" },
-    { value: "admin", label: "Admin", color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-900/20", icon: "🛡️" },
+    { value: "member", label: "Member", color: "text-gray-500 dark:text-gray-400", bg: "bg-gray-100 dark:bg-gray-700", icon: <User size={12} /> },
+    { value: "musician", label: "Musician", color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-50 dark:bg-purple-900/20", icon: <Guitar size={12} /> },
+    { value: "leader", label: "Worship Leader", color: "text-indigo-500 dark:text-indigo-400", bg: "bg-indigo-50 dark:bg-indigo-900/30", icon: <Mic2 size={12} /> },
+    { value: "planning_lead", label: "Planning Lead", color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-50 dark:bg-rose-900/20", icon: <ClipboardList size={12} /> },
+    { value: "audio_tech", label: "Audio / Tech", color: "text-teal-600 dark:text-teal-400", bg: "bg-teal-50 dark:bg-teal-900/20", icon: <Sliders size={12} /> },
+    { value: "admin", label: "Admin", color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-900/20", icon: <Shield size={12} /> },
 ];
 
 function RoleBadge({ role }: { role: string }) {
@@ -71,15 +71,15 @@ export default function AdminPanel() {
                 // Maintenance — fill with a friendly pre-written template instantly
                 const templates = [
                     {
-                        title: "Scheduled Maintenance In Progress 🔧",
-                        message: "We're currently making improvements to WorshipFlow. The app will be back shortly — thank you for your patience! 🙏",
+                        title: "Scheduled Maintenance In Progress",
+                        message: "We're currently making improvements to WorshipFlow. The app will be back shortly — thank you for your patience!",
                     },
                     {
-                        title: "Brief Maintenance Underway 🛠️",
+                        title: "Brief Maintenance Underway",
                         message: "WorshipFlow is undergoing a quick update to bring you a better experience. We'll be back online very soon!",
                     },
                     {
-                        title: "App Update In Progress ⚡",
+                        title: "App Update In Progress",
                         message: "We're upgrading WorshipFlow right now. Hang tight — exciting improvements are coming your way!",
                     },
                 ];
@@ -293,17 +293,17 @@ export default function AdminPanel() {
                                     >
                                         {bAutoGenerating
                                             ? <><Loader2 size={12} className="animate-spin" /> Generating...</>
-                                            : <>✨ Auto-generate</>}
+                                            : <>Auto-generate</>}
                                     </button>
                                 </div>
                             </div>
 
                             {/* Type toggle */}
                             <div className="flex gap-2">
-                                {[{ v: "whats_new", label: "🎉 What's New", desc: "Users can dismiss" }, { v: "maintenance", label: "🔧 Maintenance", desc: "Blocks app access" }].map(t => (
+                                {[{ v: "whats_new", label: "What's New", desc: "Users can dismiss", Icon: Sparkles }, { v: "maintenance", label: "Maintenance", desc: "Blocks app access", Icon: Wrench }].map(t => (
                                     <button key={t.v} onClick={() => { setBType(t.v as any); setBTitle(""); setBMessage(""); setBBullets(["", "", ""]); }}
                                         className={`flex-1 px-3 py-2 rounded-xl border text-left transition-all ${bType === t.v ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20" : "border-gray-200 dark:border-gray-700 hover:border-gray-300"}`}>
-                                        <p className="text-xs font-semibold text-gray-900 dark:text-white">{t.label}</p>
+                                        <p className="text-xs font-semibold text-gray-900 dark:text-white flex items-center gap-1.5"><t.Icon size={11} /> {t.label}</p>
                                         <p className="text-[10px] text-gray-400 mt-0.5">{t.desc}</p>
                                     </button>
                                 ))}
@@ -365,7 +365,7 @@ export default function AdminPanel() {
                                     <div className="flex items-start justify-between gap-3">
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-2 flex-wrap">
-                                                <span className="text-base">{b.type === "maintenance" ? "🔧" : "🎉"}</span>
+                                                {b.type === "maintenance" ? <Wrench size={14} className="shrink-0 text-amber-500" /> : <Sparkles size={14} className="shrink-0 text-indigo-400" />}
                                                 <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{b.title}</p>
                                                 <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${b.active ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400" : "bg-gray-100 dark:bg-gray-700 text-gray-500"}`}>{b.active ? "LIVE" : "OFF"}</span>
                                             </div>
@@ -624,7 +624,7 @@ export default function AdminPanel() {
                                     <div className="relative mx-auto w-20 h-20">
                                         <img src="/icon-192x192.png" alt="WorshipFlow" className="w-20 h-20" />
                                         <div className="absolute -top-1.5 -right-1.5 w-7 h-7 rounded-full bg-amber-500/70 flex items-center justify-center animate-bounce" style={{ animationDuration: "1.5s" }}>
-                                            <span className="text-sm">🔧</span>
+                                            <Wrench size={13} className="text-white" />
                                         </div>
                                     </div>
                                     <div>
@@ -668,7 +668,7 @@ export default function AdminPanel() {
                                             ))}
                                         </ul>
                                     )}
-                                    <button className="w-full py-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold text-sm shadow-lg opacity-70 cursor-default">Got it! 🙌</button>
+                                    <button className="w-full py-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold text-sm shadow-lg opacity-70 cursor-default flex items-center justify-center gap-2"><ThumbsUp size={14} /> Got it!</button>
                                 </>
                             )}
                             <p className="text-center text-[10px] text-gray-600">Preview only — no action taken</p>

@@ -5,31 +5,31 @@ import { usePushNotifications } from "./usePushNotifications";
 import BroadcastOverlay from "./BroadcastOverlay";
 import WelcomeToast from "./WelcomeToast";
 import AdminPanel from "./AdminPanel";
-import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, LayoutGrid, List, BookOpen, Mic2, Copy, Pencil, Shield, Mail, Bell } from "lucide-react";
+import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, LayoutGrid, List, BookOpen, Mic2, Copy, Pencil, Shield, Mail, Bell, Guitar, Sliders, Palette, Lock, AlertTriangle, CheckCircle, BookMarked, HandMetal, Headphones } from "lucide-react";
 import { Song, Tag } from "./types";
 
 // ── Member Role Constants ────────────────────────────────────────────────────
 const ROLE_CATEGORIES = [
   {
-    label: "🎸 Instrumentalists",
+    label: "Instrumentalists",
     color: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300",
     dot: "bg-indigo-400",
     roles: ["Drummer", "Bassist", "Rhythm Guitar", "Lead Guitar", "Keys / Pianist"],
   },
   {
-    label: "🎙️ Vocals",
+    label: "Vocals",
     color: "bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-300",
     dot: "bg-rose-400",
     roles: ["Worship Leader", "Backup Singer"],
   },
   {
-    label: "🎛️ Tech & Production",
+    label: "Tech & Production",
     color: "bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300",
     dot: "bg-amber-400",
     roles: ["OBS / Live Stream", "Presentation", "Lighting", "Camera Operator"],
   },
   {
-    label: "🎨 Creative Support",
+    label: "Creative Support",
     color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300",
     dot: "bg-emerald-400",
     roles: ["Designer", "Photographer", "Videographer"],
@@ -294,8 +294,8 @@ export default function App() {
     await fetch("/api/notifications/clear-all", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: user.uid }) });
   };
 
-  const notifIcon: Record<string, string> = {
-    new_song: "🎵", new_event: "📅", updated_event: "✏️", access_request: "🔔",
+  const notifIcon: Record<string, React.ReactNode> = {
+    new_song: <Music size={14} />, new_event: <Calendar size={14} />, updated_event: <Pencil size={14} />, access_request: <Bell size={14} />,
   };
   // ── Role-based permission flags ───────────────────────────────────────────
   // musician & audio_tech share identical restrictions
@@ -1500,7 +1500,7 @@ export default function App() {
           <div className="mx-3 mt-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 shadow-2xl border border-indigo-500/30 overflow-hidden">
             <div className="flex items-center gap-3 px-4 py-3.5">
               <div className="shrink-0 w-9 h-9 rounded-full bg-white/20 flex items-center justify-center">
-                <span className="text-lg">🔔</span>
+                <Bell size={18} className="text-white" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-white leading-tight">Stay notified!</p>
@@ -1687,7 +1687,7 @@ export default function App() {
                 <div className="absolute right-0 top-full mt-2 w-84 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl z-50 overflow-hidden" style={{ width: "340px" }}>
                   {/* Header */}
                   <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700">
-                    <h3 className="text-sm font-bold text-gray-900 dark:text-white">🔔 Notifications
+                    <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-1.5"><Bell size={14} /> Notifications
                       {unreadCount > 0 && <span className="ml-2 text-[10px] bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-300 px-1.5 py-0.5 rounded-full font-bold">{unreadCount} new</span>}
                     </h3>
                     <div className="flex items-center gap-2">
@@ -1704,7 +1704,7 @@ export default function App() {
                   <div className="max-h-[420px] overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700/60">
                     {notifications.length === 0 ? (
                       <div className="px-4 py-10 text-center">
-                        <p className="text-3xl mb-2">🎉</p>
+                        <Bell size={28} className="text-gray-300 mb-2" />
                         <p className="text-sm text-gray-400">You're all caught up!</p>
                       </div>
                     ) : notifications.map(n => (
@@ -1722,7 +1722,7 @@ export default function App() {
                           <div className="shrink-0 mt-0.5">
                             {n.actorPhoto
                               ? <img src={n.actorPhoto} alt={n.actorName} className="w-8 h-8 rounded-full border-2 border-indigo-400 object-cover" />
-                              : <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-sm">{notifIcon[n.type] || "🔔"}</div>
+                              : <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white">{notifIcon[n.type] || <Bell size={14} />}</div>
                             }
                           </div>
                           <div className="flex-1 min-w-0 pr-6">
@@ -1752,11 +1752,11 @@ export default function App() {
                                 </button>
                               ) : (
                                 <button onClick={() => { setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, isRead: true } : x)); setNotifActionFor(null); fetch("/api/notifications/read", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: user?.uid, notifId: n.id }) }); }} className="w-full text-left px-3 py-2 text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 flex items-center gap-2">
-                                  <span>✅</span> Mark as read
+                                  <CheckCircle size={13} /> Mark as read
                                 </button>
                               )}
                               <button onClick={() => deleteNotif(n.id)} className="w-full text-left px-3 py-2 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2">
-                                <span>🗑️</span> Delete
+                                <Trash2 size={13} /> Delete
                               </button>
                             </div>
                           )}
@@ -2055,7 +2055,7 @@ export default function App() {
                           <div className="fixed bottom-0 left-0 right-0 z-50 md:static md:z-auto w-full md:w-80 md:shrink-0 bg-white dark:bg-gray-800 rounded-t-3xl md:rounded-2xl border-t border-gray-200 dark:border-gray-700 md:border p-5 max-h-[85dvh] md:max-h-[calc(100vh-200px)] overflow-y-auto md:self-start md:sticky md:top-0">
                             {isDatePast && (
                               <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40 rounded-xl px-3 py-2 mb-3 text-xs text-amber-700 dark:text-amber-400">
-                                <span>🔒</span><span>This date has passed — view only</span>
+                                <Lock size={13} className="shrink-0" /><span>This date has passed — view only</span>
                               </div>
                             )}
                             {selectedDateEvents.length >= 2 && selectedEventId && (
@@ -2119,7 +2119,7 @@ export default function App() {
                                     const photo = livePhoto(m.memberId);
                                     return photo
                                       ? <img src={photo} className="w-9 h-9 rounded-full object-cover shrink-0 ring-2 ring-white dark:ring-gray-800" alt={m.name} />
-                                      : <div className={`w-9 h-9 rounded-full ${color} flex items-center justify-center text-white text-sm font-bold shrink-0`}>{m.name[0]}</div>;
+                                      : <div className="w-9 h-9 rounded-full ${color} flex items-center justify-center text-white text-sm font-bold shrink-0">{m.name[0]}</div>;
                                   };
                                   return (
                                     <>
@@ -2170,8 +2170,8 @@ export default function App() {
                                       {(editSchedSongLineup.joyful || editSchedSongLineup.solemn) && (
                                         <div>
                                           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Song Line-Up</p>
-                                          {editSchedSongLineup.joyful && (() => { const s = allSongs.find(sg => sg.id === editSchedSongLineup.joyful); return s ? <p className="text-sm mb-1">🌟 <span className="font-semibold text-amber-500 uppercase text-xs">Joyful</span>{" "}{s.video_url ? <a href={s.video_url} target="_blank" rel="noopener noreferrer" className="text-gray-900 dark:text-white hover:text-amber-500 dark:hover:text-amber-400 underline underline-offset-2 decoration-amber-400/60 transition-colors">{s.title} <span className="inline-block text-[10px] text-amber-400 align-middle">↗</span></a> : <span className="text-gray-900 dark:text-white">{s.title}</span>}</p> : null; })()}
-                                          {editSchedSongLineup.solemn && (() => { const s = allSongs.find(sg => sg.id === editSchedSongLineup.solemn); return s ? <p className="text-sm">🙏 <span className="font-semibold text-indigo-400 uppercase text-xs">Solemn</span>{" "}{s.video_url ? <a href={s.video_url} target="_blank" rel="noopener noreferrer" className="text-gray-900 dark:text-white hover:text-indigo-400 dark:hover:text-indigo-300 underline underline-offset-2 decoration-indigo-400/60 transition-colors">{s.title} <span className="inline-block text-[10px] text-indigo-400 align-middle">↗</span></a> : <span className="text-gray-900 dark:text-white">{s.title}</span>}</p> : null; })()}
+                                          {editSchedSongLineup.joyful && (() => { const s = allSongs.find(sg => sg.id === editSchedSongLineup.joyful); return s ? <p className="text-sm mb-1"><Sun size={12} className="inline-block mr-1" /> <span className="font-semibold text-amber-500 uppercase text-xs">Joyful</span>{" "}{s.video_url ? <a href={s.video_url} target="_blank" rel="noopener noreferrer" className="text-gray-900 dark:text-white hover:text-amber-500 dark:hover:text-amber-400 underline underline-offset-2 decoration-amber-400/60 transition-colors">{s.title} <span className="inline-block text-[10px] text-amber-400 align-middle">↗</span></a> : <span className="text-gray-900 dark:text-white">{s.title}</span>}</p> : null; })()}
+                                          {editSchedSongLineup.solemn && (() => { const s = allSongs.find(sg => sg.id === editSchedSongLineup.solemn); return s ? <p className="text-sm"><Music size={12} className="inline-block mr-1" /> <span className="font-semibold text-indigo-400 uppercase text-xs">Solemn</span>{" "}{s.video_url ? <a href={s.video_url} target="_blank" rel="noopener noreferrer" className="text-gray-900 dark:text-white hover:text-indigo-400 dark:hover:text-indigo-300 underline underline-offset-2 decoration-indigo-400/60 transition-colors">{s.title} <span className="inline-block text-[10px] text-indigo-400 align-middle">↗</span></a> : <span className="text-gray-900 dark:text-white">{s.title}</span>}</p> : null; })()}
                                         </div>
                                       )}
                                     </>
@@ -2186,7 +2186,7 @@ export default function App() {
                                 )}
                                 {editSchedAssignments.length > 0 && !isServiceEvent && (
                                   <div className="space-y-3">
-                                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">👥 Lead Facilitators</p>
+                                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1.5"><Users size={12} /> Lead Facilitators</p>
                                     {editSchedAssignments.map((asgn, gi) => (
                                       <div key={gi} className="bg-gray-50 dark:bg-gray-700/40 rounded-xl p-3 border border-gray-100 dark:border-gray-700">
                                         <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-2">{asgn.role}</p>
@@ -2237,8 +2237,8 @@ export default function App() {
                                 {/* Grouped Role Assignments — only for NON-service events */}
                                 {editSchedEventName.trim() && !isServiceEvent && (
                                   <div className="space-y-3">
-                                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                      👥 Lead Facilitators
+                                    <label className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                      <Users size={12} /> Lead Facilitators
                                     </label>
 
                                     {/* Existing role assignment groups */}
@@ -2551,14 +2551,14 @@ export default function App() {
                                       <div>
                                         <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Song Line-Up</p>
                                         <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl px-3 py-2.5 mb-3 text-xs text-amber-700 dark:text-amber-400">
-                                          <span className="text-base shrink-0">📖</span>
+                                          <BookOpen size={14} className="shrink-0" />
                                           <span>Add new songs in <strong className="text-amber-800 dark:text-amber-300">Song Management</strong> before building the lineup, especially for new songs.</span>
                                         </div>
 
                                         {/* Joyful — hidden for Midweek Service */}
                                         {!isMidweek && (
                                           <div className="mb-3">
-                                            <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 mb-1.5">🌟 JOYFUL <span className="text-gray-400 font-normal normal-case">(pick one)</span></p>
+                                            <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 mb-1.5 flex items-center gap-1.5"><Sun size={12} /> JOYFUL <span className="text-gray-400 font-normal normal-case">(pick one)</span></p>
                                             <input type="text" value={joyfulSearch} onChange={e => setJoyfulSearch(e.target.value)}
                                               placeholder="Search joyful songs…"
                                               className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 placeholder-gray-400 mb-2" />
@@ -2582,7 +2582,7 @@ export default function App() {
 
                                         {/* Solemn */}
                                         <div>
-                                          <p className="text-xs font-semibold text-indigo-500 dark:text-indigo-400 mb-1.5">🙏 SOLEMN <span className="text-gray-400 font-normal normal-case">(pick one)</span></p>
+                                          <p className="text-xs font-semibold text-indigo-500 dark:text-indigo-400 mb-1.5 flex items-center gap-1.5"><Music size={12} /> SOLEMN <span className="text-gray-400 font-normal normal-case">(pick one)</span></p>
                                           <input type="text" value={solemnSearch} onChange={e => setSolemnSearch(e.target.value)}
                                             placeholder="Search solemn songs…"
                                             className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder-gray-400 mb-2" />
@@ -2816,7 +2816,7 @@ export default function App() {
                           {memberFormErrors.email
                             ? <p className="mt-1 text-xs text-red-500">{memberFormErrors.email}</p>
                             : <p className="mt-1.5 flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40 rounded-lg px-2.5 py-1.5">
-                              <span className="shrink-0 mt-0.5">⚠️</span>
+                              <AlertTriangle size={12} className="shrink-0 mt-0.5" />
                               <span>Make sure this is the same email address this person will use to <strong>sign in to the app</strong>. This is how their access is linked to their profile.</span>
                             </p>
                           }
