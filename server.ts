@@ -616,6 +616,90 @@ app.delete("/api/schedules/:id", async (req, res) => {
 });
 
 
+// ─── Auth API ────────────────────────────────────────────────────────────────
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "jayfullsnackdev@gmail.com";
+
+app.get("/api/auth/check", async (req, res) => {
+  const email = req.query.email as string;
+  if (!email) return res.status(400).json({ error: "Missing email" });
+  if (email === ADMIN_EMAIL) return res.json({ approved: true, role: "admin" });
+  const firestore = getDb();
+  if (!firestore) return res.json({ approved: false });
+  try {
+    const doc = await firestore.collection("approved_users").doc(email).get();
+    if (doc.exists) return res.json({ approved: true, role: doc.data()?.role ?? "member" });
+    return res.json({ approved: false });
+  } catch { return res.json({ approved: false }); }
+});
+
+app.post("/api/auth/approve", async (req, res) => {
+  const { email, role = "member" } = req.body;
+  if (!email) return res.status(400).json({ error: "Missing email" });
+  const firestore = getDb();
+  if (!firestore) return res.status(500).json({ error: "Firebase not configured" });
+  await firestore.collection("approved_users").doc(email).set({ email, role, approvedAt: new Date().toISOString() });
+  await firestore.collection("pending_users").doc(email).delete().catch(() => { });
+  return res.json({ success: true });
+});
+
+app.post("/api/auth/request", async (req, res) => {
+  const { email, name = "", photo = "" } = req.body;
+  if (!email) return res.status(400).json({ error: "Missing email" });
+  const firestore = getDb();
+  if (!firestore) return res.status(500).json({ error: "Firebase not configured" });
+  const existing = await firestore.collection("approved_users").doc(email).get();
+  if (existing.exists) return res.json({ skipped: true });
+  await firestore.collection("pending_users").doc(email).set({ email, name, photo, requestedAt: new Date().toISOString() });
+  return res.json({ success: true });
+});
+
+app.get("/api/auth/pending", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.json([]);
+  const snap = await firestore.collection("pending_users").orderBy("requestedAt", "desc").get();
+  return res.json(snap.docs.map(d => d.data()));
+});
+
+app.get("/api/auth/users", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.json([]);
+  const snap = await firestore.collection("approved_users").get();
+  return res.json(snap.docs.map(d => d.data()));
+});
+
+app.delete("/api/auth/revoke", async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: "Missing email" });
+  const firestore = getDb();
+  if (!firestore) return res.status(500).json({ error: "Firebase not configured" });
+  await firestore.collection("approved_users").doc(email).delete();
+  return res.json({ success: true });
+});
+
+app.delete("/api/auth/revoke-pending", async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: "Missing email" });
+  const firestore = getDb();
+  if (!firestore) return res.status(500).json({ error: "Firebase not configured" });
+  await firestore.collection("pending_users").doc(email).delete();
+  return res.json({ success: true });
+});
+
+// NEW: Change the role of an already-approved user
+app.put("/api/auth/update-role", async (req, res) => {
+  const { email, role } = req.body;
+  if (!email || !role) return res.status(400).json({ error: "Missing email or role" });
+  const firestore = getDb();
+  if (!firestore) return res.status(500).json({ error: "Firebase not configured" });
+  try {
+    await firestore.collection("approved_users").doc(email).update({ role });
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to update role" });
+  }
+});
+
 app.post("/api/ocr", async (req, res) => {
   try {
     const { base64Data, mimeType, type } = req.body;

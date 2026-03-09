@@ -120,6 +120,18 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
         return json(200, users);
     }
 
+    if (rawPath === "/auth/update-role" && method === "PUT") {
+        const { email, role } = body;
+        if (!email || !role) return json(400, { error: "Missing email or role" });
+        try {
+            await firestore?.collection("approved_users").doc(email).update({ role });
+            return json(200, { success: true });
+        } catch (err) {
+            console.error(err);
+            return json(500, { error: "Failed to update role" });
+        }
+    }
+
     // ─── OCR ────────────────────────────────────────────────────────────────────
     if (rawPath === "/ocr" && method === "POST") {
 

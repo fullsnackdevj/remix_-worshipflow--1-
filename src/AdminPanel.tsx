@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "./AuthContext";
-import { UserPlus, Trash2, Shield, Users, Loader2, Check, X, Clock, UserCheck } from "lucide-react";
+import { UserPlus, Trash2, Shield, Users, Loader2, Check, X, Clock, UserCheck, Pencil, ShieldCheck, ShieldAlert } from "lucide-react";
 
 interface ApprovedUser {
     email: string;
@@ -15,6 +15,21 @@ interface PendingUser {
     requestedAt: string;
 }
 
+const ROLE_OPTIONS = [
+    { value: "member", label: "Member", color: "text-gray-500 dark:text-gray-400", bg: "bg-gray-100 dark:bg-gray-700", icon: "👤" },
+    { value: "leader", label: "Worship Leader", color: "text-indigo-500 dark:text-indigo-400", bg: "bg-indigo-50 dark:bg-indigo-900/30", icon: "🎤" },
+    { value: "admin", label: "Admin", color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-900/20", icon: "🛡️" },
+];
+
+function RoleBadge({ role }: { role: string }) {
+    const opt = ROLE_OPTIONS.find(r => r.value === role) ?? ROLE_OPTIONS[0];
+    return (
+        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold capitalize ${opt.bg} ${opt.color}`}>
+            {opt.icon} {opt.label}
+        </span>
+    );
+}
+
 export default function AdminPanel() {
     const { isAdmin } = useAuth();
     const [users, setUsers] = useState<ApprovedUser[]>([]);
@@ -25,6 +40,11 @@ export default function AdminPanel() {
     const [adding, setAdding] = useState(false);
     const [approvingEmail, setApprovingEmail] = useState<string | null>(null);
     const [feedback, setFeedback] = useState<{ type: "success" | "error"; msg: string } | null>(null);
+
+    // ── Role-edit state ──────────────────────────────────────────────────────
+    const [editingRoleFor, setEditingRoleFor] = useState<string | null>(null); // email currently being edited
+    const [pendingRole, setPendingRole] = useState<string>("");
+    const [savingRole, setSavingRole] = useState(false);
 
     const fetchAll = async () => {
         setLoading(true);
@@ -43,7 +63,7 @@ export default function AdminPanel() {
 
     const showFeedback = (type: "success" | "error", msg: string) => {
         setFeedback({ type, msg });
-        setTimeout(() => setFeedback(null), 3000);
+        setTimeout(() => setFeedback(null), 3500);
     };
 
     const approve = async (email: string, role = "member", fromPending = false) => {
@@ -86,6 +106,36 @@ export default function AdminPanel() {
         } catch { }
     };
 
+    const startEditRole = (u: ApprovedUser) => {
+        setEditingRoleFor(u.email);
+        setPendingRole(u.role);
+    };
+
+    const cancelEditRole = () => {
+        setEditingRoleFor(null);
+        setPendingRole("");
+    };
+
+    const saveRole = async (email: string) => {
+        setSavingRole(true);
+        try {
+            const res = await fetch("/api/auth/update-role", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email, role: pendingRole }),
+            });
+            if (!res.ok) throw new Error("Failed");
+            // optimistic update
+            setUsers(prev => prev.map(u => u.email === email ? { ...u, role: pendingRole } : u));
+            showFeedback("success", `Role updated to "${ROLE_OPTIONS.find(r => r.value === pendingRole)?.label}" for ${email}.`);
+            setEditingRoleFor(null);
+        } catch {
+            showFeedback("error", "Failed to update role. Try again.");
+        } finally {
+            setSavingRole(false);
+        }
+    };
+
     if (!isAdmin) {
         return (
             <div className="flex flex-col items-center justify-center h-64 text-gray-400 gap-3">
@@ -102,7 +152,7 @@ export default function AdminPanel() {
                 <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
                     <Shield size={20} className="text-indigo-500" /> Team Access
                 </h2>
-                <p className="text-sm text-gray-400 mt-1">Manage who can access WorshipFlow.</p>
+                <p className="text-sm text-gray-400 mt-1">Manage who can access WorshipFlow and their permission level.</p>
             </div>
 
             {/* Feedback */}
@@ -156,9 +206,9 @@ export default function AdminPanel() {
                                             defaultValue="member"
                                             className="flex-1 text-sm px-3 py-2 rounded-xl bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 focus:outline-none"
                                         >
-                                            <option value="member">Member</option>
-                                            <option value="leader">Worship Leader</option>
-                                            <option value="admin">Admin</option>
+                                            {ROLE_OPTIONS.map(r => (
+                                                <option key={r.value} value={r.value}>{r.icon} {r.label}</option>
+                                            ))}
                                         </select>
                                         <button
                                             onClick={() => {
@@ -205,9 +255,9 @@ export default function AdminPanel() {
                         onChange={e => setNewRole(e.target.value)}
                         className="px-3 py-2.5 text-sm rounded-xl bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     >
-                        <option value="member">Member</option>
-                        <option value="leader">Worship Leader</option>
-                        <option value="admin">Admin</option>
+                        {ROLE_OPTIONS.map(r => (
+                            <option key={r.value} value={r.value}>{r.icon} {r.label}</option>
+                        ))}
                     </select>
                     <button
                         onClick={() => approve(newEmail.trim().toLowerCase(), newRole)}
@@ -240,20 +290,73 @@ export default function AdminPanel() {
                 ) : (
                     <ul className="divide-y divide-gray-100 dark:divide-gray-700">
                         {users.map(u => (
-                            <li key={u.email} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors">
-                                <div>
-                                    <p className="text-sm font-medium text-gray-900 dark:text-white">{u.email}</p>
-                                    <p className="text-xs text-gray-400 mt-0.5 capitalize">
-                                        {u.role}
-                                        {u.approvedAt && ` · Added ${new Date(u.approvedAt).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}`}
-                                    </p>
-                                </div>
-                                <button
-                                    onClick={() => revokeUser(u.email)}
-                                    className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                                >
-                                    <Trash2 size={15} />
-                                </button>
+                            <li key={u.email} className="px-4 py-3 transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                                {editingRoleFor === u.email ? (
+                                    /* ── Inline role-edit row ── */
+                                    <div className="flex flex-col gap-2">
+                                        <div className="flex items-center gap-2 min-w-0">
+                                            <ShieldAlert size={15} className="text-amber-500 shrink-0" />
+                                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{u.email}</p>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <select
+                                                value={pendingRole}
+                                                onChange={e => setPendingRole(e.target.value)}
+                                                className="flex-1 text-sm px-3 py-2 rounded-xl bg-gray-100 dark:bg-gray-700 border border-indigo-300 dark:border-indigo-600 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                            >
+                                                {ROLE_OPTIONS.map(r => (
+                                                    <option key={r.value} value={r.value}>{r.icon} {r.label}</option>
+                                                ))}
+                                            </select>
+                                            <button
+                                                onClick={() => saveRole(u.email)}
+                                                disabled={savingRole || pendingRole === u.role}
+                                                className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-40 transition-colors shrink-0"
+                                            >
+                                                {savingRole ? <Loader2 size={13} className="animate-spin" /> : <ShieldCheck size={13} />}
+                                                Save
+                                            </button>
+                                            <button
+                                                onClick={cancelEditRole}
+                                                className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-xl border border-gray-200 dark:border-gray-600 transition-colors shrink-0"
+                                                title="Cancel"
+                                            >
+                                                <X size={15} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    /* ── Normal display row ── */
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{u.email}</p>
+                                            <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                                <RoleBadge role={u.role} />
+                                                {u.approvedAt && (
+                                                    <span className="text-[10px] text-gray-400">
+                                                        Added {new Date(u.approvedAt).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-1 shrink-0">
+                                            <button
+                                                onClick={() => startEditRole(u)}
+                                                title="Change role"
+                                                className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-colors"
+                                            >
+                                                <Pencil size={14} />
+                                            </button>
+                                            <button
+                                                onClick={() => revokeUser(u.email)}
+                                                title="Remove access"
+                                                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </li>
                         ))}
                     </ul>
