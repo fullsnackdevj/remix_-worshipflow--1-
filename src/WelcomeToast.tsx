@@ -30,14 +30,14 @@ export default function WelcomeToast() {
                 });
 
                 // Show the toast
-                setTimeout(() => setVisible(true), 800);
+                setTimeout(() => setVisible(true), 200);
             })
             .catch(() => {
                 // If API fails, fall back to localStorage
                 const key = `wf_welcomed_${user.uid}`;
                 if (!localStorage.getItem(key)) {
                     localStorage.setItem(key, "1");
-                    setTimeout(() => setVisible(true), 800);
+                    setTimeout(() => setVisible(true), 200);
                 }
             });
     }, [user?.uid, user?.email]);

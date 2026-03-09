@@ -209,6 +209,11 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
     const [editing, setEditing] = useState<TeamNote | null>(null);
     const [saving, setSaving] = useState(false);
 
+    // Undo-delete queue
+    const [undoNote, setUndoNote] = useState<{ note: TeamNote; timer: ReturnType<typeof setTimeout> } | null>(null);
+    const [undoProgress, setUndoProgress] = useState(100);
+    const undoProgressRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
     // Form state
     const [fType, setFType] = useState<"bug" | "feature" | "general">("general");
     const [fContent, setFContent] = useState("");
@@ -268,7 +273,7 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
             setEditing(null); setFType("general"); setFContent(""); setFImage(null);
         }
         setShowForm(true);
-        setTimeout(() => textRef.current?.focus(), 100);
+        textRef.current?.focus();
     };
 
     const closeForm = () => { setShowForm(false); setEditing(null); setFContent(""); setFImage(null); };
@@ -279,48 +284,104 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
         try { setFImage(await compressImage(file)); } finally { setImageUploading(false); }
     };
 
+    // ── Optimistic submit (create / edit) ──────────────────────────────────────
     const submit = async () => {
         if (!fContent.trim()) return;
-        setSaving(true);
-        try {
-            if (editing) {
-                await fetch(`/api/notes/${editing.id}`, {
-                    method: "PUT", headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ authorId: userId, content: fContent, type: fType, imageData: fImage }),
-                });
-            } else {
-                await fetch("/api/notes", {
-                    method: "POST", headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ authorId: userId, authorName: userName, authorPhoto: userPhoto, type: fType, content: fContent, imageData: fImage }),
-                });
-            }
-            closeForm(); fetchNotes();
-        } finally { setSaving(false); }
+        const tempId = `temp_${Date.now()}`;
+
+        if (editing) {
+            // Optimistic edit: update in-place immediately
+            const updated: TeamNote = { ...editing, type: fType, content: fContent, imageData: fImage, updatedAt: new Date().toISOString() };
+            setNotes(prev => prev.map(n => n.id === editing.id ? updated : n));
+            closeForm();
+            fetch(`/api/notes/${editing.id}`, {
+                method: "PUT", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ authorId: userId, content: fContent, type: fType, imageData: fImage }),
+            }).catch(() => fetchNotes()); // rollback on error
+        } else {
+            // Optimistic create: prepend immediately with temp id
+            const tempNote: TeamNote = {
+                id: tempId, authorId: userId, authorName: userName, authorPhoto: userPhoto,
+                type: fType, content: fContent, imageData: fImage, createdAt: new Date().toISOString(),
+                reactions: {}, resolved: false,
+            };
+            setNotes(prev => [tempNote, ...prev]);
+            closeForm();
+            fetch("/api/notes", {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ authorId: userId, authorName: userName, authorPhoto: userPhoto, type: fType, content: fContent, imageData: fImage }),
+            }).then(r => r.json()).then(({ id }) => {
+                // Replace temp id with real id from server
+                if (id) setNotes(prev => prev.map(n => n.id === tempId ? { ...n, id } : n));
+            }).catch(() => {
+                setNotes(prev => prev.filter(n => n.id !== tempId)); // rollback
+            });
+        }
+        setSaving(false);
     };
 
-    const deleteNote = async (id: string) => {
-        if (!confirm("Delete this note?")) return;
-        await fetch(`/api/notes/${id}`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ authorId: userId }) });
-        fetchNotes();
+    // ── Optimistic delete with undo ─────────────────────────────────────────────
+    const deleteNote = (id: string) => {
+        const note = notes.find(n => n.id === id);
+        if (!note) return;
+
+        // Remove immediately
+        setNotes(prev => prev.filter(n => n.id !== id));
+
+        // Clear any existing undo
+        if (undoNote) { clearTimeout(undoNote.timer); clearInterval(undoProgressRef.current!); }
+
+        // Start progress bar
+        setUndoProgress(100);
+        if (undoProgressRef.current) clearInterval(undoProgressRef.current);
+        undoProgressRef.current = setInterval(() => {
+            setUndoProgress(p => { if (p <= 2) { clearInterval(undoProgressRef.current!); return 0; } return p - 2.5; });
+        }, 100);
+
+        // Set undo window (4s)
+        const timer = setTimeout(() => {
+            setUndoNote(null);
+            clearInterval(undoProgressRef.current!);
+            // Commit delete to server
+            fetch(`/api/notes/${id}`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ authorId: userId }) });
+        }, 4000);
+
+        setUndoNote({ note, timer });
     };
 
-    const reactToNote = async (id: string, emoji: string) => {
-        const res = await fetch(`/api/notes/${id}/react`, {
+    const handleUndo = () => {
+        if (!undoNote) return;
+        clearTimeout(undoNote.timer);
+        clearInterval(undoProgressRef.current!);
+        setNotes(prev => [undoNote.note, ...prev]);
+        setUndoNote(null);
+        setUndoProgress(100);
+    };
+
+    // ── Optimistic react ────────────────────────────────────────────────────────
+    const reactToNote = (id: string, emoji: string) => {
+        // Update instantly
+        setNotes(prev => prev.map(n => {
+            if (n.id !== id) return n;
+            const reactions = { ...(n.reactions || {}) };
+            const users: string[] = reactions[emoji] || [];
+            reactions[emoji] = users.includes(userId) ? users.filter(u => u !== userId) : [...users, userId];
+            return { ...n, reactions };
+        }));
+        // Sync in background
+        fetch(`/api/notes/${id}/react`, {
             method: "PATCH", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ userId, emoji }),
         });
-        if (res.ok) {
-            const { reactions } = await res.json();
-            setNotes(prev => prev.map(n => n.id === id ? { ...n, reactions } : n));
-        }
     };
 
-    const resolveNote = async (id: string, resolved: boolean) => {
-        await fetch(`/api/notes/${id}/resolve`, {
+    // ── Optimistic resolve (already was optimistic, keeping) ────────────────────
+    const resolveNote = (id: string, resolved: boolean) => {
+        setNotes(prev => prev.map(n => n.id === id ? { ...n, resolved } : n));
+        fetch(`/api/notes/${id}/resolve`, {
             method: "PATCH", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ userId, resolved }),
         });
-        setNotes(prev => prev.map(n => n.id === id ? { ...n, resolved } : n));
     };
 
     // Filter + sort
@@ -344,13 +405,31 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
             <button
                 onClick={() => setOpen(v => !v)}
                 title="Team Notes"
-                className={`relative p-2 rounded-xl transition-all ${open ? "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400" : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
+                className={`relative p-2 rounded-xl transition-all active:scale-90 ${open ? "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400" : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
             >
                 <PenLine size={18} />
                 {hasNewNotes && !open && (
                     <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-indigo-500" />
                 )}
             </button>
+
+            {/* Undo-delete toast */}
+            {undoNote && (
+                <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[300] flex flex-col gap-0 w-[min(340px,calc(100vw-20px))] rounded-2xl overflow-hidden shadow-2xl border border-gray-700/60 bg-gray-900 text-white"
+                    style={{ animation: "slideUpFade 0.2s ease-out" }}>
+                    <div className="flex items-center gap-3 px-4 py-3">
+                        <Trash2 size={14} className="text-red-400 shrink-0" />
+                        <span className="text-sm flex-1">Note deleted</span>
+                        <button onClick={handleUndo} className="text-xs font-bold text-indigo-400 hover:text-indigo-300 active:scale-95 transition-all px-2 py-1 rounded-lg hover:bg-white/10">
+                            Undo
+                        </button>
+                    </div>
+                    {/* Progress bar */}
+                    <div className="h-0.5 bg-gray-700 w-full">
+                        <div className="h-full bg-indigo-500 transition-none" style={{ width: `${undoProgress}%` }} />
+                    </div>
+                </div>
+            )}
 
             {/* Panel — centered, responsive */}
             {open && (
