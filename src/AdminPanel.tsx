@@ -320,7 +320,21 @@ export default function AdminPanel() {
                                 <div className="space-y-2">
                                     <p className="text-xs font-semibold text-gray-600 dark:text-gray-400">Feature bullet points</p>
                                     {bBullets.map((b, i) => (
-                                        <input key={i} value={b} onChange={e => { const arr = [...bBullets]; arr[i] = e.target.value; setBBullets(arr); }} placeholder={`• Feature ${i + 1}`} className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                                        <div key={i} className="flex items-center gap-2">
+                                            <input
+                                                value={b}
+                                                onChange={e => { const arr = [...bBullets]; arr[i] = e.target.value; setBBullets(arr); }}
+                                                placeholder={`• Feature ${i + 1}`}
+                                                className="flex-1 px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                            />
+                                            <button
+                                                onClick={() => setBBullets(prev => prev.filter((_, idx) => idx !== i))}
+                                                className="shrink-0 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                                title="Remove this bullet"
+                                            >
+                                                <X size={14} />
+                                            </button>
+                                        </div>
                                     ))}
                                     <button onClick={() => setBBullets(b => [...b, ""])} className="text-xs text-indigo-500 hover:text-indigo-700">+ Add bullet</button>
                                 </div>
