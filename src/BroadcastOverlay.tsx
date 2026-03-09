@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "./AuthContext";
+import { Sparkles } from "lucide-react";
 
 interface Broadcast {
     id: string;
@@ -114,9 +115,7 @@ export default function BroadcastOverlay() {
                             />
                             {/* Animated sparkle badge — top right corner */}
                             <div className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-indigo-500/70 shadow-lg shadow-indigo-500/50 flex items-center justify-center animate-bounce" style={{ animationDuration: "1.8s" }}>
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
-                                    <path d="M12 2 L13.5 9 L20 8 L14.5 13 L17 20 L12 16 L7 20 L9.5 13 L4 8 L10.5 9 Z" />
-                                </svg>
+                                <Sparkles size={14} className="text-white" />
                             </div>
                         </div>
                         <div>
