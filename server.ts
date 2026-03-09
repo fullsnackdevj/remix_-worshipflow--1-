@@ -296,6 +296,65 @@ app.get("/api/broadcasts/all", async (req, res) => {
   } catch (e) { res.status(500).json([]); }
 });
 
+// GET /api/release-notes — auto-generate What's New content from GitHub commits
+app.get("/api/release-notes", async (_req, res) => {
+  try {
+    const REPO = "fullsnackdevj/remix_-worshipflow--1-";
+    const url = `https://api.github.com/repos/${REPO}/commits?per_page=30`;
+    const response = await fetch(url, {
+      headers: { "User-Agent": "WorshipFlow-App", "Accept": "application/vnd.github.v3+json" },
+    });
+    if (!response.ok) throw new Error("GitHub API error");
+    const commits: any[] = await response.json();
+
+    const features: string[] = [];
+    const fixes: string[] = [];
+    const seen = new Set<string>();
+
+    for (const commit of commits) {
+      const msg: string = commit.commit?.message?.split("\n")[0]?.trim() || "";
+      if (!msg) continue;
+
+      // Skip merge commits and boring ones
+      if (/^Merge|^chore|^style|^refactor|^test|^docs|^ci/i.test(msg)) continue;
+
+      // Parse conventional commit prefix
+      const featMatch = msg.match(/^feat[:(]\s*(.+)/i);
+      const fixMatch = msg.match(/^fix[:(]\s*(.+)/i);
+
+      let clean = "";
+      let type = "";
+
+      if (featMatch) { clean = featMatch[1].replace(/\)$/, "").trim(); type = "feat"; }
+      else if (fixMatch) { clean = fixMatch[1].replace(/\)$/, "").trim(); type = "fix"; }
+      else { clean = msg; type = "feat"; } // untagged commits default to feature
+
+      // Capitalise first letter, trim to 80 chars
+      clean = clean.charAt(0).toUpperCase() + clean.slice(1);
+      if (clean.length > 80) clean = clean.slice(0, 77) + "...";
+
+      if (seen.has(clean)) continue;
+      seen.add(clean);
+
+      if (type === "fix") fixes.push(`🐛 ${clean}`);
+      else features.push(`✨ ${clean}`);
+
+      if (features.length >= 5 && fixes.length >= 3) break;
+    }
+
+    const bullets = [...features.slice(0, 5), ...fixes.slice(0, 3)];
+    const today = new Date().toLocaleDateString("en", { month: "long", day: "numeric", year: "numeric" });
+
+    res.json({
+      title: `What's New — ${today}`,
+      message: "Here's what we've been working on for your worship team:",
+      bulletPoints: bullets,
+    });
+  } catch (e) {
+    res.status(500).json({ error: "Could not fetch release notes" });
+  }
+});
+
 // POST /api/broadcasts — create a new broadcast (admin only)
 app.post("/api/broadcasts", async (req, res) => {
   const firestore = getDb();

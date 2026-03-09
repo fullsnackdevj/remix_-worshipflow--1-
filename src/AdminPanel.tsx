@@ -61,6 +61,19 @@ export default function AdminPanel() {
     const [bSelected, setBSelected] = useState<string[]>([]);
     const [bCreating, setBCreating] = useState(false);
     const [showForm, setShowForm] = useState(false);
+    const [bAutoGenerating, setBAutoGenerating] = useState(false);
+
+    const autoGenerate = async () => {
+        setBAutoGenerating(true);
+        try {
+            const res = await fetch("/api/release-notes");
+            const data = await res.json();
+            if (data.title) setBTitle(data.title);
+            if (data.message) setBMessage(data.message);
+            if (data.bulletPoints?.length) setBBullets(data.bulletPoints);
+        } catch { /* silent fail */ }
+        finally { setBAutoGenerating(false); }
+    };
 
     const fetchBroadcasts = async () => {
         setBLoading(true);
@@ -231,7 +244,20 @@ export default function AdminPanel() {
                     {/* Create Form */}
                     {showForm && (
                         <div className="bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 space-y-4">
-                            <h3 className="text-sm font-bold text-gray-900 dark:text-white">Create Broadcast</h3>
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-sm font-bold text-gray-900 dark:text-white">Create Broadcast</h3>
+                                {bType === "whats_new" && (
+                                    <button
+                                        onClick={autoGenerate}
+                                        disabled={bAutoGenerating}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-60 text-white transition-all active:scale-95"
+                                    >
+                                        {bAutoGenerating
+                                            ? <><Loader2 size={12} className="animate-spin" /> Generating...</>
+                                            : <>✨ Auto-generate</>}
+                                    </button>
+                                )}
+                            </div>
 
                             {/* Type toggle */}
                             <div className="flex gap-2">
