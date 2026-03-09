@@ -190,7 +190,7 @@ function UserMenu({ simulatedRole, onRoleSwitch }: { simulatedRole: string; onRo
         <ChevronDown size={14} className="text-gray-400 hidden sm:block" />
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50 py-1 overflow-hidden">
+        <div className="fixed sm:absolute right-2 sm:right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50 py-1 overflow-hidden" style={{ width: "min(256px, calc(100vw - 1rem))", top: "calc(var(--header-h, 64px) + 8px)" }}>
           {/* Identity */}
           <div className="px-3 py-2.5 border-b border-gray-100 dark:border-gray-700">
             <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{user.displayName}</p>
@@ -1730,7 +1730,7 @@ export default function App() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header */}
-        <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 py-4 px-4 sm:px-6 flex items-center gap-4 h-16 shrink-0">
+        <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 py-4 px-4 sm:px-6 flex items-center gap-4 h-16 shrink-0" style={{ ["--header-h" as any]: "64px" }}>
           <button
             className="lg:hidden p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
             onClick={() => setIsMobileMenuOpen(true)}
@@ -1771,7 +1771,7 @@ export default function App() {
               </button>
 
               {notifOpen && (
-                <div className="absolute right-0 top-full mt-2 w-84 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl z-50 overflow-hidden" style={{ width: "340px" }}>
+                <div className="fixed sm:absolute right-2 sm:right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl z-50 overflow-hidden" style={{ width: "min(340px, calc(100vw - 1rem))", top: "calc(var(--header-h, 64px) + 8px)" }}>
                   {/* Header */}
                   <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700">
                     <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-1.5"><Bell size={14} /> Notifications

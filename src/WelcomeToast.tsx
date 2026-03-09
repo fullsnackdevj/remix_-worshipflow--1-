@@ -10,15 +10,15 @@ export default function WelcomeToast() {
     useEffect(() => {
         if (!user?.uid || !user?.email) return;
 
-        // Check Firestore (cross-device) instead of localStorage
-        fetch(`/ api / user - flags ? userId = ${user.uid} `)
+        // Check Firestore (cross-device) for welcomed flag
+        fetch(`/api/user-flags?userId=${user.uid}`)
             .then(r => r.json())
             .then(async flags => {
                 // Already welcomed on any device before — skip
                 if (flags?.welcomed) return;
 
                 // Check if there's a live broadcast — if yes, defer welcome toast
-                const broadcastRes = await fetch(`/ api / broadcasts ? email = ${encodeURIComponent(user.email!)} `);
+                const broadcastRes = await fetch(`/api/broadcasts?email=${encodeURIComponent(user.email!)}`);
                 const broadcast = await broadcastRes.json();
                 if (broadcast?.id) return; // Broadcast takes priority — skip for now
 
@@ -33,8 +33,8 @@ export default function WelcomeToast() {
                 setTimeout(() => setVisible(true), 800);
             })
             .catch(() => {
-                // If API fails, fall back to localStorage so we don't break anything
-                const key = `wf_welcomed_${user.uid} `;
+                // If API fails, fall back to localStorage
+                const key = `wf_welcomed_${user.uid}`;
                 if (!localStorage.getItem(key)) {
                     localStorage.setItem(key, "1");
                     setTimeout(() => setVisible(true), 800);
@@ -44,7 +44,6 @@ export default function WelcomeToast() {
 
     useEffect(() => {
         if (!visible) return;
-        // Auto-dismiss after 5 seconds
         const t = setTimeout(() => dismiss(), 5000);
         return () => clearTimeout(t);
     }, [visible]);
@@ -60,7 +59,7 @@ export default function WelcomeToast() {
 
     return (
         <div
-            className={`fixed bottom - 6 left - 1 / 2 - translate - x - 1 / 2 z - [300] w - [calc(100 % -2rem)] max - w - sm transition - all duration - 400 ${exiting ? "opacity-0 translate-y-4" : "opacity-100 translate-y-0"} `}
+            className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[300] w-[calc(100%-2rem)] max-w-sm transition-all duration-400 ${exiting ? "opacity-0 translate-y-4" : "opacity-100 translate-y-0"}`}
             style={{ animation: exiting ? undefined : "welcomeSlideUp 0.45s cubic-bezier(0.34,1.56,0.64,1) forwards" }}
         >
             <div className="bg-gray-900 border border-gray-700/60 rounded-2xl shadow-2xl overflow-hidden">
@@ -81,7 +80,6 @@ export default function WelcomeToast() {
                                 {firstName[0]?.toUpperCase()}
                             </div>
                         )}
-                        {/* Wave badge */}
                         <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center shadow">
                             <Heart size={10} className="text-white" />
                         </span>
@@ -103,9 +101,7 @@ export default function WelcomeToast() {
                         className="shrink-0 p-1.5 text-gray-500 hover:text-gray-300 rounded-lg hover:bg-white/5 transition-colors"
                         aria-label="Dismiss"
                     >
-                        <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                            <path d="M18 6L6 18M6 6l12 12" />
-                        </svg>
+                        <X size={13} />
                     </button>
                 </div>
             </div>

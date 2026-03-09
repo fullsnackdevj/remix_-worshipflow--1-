@@ -330,8 +330,12 @@ export default function NotesPanel({ userId, userName, userPhoto }: NotesPanelPr
             {/* Panel */}
             {open && (
                 <div
-                    className="absolute right-0 top-full mt-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700/60 rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden"
-                    style={{ width: "380px", maxHeight: "580px" }}
+                    className="fixed sm:absolute right-2 sm:right-0 top-auto sm:top-full mt-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700/60 rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden"
+                    style={{
+                        width: "min(380px, calc(100vw - 1rem))",
+                        maxHeight: "min(580px, calc(100dvh - 120px))",
+                        top: "calc(var(--header-h, 64px) + 8px)",
+                    }}
                 >
                     {/* Header */}
                     <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/60 shrink-0">

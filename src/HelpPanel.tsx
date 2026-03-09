@@ -224,8 +224,8 @@ export default function HelpPanel({ isAdmin }: HelpPanelProps) {
             {/* Panel */}
             {open && (
                 <div
-                    className="absolute right-0 top-full mt-2 bg-gray-900 border border-gray-700/60 rounded-2xl shadow-2xl z-50 overflow-hidden flex flex-col"
-                    style={{ width: "340px", maxHeight: "520px" }}
+                    className="fixed sm:absolute right-2 sm:right-0 bg-gray-900 border border-gray-700/60 rounded-2xl shadow-2xl z-50 overflow-hidden flex flex-col"
+                    style={{ width: "min(340px, calc(100vw - 1rem))", maxHeight: "min(520px, calc(100dvh - 120px))", top: "calc(var(--header-h, 64px) + 8px)" }}
                 >
                     {/* Header */}
                     <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700/60 shrink-0">
