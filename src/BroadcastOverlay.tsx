@@ -112,9 +112,11 @@ export default function BroadcastOverlay() {
                                 alt="WorshipFlow"
                                 className="w-14 h-14"
                             />
-                            {/* Animated confetti badge — top right corner */}
+                            {/* Animated sparkle badge — top right corner */}
                             <div className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-indigo-500/70 shadow-lg shadow-indigo-500/50 flex items-center justify-center animate-bounce" style={{ animationDuration: "1.8s" }}>
-                                <span className="text-base">🎉</span>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
+                                    <path d="M12 2 L13.5 9 L20 8 L14.5 13 L17 20 L12 16 L7 20 L9.5 13 L4 8 L10.5 9 Z" />
+                                </svg>
                             </div>
                         </div>
                         <div>

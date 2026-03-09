@@ -1,33 +1,33 @@
 {
-    "title": "What's New in WorshipFlow 🎉",
+    "title": "What's New in WorshipFlow",
     "message": "Here's what's been added to make your worship team experience even better:",
     "releases": [
         {
             "version": "1.2",
             "date": "March 2026",
             "highlights": [
-                "✨ App announcements — admins can now notify the whole team with maintenance alerts or release updates",
-                "👋 Personalized welcome screen when you join the team for the first time",
-                "🔔 Push notifications so you never miss a song update or schedule change — even on your lock screen"
+                "App announcements — admins can now notify the whole team with maintenance alerts or release updates",
+                "Personalized welcome screen when you join the team for the first time",
+                "Push notifications so you never miss a song update or schedule change — even on your lock screen"
             ]
         },
         {
             "version": "1.1",
             "date": "February 2026",
             "highlights": [
-                "📅 Service scheduling — plan upcoming services and assign team members by role",
-                "👥 Team member profiles with photos, roles, and contact info all in one place",
-                "🎤 Role-based access — each member sees only what's relevant to their role"
+                "Service scheduling — plan upcoming services and assign team members by role",
+                "Team member profiles with photos, roles, and contact info all in one place",
+                "Role-based access — each member sees only what's relevant to their role"
             ]
         },
         {
             "version": "1.0",
             "date": "February 2026",
             "highlights": [
-                "🎵 Smart song search — find any song instantly by title, artist, language, or tag",
-                "📖 Full-screen lyrics viewer — clean, distraction-free view designed for stage use",
-                "🔗 YouTube video links attached directly to every song for quick reference",
-                "🖼️ Song cover art — add images to make your song library feel alive"
+                "Smart song search — find any song instantly by title, artist, language, or tag",
+                "Full-screen lyrics viewer — clean, distraction-free view designed for stage use",
+                "YouTube video links attached directly to every song for quick reference",
+                "Song cover art — add images to make your song library feel alive"
             ]
         }
     ]
