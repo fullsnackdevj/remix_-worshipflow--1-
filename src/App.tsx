@@ -191,8 +191,17 @@ export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [currentView, setCurrentView] = useState<"songs" | "members" | "schedule" | "admin">("songs");
   const { isAdmin, userRole } = useAuth();
-  // canEdit: admin OR any role other than plain 'member'
-  const canEdit = isAdmin || userRole !== "member";
+  // ── Role-based permission flags ───────────────────────────────────────────
+  // Roles that can add/edit songs: musician, leader, audio_tech, admin
+  const canAddSong = isAdmin || ["musician", "leader", "audio_tech"].includes(userRole);
+  const canEditSong = isAdmin || ["musician", "leader", "audio_tech"].includes(userRole);
+  // Only leader/audio_tech/admin can delete songs or enter selection (bulk-delete) mode
+  const canDeleteSong = isAdmin || ["leader", "audio_tech"].includes(userRole);
+  const canSelectSongs = isAdmin || ["leader", "audio_tech"].includes(userRole);
+  // Only leader/audio_tech/admin can add/edit/delete members
+  const canWriteMembers = isAdmin || ["leader", "audio_tech"].includes(userRole);
+  // Only leader/audio_tech/admin can add/edit schedule events
+  const canWriteSchedule = isAdmin || ["leader", "audio_tech"].includes(userRole);
 
   // ── Scheduling state ─────────────────────────────────────────────────────
   const [allSchedules, setAllSchedules] = useState<Schedule[]>([]);
@@ -1502,9 +1511,9 @@ export default function App() {
                           const isPast = !!selectedScheduleDate && selectedScheduleDate < todayStr;
                           const isEditingExistingEvent = schedPanelMode === "edit" && !!selectedEventId;
                           // Enable only in month view, future empty date selected, not editing existing
-                          const canAdd = canEdit && !isListView && hasDate && !hasExisting && !isEditingExistingEvent;
+                          const canAdd = canWriteSchedule && !isListView && hasDate && !hasExisting && !isEditingExistingEvent;
                           const label = isListView || hasExisting ? "Add Another Event" : "Add Event";
-                          const disabledTitle = !canEdit
+                          const disabledTitle = !canWriteSchedule
                             ? "You don't have permission to add events"
                             : isListView
                               ? "Switch to Month view to add events"
@@ -1559,7 +1568,7 @@ export default function App() {
                                     className={`group relative min-h-[70px] border-b border-r border-gray-200 dark:border-gray-700/50 p-1.5 text-left transition-colors ${isCellPast && !cellHasEvents ? "opacity-40 cursor-not-allowed" : "hover:bg-indigo-50 dark:hover:bg-indigo-900/20"} ${isSelected ? "bg-indigo-50 dark:bg-indigo-900/30" : ""}`}
                                   >
                                     <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-medium mb-1 ${isToday ? "bg-indigo-600 text-white" : "text-gray-700 dark:text-gray-300"}`}>{day}</span>
-                                    {!isCellPast && canEdit && (
+                                    {!isCellPast && canWriteSchedule && (
                                       <span
                                         onClick={e => { e.stopPropagation(); openBlankEventForm(dateStr); }}
                                         className="hidden sm:flex absolute top-1.5 right-1.5 w-5 h-5 items-center justify-center rounded-full bg-indigo-600 text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:bg-indigo-700"
@@ -1748,7 +1757,7 @@ export default function App() {
                                 </p>
                               </div>
                               <div className="flex items-center gap-1">
-                                {schedPanelMode === "view" && editingExisting && !isDatePast && canEdit && (
+                                {schedPanelMode === "view" && editingExisting && !isDatePast && canWriteSchedule && (
                                   <button onClick={() => setSchedPanelMode("edit")} className="p-1.5 text-gray-400 hover:text-indigo-500 rounded-lg transition-colors"><Pencil size={16} /></button>
                                 )}
                                 {editingExisting && (
@@ -2583,13 +2592,13 @@ export default function App() {
                                 : <div className="w-full h-full flex items-center justify-center text-3xl font-bold text-gray-400">{selectedMember.name?.[0]?.toUpperCase()}</div>}
                             </div>
                             <div className="flex items-center gap-2 mb-1">
-                              {canEdit && (
+                              {canWriteMembers && (
                                 <button onClick={() => openMemberEditor(selectedMember)} className="relative group text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
                                   <Edit size={18} />
                                   <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-0.5 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none">Edit</span>
                                 </button>
                               )}
-                              {canEdit && (
+                              {canWriteMembers && (
                                 <button onClick={() => handleDeleteMember(selectedMember.id)} className="relative group text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-colors">
                                   <Trash2 size={18} />
                                   <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-0.5 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none">Remove</span>
@@ -2668,7 +2677,7 @@ export default function App() {
                             <button onClick={() => setMemberSearchQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"><X size={14} /></button>
                           )}
                         </div>
-                        {canEdit && (
+                        {canWriteMembers && (
                           <button
                             onClick={() => openMemberEditor()}
                             className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium shadow-sm text-sm shrink-0"
@@ -3013,13 +3022,13 @@ export default function App() {
                               <Printer size={20} />
                               <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">Print</span>
                             </button>
-                            {canEdit && (
+                            {canEditSong && (
                               <button onClick={() => openEditor(selectedSong)} className="relative group text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors duration-150">
                                 <Edit size={20} />
                                 <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">Edit</span>
                               </button>
                             )}
-                            {canEdit && (
+                            {canDeleteSong && (
                               <button onClick={() => handleDeleteSong(selectedSong.id)} className="relative group text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-colors duration-150">
                                 <Trash2 size={20} />
                                 <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">Delete</span>
@@ -3215,7 +3224,7 @@ export default function App() {
                                 </>
                               ) : (
                                 <>
-                                  {canEdit && (
+                                  {canSelectSongs && (
                                     <button
                                       onClick={() => setIsSelectionMode(true)}
                                       className="p-2 text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 rounded-xl transition-colors relative group"
@@ -3227,7 +3236,7 @@ export default function App() {
                                       </span>
                                     </button>
                                   )}
-                                  {canEdit && (
+                                  {canAddSong && (
                                     <button
                                       onClick={() => openEditor()}
                                       className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium shadow-sm text-sm"
