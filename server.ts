@@ -109,6 +109,9 @@ async function sendPushNotification(firestore: admin.firestore.Firestore, payloa
   body: string;
   actorUserId?: string;
   targetAudience: "all" | "non_member" | "admin_only";
+  type?: string;
+  resourceId?: string;
+  resourceDate?: string;
 }) {
   try {
     const tokensSnap = await firestore.collection("fcm_tokens").get();
@@ -121,9 +124,7 @@ async function sendPushNotification(firestore: admin.firestore.Firestore, payloa
       const role: string = data.role || "member";
       const tokenUserId: string = data.userId || "";
       if (!token) return;
-      // Self-exclusion
       if (payload.actorUserId && tokenUserId === payload.actorUserId) return;
-      // Audience filter
       if (payload.targetAudience === "admin_only" && role !== "admin") return;
       if (payload.targetAudience === "non_member" && role === "member") return;
       tokens.push(token);
@@ -131,11 +132,27 @@ async function sendPushNotification(firestore: admin.firestore.Firestore, payloa
 
     if (tokens.length === 0) return;
 
-    // Send in batches of 500 (FCM limit)
+    // Build deep-link URL for notification tap
+    let deepLink = "/";
+    if (payload.type === "new_song" && payload.resourceId) {
+      deepLink = `/?notif=new_song&id=${payload.resourceId}`;
+    } else if ((payload.type === "new_event" || payload.type === "updated_event") && payload.resourceId) {
+      deepLink = `/?notif=${payload.type}&id=${payload.resourceId}${payload.resourceDate ? `&date=${payload.resourceDate}` : ""}`;
+    } else if (payload.type === "access_request") {
+      deepLink = "/?notif=access_request";
+    }
+
     for (let i = 0; i < tokens.length; i += 500) {
       const batch = tokens.slice(i, i + 500);
       const response = await admin.messaging().sendEachForMulticast({
         tokens: batch,
+        // Data payload — passed to service worker for deep linking
+        data: {
+          type: payload.type || "",
+          resourceId: payload.resourceId || "",
+          resourceDate: payload.resourceDate || "",
+          deepLink,
+        },
         notification: { title: payload.title, body: payload.body },
         webpush: {
           notification: {
@@ -145,10 +162,9 @@ async function sendPushNotification(firestore: admin.firestore.Firestore, payloa
             badge: "/favicon-32.png",
             vibrate: [200, 100, 200],
           },
-          fcmOptions: { link: "/" },
+          fcmOptions: { link: deepLink },
         },
       });
-      // Clean up invalid/expired tokens
       response.responses.forEach((r, idx) => {
         if (!r.success && (r.error?.code === "messaging/invalid-registration-token" || r.error?.code === "messaging/registration-token-not-registered")) {
           firestore.collection("fcm_tokens").where("token", "==", batch[idx]).get()
@@ -188,6 +204,9 @@ async function writeNotification(firestore: admin.firestore.Firestore, payload: 
       body: payload.subMessage,
       actorUserId: payload.actorUserId,
       targetAudience: payload.targetAudience,
+      type: payload.type,
+      resourceId: payload.resourceId,
+      resourceDate: payload.resourceDate,
     });
   } catch (e) {
     console.error("Failed to write notification:", e);

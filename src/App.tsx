@@ -386,6 +386,45 @@ export default function App() {
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
   const [isEditing, setIsEditing] = useState(false);
 
+  // ── Push notification deep-link handling ──────────────────────────────────
+  // Stores a song ID to navigate to once allSongs has loaded
+  const [pendingNavSongId, setPendingNavSongId] = useState<string | null>(null);
+
+  // On app boot: check if we were opened via a push notification tap
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const notifType = params.get("notif");
+    const resourceId = params.get("id");
+    const resourceDate = params.get("date");
+    if (!notifType) return;
+
+    // Clean the URL immediately (no page reload, just cosmetic)
+    window.history.replaceState({}, "", "/");
+
+    if (notifType === "new_song" && resourceId) {
+      setCurrentView("songs");
+      setPendingNavSongId(resourceId); // will open once allSongs loads
+    } else if ((notifType === "new_event" || notifType === "updated_event") && resourceId && resourceDate) {
+      setCurrentView("schedule");
+      setSelectedScheduleDate(resourceDate);
+      setSelectedEventId(resourceId);
+      setSchedPanelMode("view");
+    } else if (notifType === "access_request") {
+      setCurrentView("admin");
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Once songs load, apply any pending song navigation from push tap
+  useEffect(() => {
+    if (!pendingNavSongId || !allSongs.length) return;
+    const found = allSongs.find(s => s.id === pendingNavSongId);
+    if (found) {
+      setSelectedSong(found);
+      setIsEditing(false);
+      setPendingNavSongId(null);
+    }
+  }, [pendingNavSongId, allSongs]);
+
   // Form states
   const [editTitle, setEditTitle] = useState("");
   const [editArtist, setEditArtist] = useState("");
