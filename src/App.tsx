@@ -192,16 +192,17 @@ export default function App() {
   const [currentView, setCurrentView] = useState<"songs" | "members" | "schedule" | "admin">("songs");
   const { isAdmin, userRole } = useAuth();
   // ── Role-based permission flags ───────────────────────────────────────────
-  // Roles that can add/edit songs: musician, leader, audio_tech, admin
+  // musician & audio_tech share identical restrictions
+  // Roles that can add/edit songs: musician, audio_tech, leader, admin
   const canAddSong = isAdmin || ["musician", "leader", "audio_tech"].includes(userRole);
   const canEditSong = isAdmin || ["musician", "leader", "audio_tech"].includes(userRole);
-  // Only leader/audio_tech/admin can delete songs or enter selection (bulk-delete) mode
-  const canDeleteSong = isAdmin || ["leader", "audio_tech"].includes(userRole);
-  const canSelectSongs = isAdmin || ["leader", "audio_tech"].includes(userRole);
-  // Only leader/audio_tech/admin can add/edit/delete members
-  const canWriteMembers = isAdmin || ["leader", "audio_tech"].includes(userRole);
-  // Only leader/audio_tech/admin can add/edit schedule events
-  const canWriteSchedule = isAdmin || ["leader", "audio_tech"].includes(userRole);
+  // Only leader/admin can delete songs or enter selection (bulk-delete) mode
+  const canDeleteSong = isAdmin || userRole === "leader";
+  const canSelectSongs = isAdmin || userRole === "leader";
+  // Only leader/admin can add/edit/delete members
+  const canWriteMembers = isAdmin || userRole === "leader";
+  // Only leader/admin can add/edit schedule events
+  const canWriteSchedule = isAdmin || userRole === "leader";
 
   // ── Scheduling state ─────────────────────────────────────────────────────
   const [allSchedules, setAllSchedules] = useState<Schedule[]>([]);
