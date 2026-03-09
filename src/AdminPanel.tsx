@@ -247,17 +247,29 @@ export default function AdminPanel() {
                         <div className="bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 space-y-4">
                             <div className="flex items-center justify-between">
                                 <h3 className="text-sm font-bold text-gray-900 dark:text-white">Create Broadcast</h3>
-                                {bType === "whats_new" && (
+                                <div className="flex items-center gap-2">
+                                    {/* 👁️ Preview — enabled only when there's content */}
                                     <button
-                                        onClick={autoGenerate}
-                                        disabled={bAutoGenerating}
-                                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-60 text-white transition-all active:scale-95"
+                                        onClick={() => bTitle.trim() && setPreviewBroadcast({ type: bType, title: bTitle, message: bMessage, bulletPoints: bBullets })}
+                                        disabled={!bTitle.trim()}
+                                        title="Preview"
+                                        className="p-1.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-400 hover:text-indigo-500 hover:border-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                                     >
-                                        {bAutoGenerating
-                                            ? <><Loader2 size={12} className="animate-spin" /> Generating...</>
-                                            : <>✨ Auto-generate</>}
+                                        <Eye size={14} />
                                     </button>
-                                )}
+                                    {/* ✨ Auto-generate — What's New only */}
+                                    {bType === "whats_new" && (
+                                        <button
+                                            onClick={autoGenerate}
+                                            disabled={bAutoGenerating}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-60 text-white transition-all active:scale-95"
+                                        >
+                                            {bAutoGenerating
+                                                ? <><Loader2 size={12} className="animate-spin" /> Generating...</>
+                                                : <>✨ Auto-generate</>}
+                                        </button>
+                                    )}
+                                </div>
                             </div>
 
                             {/* Type toggle */}
@@ -338,9 +350,6 @@ export default function AdminPanel() {
                                             </p>
                                         </div>
                                         <div className="flex items-center gap-1 shrink-0">
-                                            <button onClick={() => setPreviewBroadcast(b)} title="Preview" className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-all">
-                                                <Eye size={14} />
-                                            </button>
                                             <button onClick={() => toggleBroadcast(b.id, !b.active)} title={b.active ? "Deactivate" : "Activate"} className={`p-1.5 rounded-lg transition-all ${b.active ? "text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20" : "text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"}`}>
                                                 {b.active ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
                                             </button>
