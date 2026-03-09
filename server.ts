@@ -238,24 +238,25 @@ app.get("/api/broadcasts", async (req, res) => {
   const email = (req.query.email as string) || "";
   if (!email) return res.json(null);
   try {
+    // No composite index needed — filter active only, sort in memory
     const snap = await firestore.collection("broadcasts")
-      .where("active", "==", true)
-      .orderBy("createdAt", "desc").limit(10).get();
-    for (const doc of snap.docs) {
-      const data = doc.data();
+      .where("active", "==", true).get();
+    const docs = snap.docs
+      .map(d => ({ id: d.id, ...d.data() } as any))
+      .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+    for (const data of docs) {
       const targets: string[] = data.targetEmails || [];
       const isAll = targets.includes("__all__");
       const isTargeted = targets.includes(email);
       if (!isAll && !isTargeted) continue;
-      // For "whats_new" — skip if already dismissed
       if (data.type === "whats_new") {
         const dismissed: string[] = data.dismissedBy || [];
         if (dismissed.includes(email)) continue;
       }
-      return res.json({ id: doc.id, ...data });
+      return res.json(data);
     }
     return res.json(null);
-  } catch (e) { res.status(500).json(null); }
+  } catch (e) { console.error("broadcasts fetch error:", e); res.status(500).json(null); }
 });
 
 // GET /api/broadcasts/all — admin list all broadcasts
@@ -263,8 +264,12 @@ app.get("/api/broadcasts/all", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.json([]);
   try {
-    const snap = await firestore.collection("broadcasts").orderBy("createdAt", "desc").limit(20).get();
-    return res.json(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    // No composite index — fetch all, sort in memory
+    const snap = await firestore.collection("broadcasts").get();
+    const sorted = snap.docs
+      .map(d => ({ id: d.id, ...d.data() } as any))
+      .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+    return res.json(sorted);
   } catch (e) { res.status(500).json([]); }
 });
 

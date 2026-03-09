@@ -271,22 +271,29 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
         const email = event.queryStringParameters?.email || "";
         if (!email) return json(200, null);
         try {
-            const snap = await firestore?.collection("broadcasts").where("active", "==", true).orderBy("createdAt", "desc").limit(10).get();
-            for (const doc of (snap?.docs || [])) {
-                const data = doc.data();
+            // No composite index — filter active only, sort in memory
+            const snap = await firestore?.collection("broadcasts").where("active", "==", true).get();
+            const docs = (snap?.docs || [])
+                .map(d => ({ id: d.id, ...d.data() } as any))
+                .sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+            for (const data of docs) {
                 const targets: string[] = data.targetEmails || [];
                 if (!targets.includes("__all__") && !targets.includes(email)) continue;
                 if (data.type === "whats_new" && (data.dismissedBy || []).includes(email)) continue;
-                return json(200, { id: doc.id, ...data });
+                return json(200, data);
             }
             return json(200, null);
-        } catch (e) { return json(200, null); }
+        } catch (e) { console.error("broadcast fetch error:", e); return json(200, null); }
     }
 
     if (rawPath === "/broadcasts/all" && method === "GET") {
         try {
-            const snap = await firestore?.collection("broadcasts").orderBy("createdAt", "desc").limit(20).get();
-            return json(200, snap?.docs.map(d => ({ id: d.id, ...d.data() })) ?? []);
+            // No composite index — fetch all, sort in memory
+            const snap = await firestore?.collection("broadcasts").get();
+            const sorted = (snap?.docs || [])
+                .map(d => ({ id: d.id, ...d.data() } as any))
+                .sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+            return json(200, sorted);
         } catch (e) { return json(200, []); }
     }
 
