@@ -371,8 +371,13 @@ export default function App() {
   const canDeleteSong = isAdmin; // only admin can delete songs
   const canSelectSongs = isAdmin; // selection mode leads to bulk delete
 
-  // Members — admin only
-  const canWriteMembers = true; // TODO: restrict to own-profile edit only
+  // Members — own-profile restriction via email matching
+  const isMyProfile = (member: any) =>
+    !!user?.email && !!member?.email &&
+    member.email.trim().toLowerCase() === user.email.trim().toLowerCase();
+  const canAddMember = isAdmin || isLeader;
+  const canEditMember = (member: any) => isAdmin || isLeader || isMyProfile(member);
+  const canDeleteMember = isAdmin || isLeader;
 
   // Schedule helpers
   // Returns true if dateStr falls on a Sunday (0) or Wednesday (3)
@@ -3017,13 +3022,13 @@ export default function App() {
                                 : <div className="w-full h-full flex items-center justify-center text-3xl font-bold text-gray-400">{selectedMember.name?.[0]?.toUpperCase()}</div>}
                             </div>
                             <div className="flex items-center gap-2 mb-1">
-                              {canWriteMembers && (
+                              {canEditMember(selectedMember) && (
                                 <button onClick={() => openMemberEditor(selectedMember)} className="relative group text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
                                   <Edit size={18} />
                                   <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-0.5 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none">Edit</span>
                                 </button>
                               )}
-                              {canWriteMembers && (
+                              {canDeleteMember && selectedMember && (
                                 <button onClick={() => handleDeleteMember(selectedMember.id)} className="relative group text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-colors">
                                   <Trash2 size={18} />
                                   <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-0.5 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none">Remove</span>
@@ -3102,7 +3107,7 @@ export default function App() {
                             <button onClick={() => setMemberSearchQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"><X size={14} /></button>
                           )}
                         </div>
-                        {canWriteMembers && (
+                        {canAddMember && (
                           <button
                             onClick={() => openMemberEditor()}
                             className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium shadow-sm text-sm shrink-0"
