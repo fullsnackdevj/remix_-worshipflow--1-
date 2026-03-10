@@ -70,9 +70,9 @@ function Tile({ children, className = "", onClick }: {
 }) {
     return (
         <div onClick={onClick}
-            className={`${CARD} overflow - hidden
+            className={`${CARD} overflow-hidden
                 ${onClick ? "cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-700 hover:shadow-md transition-all duration-150" : ""}
-                ${className} `}>
+                ${className}`}>
             {children}
         </div>
     );
@@ -103,7 +103,7 @@ function MetricTile({ label, value, sub, iconBg, icon, onClick }: {
     return (
         <Tile className="p-4 flex flex-col justify-between" onClick={onClick}>
             <div className="flex items-start justify-between">
-                <div className={`w - 9 h - 9 rounded - xl flex items - center justify - center ${iconBg} `}>{icon}</div>
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${iconBg}`}>{icon}</div>
                 <ArrowUpRight size={13} className="text-gray-300 dark:text-gray-600 mt-0.5" />
             </div>
             <div className="mt-2">
@@ -173,9 +173,9 @@ function NextServiceTile({ ev, songs, members, myMemberId, onClick }: {
                     <div className="min-w-0 flex-1">
                         <div className="flex items-start justify-between gap-2">
                             <p className="text-lg font-bold text-gray-900 dark:text-white leading-tight truncate">{ev.eventName ?? "Event"}</p>
-                            <span className={`text - [10px] font - bold px - 2 py - 0.5 rounded - full shrink - 0 ${isUrgent ? "bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400" : "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300"} `}>{du}</span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${isUrgent ? "bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400" : "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300"}`}>{du}</span>
                         </div>
-                        <span className={`text - [11px] font - semibold px - 2 py - 0.5 rounded - full mt - 1 inline - block ${svcColor(ev.serviceType)} `}>{svcLabel(ev.serviceType)}</span>
+                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full mt-1 inline-block ${svcColor(ev.serviceType)}`}>{svcLabel(ev.serviceType)}</span>
                         {ev.worshipLeader && <p className="text-xs text-gray-400 mt-1 flex items-center gap-1"><Mic2 size={10} />Leader: {ev.worshipLeader.name}</p>}
                     </div>
                 </div>
