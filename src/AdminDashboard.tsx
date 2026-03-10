@@ -45,15 +45,17 @@ function relDate(iso: string) {
     } catch { return ""; }
 }
 function svcLabel(t?: string) {
-    return ({ sunday_service: "Sunday Service", midweek_service: "Midweek Service", practice: "Practice", special: "Special Event" })[t ?? ""] ?? (t ?? "Event");
+    return ({ sunday_service: "Sunday Service", sunday: "Sunday Service", midweek_service: "Midweek Service", midweek: "Midweek Service", practice: "Practice", special: "Special Event" })[t ?? ""] ?? (t ?? "Event");
 }
 function svcColor(t?: string) {
     return ({
         sunday_service: "bg-indigo-100 dark:bg-indigo-600/30 text-indigo-700 dark:text-indigo-200",
+        sunday: "bg-indigo-100 dark:bg-indigo-600/30 text-indigo-700 dark:text-indigo-200",
         midweek_service: "bg-violet-100 dark:bg-violet-600/30 text-violet-700 dark:text-violet-200",
-        practice: "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300",
-        special: "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300",
-    })[t ?? ""] ?? "bg-gray-100 dark:bg-gray-700 text-gray-600";
+        midweek: "bg-violet-100 dark:bg-violet-600/30 text-violet-700 dark:text-violet-200",
+        practice: "bg-green-100 dark:bg-green-600/30 text-green-700 dark:text-green-200",
+        special: "bg-amber-100 dark:bg-amber-600/30 text-amber-700 dark:text-amber-200",
+    })[t ?? ""] ?? "bg-violet-100 dark:bg-violet-600/30 text-violet-700 dark:text-violet-200";
 }
 function greeting() { const h = new Date().getHours(); return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"; }
 
