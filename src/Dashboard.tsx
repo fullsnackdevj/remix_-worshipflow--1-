@@ -1,5 +1,4 @@
 import React, { useMemo, useState, useEffect, useCallback } from "react";
-import AdminDashboard from "./AdminDashboard";
 import {
     Music, Users, Calendar, NotepadText, ChevronRight,
     BookOpen, Clock, Star, TrendingUp, Bug, Lightbulb,
@@ -320,18 +319,7 @@ export default function Dashboard({
         }).finally(() => setLoadingExtra(false));
     }, []);
 
-    // ── Admin gets the new dark navy SaaS UI ──────────────────────────────────
-    if (isAdmin) {
-        return (
-            <AdminDashboard
-                userName={userName} userPhoto={""}
-                songs={songs} members={members} schedules={schedules} notes={notes}
-                onNavigate={onNavigate}
-                broadcasts={broadcasts} pendingUsers={pendingUsers} loadingExtra={loadingExtra}
-                canAddSong={canAddSong} canWriteSchedule={canWriteSchedule} canAddMember={canAddMember}
-            />
-        );
-    }
+
 
     // Role flags
     const isLeader = userRole === "leader";
