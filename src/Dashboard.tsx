@@ -203,39 +203,45 @@ export default function Dashboard({ isAdmin, userRole, userName, songs, members,
     return (
         <div className="max-w-6xl mx-auto space-y-5 pb-12">
 
-            {/* ══ HERO HEADER ══════════════════════════════════════════════════ */}
-            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-600 via-indigo-700 to-violet-800 px-6 py-6 shadow-lg">
-                <div className="absolute -top-8 -right-8 w-48 h-48 rounded-full bg-white/5 blur-3xl pointer-events-none" />
-                <div className="absolute bottom-0 left-1/3 w-40 h-40 rounded-full bg-violet-500/20 blur-2xl pointer-events-none" />
-                <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            {/* ══ HEADER ════════════════════════════════════ */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
+                <div className="flex items-center gap-3">
+                    <div className="w-1 h-10 rounded-full bg-indigo-500 dark:bg-indigo-400 shrink-0" />
                     <div>
-                        <p className="text-indigo-200 text-sm">{greeting()},</p>
-                        <h1 className="text-2xl sm:text-3xl font-bold text-white mt-0.5">{(userName || "Admin").split(" ")[0]} 👋</h1>
-                        <p className="text-indigo-300 text-xs mt-1">{new Date().toLocaleDateString("en", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{greeting()},</p>
+                        <h1 className="text-xl font-bold text-gray-900 dark:text-white leading-tight">
+                            {(userName || "Admin").split(" ")[0]} 👋
+                        </h1>
                     </div>
-                    <div className="flex flex-col items-start sm:items-end gap-2">
-                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 text-white text-xs font-semibold border border-white/20">
-                            <Shield size={12} /> Admin Dashboard
-                        </div>
-                        {!loadingExtra && pendingUsers.length > 0 && (
-                            <button onClick={() => onNavigate("admin")} className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-400/90 hover:bg-amber-400 text-amber-900 text-xs font-bold transition-colors">
-                                <UserCheck size={12} /> {pendingUsers.length} pending {pendingUsers.length === 1 ? "request" : "requests"} — Review
-                            </button>
-                        )}
+                </div>
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 text-xs font-medium">
+                        <Shield size={11} /> Admin
                     </div>
+                    <span className="text-xs text-gray-400 dark:text-gray-500 hidden sm:block">
+                        {new Date().toLocaleDateString("en", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
+                    </span>
+                    {!loadingExtra && pendingUsers.length > 0 && (
+                        <button onClick={() => onNavigate("admin")}
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 text-amber-700 dark:text-amber-400 text-xs font-semibold hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors">
+                            <UserCheck size={12} />
+                            {pendingUsers.length} pending
+                        </button>
+                    )}
                 </div>
             </div>
 
-            {/* ══ QUICK ACTIONS ════════════════════════════════════════════════ */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {/* ══ QUICK ACTIONS ════════════════════════════════════ */}
+            <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 mr-1">Quick Actions</span>
                 {[
-                    { label: "Add Song", icon: <Music size={17} />, color: "from-indigo-500 to-indigo-600", action: () => onNavigate("songs") },
-                    { label: "Schedule Service", icon: <Calendar size={17} />, color: "from-emerald-500 to-emerald-600", action: () => onNavigate("schedule") },
-                    { label: "Add Member", icon: <UserPlus size={17} />, color: "from-violet-500 to-violet-600", action: () => onNavigate("members") },
-                    { label: "New Broadcast", icon: <Megaphone size={17} />, color: "from-amber-500 to-orange-500", action: () => onNavigate("admin") },
-                ].map(({ label, icon, color, action }) => (
+                    { label: "Add Song", icon: <Music size={14} className="text-indigo-400" />, action: () => onNavigate("songs") },
+                    { label: "Schedule Service", icon: <Calendar size={14} className="text-emerald-400" />, action: () => onNavigate("schedule") },
+                    { label: "Add Member", icon: <UserPlus size={14} className="text-violet-400" />, action: () => onNavigate("members") },
+                    { label: "New Broadcast", icon: <Megaphone size={14} className="text-amber-400" />, action: () => onNavigate("admin") },
+                ].map(({ label, icon, action }) => (
                     <button key={label} onClick={action}
-                        className={`flex items-center justify-center gap-2 px-3 py-3 rounded-2xl bg-gradient-to-br ${color} text-white text-sm font-semibold shadow-sm hover:shadow-md hover:-translate-y-0.5 active:scale-95 transition-all`}>
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-indigo-400/50 dark:hover:border-indigo-500/50 hover:bg-gray-200 dark:hover:bg-gray-700/60 text-gray-700 dark:text-gray-300 text-xs font-medium transition-all">
                         {icon} {label}
                     </button>
                 ))}
