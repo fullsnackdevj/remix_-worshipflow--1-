@@ -9,6 +9,7 @@ import {
     CheckCheck, Megaphone, Plus, UserPlus, Zap, BarChart3,
     Radio, FlaskConical
 } from "lucide-react";
+import VerseOfTheDay from "./VerseOfTheDay";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface ScheduleMember { memberId: string; name: string; photo: string; role: string; }
@@ -24,7 +25,7 @@ interface Note { id: string; type: "bug" | "feature" | "general"; content: strin
 interface Broadcast { id: string; title: string; message: string; active: boolean; type?: string; }
 
 interface Props {
-    isAdmin: boolean; userRole: string; userName: string; userPhoto: string; userEmail: string;
+    isAdmin: boolean; userRole: string; userName: string; userPhoto: string; userEmail: string; userId: string;
     songs: Song[]; members: Member[]; schedules: Schedule[]; notes: Note[];
     onNavigate: (view: "songs" | "members" | "schedule" | "admin") => void;
     canAddSong?: boolean; canWriteSchedule?: boolean; canAddMember?: boolean;
@@ -303,7 +304,7 @@ function BroadcastsCard({ broadcasts, loading, isAdmin, onNavigate }: {
 
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 export default function Dashboard({
-    isAdmin, userRole, userName, userEmail, songs, members, schedules, notes, onNavigate,
+    isAdmin, userRole, userName, userPhoto, userEmail, userId, songs, members, schedules, notes, onNavigate,
     canAddSong = false, canWriteSchedule = false, canAddMember = false,
 }: Props) {
     const [broadcasts, setBroadcasts] = useState<any[]>([]);
@@ -323,13 +324,16 @@ export default function Dashboard({
     // ── Admin → Bento grid dashboard ──────────────────────────────────────
     if (isAdmin) {
         return (
-            <AdminDashboard
-                userName={userName} userPhoto={""} userEmail={userEmail}
-                songs={songs} members={members} schedules={schedules} notes={notes}
-                onNavigate={onNavigate}
-                broadcasts={broadcasts} pendingUsers={pendingUsers} loadingExtra={loadingExtra}
-                canAddSong={canAddSong} canWriteSchedule={canWriteSchedule} canAddMember={canAddMember}
-            />
+            <div className="space-y-0">
+                <VerseOfTheDay userId={userId} userName={userName} userPhoto={userPhoto} />
+                <AdminDashboard
+                    userName={userName} userPhoto={""} userEmail={userEmail}
+                    songs={songs} members={members} schedules={schedules} notes={notes}
+                    onNavigate={onNavigate}
+                    broadcasts={broadcasts} pendingUsers={pendingUsers} loadingExtra={loadingExtra}
+                    canAddSong={canAddSong} canWriteSchedule={canWriteSchedule} canAddMember={canAddMember}
+                />
+            </div>
         );
     }
 
@@ -411,6 +415,9 @@ export default function Dashboard({
 
     return (
         <div className="max-w-6xl mx-auto space-y-5 pb-12">
+
+            {/* Verse of the Day — shown to all users at the top */}
+            <VerseOfTheDay userId={userId} userName={userName} userPhoto={userPhoto} />
 
             {/* Header */}
             <DashHeader userName={userName} userRole={userRole}

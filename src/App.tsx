@@ -2022,6 +2022,7 @@ export default function App() {
                   <Dashboard
                     isAdmin={isAdmin}
                     userRole={effectiveRole}
+                    userId={user?.uid ?? ""}
                     userName={user?.displayName ?? user?.email ?? "Team Member"}
                     userPhoto={user?.photoURL ?? ""}
                     userEmail={user?.email ?? ""}
