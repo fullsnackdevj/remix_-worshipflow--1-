@@ -2023,11 +2023,15 @@ export default function App() {
                     userRole={effectiveRole}
                     userName={user?.displayName ?? user?.email ?? "Team Member"}
                     userPhoto={user?.photoURL ?? ""}
+                    userEmail={user?.email ?? ""}
                     songs={allSongs}
                     members={allMembers}
                     schedules={allSchedules}
                     notes={dashboardNotes}
                     onNavigate={setCurrentView}
+                    canAddSong={canAddSong}
+                    canWriteSchedule={canWriteSchedule}
+                    canAddMember={canAddMember}
                   />
                 )
               ) : null}
