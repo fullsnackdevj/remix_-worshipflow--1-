@@ -489,8 +489,8 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
                 <div
                     className="fixed top-[72px] left-1/2 -translate-x-1/2 sm:absolute sm:top-full sm:mt-2 sm:left-auto sm:translate-x-0 sm:right-0 z-[200] bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700/60 rounded-2xl shadow-2xl flex flex-col overflow-hidden"
                     style={{
-                        width: "min(520px, calc(100vw - 20px))",
-                        maxHeight: "min(600px, calc(100dvh - 90px))",
+                        width: showForm ? "min(680px, calc(100vw - 20px))" : "min(520px, calc(100vw - 20px))",
+                        maxHeight: showForm ? "min(760px, calc(100dvh - 80px))" : "min(600px, calc(100dvh - 90px))",
                     }}
                 >
                     {/* ── Header ── */}
@@ -516,7 +516,7 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
 
                     {/* ── Form ── */}
                     {showForm && (
-                        <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/40 shrink-0 space-y-3">
+                        <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/40 flex-1 overflow-y-auto space-y-3">
                             {/* Type selector */}
                             <div className="flex gap-2">
                                 {NOTE_TYPES.map(t => (
@@ -533,7 +533,8 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
                                 value={fContent}
                                 onChange={e => setFContent(e.target.value)}
                                 placeholder="Describe the bug, feature idea, or general note… (paste images here)"
-                                rows={4}
+                                rows={12}
+                                style={{ minHeight: "220px" }}
                                 className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
                             />
 
