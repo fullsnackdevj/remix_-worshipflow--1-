@@ -922,8 +922,10 @@ Rules:
     // GET /notes
     if (rawPath === "/notes" && method === "GET") {
         try {
-            const snap = await firestore?.collection("team_notes").where("deletedAt", "==", null).orderBy("createdAt", "desc").get();
-            const notes = snap?.docs.map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(), updatedAt: d.data().updatedAt?.toDate?.()?.toISOString() ?? null })) ?? [];
+            const snap = await firestore?.collection("team_notes").orderBy("createdAt", "desc").get();
+            const notes = snap?.docs
+                .filter(d => !d.data().deletedAt)
+                .map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(), updatedAt: d.data().updatedAt?.toDate?.()?.toISOString() ?? null })) ?? [];
             return json(200, notes);
         } catch (e) { return json(500, { error: "Failed to fetch notes" }); }
     }
@@ -931,9 +933,17 @@ Rules:
     // GET /notes/trash — items soft-deleted within 15 days
     if (rawPath === "/notes/trash" && method === "GET") {
         try {
-            const cutoff = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000);
-            const snap = await firestore?.collection("team_notes").where("deletedAt", ">", admin.firestore.Timestamp.fromDate(cutoff)).orderBy("deletedAt", "desc").get();
-            const notes = snap?.docs.map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(), updatedAt: d.data().updatedAt?.toDate?.()?.toISOString() ?? null, deletedAt: d.data().deletedAt?.toDate?.()?.toISOString() ?? null })) ?? [];
+            const cutoff = Date.now() - 15 * 24 * 60 * 60 * 1000;
+            const snap = await firestore?.collection("team_notes").get();
+            const notes = snap?.docs
+                .filter(d => {
+                    const deletedAt = d.data().deletedAt;
+                    if (!deletedAt) return false;
+                    const deletedMs = deletedAt.toDate?.()?.getTime() ?? 0;
+                    return deletedMs > cutoff;
+                })
+                .map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(), updatedAt: d.data().updatedAt?.toDate?.()?.toISOString() ?? null, deletedAt: d.data().deletedAt?.toDate?.()?.toISOString() ?? null }))
+                .sort((a, b) => (b.deletedAt ?? "").localeCompare(a.deletedAt ?? "")) ?? [];
             return json(200, notes);
         } catch (e) { return json(500, { error: "Failed to fetch trash" }); }
     }

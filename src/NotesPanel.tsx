@@ -297,7 +297,7 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
         try {
             const res = await fetch("/api/notes");
             const data = await res.json();
-            setNotes(data);
+            if (Array.isArray(data)) setNotes(data);
         } catch { /* keep existing notes on error */ }
         finally { if (!silent) setLoading(false); }
     }, []);
@@ -318,7 +318,8 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
         setTrashLoading(true);
         try {
             const res = await fetch("/api/notes/trash");
-            setTrashNotes(await res.json());
+            const data = await res.json();
+            if (Array.isArray(data)) setTrashNotes(data);
         } catch { setTrashNotes([]); }
         finally { setTrashLoading(false); }
     }, []);
@@ -529,7 +530,12 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
         .filter(n => typeFilter === "all" ? true : n.type === typeFilter)
         .sort((a, b) => {
             if (sort === "oldest") return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-            if (sort === "most_reacted") return Object.values(b.reactions || {}).reduce((s: number, a: string[]) => s + a.length, 0) - Object.values(a.reactions || {}).reduce((s: number, arr: string[]) => s + arr.length, 0);
+            if (sort === "most_reacted") {
+                const sumB = Object.values(b.reactions ?? {}).reduce((s: number, arr: unknown) => s + (arr as string[]).length, 0);
+                const sumA = Object.values(a.reactions ?? {}).reduce((s: number, arr: unknown) => s + (arr as string[]).length, 0);
+                return sumB - sumA;
+            }
+
             return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(); // newest
         });
 
