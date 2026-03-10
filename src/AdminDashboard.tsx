@@ -253,7 +253,7 @@ export default function AdminDashboard({
     return (
         <div className="space-y-4 p-0">
             {/* ── Greeting row — name left, Admin badge far right ── */}
-            <div className="flex items-start justify-between gap-4 pt-1">
+            <div className="flex items-center justify-between gap-4 pt-1">
                 <div className="flex items-center gap-4">
                     <div className="w-1.5 h-14 rounded-full bg-indigo-500 dark:bg-indigo-400 shrink-0" />
                     <div>
@@ -263,8 +263,8 @@ export default function AdminDashboard({
                     </div>
                 </div>
                 <div className="flex flex-col items-end gap-2 shrink-0">
-                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500/15 border border-amber-400/40 text-amber-500 dark:text-amber-300"
-                        style={{ boxShadow: "0 0 10px 3px rgba(245,158,11,0.45), 0 0 20px 4px rgba(245,158,11,0.2)" }}>
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500/15 border border-amber-400/30 text-amber-500 dark:text-amber-300"
+                        style={{ boxShadow: "0 0 8px 2px rgba(245,158,11,0.25)" }}>
                         <Shield size={12} /> Admin
                     </div>
                     {!loadingExtra && pendingUsers.length > 0 && (
