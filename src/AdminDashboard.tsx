@@ -1,4 +1,6 @@
 import React, { useMemo, useState, useEffect, useCallback } from "react";
+import { db } from "./firebase";
+import VerseOfTheDay from "./VerseOfTheDay";
 import {
     Music, Users, Calendar, NotepadText, ChevronRight, Clock,
     Bug, Lightbulb, CheckCircle2, AlertCircle, Shield, Bell, UserCheck,
@@ -19,11 +21,11 @@ interface Member { id: string; name: string; email: string; photo: string; roles
 interface Note { id: string; type: "bug" | "feature" | "general"; content: string; resolved?: boolean; createdAt: string; authorName: string; }
 
 interface Props {
-    userName: string; userPhoto: string; userEmail: string;
+    userName: string; userEmail: string; userId?: string; userPhoto?: string;
     songs: Song[]; members: Member[]; schedules: Schedule[]; notes: Note[];
     onNavigate: (view: "songs" | "members" | "schedule" | "admin") => void;
-    broadcasts: any[]; pendingUsers: any[]; loadingExtra: boolean;
-    canAddSong: boolean; canWriteSchedule: boolean; canAddMember: boolean;
+    broadcasts?: any[]; pendingUsers?: any[]; loadingExtra?: boolean;
+    canAddSong?: boolean; canWriteSchedule?: boolean; canAddMember?: boolean;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -33,7 +35,7 @@ function daysUntil(dateStr: string) {
         const d = new Date(dateStr + "T00:00:00"); d.setHours(0, 0, 0, 0);
         const diff = Math.round((d.getTime() - t.getTime()) / 86400000);
         if (diff === 0) return "Today"; if (diff === 1) return "Tomorrow";
-        if (diff > 0) return `In ${diff}d`; return `${Math.abs(diff)}d ago`;
+        if (diff > 0) return `In ${diff} d`; return `${Math.abs(diff)}d ago`;
     } catch { return ""; }
 }
 function relDate(iso: string) {
@@ -68,9 +70,9 @@ function Tile({ children, className = "", onClick }: {
 }) {
     return (
         <div onClick={onClick}
-            className={`${CARD} overflow-hidden
+            className={`${CARD} overflow - hidden
                 ${onClick ? "cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-700 hover:shadow-md transition-all duration-150" : ""}
-                ${className}`}>
+                ${className} `}>
             {children}
         </div>
     );
@@ -99,14 +101,14 @@ function MetricTile({ label, value, sub, iconBg, icon, onClick }: {
     label: string; value: number; sub: string; iconBg: string; icon: React.ReactNode; onClick?: () => void;
 }) {
     return (
-        <Tile className="p-5 flex flex-col justify-between" onClick={onClick}>
+        <Tile className="p-4 flex flex-col justify-between" onClick={onClick}>
             <div className="flex items-start justify-between">
-                <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${iconBg}`}>{icon}</div>
+                <div className={`w - 9 h - 9 rounded - xl flex items - center justify - center ${iconBg} `}>{icon}</div>
                 <ArrowUpRight size={13} className="text-gray-300 dark:text-gray-600 mt-0.5" />
             </div>
-            <div className="mt-5">
-                <p className="text-4xl font-black text-gray-900 dark:text-white tracking-tight leading-none">{value}</p>
-                <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 mt-1.5">{label}</p>
+            <div className="mt-2">
+                <p className="text-3xl font-black text-gray-900 dark:text-white tracking-tight leading-none">{value}</p>
+                <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 mt-1">{label}</p>
                 <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">{sub}</p>
             </div>
         </Tile>
@@ -171,9 +173,9 @@ function NextServiceTile({ ev, songs, members, myMemberId, onClick }: {
                     <div className="min-w-0 flex-1">
                         <div className="flex items-start justify-between gap-2">
                             <p className="text-lg font-bold text-gray-900 dark:text-white leading-tight truncate">{ev.eventName ?? "Event"}</p>
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${isUrgent ? "bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400" : "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300"}`}>{du}</span>
+                            <span className={`text - [10px] font - bold px - 2 py - 0.5 rounded - full shrink - 0 ${isUrgent ? "bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400" : "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300"} `}>{du}</span>
                         </div>
-                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full mt-1 inline-block ${svcColor(ev.serviceType)}`}>{svcLabel(ev.serviceType)}</span>
+                        <span className={`text - [11px] font - semibold px - 2 py - 0.5 rounded - full mt - 1 inline - block ${svcColor(ev.serviceType)} `}>{svcLabel(ev.serviceType)}</span>
                         {ev.worshipLeader && <p className="text-xs text-gray-400 mt-1 flex items-center gap-1"><Mic2 size={10} />Leader: {ev.worshipLeader.name}</p>}
                     </div>
                 </div>
@@ -230,7 +232,7 @@ function NextServiceTile({ ev, songs, members, myMemberId, onClick }: {
 
 // ── Main AdminDashboard ───────────────────────────────────────────────────────
 export default function AdminDashboard({
-    userName, userEmail, songs, members, schedules, notes, onNavigate,
+    userName, userEmail, userId = "", songs, members, schedules, notes, onNavigate,
     broadcasts, pendingUsers, loadingExtra, canAddSong, canWriteSchedule, canAddMember,
 }: Props) {
     const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }, []);
@@ -288,6 +290,9 @@ export default function AdminDashboard({
                     )}
                 </div>
             </div>
+
+            {/* ── Verse of the Day — between greeting and quick actions ── */}
+            <VerseOfTheDay userId={userId} userName={userName.split(" ")[0] || userName} userPhoto="" />
 
             {/* ── Quick actions — full-width equal icon grid ── */}
             <div className="grid grid-cols-4 gap-2">
@@ -390,8 +395,8 @@ export default function AdminDashboard({
                         ) : upcomingEvents.slice(0, 4).map((ev, i) => {
                             const d = new Date(ev.date + "T00:00:00");
                             return (
-                                <div key={ev.id} className={`flex items-center gap-3 px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors ${i === 0 ? "bg-indigo-50/50 dark:bg-indigo-900/10" : ""}`}>
-                                    <div className={`flex flex-col items-center justify-center w-10 h-10 rounded-xl shrink-0 ${i === 0 ? "bg-indigo-600 text-white" : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"}`}>
+                                <div key={ev.id} className={`flex items - center gap - 3 px - 5 py - 3 hover: bg - gray - 50 dark: hover: bg - gray - 700 / 30 transition - colors ${i === 0 ? "bg-indigo-50/50 dark:bg-indigo-900/10" : ""} `}>
+                                    <div className={`flex flex - col items - center justify - center w - 10 h - 10 rounded - xl shrink - 0 ${i === 0 ? "bg-indigo-600 text-white" : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"} `}>
                                         <p className="text-[8px] font-bold uppercase opacity-80">{d.toLocaleDateString("en", { month: "short" })}</p>
                                         <p className="text-sm font-black leading-none">{d.getDate()}</p>
                                     </div>
@@ -399,7 +404,7 @@ export default function AdminDashboard({
                                         <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{ev.eventName ?? "Event"}</p>
                                         <p className="text-xs text-gray-400 truncate">{ev.worshipLeader?.name ? <span>Leader: {ev.worshipLeader.name}</span> : <span className="text-red-400 flex items-center gap-1"><AlertTriangle size={9} />No leader</span>}</p>
                                     </div>
-                                    <span className={`text-xs font-semibold shrink-0 ${i === 0 ? "text-indigo-600 dark:text-indigo-400" : "text-gray-400"}`}>{daysUntil(ev.date)}</span>
+                                    <span className={`text - xs font - semibold shrink - 0 ${i === 0 ? "text-indigo-600 dark:text-indigo-400" : "text-gray-400"} `}>{daysUntil(ev.date)}</span>
                                 </div>
                             );
                         })}
@@ -410,7 +415,7 @@ export default function AdminDashboard({
                 <Tile>
                     <CardHeader
                         icon={<Megaphone size={14} className="text-indigo-500" />}
-                        title={`Announcements${broadcasts.length > 0 ? ` — ${broadcasts.length} live` : ""}`}
+                        title={`Announcements${broadcasts.length > 0 ? ` — ${broadcasts.length} live` : ""} `}
                         action="Manage"
                         onAction={() => onNavigate("admin")}
                     />
@@ -502,7 +507,7 @@ export default function AdminDashboard({
                                 </div>
                                 <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                                     <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full"
-                                        style={{ width: members.length > 0 ? `${Math.round(count / members.length * 100)}%` : "0%" }} />
+                                        style={{ width: members.length > 0 ? `${Math.round(count / members.length * 100)}% ` : "0%" }} />
                                 </div>
                             </div>
                         ))}

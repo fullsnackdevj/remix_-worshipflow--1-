@@ -1,34 +1,14 @@
 {
     "title": "What's New in WorshipFlow",
-    "message": "Here's what's been added to make your worship team experience even better:",
-    "releases": [
-        {
-            "version": "1.2",
-            "date": "March 2026",
-            "highlights": [
-                "App announcements — admins can now notify the whole team with maintenance alerts or release updates",
-                "Personalized welcome screen when you join the team for the first time",
-                "Push notifications so you never miss a song update or schedule change — even on your lock screen"
-            ]
-        },
-        {
-            "version": "1.1",
-            "date": "February 2026",
-            "highlights": [
-                "Service scheduling — plan upcoming services and assign team members by role",
-                "Team member profiles with photos, roles, and contact info all in one place",
-                "Role-based access — each member sees only what's relevant to their role"
-            ]
-        },
-        {
-            "version": "1.0",
-            "date": "February 2026",
-            "highlights": [
-                "Smart song search — find any song instantly by title, artist, language, or tag",
-                "Full-screen lyrics viewer — clean, distraction-free view designed for stage use",
-                "YouTube video links attached directly to every song for quick reference",
-                "Song cover art — add images to make your song library feel alive"
-            ]
-        }
+    "message": "Here's what's been added and improved across the app this month:",
+    "bulletPoints": [
+        "Verse of the Day — a daily NLT Bible verse with inspiring insights and cross-references now appears at the top of every dashboard. React with emojis and share team reflections.",
+        "Church Events dashboard — renamed and redesigned to show all scheduled events (not just services) with correct upcoming counts and member avatars.",
+        "Bento grid dashboard — all team members now see a beautiful card-based dashboard layout tailored to their role and permissions.",
+        "Admin badge — redesigned with a seamless glow and proper alignment next to your name in the greeting.",
+        "Quick actions redesigned — icon grid stretches edge-to-edge for faster one-tap access to key features.",
+        "Calendar event panel — tapping a calendar date on mobile now opens a centered modal instead of a sheet, keeping events visible at a glance.",
+        "Profile photo improvements — member avatars in the Church Events tile now resolve photos using multiple fallback strategies for higher accuracy.",
+        "Sidebar now closes automatically when navigating to Scheduling on mobile."
     ]
 }

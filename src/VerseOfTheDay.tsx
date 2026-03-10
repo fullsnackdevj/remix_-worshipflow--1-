@@ -33,7 +33,7 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
     const [notes, setNotes] = useState<VotdNote[]>([]);
     const [noteInput, setNoteInput] = useState("");
     const [showNotes, setShowNotes] = useState(false);
-    const [showInsight, setShowInsight] = useState(false);
+    const [showInsight, setShowInsight] = useState(true);
     const [savingNote, setSavingNote] = useState(false);
 
     const docRef = doc(db, "verseOfDay", dateKey);

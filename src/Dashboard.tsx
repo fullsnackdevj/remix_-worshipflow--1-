@@ -7,9 +7,35 @@ import {
     User, Shield, ArrowRight, ClipboardList,
     Bell, UserCheck, AlertTriangle,
     CheckCheck, Megaphone, Plus, UserPlus, Zap, BarChart3,
-    Radio, FlaskConical
+    Radio, FlaskConical, ArrowUpRight
 } from "lucide-react";
 import VerseOfTheDay from "./VerseOfTheDay";
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function greetingStr() { const h = new Date().getHours(); return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"; }
+
+const ROLE_COLORS: Record<string, string> = {
+    admin: "bg-amber-500/15 border-amber-400/30 text-amber-500",
+    leader: "bg-indigo-500/15 border-indigo-400/30 text-indigo-400",
+    planning_lead: "bg-rose-500/15 border-rose-400/30 text-rose-400",
+    musician: "bg-purple-500/15 border-purple-400/30 text-purple-400",
+    audio_tech: "bg-teal-500/15 border-teal-400/30 text-teal-400",
+    qa_specialist: "bg-fuchsia-500/15 border-fuchsia-400/30 text-fuchsia-400",
+    member: "bg-gray-500/15 border-gray-400/30 text-gray-400",
+};
+const ROLE_LABELS: Record<string, string> = {
+    admin: "Admin", leader: "Worship Leader", planning_lead: "Planning Lead",
+    musician: "Musician", audio_tech: "Audio / Tech", qa_specialist: "QA Specialist", member: "Member",
+};
+function RoleBadgeChip({ role }: { role: string }) {
+    const color = ROLE_COLORS[role] ?? ROLE_COLORS.member;
+    const label = ROLE_LABELS[role] ?? role;
+    return (
+        <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border ${color}`}>
+            {label}
+        </div>
+    );
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface ScheduleMember { memberId: string; name: string; photo: string; role: string; }
@@ -414,186 +440,103 @@ export default function Dashboard({
     ].filter(Boolean).filter((v, i, arr) => { const a = v as any; return arr.findIndex((x: any) => x && a && x.label === a.label) === i; }) as { label: string; icon: React.ReactNode; action: () => void }[];
 
     return (
-        <div className="max-w-6xl mx-auto space-y-5 pb-12">
+        <div className="space-y-4 p-0 pb-12">
 
-            {/* Verse of the Day — shown to all users at the top */}
+            {/* ── Greeting row — mirrors AdminDashboard style ── */}
+            <div className="flex items-center justify-between gap-4 pt-1">
+                <div className="flex items-center gap-4">
+                    <div className="w-1.5 h-14 rounded-full bg-indigo-500 dark:bg-indigo-400 shrink-0" />
+                    <div>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">{greetingStr()},</p>
+                        <h1 className="text-3xl font-bold text-gray-900 dark:text-white leading-tight">{userName.split(" ")[0] || userName} 👋</h1>
+                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{new Date().toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</p>
+                    </div>
+                </div>
+                <div className="flex flex-col items-end gap-2 shrink-0">
+                    <RoleBadgeChip role={userRole} />
+                </div>
+            </div>
+
+            {/* ── Verse of the Day — below greeting ── */}
             <VerseOfTheDay userId={userId} userName={userName} userPhoto={userPhoto} />
 
-            {/* Header */}
-            <DashHeader userName={userName} userRole={userRole}
-                pendingCount={isAdmin ? pendingUsers.length : 0}
-                onNavigate={onNavigate} loadingExtra={loadingExtra} />
-
-            {/* Quick Actions */}
-            <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 mr-1">Quick Actions</span>
+            {/* ── Quick actions — 4-col icon grid same as admin ── */}
+            <div className={`grid gap-2 ${quickActions.length <= 2 ? "grid-cols-2" : quickActions.length === 3 ? "grid-cols-3" : "grid-cols-4"}`}>
                 {quickActions.map(({ label, icon, action }) => (
                     <button key={label} onClick={action}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-indigo-400/50 dark:hover:border-indigo-500/50 hover:bg-gray-200 dark:hover:bg-gray-700/60 text-gray-700 dark:text-gray-300 text-xs font-medium transition-all">
-                        {icon} {label}
+                        className="flex flex-col items-center justify-center gap-1.5 py-3 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors">
+                        {icon}
+                        <span className="text-[10px] font-semibold hidden sm:block">{label}</span>
                     </button>
                 ))}
             </div>
 
-            {/* My Next Service — everyone */}
-            <MyServiceCard schedule={myNextService} myMemberId={myMemberId} songs={songs} members={members} onNavigate={onNavigate} />
-
-            {/* Broadcasts — everyone */}
-            <BroadcastsCard broadcasts={broadcasts} loading={loadingExtra} isAdmin={isAdmin} onNavigate={onNavigate} />
-
-            {/* Admin & Leaders: stat tiles + full schedule */}
+            {/* ── Metric tiles — role-gated ── */}
             {canSeeSchedule && (
-                <>
-                    {/* Stat tiles — admin/leader/planningLead */}
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                        {[
-                            { label: "Songs", value: songs.length, sub: `${songsUsedInServices} used in services`, icon: <Music size={20} />, c: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-50 dark:bg-indigo-900/30", border: "border-indigo-100 dark:border-indigo-800/50", view: "songs" as const },
-                            { label: "Team Members", value: members.length, sub: `${members.filter(m => m.status !== "inactive").length} active`, icon: <Users size={20} />, c: "text-violet-600 dark:text-violet-400", bg: "bg-violet-50 dark:bg-violet-900/30", border: "border-violet-100 dark:border-violet-800/50", view: "members" as const },
-                            { label: "Events This Month", value: eventsThisMonth, sub: `${totalServicesAllTime} all-time`, icon: <Calendar size={20} />, c: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-900/30", border: "border-emerald-100 dark:border-emerald-800/50", view: "schedule" as const },
-                            { label: "Open Notes", value: unresolvedNotes, sub: `${openBugs} bugs · ${openFeatures} requests`, icon: <NotepadText size={20} />, c: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-900/30", border: "border-amber-100 dark:border-amber-800/50", view: null as null },
-                        ].map(({ label, value, sub, icon, c, bg, border, view }) => (
-                            <button key={label} onClick={() => view && onNavigate(view)}
-                                className={`flex flex-col gap-3 p-4 rounded-2xl bg-white dark:bg-gray-800 border ${border} shadow-sm hover:shadow-md transition-all text-left ${view ? "hover:-translate-y-0.5 cursor-pointer" : "cursor-default"}`}>
-                                <div className={`w-10 h-10 rounded-xl ${bg} ${c} flex items-center justify-center`}>{icon}</div>
-                                <div>
-                                    <p className="text-2xl font-bold text-gray-900 dark:text-white">{value}</p>
-                                    <p className="text-xs font-medium text-gray-600 dark:text-gray-400">{label}</p>
-                                    <p className="text-[10px] text-gray-400 mt-0.5">{sub}</p>
-                                </div>
-                            </button>
-                        ))}
-                    </div>
-
-                    {/* Service Coverage + Issues (side by side) */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {/* Coverage */}
-                        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-                            <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-100 dark:border-gray-700 font-semibold text-gray-900 dark:text-white text-sm">
-                                <AlertTriangle size={15} className="text-amber-500" /> Service Coverage
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {[
+                        { label: "Songs", value: songs.length, sub: `${songsUsedInServices} in services`, iconBg: "bg-indigo-100 dark:bg-indigo-900/40", icon: <Music size={15} className="text-indigo-600 dark:text-indigo-400" />, nav: "songs" as const },
+                        { label: "Team Members", value: members.length, sub: `${members.filter(m => m.status !== "inactive").length} active`, iconBg: "bg-violet-100 dark:bg-violet-900/40", icon: <Users size={15} className="text-violet-600 dark:text-violet-400" />, nav: "members" as const },
+                        { label: "Church Events", value: upcomingEvents.length, sub: `${eventsThisMonth} this month`, iconBg: "bg-emerald-100 dark:bg-emerald-900/40", icon: <Calendar size={15} className="text-emerald-600 dark:text-emerald-400" />, nav: "schedule" as const },
+                        { label: "Open Notes", value: unresolvedNotes, sub: `${openBugs} bugs · ${openFeatures} req`, iconBg: "bg-amber-100 dark:bg-amber-900/40", icon: <NotepadText size={15} className="text-amber-600 dark:text-amber-400" />, nav: null as null },
+                    ].map(({ label, value, sub, iconBg, icon, nav }) => (
+                        <div key={label}
+                            onClick={() => nav && onNavigate(nav)}
+                            className={`bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-4 flex flex-col justify-between overflow-hidden ${nav ? "cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-700 hover:shadow-md transition-all duration-150" : ""}`}>
+                            <div className="flex items-start justify-between">
+                                <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${iconBg}`}>{icon}</div>
+                                {nav && <ArrowUpRight size={13} className="text-gray-300 dark:text-gray-600 mt-0.5" />}
                             </div>
-                            <div className="p-4 space-y-2">
-                                {upcomingEvents.length === 0 ? (
-                                    <div className="flex flex-col items-center py-4 gap-2 text-center"><CheckCheck size={20} className="text-gray-300" /><p className="text-xs text-gray-400">No upcoming events</p></div>
-                                ) : coverageWarnings.length === 0 ? (
-                                    <div className="flex items-center gap-2 px-3 py-3 rounded-xl bg-green-50 dark:bg-green-900/20 text-sm text-green-700 dark:text-green-400 font-medium"><CheckCheck size={15} /> All upcoming events have leaders ✓</div>
-                                ) : coverageWarnings.slice(0, 3).map(ev => (
-                                    <div key={ev.id} className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-red-50 dark:bg-red-900/15 border border-red-100 dark:border-red-800/30 text-xs">
-                                        <AlertTriangle size={12} className="text-red-500 shrink-0 mt-0.5" />
-                                        <div><p className="font-semibold text-red-700 dark:text-red-400">{ev.eventName ?? "Event"}</p><p className="text-red-400">{new Date(ev.date + "T00:00:00").toLocaleDateString("en", { weekday: "short", month: "short", day: "numeric" })} · No leader</p></div>
-                                    </div>
-                                ))}
-                                {coverageOk.slice(0, 3).map(ev => (
-                                    <div key={ev.id} className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs bg-gray-50 dark:bg-gray-700/30">
-                                        <CheckCircle2 size={12} className="text-green-500 shrink-0" />
-                                        <span className="truncate text-gray-500 dark:text-gray-400">{ev.eventName ?? "Event"}</span>
-                                        <span className="ml-auto text-gray-400 shrink-0">{ev.worshipLeader?.name}</span>
-                                    </div>
-                                ))}
+                            <div className="mt-2">
+                                <p className="text-3xl font-black text-gray-900 dark:text-white tracking-tight leading-none">{value}</p>
+                                <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 mt-1">{label}</p>
+                                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">{sub}</p>
                             </div>
                         </div>
-
-                        {/* Open Issues — Admin only */}
-                        {isAdmin ? (
-                            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-                                <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-100 dark:border-gray-700 font-semibold text-gray-900 dark:text-white text-sm">
-                                    <AlertCircle size={15} className="text-amber-500" /> Open Issues
-                                </div>
-                                <div className="p-4 space-y-3">
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div className="flex flex-col items-center py-3 rounded-2xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/40">
-                                            <p className="text-2xl font-bold text-red-600 dark:text-red-400">{openBugs}</p>
-                                            <div className="flex items-center gap-1 text-xs text-red-500 font-medium mt-0.5"><Bug size={11} /> Bugs</div>
-                                        </div>
-                                        <div className="flex flex-col items-center py-3 rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/40">
-                                            <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{openFeatures}</p>
-                                            <div className="flex items-center gap-1 text-xs text-amber-500 font-medium mt-0.5"><Lightbulb size={11} /> Requests</div>
-                                        </div>
-                                    </div>
-                                    {recentNotes.length === 0 ? (
-                                        <div className="flex flex-col items-center py-3 gap-1.5 text-center"><CheckCircle2 size={22} className="text-green-400 opacity-70" /><p className="text-xs text-gray-400">All clear! 🎉</p></div>
-                                    ) : recentNotes.map(n => (
-                                        <div key={n.id} className={`flex gap-2 p-2.5 rounded-xl border text-xs ${n.type === "bug" ? "bg-red-50 dark:bg-red-900/10 border-red-100 dark:border-red-900/30" : n.type === "feature" ? "bg-amber-50 dark:bg-amber-900/10 border-amber-100 dark:border-amber-900/30" : "bg-gray-50 dark:bg-gray-700/30 border-gray-100 dark:border-gray-700"}`}>
-                                            <span className="shrink-0 mt-0.5">{n.type === "bug" ? <Bug size={11} className="text-red-500" /> : n.type === "feature" ? <Lightbulb size={11} className="text-amber-500" /> : <NotepadText size={11} className="text-gray-400" />}</span>
-                                            <div className="min-w-0"><p className="text-gray-700 dark:text-gray-200 line-clamp-1">{(n.content ?? "").slice(0, 55)}{(n.content ?? "").length > 55 ? "…" : ""}</p><p className="text-gray-400 mt-0.5">{n.authorName}</p></div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        ) : (
-                            /* For leaders: show their upcoming services instead */
-                            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-                                <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-100 dark:border-gray-700 font-semibold text-gray-900 dark:text-white text-sm">
-                                    <Star size={15} className="text-indigo-500" /> My Upcoming Services
-                                </div>
-                                <div className="divide-y divide-gray-100 dark:divide-gray-700">
-                                    {myServices.length === 0 ? (
-                                        <div className="flex items-center gap-2 px-5 py-5 text-gray-400 text-sm">No upcoming assignments</div>
-                                    ) : myServices.slice(0, 4).map((s, i) => (
-                                        <div key={s.id} className={`flex items-center gap-3 px-5 py-3 ${i === 0 ? "bg-indigo-50/40 dark:bg-indigo-900/10" : ""}`}>
-                                            <div className={`w-9 h-9 rounded-xl flex flex-col items-center justify-center shrink-0 ${i === 0 ? "bg-indigo-600 text-white" : "bg-gray-100 dark:bg-gray-700"}`}>
-                                                <p className="text-[8px] font-bold uppercase">{new Date(s.date + "T00:00:00").toLocaleDateString("en", { month: "short" })}</p>
-                                                <p className={`text-sm font-black leading-tight ${i === 0 ? "text-white" : "text-gray-900 dark:text-white"}`}>{new Date(s.date + "T00:00:00").getDate()}</p>
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{s.eventName ?? "Event"}</p>
-                                                <p className="text-xs text-gray-400 truncate">{svcLabel(s.serviceType)}</p>
-                                            </div>
-                                            <span className="text-xs font-semibold text-indigo-500 shrink-0">{daysUntil(s.date)}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Full Upcoming Timeline */}
-                    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-                        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
-                            <div className="flex items-center gap-2 font-semibold text-gray-900 dark:text-white text-sm"><Clock size={15} className="text-indigo-500" /> Upcoming Schedule</div>
-                            <button onClick={() => onNavigate("schedule")} className="text-xs text-indigo-500 hover:text-indigo-400 flex items-center gap-1 font-medium">Full calendar <ChevronRight size={13} /></button>
-                        </div>
-                        {upcomingEvents.length === 0 ? (
-                            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-5 py-5">
-                                <div className="flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-700/60 flex items-center justify-center"><Calendar size={18} className="text-gray-400" /></div><p className="text-sm text-gray-500 dark:text-gray-400">No upcoming events scheduled</p></div>
-                                {canWriteSchedule && <button onClick={() => onNavigate("schedule")} className="shrink-0 flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"><Plus size={13} /> Add Event</button>}
-                            </div>
-                        ) : (
-                            <div className="divide-y divide-gray-100 dark:divide-gray-700">
-                                {upcomingEvents.slice(0, 5).map((ev, i) => (
-                                    <div key={ev.id} className={`flex items-center gap-4 px-5 py-3.5 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors ${i === 0 ? "bg-indigo-50/50 dark:bg-indigo-900/10" : ""}`}>
-                                        <div className={`w-10 h-10 rounded-xl shrink-0 flex flex-col items-center justify-center ${i === 0 ? "bg-indigo-600 text-white" : "bg-gray-100 dark:bg-gray-700"}`}>
-                                            <p className="text-[9px] font-bold uppercase opacity-80">{new Date(ev.date + "T00:00:00").toLocaleDateString("en", { month: "short" })}</p>
-                                            <p className={`text-base font-black leading-tight ${i === 0 ? "text-white" : "text-gray-900 dark:text-white"}`}>{new Date(ev.date + "T00:00:00").getDate()}</p>
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{ev.eventName ?? "Event"}</p>
-                                            <p className="text-xs mt-0.5 truncate">{ev.worshipLeader?.name ? <span className="text-gray-400">Leader: {ev.worshipLeader.name}</span> : <span className="text-red-400 flex items-center gap-1"><AlertTriangle size={9} /> No leader assigned</span>}</p>
-                                        </div>
-                                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${svcColor(ev.serviceType)}`}>{svcLabel(ev.serviceType)}</span>
-                                        <span className={`text-xs font-semibold shrink-0 ${i === 0 ? "text-indigo-600 dark:text-indigo-400" : "text-gray-400"}`}>{daysUntil(ev.date)}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                </>
+                    ))}
+                </div>
             )}
 
-            {/* Milestones — everyone */}
-            <div className="grid grid-cols-3 gap-3">
-                {[
-                    { label: "Total Services", value: totalServicesAllTime, icon: <Zap size={15} />, c: "text-indigo-500", bg: "bg-indigo-50 dark:bg-indigo-900/20" },
-                    { label: "Songs in Library", value: songs.length, icon: <Music size={15} />, c: "text-violet-500", bg: "bg-violet-50 dark:bg-violet-900/20" },
-                    { label: "Used in Services", value: songsUsedInServices, icon: <BarChart3 size={15} />, c: "text-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-900/20" },
-                ].map(({ label, value, icon, c, bg }) => (
-                    <div key={label} className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm">
-                        <div className={`w-9 h-9 rounded-xl ${bg} ${c} flex items-center justify-center shrink-0`}>{icon}</div>
-                        <div><p className="text-xl font-bold text-gray-900 dark:text-white leading-tight">{value}</p><p className="text-[10px] text-gray-400 leading-tight">{label}</p></div>
-                    </div>
-                ))}
-            </div>
+            {/* ── My Next Service hero ── */}
+            <MyServiceCard schedule={myNextService} myMemberId={myMemberId} songs={songs} members={members} onNavigate={onNavigate} />
 
-            {/* Bottom grid: Recent Songs + Team breakdown */}
+            {/* ── Broadcasts ── */}
+            <BroadcastsCard broadcasts={broadcasts} loading={loadingExtra} isAdmin={isAdmin} onNavigate={onNavigate} />
+
+            {/* ── Upcoming Schedule timeline ── */}
+            {canSeeSchedule && (
+                <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+                    <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
+                        <div className="flex items-center gap-2 font-semibold text-gray-900 dark:text-white text-sm"><Clock size={15} className="text-indigo-500" /> Upcoming Events</div>
+                        <button onClick={() => onNavigate("schedule")} className="text-xs text-indigo-500 hover:text-indigo-400 flex items-center gap-1 font-medium">Full calendar <ChevronRight size={13} /></button>
+                    </div>
+                    {upcomingEvents.length === 0 ? (
+                        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-5 py-5">
+                            <div className="flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-700/60 flex items-center justify-center"><Calendar size={18} className="text-gray-400" /></div><p className="text-sm text-gray-500 dark:text-gray-400">No upcoming events scheduled</p></div>
+                            {canWriteSchedule && <button onClick={() => onNavigate("schedule")} className="shrink-0 flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"><Plus size={13} /> Add Event</button>}
+                        </div>
+                    ) : (
+                        <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                            {upcomingEvents.slice(0, 5).map((ev, i) => (
+                                <div key={ev.id} className={`flex items-center gap-4 px-5 py-3.5 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors ${i === 0 ? "bg-indigo-50/50 dark:bg-indigo-900/10" : ""}`}>
+                                    <div className={`w-10 h-10 rounded-xl shrink-0 flex flex-col items-center justify-center ${i === 0 ? "bg-indigo-600 text-white" : "bg-gray-100 dark:bg-gray-700"}`}>
+                                        <p className="text-[9px] font-bold uppercase opacity-80">{new Date(ev.date + "T00:00:00").toLocaleDateString("en", { month: "short" })}</p>
+                                        <p className={`text-base font-black leading-tight ${i === 0 ? "text-white" : "text-gray-900 dark:text-white"}`}>{new Date(ev.date + "T00:00:00").getDate()}</p>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{ev.eventName ?? "Event"}</p>
+                                        <p className="text-xs mt-0.5 truncate">{ev.worshipLeader?.name ? <span className="text-gray-400">Leader: {ev.worshipLeader.name}</span> : <span className="text-red-400 flex items-center gap-1"><AlertTriangle size={9} /> No leader assigned</span>}</p>
+                                    </div>
+                                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${svcColor(ev.serviceType)}`}>{svcLabel(ev.serviceType)}</span>
+                                    <span className={`text-xs font-semibold shrink-0 ${i === 0 ? "text-indigo-600 dark:text-indigo-400" : "text-gray-400"}`}>{daysUntil(ev.date)}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* ── Bottom bento: Songs + Team ── */}
             {(canSeeSongs || canSeeTeam) && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     {canSeeSongs && (
@@ -605,7 +548,7 @@ export default function Dashboard({
                             {recentSongs.length === 0 ? (
                                 <div className="flex flex-col items-center py-8 gap-3 text-center px-5">
                                     <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center"><BookOpen size={22} className="text-indigo-400" /></div>
-                                    <div><p className="text-sm font-medium text-gray-500 dark:text-gray-400">No songs yet</p></div>
+                                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400">No songs yet</p>
                                     {canAddSong && <button onClick={() => onNavigate("songs")} className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"><Plus size={12} /> Add First Song</button>}
                                 </div>
                             ) : (
@@ -651,3 +594,4 @@ export default function Dashboard({
         </div>
     );
 }
+
