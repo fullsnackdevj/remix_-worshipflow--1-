@@ -276,14 +276,37 @@ export default function AdminDashboard({
                 </div>
             </div>
 
-            {/* ── Quick actions ── */}
-            <div className="flex flex-wrap gap-2 items-center">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mr-1">Quick Actions</span>
-                {canAddSong && <button onClick={() => onNavigate("songs")} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 text-xs font-semibold hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors"><Music size={11} />Add Song</button>}
-                {canWriteSchedule && <button onClick={() => onNavigate("schedule")} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 text-xs font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"><Calendar size={11} />Schedule</button>}
-                {canAddMember && <button onClick={() => onNavigate("members")} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 text-violet-600 dark:text-violet-400 text-xs font-semibold hover:bg-violet-100 dark:hover:bg-violet-900/40 transition-colors"><UserPlus size={11} />Add Member</button>}
-                <button onClick={() => onNavigate("admin")} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400 text-xs font-semibold hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"><Megaphone size={11} />Broadcast</button>
+            {/* ── Quick actions — icon-only on mobile, icon+label on sm+ ── */}
+            <div className="flex items-center gap-1.5 sm:gap-2">
+                <span className="hidden sm:block text-[10px] font-bold uppercase tracking-widest text-gray-400 mr-1">Quick&nbsp;Actions</span>
+                {canAddSong && (
+                    <button onClick={() => onNavigate("songs")}
+                        title="Add Song"
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 rounded-lg sm:rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 text-xs font-semibold hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors">
+                        <Music size={13} /><span className="hidden sm:inline">Add Song</span>
+                    </button>
+                )}
+                {canWriteSchedule && (
+                    <button onClick={() => onNavigate("schedule")}
+                        title="Schedule"
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 rounded-lg sm:rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 text-xs font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors">
+                        <Calendar size={13} /><span className="hidden sm:inline">Schedule</span>
+                    </button>
+                )}
+                {canAddMember && (
+                    <button onClick={() => onNavigate("members")}
+                        title="Add Member"
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 rounded-lg sm:rounded-xl bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 text-violet-600 dark:text-violet-400 text-xs font-semibold hover:bg-violet-100 dark:hover:bg-violet-900/40 transition-colors">
+                        <UserPlus size={13} /><span className="hidden sm:inline">Add Member</span>
+                    </button>
+                )}
+                <button onClick={() => onNavigate("admin")}
+                    title="Broadcast"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 rounded-lg sm:rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400 text-xs font-semibold hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors">
+                    <Megaphone size={13} /><span className="hidden sm:inline">Broadcast</span>
+                </button>
             </div>
+
 
             {/* ── ROW 1: 4 metrics + Next Service hero (2-col) ── */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
