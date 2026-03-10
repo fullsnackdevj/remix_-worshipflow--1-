@@ -3442,17 +3442,17 @@ export default function App() {
                               accept="image/*"
                             />
 
-                            {/* Undo/Redo toolbar — Lyrics */}
+                            {/* Undo/Redo icon buttons — Lyrics (touch-friendly) */}
                             <div className="flex items-center gap-1 mb-1.5">
                               <button type="button" onClick={undoLyrics} disabled={!lyricsCanUndo}
-                                title="Undo (Ctrl+Z)"
-                                className="flex items-center gap-1 px-2 py-1 text-xs rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
-                                <Undo2 size={12} /> Undo
+                                aria-label="Undo" title="Undo (Ctrl+Z)"
+                                className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 active:scale-90 disabled:opacity-25 disabled:cursor-not-allowed transition-all">
+                                <Undo2 size={16} />
                               </button>
                               <button type="button" onClick={redoLyrics} disabled={!lyricsCanRedo}
-                                title="Redo (Ctrl+Y)"
-                                className="flex items-center gap-1 px-2 py-1 text-xs rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
-                                <Redo2 size={12} /> Redo
+                                aria-label="Redo" title="Redo (Ctrl+Y)"
+                                className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 active:scale-90 disabled:opacity-25 disabled:cursor-not-allowed transition-all">
+                                <Redo2 size={16} />
                               </button>
                             </div>
 
@@ -3518,17 +3518,17 @@ export default function App() {
                               accept="image/*"
                             />
 
-                            {/* Undo/Redo toolbar — Chords */}
+                            {/* Undo/Redo icon buttons — Chords (touch-friendly) */}
                             <div className="flex items-center gap-1 mb-1.5">
                               <button type="button" onClick={undoChords} disabled={!chordsCanUndo}
-                                title="Undo (Ctrl+Z)"
-                                className="flex items-center gap-1 px-2 py-1 text-xs rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
-                                <Undo2 size={12} /> Undo
+                                aria-label="Undo" title="Undo (Ctrl+Z)"
+                                className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 active:scale-90 disabled:opacity-25 disabled:cursor-not-allowed transition-all">
+                                <Undo2 size={16} />
                               </button>
                               <button type="button" onClick={redoChords} disabled={!chordsCanRedo}
-                                title="Redo (Ctrl+Y)"
-                                className="flex items-center gap-1 px-2 py-1 text-xs rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
-                                <Redo2 size={12} /> Redo
+                                aria-label="Redo" title="Redo (Ctrl+Y)"
+                                className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 active:scale-90 disabled:opacity-25 disabled:cursor-not-allowed transition-all">
+                                <Redo2 size={16} />
                               </button>
                             </div>
 
