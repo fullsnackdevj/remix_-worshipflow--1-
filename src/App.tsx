@@ -1784,7 +1784,7 @@ export default function App() {
 
           {/* Scheduling */}
           <button
-            onClick={() => setCurrentView("schedule")}
+            onClick={() => { setCurrentView("schedule"); setIsMobileMenuOpen(false); }}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "schedule"
               ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
               : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
