@@ -49,8 +49,8 @@ function svcLabel(t?: string) {
 }
 function svcColor(t?: string) {
     return ({
-        sunday_service: "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300",
-        midweek_service: "bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300",
+        sunday_service: "bg-indigo-100 dark:bg-indigo-600/30 text-indigo-700 dark:text-indigo-200",
+        midweek_service: "bg-violet-100 dark:bg-violet-600/30 text-violet-700 dark:text-violet-200",
         practice: "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300",
         special: "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300",
     })[t ?? ""] ?? "bg-gray-100 dark:bg-gray-700 text-gray-600";
@@ -252,58 +252,61 @@ export default function AdminDashboard({
 
     return (
         <div className="space-y-4 p-0">
-            {/* ── Greeting row ── */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
+            {/* ── Greeting row — name + Admin badge on same line ── */}
+            <div className="flex items-start justify-between gap-4 pt-1">
                 <div className="flex items-center gap-4">
                     <div className="w-1.5 h-14 rounded-full bg-indigo-500 dark:bg-indigo-400 shrink-0" />
                     <div>
                         <p className="text-sm text-gray-500 dark:text-gray-400">{greeting()},</p>
-                        <h1 className="text-3xl font-bold text-gray-900 dark:text-white leading-tight">{first} 👋</h1>
+                        <div className="flex items-center gap-3">
+                            <h1 className="text-3xl font-bold text-gray-900 dark:text-white leading-tight">{first} 👋</h1>
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-bold bg-amber-500/15 border border-amber-400/30 text-amber-600 dark:text-amber-300"
+                                style={{ boxShadow: "0 0 12px 2px rgba(245,158,11,0.2)" }}>
+                                <Shield size={13} /> Admin
+                            </div>
+                        </div>
                         <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{new Date().toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-2 flex-wrap justify-end">
-                    <div className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-amber-500/15 border border-amber-400/30 text-amber-600 dark:text-amber-300"
-                        style={{ boxShadow: "0 0 12px 2px rgba(245,158,11,0.2)" }}>
-                        <Shield size={14} /> Admin
-                    </div>
-                    {!loadingExtra && pendingUsers.length > 0 && (
-                        <button onClick={() => onNavigate("admin")}
-                            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 text-amber-700 dark:text-amber-400 text-sm font-semibold hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors">
-                            <UserCheck size={14} />{pendingUsers.length} pending {pendingUsers.length === 1 ? "request" : "requests"}
-                        </button>
-                    )}
-                </div>
+                {!loadingExtra && pendingUsers.length > 0 && (
+                    <button onClick={() => onNavigate("admin")}
+                        className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 text-amber-700 dark:text-amber-400 text-xs font-semibold hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors">
+                        <UserCheck size={12} />{pendingUsers.length} pending
+                    </button>
+                )}
             </div>
 
-            {/* ── Quick actions — icon-only on mobile, icon+label on sm+ ── */}
-            <div className="flex items-center gap-1.5 sm:gap-2">
-                <span className="hidden sm:block text-[10px] font-bold uppercase tracking-widest text-gray-400 mr-1">Quick&nbsp;Actions</span>
+            {/* ── Quick actions — full-width equal icon grid ── */}
+            <div className="grid grid-cols-4 gap-2">
                 {canAddSong && (
                     <button onClick={() => onNavigate("songs")}
                         title="Add Song"
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 rounded-lg sm:rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 text-xs font-semibold hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors">
-                        <Music size={13} /><span className="hidden sm:inline">Add Song</span>
+                        className="flex flex-col items-center justify-center gap-1.5 py-3 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors">
+                        <Music size={18} />
+                        <span className="text-[10px] font-semibold hidden sm:block">Songs</span>
                     </button>
                 )}
                 {canWriteSchedule && (
                     <button onClick={() => onNavigate("schedule")}
                         title="Schedule"
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 rounded-lg sm:rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 text-xs font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors">
-                        <Calendar size={13} /><span className="hidden sm:inline">Schedule</span>
+                        className="flex flex-col items-center justify-center gap-1.5 py-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors">
+                        <Calendar size={18} />
+                        <span className="text-[10px] font-semibold hidden sm:block">Schedule</span>
                     </button>
                 )}
                 {canAddMember && (
                     <button onClick={() => onNavigate("members")}
                         title="Add Member"
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 rounded-lg sm:rounded-xl bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 text-violet-600 dark:text-violet-400 text-xs font-semibold hover:bg-violet-100 dark:hover:bg-violet-900/40 transition-colors">
-                        <UserPlus size={13} /><span className="hidden sm:inline">Add Member</span>
+                        className="flex flex-col items-center justify-center gap-1.5 py-3 rounded-xl bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 text-violet-600 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-900/40 transition-colors">
+                        <UserPlus size={18} />
+                        <span className="text-[10px] font-semibold hidden sm:block">Members</span>
                     </button>
                 )}
                 <button onClick={() => onNavigate("admin")}
                     title="Broadcast"
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 rounded-lg sm:rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400 text-xs font-semibold hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors">
-                    <Megaphone size={13} /><span className="hidden sm:inline">Broadcast</span>
+                    className="flex flex-col items-center justify-center gap-1.5 py-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors">
+                    <Megaphone size={18} />
+                    <span className="text-[10px] font-semibold hidden sm:block">Broadcast</span>
                 </button>
             </div>
 
