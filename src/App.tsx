@@ -7,7 +7,6 @@ import WelcomeToast from "./WelcomeToast";
 import AdminPanel from "./AdminPanel";
 import HelpPanel from "./HelpPanel";
 import NotesPanel from "./NotesPanel";
-import GuideBotPanel from "./GuideBotPanel";
 import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, LayoutGrid, List, BookOpen, Mic2, Copy, Pencil, Shield, Mail, Bell, Guitar, Sliders, Palette, Lock, AlertTriangle, CheckCircle, BookMarked, HandMetal, Headphones, HelpCircle, Undo2, Redo2 } from "lucide-react";
 import { Song, Tag } from "./types";
 
@@ -4242,8 +4241,6 @@ export default function App() {
           </div>
         </div>
       )}
-      {/* ── Guide Bot — Admin only ─────────────────────────────────────── */}
-      {isAdmin && <GuideBotPanel onNavigate={setCurrentView} />}
 
     </div >
   );
