@@ -204,28 +204,32 @@ export default function Dashboard({ isAdmin, userRole, userName, songs, members,
         <div className="max-w-6xl mx-auto space-y-5 pb-12">
 
             {/* ══ HEADER ════════════════════════════════════ */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
-                <div className="flex items-center gap-3">
-                    <div className="w-1 h-10 rounded-full bg-indigo-500 dark:bg-indigo-400 shrink-0" />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-2">
+                <div className="flex items-center gap-4">
+                    <div className="w-1.5 h-14 rounded-full bg-indigo-500 dark:bg-indigo-400 shrink-0" />
                     <div>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">{greeting()},</p>
-                        <h1 className="text-xl font-bold text-gray-900 dark:text-white leading-tight">
+                        <p className="text-sm text-gray-500 dark:text-gray-400">{greeting()},</p>
+                        <h1 className="text-3xl font-bold text-gray-900 dark:text-white leading-tight tracking-tight">
                             {(userName || "Admin").split(" ")[0]} 👋
                         </h1>
+                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                            {new Date().toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+                        </p>
                     </div>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap justify-end">
-                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 text-xs font-medium">
-                        <Shield size={11} /> Admin
+                    {/* Glowing Admin role badge */}
+                    <div
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-indigo-100 dark:bg-indigo-500/15 border border-indigo-300 dark:border-indigo-500/40 text-indigo-700 dark:text-indigo-300"
+                        style={{ boxShadow: "0 0 14px 3px rgba(99,102,241,0.28)" }}>
+                        <Shield size={14} />
+                        Admin
                     </div>
-                    <span className="text-xs text-gray-400 dark:text-gray-500 hidden sm:block">
-                        {new Date().toLocaleDateString("en", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
-                    </span>
                     {!loadingExtra && pendingUsers.length > 0 && (
                         <button onClick={() => onNavigate("admin")}
-                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 text-amber-700 dark:text-amber-400 text-xs font-semibold hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors">
-                            <UserCheck size={12} />
-                            {pendingUsers.length} pending
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 text-amber-700 dark:text-amber-400 text-sm font-semibold hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors">
+                            <UserCheck size={14} />
+                            {pendingUsers.length} pending {pendingUsers.length === 1 ? "request" : "requests"}
                         </button>
                     )}
                 </div>
