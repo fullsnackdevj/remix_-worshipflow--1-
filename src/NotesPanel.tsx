@@ -231,7 +231,7 @@ function NoteCard({ note, userId, userRole, onEdit, onDelete, onReact, onResolve
                             <Pencil size={13} />
                         </button>
                     )}
-                    {isAuthor && (
+                    {(isAuthor || isAdmin) && (
                         <button onClick={() => onDelete(note.id)} title="Delete" className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all">
                             <Trash2 size={13} />
                         </button>
