@@ -240,7 +240,67 @@ function UserMenu({ simulatedRole, onRoleSwitch }: { simulatedRole: string; onRo
       )}
     </div>
   );
+
 }
+
+// ── Pull-to-refresh hook ──────────────────────────────────────────────────────
+function usePullToRefresh(onRefresh: () => Promise<void>) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [pullY, setPullY] = useState(0);       // px pulled
+  const [refreshing, setRefreshing] = useState(false);
+  const startYRef = useRef(0);
+  const pullingRef = useRef(false);
+  const TRIGGER = 72; // px needed to trigger refresh
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (el.scrollTop > 0) return; // only trigger at very top
+      startYRef.current = e.touches[0].clientY;
+      pullingRef.current = true;
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!pullingRef.current || refreshing) return;
+      const delta = e.touches[0].clientY - startYRef.current;
+      if (delta <= 0) { pullingRef.current = false; return; }
+      // Dampen the pull so it feels springy
+      const dampened = Math.min(delta * 0.45, TRIGGER + 20);
+      setPullY(dampened);
+      if (delta > 5) e.preventDefault(); // prevent scroll while pulling
+    };
+
+    const onTouchEnd = async () => {
+      if (!pullingRef.current) return;
+      pullingRef.current = false;
+      if (pullY >= TRIGGER && !refreshing) {
+        setRefreshing(true);
+        setPullY(TRIGGER);
+        try { await onRefresh(); } finally {
+          setRefreshing(false);
+          setPullY(0);
+        }
+      } else {
+        setPullY(0);
+      }
+    };
+
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", onTouchEnd, { passive: true });
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", onTouchEnd);
+    };
+  }, [pullY, refreshing, onRefresh]);
+
+  return { containerRef, pullY, refreshing, TRIGGER };
+}
+
+
 
 export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -692,6 +752,21 @@ export default function App() {
       fetchMembers();
     }
   }, [currentView]);
+
+  // ── Pull-to-refresh ────────────────────────────────────────────────────────
+  const doRefresh = useCallback(async () => {
+    await Promise.all([
+      fetchSongs({ background: true }),
+      fetchMembers({ background: true }),
+      fetchSchedules({ background: true }),
+    ]);
+    if (currentView === "dashboard") {
+      fetch("/api/notes").then(r => r.json()).then(data => {
+        if (Array.isArray(data)) setDashboardNotes(data);
+      }).catch(() => { });
+    }
+  }, [currentView]);
+  const { containerRef: ptrRef, pullY, refreshing: ptrRefreshing, TRIGGER } = usePullToRefresh(doRefresh);
 
   // ── Schedule helpers ──────────────────────────────────────────────────────
   const SCHED_CACHE_KEY = "wf_schedules_cache";
@@ -1998,7 +2073,23 @@ export default function App() {
         {/* Content Area */}
         <main className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-900">
           <div className="flex flex-col h-full">
-            <div className="flex-1 p-4 sm:p-6 overflow-auto">
+            <div ref={ptrRef} className="flex-1 p-4 sm:p-6 overflow-auto" style={{ overscrollBehaviorY: "contain" }}>
+
+              {/* PTR indicator */}
+              {pullY > 0 || ptrRefreshing ? (
+                <div className="flex items-center justify-center gap-2 pb-3 -mt-1"
+                  style={{ transform: `translateY(${Math.min(pullY, TRIGGER + 20)}px)`, transition: pullY === 0 ? "transform 0.3s ease" : undefined }}>
+                  <svg className={`w-5 h-5 text-indigo-500 ${ptrRefreshing ? "animate-spin" : ""}`}
+                    style={{ transform: ptrRefreshing ? undefined : `rotate(${Math.min(pullY / TRIGGER, 1) * 360}deg)` }}
+                    fill="none" viewBox="0 0 24 24">
+                    <path stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span className="text-xs font-semibold text-indigo-500">
+                    {ptrRefreshing ? "Refreshing…" : pullY >= TRIGGER ? "Release to refresh" : "Pull to refresh"}
+                  </span>
+                </div>
+              ) : null}
 
               {/* ══════════════════════════════════════════════════════════════
                    DASHBOARD VIEW
