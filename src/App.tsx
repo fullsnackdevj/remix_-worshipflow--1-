@@ -7,6 +7,7 @@ import WelcomeToast from "./WelcomeToast";
 import AdminPanel from "./AdminPanel";
 import HelpPanel from "./HelpPanel";
 import NotesPanel from "./NotesPanel";
+import Dashboard from "./Dashboard";
 import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, LayoutGrid, List, BookOpen, Mic2, Copy, Pencil, Shield, Mail, Bell, Guitar, Sliders, Palette, Lock, AlertTriangle, CheckCircle, BookMarked, HandMetal, Headphones, HelpCircle, Undo2, Redo2 } from "lucide-react";
 import { Song, Tag } from "./types";
 
@@ -245,7 +246,7 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
-  const [currentView, setCurrentView] = useState<"songs" | "members" | "schedule" | "admin">("songs");
+  const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "admin">("dashboard");
   const { isAdmin, userRole, user } = useAuth();
 
   // ── QA Specialist simulated role ──────────────────────────────────────────
@@ -425,6 +426,16 @@ export default function App() {
   const [isLoadingSongs, setIsLoadingSongs] = useState(true);
   const [tags, setTags] = useState<Tag[]>([]);
   const fetchAbortRef = useRef<AbortController | null>(null);
+
+  // ── Dashboard notes (fetched for dashboard stats) ──────────────────────────
+  const [dashboardNotes, setDashboardNotes] = useState<any[]>([]);
+  useEffect(() => {
+    if (currentView === "dashboard") {
+      fetch("/api/notes").then(r => r.json()).then(data => {
+        if (Array.isArray(data)) setDashboardNotes(data);
+      }).catch(() => { });
+    }
+  }, [currentView]);
 
   // ── Member state ──────────────────────────────────────────────────────────
   const [allMembers, setAllMembers] = useState<Member[]>([]);
@@ -1731,19 +1742,18 @@ export default function App() {
             <p className="px-3 text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 mt-2">Worship</p>
           )}
 
-          {/* Dashboard — coming soon */}
-          <div
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium opacity-40 cursor-not-allowed select-none text-gray-500 dark:text-gray-500 ${isSidebarCollapsed ? "justify-center" : ""}`}
-            title="Dashboard — Coming Soon"
+          {/* Dashboard */}
+          <button
+            onClick={() => { setCurrentView("dashboard"); setIsMobileMenuOpen(false); }}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "dashboard"
+              ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300"
+              : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+              } ${isSidebarCollapsed ? "justify-center" : ""}`}
+            title="Dashboard"
           >
             <LayoutGrid size={20} className="shrink-0" />
-            {!isSidebarCollapsed && (
-              <span className="flex items-center gap-2">
-                Dashboard
-                <span className="text-[10px] font-bold uppercase tracking-wider bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded-full">Soon</span>
-              </span>
-            )}
-          </div>
+            {!isSidebarCollapsed && <span>Dashboard</span>}
+          </button>
 
           {/* Song Management */}
           <button
@@ -1848,7 +1858,7 @@ export default function App() {
 
           <div className="flex-1 flex items-center">
             <h1 className="text-base sm:text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap">
-              {currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : "Song Management"}
+              {currentView === "dashboard" ? "Dashboard" : currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : "Song Management"}
             </h1>
           </div>
           <div className="flex items-center gap-2">
@@ -1988,6 +1998,23 @@ export default function App() {
         <main className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-900">
           <div className="flex flex-col h-full">
             <div className="flex-1 p-4 sm:p-6 overflow-auto">
+
+              {/* ══════════════════════════════════════════════════════════════
+                   DASHBOARD VIEW
+              ══════════════════════════════════════════════════════════════ */}
+              {currentView === "dashboard" ? (
+                <Dashboard
+                  isAdmin={isAdmin}
+                  userRole={effectiveRole}
+                  userName={user?.displayName ?? user?.email ?? "Team Member"}
+                  userPhoto={user?.photoURL ?? ""}
+                  songs={allSongs}
+                  members={allMembers}
+                  schedules={allSchedules}
+                  notes={dashboardNotes}
+                  onNavigate={setCurrentView}
+                />
+              ) : null}
 
               {/* ══════════════════════════════════════════════════════════════
                    SCHEDULING VIEW
