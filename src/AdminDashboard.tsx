@@ -260,9 +260,9 @@ export default function AdminDashboard({
                         <p className="text-sm text-gray-500 dark:text-gray-400">{greeting()},</p>
                         <div className="flex items-center gap-3">
                             <h1 className="text-3xl font-bold text-gray-900 dark:text-white leading-tight">{first} 👋</h1>
-                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-bold bg-amber-500/15 border border-amber-400/30 text-amber-600 dark:text-amber-300"
-                                style={{ boxShadow: "0 0 12px 2px rgba(245,158,11,0.2)" }}>
-                                <Shield size={13} /> Admin
+                            <div className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold bg-amber-500/15 border border-amber-400/40 text-amber-500 dark:text-amber-300"
+                                style={{ boxShadow: "0 0 10px 3px rgba(245,158,11,0.45), 0 0 20px 4px rgba(245,158,11,0.2)" }}>
+                                <Shield size={11} /> Admin
                             </div>
                         </div>
                         <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{new Date().toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</p>
