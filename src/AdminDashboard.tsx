@@ -227,7 +227,7 @@ export default function AdminDashboard({
             .sort((a, b) => a.date.localeCompare(b.date))
         , [schedules, today]);
 
-    const totalServices = schedules.filter(s => ["sunday_service", "midweek_service"].includes(s.serviceType ?? "")).length;
+    const totalEvents = schedules.length;
     const songsUsed = useMemo(() => {
         const ids = new Set<string>();
         schedules.forEach(s => { if (s.songLineup?.solemn) ids.add(s.songLineup.solemn); if (s.songLineup?.joyful) ids.add(s.songLineup.joyful); });
@@ -319,7 +319,7 @@ export default function AdminDashboard({
                 <MetricTile label="Members" value={members.length} sub={`${members.filter(m => m.status !== "inactive").length} active`}
                     iconBg="bg-violet-100 dark:bg-violet-900/40" icon={<Users size={15} className="text-violet-600 dark:text-violet-400" />}
                     onClick={() => onNavigate("members")} />
-                <MetricTile label="Services" value={totalServices} sub={`${upcomingEvents.length} upcoming`}
+                <MetricTile label="Church Events" value={totalEvents} sub={`${upcomingEvents.length} upcoming`}
                     iconBg="bg-emerald-100 dark:bg-emerald-900/40" icon={<Zap size={15} className="text-emerald-600 dark:text-emerald-400" />}
                     onClick={() => onNavigate("schedule")} />
                 <MetricTile label="Issues" value={openBugs + openFeqs} sub={`${openBugs} bugs · ${openFeqs} req`}
