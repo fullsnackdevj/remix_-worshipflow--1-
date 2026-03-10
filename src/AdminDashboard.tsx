@@ -204,7 +204,11 @@ function NextServiceTile({ ev, songs, members, myMemberId, onClick }: {
                 <div className="flex items-center gap-2 pt-2 border-t border-gray-100 dark:border-gray-700">
                     <div className="flex -space-x-1.5">
                         {[ev.worshipLeader, ...(ev.musicians ?? []).slice(0, 3), ...(ev.backupSingers ?? []).slice(0, 1)].filter(Boolean).map((m, i) => {
-                            const photo = getLivePhoto(m!.memberId, m!.photo);
+                            const directPhoto = m!.photo?.startsWith("http") ? m!.photo : "";
+                            const byId = members.find(mem => mem.id === m!.memberId);
+                            const byName = members.find(mem => mem.name?.toLowerCase() === m!.name?.toLowerCase());
+                            const resolved = directPhoto || byId?.photo || byName?.photo || "";
+                            const photo = resolved.startsWith("http") ? resolved : "";
                             const initials = (m!.name || "?")[0].toUpperCase();
                             return photo ? (
                                 <img key={i} src={photo} alt={m!.name}
