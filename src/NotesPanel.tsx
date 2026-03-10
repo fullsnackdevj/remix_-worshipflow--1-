@@ -282,6 +282,9 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
     const videoRef = useRef<HTMLInputElement>(null);
     const panelRef = useRef<HTMLDivElement>(null);
     const textRef = useRef<HTMLTextAreaElement>(null);
+    // Tracks IDs removed optimistically — prevents re-fetch from restoring them
+    const deletedIdsRef = useRef<Set<string>>(new Set());
+
 
     // Close on outside click
     useEffect(() => {
@@ -297,7 +300,8 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
         try {
             const res = await fetch("/api/notes");
             const data = await res.json();
-            if (Array.isArray(data)) setNotes(data);
+            if (Array.isArray(data))
+                setNotes(data.filter((n: TeamNote) => !deletedIdsRef.current.has(n.id)));
         } catch { /* keep existing notes on error */ }
         finally { if (!silent) setLoading(false); }
     }, []);
@@ -337,6 +341,7 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
     );
 
     const restoreNote = async (id: string) => {
+        deletedIdsRef.current.delete(id); // allow this note to show in re-fetches
         setTrashNotes(prev => prev.filter(n => n.id !== id));
         await fetch(`/api/notes/trash/restore/${id}`, { method: "POST" });
         fetchNotes(true); // refresh active list
@@ -466,6 +471,9 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
         const note = notes.find(n => n.id === id);
         if (!note) return;
 
+        // Mark as deleted so fetchNotes filters it out on any re-fetch
+        deletedIdsRef.current.add(id);
+
         // Remove immediately from active list
         setNotes(prev => prev.filter(n => n.id !== id));
 
@@ -493,6 +501,8 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
         if (!undoNote) return;
         clearTimeout(undoNote.timer);
         clearInterval(undoProgressRef.current!);
+        // Remove from deleted set so it shows up in re-fetches again
+        deletedIdsRef.current.delete(undoNote.note.id);
         setNotes(prev => [undoNote.note, ...prev]);
         setUndoNote(null);
         setUndoProgress(100);

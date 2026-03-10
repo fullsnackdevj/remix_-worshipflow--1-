@@ -966,7 +966,49 @@ Rules:
         } catch (e) { return json(500, { error: "Failed to create note" }); }
     }
 
-    // PUT /notes/:id  &  DELETE /notes/:id
+    // ── TRASH ROUTES — checked before noteMatch so /notes/trash isn't caught as /notes/:id ──
+
+    // POST /notes/trash/restore/:id
+    const restoreMatch = rawPath.match(/^\/notes\/trash\/restore\/([^/]+)$/);
+    if (restoreMatch && method === "POST") {
+        const nid = restoreMatch[1];
+        try {
+            await firestore?.collection("team_notes").doc(nid).update({ deletedAt: null, deletedBy: null });
+            return json(200, { success: true });
+        } catch (e) { return json(500, { error: "Failed to restore note" }); }
+    }
+
+    // DELETE /notes/trash/:id — permanently hard-delete single trash item
+    const trashItemMatch = rawPath.match(/^\/notes\/trash\/([^/]+)$/);
+    if (trashItemMatch && method === "DELETE") {
+        const nid = trashItemMatch[1];
+        try {
+            await firestore?.collection("team_notes").doc(nid).delete();
+            return json(200, { success: true });
+        } catch (e) { return json(500, { error: "Failed to permanently delete note" }); }
+    }
+
+    // DELETE /notes/trash — bulk hard-delete by ids, or purge all expired (>15 days)
+    if (rawPath === "/notes/trash" && method === "DELETE") {
+        const { ids } = body;
+        try {
+            const batch = firestore?.batch();
+            if (ids && Array.isArray(ids) && ids.length > 0) {
+                ids.forEach((id: string) => batch?.delete(firestore!.collection("team_notes").doc(id)));
+            } else {
+                const cutoff = Date.now() - 15 * 24 * 60 * 60 * 1000;
+                const snap = await firestore?.collection("team_notes").get();
+                snap?.docs.filter(d => {
+                    const at = d.data().deletedAt;
+                    return at && (at.toDate?.()?.getTime() ?? 0) < cutoff;
+                }).forEach(d => batch?.delete(d.ref));
+            }
+            await batch?.commit();
+            return json(200, { success: true });
+        } catch (e) { return json(500, { error: "Failed to bulk delete" }); }
+    }
+
+    // PUT /notes/:id  &  DELETE /notes/:id (soft-delete → moves to trash)
     const noteMatch = rawPath.match(/^\/notes\/([^/]+)$/);
     if (noteMatch) {
         const nid = noteMatch[1];
@@ -1002,44 +1044,6 @@ Rules:
                 return json(200, { success: true });
             } catch (e) { return json(500, { error: "Failed to delete note" }); }
         }
-    }
-
-    // POST /notes/trash/restore/:id — restore from trash
-    const restoreMatch = rawPath.match(/^\/notes\/trash\/restore\/([^/]+)$/);
-    if (restoreMatch && method === "POST") {
-        const nid = restoreMatch[1];
-        try {
-            await firestore?.collection("team_notes").doc(nid).update({ deletedAt: null, deletedBy: null });
-            return json(200, { success: true });
-        } catch (e) { return json(500, { error: "Failed to restore note" }); }
-    }
-
-    // DELETE /notes/trash/:id — permanently delete single item from trash
-    const trashItemMatch = rawPath.match(/^\/notes\/trash\/([^/]+)$/);
-    if (trashItemMatch && method === "DELETE") {
-        const nid = trashItemMatch[1];
-        try {
-            await firestore?.collection("team_notes").doc(nid).delete();
-            return json(200, { success: true });
-        } catch (e) { return json(500, { error: "Failed to permanently delete note" }); }
-    }
-
-    // DELETE /notes/trash — bulk permanent delete (body: { ids: string[] }) or purge expired
-    if (rawPath === "/notes/trash" && method === "DELETE") {
-        const { ids } = body;
-        try {
-            const batch = firestore?.batch();
-            if (ids && Array.isArray(ids) && ids.length > 0) {
-                ids.forEach((id: string) => batch?.delete(firestore!.collection("team_notes").doc(id)));
-            } else {
-                // Purge all expired (>15 days)
-                const cutoff = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000);
-                const snap = await firestore?.collection("team_notes").where("deletedAt", "<", admin.firestore.Timestamp.fromDate(cutoff)).get();
-                snap?.docs.forEach(d => batch?.delete(d.ref));
-            }
-            await batch?.commit();
-            return json(200, { success: true });
-        } catch (e) { return json(500, { error: "Failed to bulk delete" }); }
     }
 
     // PATCH /notes/:id/react
