@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { X, PenLine, Trash2, ImagePlus, Loader2, Bug, Lightbulb, MessageSquare, Pencil, Check, CheckCircle2, ChevronDown, Link } from "lucide-react";
+import { X, PenLine, Trash2, ImagePlus, Loader2, Bug, Lightbulb, MessageSquare, Pencil, Check, CheckCircle2, ChevronDown, Film } from "lucide-react";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 export interface TeamNote {
@@ -10,7 +10,7 @@ export interface TeamNote {
     type: "bug" | "feature" | "general";
     content: string;
     imageData?: string | null;
-    videoUrl?: string | null;
+    videoData?: string | null;
     createdAt: string;
     updatedAt?: string | null;
     resolved?: boolean;
@@ -59,13 +59,14 @@ Browser: (e.g. Chrome, Safari, Firefox)
 [ ] High — app is unusable
 
 📎 Screenshot:
-(Paste an image below ↔ or attach a file)
+(Paste an image below or attach a file)
 
-🎬 Screen Recording Link (optional):
-(Paste a Google Drive, Loom, or YouTube link here)`;
+🎬 Screen Recording:
+(Use the video upload button below ↓)`;
 
 const EMOJI_REACTIONS = ["👍", "❤️", "👀", "😂", "🙏"];
 const MAX_IMAGE_BYTES = 300 * 1024;
+const MAX_VIDEO_BYTES = 5 * 1024 * 1024; // 5MB
 
 type StatusTab = "active" | "resolved" | "all";
 type SortMode = "newest" | "oldest" | "most_reacted";
@@ -185,14 +186,12 @@ function NoteCard({ note, userId, userRole, onEdit, onDelete, onReact, onResolve
                 </div>
             )}
 
-            {/* Screen recording link */}
-            {note.videoUrl && (
-                <a href={note.videoUrl} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-2 mb-3 px-3 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 text-xs font-medium hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-all">
-                    <Link size={12} className="shrink-0" />
-                    <span className="truncate">🎬 Screen Recording</span>
-                    <span className="ml-auto opacity-60 shrink-0">↗</span>
-                </a>
+            {/* Screen recording video */}
+            {note.videoData && (
+                <div className="mb-3">
+                    <video controls src={note.videoData} className="rounded-xl border border-gray-200 dark:border-gray-700 w-full max-h-48 bg-black" />
+                    <p className="text-[10px] text-gray-400 mt-1 text-center">🎬 Screen recording</p>
+                </div>
             )}
 
             {/* Reactions */}
@@ -261,8 +260,10 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
     const [fType, setFType] = useState<"bug" | "feature" | "general">("general");
     const [fContent, setFContent] = useState("");
     const [fImage, setFImage] = useState<string | null>(null);
-    const [fVideoUrl, setFVideoUrl] = useState("");
+    const [fVideoData, setFVideoData] = useState<string | null>(null);
     const [imageUploading, setImageUploading] = useState(false);
+    const [videoUploading, setVideoUploading] = useState(false);
+    const [videoError, setVideoError] = useState("");
 
     // Filter/sort state
     const [statusTab, setStatusTab] = useState<StatusTab>("active");
@@ -271,6 +272,7 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
     const [showSort, setShowSort] = useState(false);
 
     const fileRef = useRef<HTMLInputElement>(null);
+    const videoRef = useRef<HTMLInputElement>(null);
     const panelRef = useRef<HTMLDivElement>(null);
     const textRef = useRef<HTMLTextAreaElement>(null);
 
@@ -324,20 +326,35 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
     const openForm = (note?: TeamNote) => {
         if (note) {
             setEditing(note); setFType(note.type); setFContent(note.content);
-            setFImage(note.imageData ?? null); setFVideoUrl(note.videoUrl ?? "");
+            setFImage(note.imageData ?? null); setFVideoData(note.videoData ?? null);
         } else {
-            setEditing(null); setFType("general"); setFContent(""); setFImage(null); setFVideoUrl("");
+            setEditing(null); setFType("general"); setFContent(""); setFImage(null); setFVideoData(null);
         }
+        setVideoError("");
         setShowForm(true);
         textRef.current?.focus();
     };
 
-    const closeForm = () => { setShowForm(false); setEditing(null); setFContent(""); setFImage(null); setFVideoUrl(""); };
+    const closeForm = () => { setShowForm(false); setEditing(null); setFContent(""); setFImage(null); setFVideoData(null); setVideoError(""); };
 
     const handleImageFile = async (file: File) => {
         if (!file.type.startsWith("image/")) return;
         setImageUploading(true);
         try { setFImage(await compressImage(file)); } finally { setImageUploading(false); }
+    };
+
+    const handleVideoFile = (file: File) => {
+        if (!file.type.startsWith("video/")) return;
+        setVideoError("");
+        if (file.size > MAX_VIDEO_BYTES) {
+            setVideoError(`Video too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max 5MB.`);
+            return;
+        }
+        setVideoUploading(true);
+        const reader = new FileReader();
+        reader.onload = e => { setFVideoData(e.target?.result as string); setVideoUploading(false); };
+        reader.onerror = () => { setVideoError("Failed to read video."); setVideoUploading(false); };
+        reader.readAsDataURL(file);
     };
 
     // ── Optimistic submit (create / edit) ──────────────────────────────────────
@@ -346,24 +363,24 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
         const tempId = `temp_${Date.now()}`;
 
         if (editing) {
-            const updated: TeamNote = { ...editing, type: fType, content: fContent, imageData: fImage, videoUrl: fVideoUrl || null, updatedAt: new Date().toISOString() };
+            const updated: TeamNote = { ...editing, type: fType, content: fContent, imageData: fImage, videoData: fVideoData, updatedAt: new Date().toISOString() };
             setNotes(prev => prev.map(n => n.id === editing.id ? updated : n));
             closeForm();
             fetch(`/api/notes/${editing.id}`, {
                 method: "PUT", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ authorId: userId, content: fContent, type: fType, imageData: fImage, videoUrl: fVideoUrl || null }),
+                body: JSON.stringify({ authorId: userId, content: fContent, type: fType, imageData: fImage, videoData: fVideoData }),
             }).catch(() => fetchNotes());
         } else {
             const tempNote: TeamNote = {
                 id: tempId, authorId: userId, authorName: userName, authorPhoto: userPhoto,
-                type: fType, content: fContent, imageData: fImage, videoUrl: fVideoUrl || null,
+                type: fType, content: fContent, imageData: fImage, videoData: fVideoData,
                 createdAt: new Date().toISOString(), reactions: {}, resolved: false,
             };
             setNotes(prev => [tempNote, ...prev]);
             closeForm();
             fetch("/api/notes", {
                 method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ authorId: userId, authorName: userName, authorPhoto: userPhoto, type: fType, content: fContent, imageData: fImage, videoUrl: fVideoUrl || null }),
+                body: JSON.stringify({ authorId: userId, authorName: userName, authorPhoto: userPhoto, type: fType, content: fContent, imageData: fImage, videoData: fVideoData }),
             }).then(r => r.json()).then(({ id }) => {
                 if (id) setNotes(prev => prev.map(n => n.id === tempId ? { ...n, id } : n));
             }).catch(() => {
@@ -538,37 +555,38 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
                                 className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
                             />
 
-                            {/* Image preview */}
-                            {imageUploading && <div className="flex items-center gap-2 text-xs text-gray-400"><Loader2 size={12} className="animate-spin" /> Compressing image…</div>}
-                            {fImage && (
-                                <div className="relative inline-block">
-                                    <img src={fImage} alt="preview" className="max-h-28 rounded-xl border border-gray-200 dark:border-gray-700 object-cover" />
-                                    <button onClick={() => setFImage(null)} className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center shadow">
-                                        <X size={10} />
-                                    </button>
-                                </div>
-                            )}
-
-                            {/* Screen recording URL (shown for Bug type) */}
-                            {fType === "bug" && (
-                                <div className="flex items-center gap-2">
-                                    <Link size={13} className="text-gray-400 shrink-0" />
-                                    <input
-                                        type="url"
-                                        value={fVideoUrl}
-                                        onChange={e => setFVideoUrl(e.target.value)}
-                                        placeholder="Screen recording link (Google Drive, Loom, YouTube…)"
-                                        className="flex-1 px-3 py-1.5 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                    />
-                                </div>
-                            )}
+                            {/* Attachments preview row */}
+                            <div className="flex flex-wrap gap-2">
+                                {imageUploading && <div className="flex items-center gap-1.5 text-xs text-gray-400"><Loader2 size={12} className="animate-spin" /> Compressing…</div>}
+                                {fImage && (
+                                    <div className="relative inline-block">
+                                        <img src={fImage} alt="preview" className="max-h-24 rounded-xl border border-gray-200 dark:border-gray-700 object-cover" />
+                                        <button onClick={() => setFImage(null)} className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center shadow"><X size={10} /></button>
+                                    </div>
+                                )}
+                                {videoUploading && <div className="flex items-center gap-1.5 text-xs text-gray-400"><Loader2 size={12} className="animate-spin" /> Reading video…</div>}
+                                {fVideoData && (
+                                    <div className="relative">
+                                        <video src={fVideoData} className="max-h-24 rounded-xl border border-gray-200 dark:border-gray-700 bg-black" />
+                                        <button onClick={() => setFVideoData(null)} className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center shadow"><X size={10} /></button>
+                                    </div>
+                                )}
+                                {videoError && <p className="text-xs text-red-500 w-full">{videoError}</p>}
+                            </div>
 
                             {/* Actions */}
                             <div className="flex items-center gap-2">
+                                {/* Hidden file inputs */}
                                 <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleImageFile(e.target.files[0])} />
+                                <input ref={videoRef} type="file" accept="video/*" className="hidden" onChange={e => e.target.files?.[0] && handleVideoFile(e.target.files[0])} />
+
                                 <button onClick={() => fileRef.current?.click()} className="p-2 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-xl border border-gray-200 dark:border-gray-700 transition-all" title="Attach image">
                                     <ImagePlus size={15} />
                                 </button>
+                                <button onClick={() => videoRef.current?.click()} className="p-2 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-xl border border-gray-200 dark:border-gray-700 transition-all" title="Attach screen recording (max 5MB)">
+                                    <Film size={15} />
+                                </button>
+
                                 <div className="flex-1" />
                                 <button onClick={closeForm} className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-xl transition-all">Cancel</button>
                                 <button onClick={submit} disabled={saving || !fContent.trim()} className="flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-all">
