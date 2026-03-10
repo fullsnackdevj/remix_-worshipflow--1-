@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { X, PenLine, Trash2, ImagePlus, Loader2, Bug, Lightbulb, MessageSquare, Pencil, Check, CheckCircle2, ChevronDown, Film } from "lucide-react";
+import { X, PenLine, Trash2, ImagePlus, Loader2, Bug, Lightbulb, MessageSquare, Pencil, Check, CheckCircle2, ChevronDown, Film, RotateCcw, Archive } from "lucide-react";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 export interface TeamNote {
@@ -13,6 +13,7 @@ export interface TeamNote {
     videoData?: string | null;
     createdAt: string;
     updatedAt?: string | null;
+    deletedAt?: string | null;
     resolved?: boolean;
     resolvedBy?: string | null;
     reactions?: Record<string, string[]>;
@@ -251,6 +252,12 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
     const [editing, setEditing] = useState<TeamNote | null>(null);
     const [saving, setSaving] = useState(false);
 
+    // Trash state
+    const [showTrash, setShowTrash] = useState(false);
+    const [trashNotes, setTrashNotes] = useState<TeamNote[]>([]);
+    const [trashSelected, setTrashSelected] = useState<Set<string>>(new Set());
+    const [trashLoading, setTrashLoading] = useState(false);
+
     // Undo-delete queue
     const [undoNote, setUndoNote] = useState<{ note: TeamNote; timer: ReturnType<typeof setTimeout> } | null>(null);
     const [undoProgress, setUndoProgress] = useState(100);
@@ -307,7 +314,59 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
 
-    // Clipboard paste for images
+    const fetchTrash = useCallback(async () => {
+        setTrashLoading(true);
+        try {
+            const res = await fetch("/api/notes/trash");
+            setTrashNotes(await res.json());
+        } catch { setTrashNotes([]); }
+        finally { setTrashLoading(false); }
+    }, []);
+
+    const openTrash = () => { setShowTrash(true); setTrashSelected(new Set()); fetchTrash(); };
+    const closeTrash = () => { setShowTrash(false); setTrashSelected(new Set()); };
+
+    const toggleTrashSelect = (id: string) => setTrashSelected(prev => {
+        const next = new Set(prev);
+        next.has(id) ? next.delete(id) : next.add(id);
+        return next;
+    });
+    const toggleSelectAll = () => setTrashSelected(
+        trashSelected.size === trashNotes.length ? new Set() : new Set(trashNotes.map(n => n.id))
+    );
+
+    const restoreNote = async (id: string) => {
+        setTrashNotes(prev => prev.filter(n => n.id !== id));
+        await fetch(`/api/notes/trash/restore/${id}`, { method: "POST" });
+        fetchNotes(true); // refresh active list
+    };
+
+    const permanentlyDelete = async (id: string) => {
+        setTrashNotes(prev => prev.filter(n => n.id !== id));
+        await fetch(`/api/notes/trash/${id}`, { method: "DELETE" });
+    };
+
+    const permanentlyDeleteSelected = async () => {
+        const ids = Array.from(trashSelected);
+        setTrashNotes(prev => prev.filter(n => !trashSelected.has(n.id)));
+        setTrashSelected(new Set());
+        await fetch("/api/notes/trash", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) });
+    };
+
+    const emptyTrash = async () => {
+        const ids = trashNotes.map(n => n.id);
+        setTrashNotes([]);
+        setTrashSelected(new Set());
+        await fetch("/api/notes/trash", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) });
+    };
+
+    // Helper: days remaining before auto-deletion
+    const daysRemaining = (deletedAt: string) => {
+        const diff = 15 - Math.floor((Date.now() - new Date(deletedAt).getTime()) / 86400000);
+        return Math.max(0, diff);
+    };
+
+
     useEffect(() => {
         if (!showForm) return;
         const handler = async (e: ClipboardEvent) => {
@@ -406,7 +465,7 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
         const note = notes.find(n => n.id === id);
         if (!note) return;
 
-        // Remove immediately
+        // Remove immediately from active list
         setNotes(prev => prev.filter(n => n.id !== id));
 
         // Clear any existing undo
@@ -419,12 +478,11 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
             setUndoProgress(p => { if (p <= 2) { clearInterval(undoProgressRef.current!); return 0; } return p - 2.5; });
         }, 100);
 
-        // Set undo window (4s)
+        // Set undo window (4s) — after that, soft-delete (move to trash)
         const timer = setTimeout(() => {
             setUndoNote(null);
             clearInterval(undoProgressRef.current!);
-            // Commit delete to server
-            fetch(`/api/notes/${id}`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ authorId: userId }) });
+            fetch(`/api/notes/${id}`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ authorId: userId, userRole }) });
         }, 4000);
 
         setUndoNote({ note, timer });
@@ -553,19 +611,103 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
                             )}
                         </div>
                         <div className="flex items-center gap-1.5">
-                            {!showForm && (
+                            {!showForm && !showTrash && (
                                 <button onClick={() => openForm()} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl transition-all">
                                     <Pencil size={11} /> New Note
                                 </button>
                             )}
-                            <button onClick={() => { setOpen(false); closeForm(); }} className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all">
+                            {!showForm && !showTrash && (
+                                <button onClick={openTrash} title="Recently Deleted" className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all relative">
+                                    <Archive size={15} />
+                                    {trashNotes.length > 0 && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-400" />}
+                                </button>
+                            )}
+                            <button onClick={() => { setOpen(false); closeForm(); closeTrash(); }} className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all">
                                 <X size={15} />
                             </button>
                         </div>
                     </div>
 
+                    {/* ── Trash View ── */}
+                    {showTrash && (
+                        <div className="flex flex-col flex-1 overflow-hidden">
+                            {/* Trash header */}
+                            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-200 dark:border-gray-700/60 bg-red-50 dark:bg-red-900/10 shrink-0">
+                                <button onClick={closeTrash} className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg transition-all"><RotateCcw size={13} /></button>
+                                <Archive size={13} className="text-red-500" />
+                                <span className="text-xs font-bold text-gray-900 dark:text-white flex-1">Recently Deleted <span className="font-normal text-gray-400">({trashNotes.length})</span></span>
+                                {trashNotes.length > 0 && (
+                                    <>
+                                        <button onClick={toggleSelectAll} className="text-[10px] text-indigo-500 hover:underline font-medium">
+                                            {trashSelected.size === trashNotes.length ? "Deselect all" : "Select all"}
+                                        </button>
+                                        {trashSelected.size > 0 && (
+                                            <button onClick={permanentlyDeleteSelected} className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-all">
+                                                Delete {trashSelected.size}
+                                            </button>
+                                        )}
+                                        <button onClick={emptyTrash} className="text-[10px] text-red-400 hover:text-red-600 font-medium hover:underline">Empty</button>
+                                    </>
+                                )}
+                            </div>
+
+                            {/* Info banner */}
+                            <div className="px-4 py-2 text-[10px] text-gray-400 bg-gray-50 dark:bg-gray-900/50 border-b border-gray-200 dark:border-gray-700/40 shrink-0">
+                                🗑 Items are permanently deleted after <strong>15 days</strong>.
+                            </div>
+
+                            {/* Trash list */}
+                            <div className="overflow-y-auto flex-1 p-3 space-y-2">
+                                {trashLoading ? (
+                                    <div className="flex items-center justify-center py-10"><Loader2 size={20} className="animate-spin text-red-400" /></div>
+                                ) : trashNotes.length === 0 ? (
+                                    <div className="text-center py-10 space-y-2">
+                                        <p className="text-3xl">🗑️</p>
+                                        <p className="text-sm text-gray-400">Trash is empty</p>
+                                    </div>
+                                ) : trashNotes.map(note => {
+                                    const days = note.deletedAt ? daysRemaining(note.deletedAt) : 15;
+                                    const cfg = typeConfig(note.type);
+                                    const isSelected = trashSelected.has(note.id);
+                                    return (
+                                        <div key={note.id} onClick={() => toggleTrashSelect(note.id)}
+                                            className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all select-none ${isSelected ? "border-red-400 bg-red-50 dark:bg-red-900/20" : "border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/50 hover:border-gray-300 dark:hover:border-gray-600"
+                                                }`}>
+                                            {/* Checkbox */}
+                                            <div className={`mt-0.5 shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${isSelected ? "bg-red-500 border-red-500" : "border-gray-300 dark:border-gray-600"
+                                                }`}>
+                                                {isSelected && <Check size={10} className="text-white" />}
+                                            </div>
+                                            {/* Content */}
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-1.5 mb-1">
+                                                    <span className={`flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${cfg.cls}`}>{cfg.icon} {cfg.label}</span>
+                                                    <span className="text-[10px] text-gray-400 truncate">{note.authorName}</span>
+                                                    <span className={`ml-auto shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${days <= 3 ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400" : "bg-gray-100 dark:bg-gray-700 text-gray-500"
+                                                        }`}>{days}d left</span>
+                                                </div>
+                                                <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2">{note.content}</p>
+                                            </div>
+                                            {/* Actions */}
+                                            <div className="flex flex-col gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                                                <button onClick={() => restoreNote(note.id)} title="Restore"
+                                                    className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-all">
+                                                    <RotateCcw size={13} />
+                                                </button>
+                                                <button onClick={() => permanentlyDelete(note.id)} title="Delete permanently"
+                                                    className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all">
+                                                    <Trash2 size={13} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
                     {/* ── Form ── */}
-                    {showForm && (
+                    {!showTrash && showForm && (
                         <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/40 flex-1 overflow-y-auto space-y-3">
                             {/* Type selector */}
                             <div className="flex gap-2">
@@ -637,8 +779,8 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
                         </div>
                     )}
 
-                    {/* ── Status Tabs + Filters + Notes list — hidden while form is open ── */}
-                    {!showForm && <div className="px-4 pt-3 pb-2 border-b border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/30 shrink-0 space-y-2">
+                    {/* ── Status Tabs + Filters + Notes list — hidden while form or trash is open ── */}
+                    {!showForm && !showTrash && <div className="px-4 pt-3 pb-2 border-b border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/30 shrink-0 space-y-2">
                         {/* Status tabs */}
                         <div className="flex items-center gap-1">
                             {(["active", "resolved", "all"] as StatusTab[]).map(tab => (
@@ -677,7 +819,7 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
                     </div>}
 
                     {/* ── Notes list — also hidden while form open ── */}
-                    {!showForm && <div className="overflow-y-auto flex-1 p-3 space-y-3">
+                    {!showForm && !showTrash && <div className="overflow-y-auto flex-1 p-3 space-y-3">
                         {loading ? (
                             <div className="flex items-center justify-center py-10"><Loader2 size={20} className="animate-spin text-indigo-400" /></div>
                         ) : filtered.length === 0 ? (
