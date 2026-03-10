@@ -5,22 +5,16 @@ import {
     CheckCircle2, AlertCircle, Mic2, Headphones, Guitar,
     User, Shield, Lock, LayoutGrid, ArrowRight, ClipboardList,
     FlaskConical, Bell, UserCheck, AlertTriangle, Radio,
-    CheckCheck, Megaphone, Eye, RefreshCw
+    CheckCheck, Megaphone, Plus, UserPlus, Zap, BarChart3
 } from "lucide-react";
 
-// ── Types matching the REAL App.tsx interfaces ─────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 interface ScheduleMember { memberId: string; name: string; photo: string; role: string; }
 interface Schedule {
-    id: string;
-    date: string;
-    serviceType?: string;
-    eventName?: string;
-    worshipLeader?: ScheduleMember | null;
-    backupSingers?: ScheduleMember[];
-    musicians?: ScheduleMember[];
-    songLineup?: { joyful?: string; solemn?: string };
-    assignments?: { role: string; members: ScheduleMember[] }[];
-    notes?: string;
+    id: string; date: string; serviceType?: string; eventName?: string;
+    worshipLeader?: ScheduleMember | null; backupSingers?: ScheduleMember[];
+    musicians?: ScheduleMember[]; songLineup?: { joyful?: string; solemn?: string };
+    assignments?: { role: string; members: ScheduleMember[] }[]; notes?: string;
 }
 interface Song { id: string; title: string; artist: string; created_at?: string; }
 interface Member { id: string; name: string; role: string; photoUrl?: string; }
@@ -29,15 +23,10 @@ interface PendingUser { email: string; name: string; photo?: string; requestedAt
 interface Broadcast { id: string; title: string; message: string; active: boolean; type?: string; createdAt?: string; }
 
 interface Props {
-    isAdmin: boolean;
-    userRole: string;
-    userName: string;
-    userPhoto: string;
-    songs: Song[];
-    members: Member[];
-    schedules: Schedule[];
-    notes: Note[];
+    isAdmin: boolean; userRole: string; userName: string; userPhoto: string;
+    songs: Song[]; members: Member[]; schedules: Schedule[]; notes: Note[];
     onNavigate: (view: "songs" | "members" | "schedule" | "admin") => void;
+    onAddSong?: () => void;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -45,25 +34,20 @@ function relativeDate(iso: string) {
     try {
         const diff = Date.now() - new Date(iso).getTime();
         const d = Math.floor(diff / 86400000);
-        if (d === 0) return "Today";
-        if (d === 1) return "Yesterday";
+        if (d === 0) return "Today"; if (d === 1) return "Yesterday";
         if (d < 7) return `${d} days ago`;
         return new Date(iso).toLocaleDateString("en", { month: "short", day: "numeric" });
     } catch { return ""; }
 }
-
 function daysUntil(dateStr: string) {
     try {
         const today = new Date(); today.setHours(0, 0, 0, 0);
         const target = new Date(dateStr + "T00:00:00"); target.setHours(0, 0, 0, 0);
         const diff = Math.round((target.getTime() - today.getTime()) / 86400000);
-        if (diff === 0) return "Today";
-        if (diff === 1) return "Tomorrow";
-        if (diff > 0) return `In ${diff} days`;
-        return `${Math.abs(diff)}d ago`;
+        if (diff === 0) return "Today"; if (diff === 1) return "Tomorrow";
+        if (diff > 0) return `In ${diff}d`; return `${Math.abs(diff)}d ago`;
     } catch { return ""; }
 }
-
 function roleIcon(role: string) {
     const map: Record<string, React.ReactNode> = {
         admin: <Shield size={12} />, leader: <Mic2 size={12} />, musician: <Guitar size={12} />,
@@ -72,7 +56,6 @@ function roleIcon(role: string) {
     };
     return map[role] ?? <User size={12} />;
 }
-
 function roleLabel(role: string) {
     const map: Record<string, string> = {
         admin: "Admin", leader: "Worship Leader", musician: "Musician",
@@ -81,8 +64,7 @@ function roleLabel(role: string) {
     };
     return map[role] ?? role;
 }
-
-function serviceTypeColor(type?: string) {
+function svcColor(type?: string) {
     const map: Record<string, string> = {
         sunday_service: "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300",
         midweek_service: "bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300",
@@ -91,16 +73,15 @@ function serviceTypeColor(type?: string) {
     };
     return map[type ?? ""] ?? "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300";
 }
-
-function serviceTypeLabel(type?: string) {
+function svcLabel(type?: string) {
     const map: Record<string, string> = {
-        sunday_service: "Sunday Service", midweek_service: "Midweek Service",
-        practice: "Practice", special: "Special Event",
+        sunday_service: "Sunday Service", midweek_service: "Midweek",
+        practice: "Practice", special: "Special",
     };
     return map[type ?? ""] ?? type ?? "Event";
 }
 
-// ── Coming Soon Screen (non-admins) ───────────────────────────────────────────
+// ── Coming Soon Screen ────────────────────────────────────────────────────────
 function ComingSoonDashboard({ userName }: { userName: string }) {
     return (
         <div className="min-h-[60vh] flex flex-col items-center justify-center text-center px-6 gap-6">
@@ -125,7 +106,6 @@ export default function Dashboard({ isAdmin, userRole, userName, songs, members,
 
     if (!isAdmin) return <ComingSoonDashboard userName={userName} />;
 
-    // ── Extra admin data (fetched inside dashboard) ───────────────────────────
     const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([]);
     const [activeBroadcasts, setActiveBroadcasts] = useState<Broadcast[]>([]);
     const [loadingExtra, setLoadingExtra] = useState(true);
@@ -142,46 +122,38 @@ export default function Dashboard({ isAdmin, userRole, userName, songs, members,
 
     const today = new Date(); today.setHours(0, 0, 0, 0);
 
-    // ── Derived data ──────────────────────────────────────────────────────────
     const upcomingEvents = useMemo(() =>
-        schedules
-            .filter(s => { try { return new Date(s.date + "T00:00:00") >= today; } catch { return false; } })
-            .sort((a, b) => a.date.localeCompare(b.date))
-            .slice(0, 6),
-        [schedules]
-    );
+        schedules.filter(s => { try { return new Date(s.date + "T00:00:00") >= today; } catch { return false; } })
+            .sort((a, b) => a.date.localeCompare(b.date)).slice(0, 6),
+        [schedules]);
 
     const nextEvent = upcomingEvents[0] ?? null;
 
     const eventsThisMonth = useMemo(() => {
         const y = today.getFullYear(), m = today.getMonth();
-        return schedules.filter(s => {
-            try { const d = new Date(s.date + "T00:00:00"); return d.getFullYear() === y && d.getMonth() === m; }
-            catch { return false; }
-        }).length;
+        return schedules.filter(s => { try { const d = new Date(s.date + "T00:00:00"); return d.getFullYear() === y && d.getMonth() === m; } catch { return false; } }).length;
     }, [schedules]);
 
-    // Coverage warnings: upcoming events missing worship leader
-    const coverageWarnings = useMemo(() =>
-        upcomingEvents.slice(0, 5).filter(ev => !ev.worshipLeader),
-        [upcomingEvents]
-    );
-    const coverageOk = useMemo(() =>
-        upcomingEvents.slice(0, 5).filter(ev => ev.worshipLeader),
-        [upcomingEvents]
-    );
+    // Total services (all time)
+    const totalServicesAllTime = schedules.filter(s => s.serviceType === "sunday_service" || s.serviceType === "midweek_service").length;
+
+    // Songs used in schedules (unique)
+    const songsUsedInSchedules = useMemo(() => {
+        const ids = new Set<string>();
+        schedules.forEach(s => { if (s.songLineup?.solemn) ids.add(s.songLineup.solemn); if (s.songLineup?.joyful) ids.add(s.songLineup.joyful); });
+        return ids.size;
+    }, [schedules]);
+
+    const coverageWarnings = useMemo(() => upcomingEvents.slice(0, 5).filter(ev => !ev.worshipLeader), [upcomingEvents]);
+    const coverageOk = useMemo(() => upcomingEvents.slice(0, 5).filter(ev => ev.worshipLeader), [upcomingEvents]);
 
     const openBugs = notes.filter(n => n.type === "bug" && !n.resolved).length;
     const openFeatures = notes.filter(n => n.type === "feature" && !n.resolved).length;
     const unresolvedNotes = notes.filter(n => !n.resolved).length;
-    const recentNotes = [...notes]
-        .sort((a, b) => { try { return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(); } catch { return 0; } })
-        .slice(0, 3);
+    const recentNotes = [...notes].sort((a, b) => { try { return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(); } catch { return 0; } }).slice(0, 3);
 
-    const recentSongs = [...songs]
-        .filter(s => s.created_at)
-        .sort((a, b) => { try { return new Date(b.created_at!).getTime() - new Date(a.created_at!).getTime(); } catch { return 0; } })
-        .slice(0, 4);
+    const recentSongs = [...songs].filter(s => s.created_at)
+        .sort((a, b) => { try { return new Date(b.created_at!).getTime() - new Date(a.created_at!).getTime(); } catch { return 0; } }).slice(0, 4);
 
     const roleGroups = useMemo(() => {
         const groups: Record<string, number> = {};
@@ -189,125 +161,122 @@ export default function Dashboard({ isAdmin, userRole, userName, songs, members,
         return Object.entries(groups).sort((a, b) => b[1] - a[1]);
     }, [members]);
 
-    const greeting = () => {
-        const h = new Date().getHours();
-        if (h < 12) return "Good morning";
-        if (h < 17) return "Good afternoon";
-        return "Good evening";
-    };
-
+    const greeting = () => { const h = new Date().getHours(); if (h < 12) return "Good morning"; if (h < 17) return "Good afternoon"; return "Good evening"; };
     const nextEventName = nextEvent?.eventName ?? "Upcoming Event";
     const nextEventLeader = nextEvent?.worshipLeader?.name ?? null;
     const nextEventMusicians = nextEvent?.musicians?.map(m => m.name).filter(Boolean) ?? [];
-    const nextEventAudio = nextEvent?.assignments
-        ?.filter(a => a.role?.toLowerCase().includes("audio") || a.role?.toLowerCase().includes("tech"))
-        .flatMap(a => a.members?.map(m => m.name) ?? []) ?? [];
+    const nextEventAudio = nextEvent?.assignments?.filter(a => a.role?.toLowerCase().includes("audio") || a.role?.toLowerCase().includes("tech")).flatMap(a => a.members?.map(m => m.name) ?? []) ?? [];
 
     return (
-        <div className="max-w-6xl mx-auto space-y-5 pb-10">
+        <div className="max-w-6xl mx-auto space-y-5 pb-12">
 
-            {/* ── Welcome Header ── */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">{greeting()},</p>
-                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                        {(userName || "Admin").split(" ")[0]} 👋
-                    </h1>
-                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                        {new Date().toLocaleDateString("en", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
-                    </p>
-                </div>
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 text-xs font-semibold">
-                    <Shield size={13} /> Admin Dashboard
+            {/* ══ HERO HEADER with gradient ═══════════════════════════════════ */}
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-600 via-indigo-700 to-violet-800 px-6 py-6 shadow-lg">
+                {/* Background orbs */}
+                <div className="absolute -top-8 -right-8 w-40 h-40 rounded-full bg-white/5 blur-2xl" />
+                <div className="absolute bottom-0 left-1/2 w-32 h-32 rounded-full bg-violet-500/20 blur-2xl" />
+
+                <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                        <p className="text-indigo-200 text-sm">{greeting()},</p>
+                        <h1 className="text-2xl sm:text-3xl font-bold text-white mt-0.5">
+                            {(userName || "Admin").split(" ")[0]} 👋
+                        </h1>
+                        <p className="text-indigo-300 text-xs mt-1">
+                            {new Date().toLocaleDateString("en", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+                        </p>
+                    </div>
+                    <div className="flex flex-col items-start sm:items-end gap-2">
+                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 backdrop-blur-sm text-white text-xs font-semibold border border-white/20">
+                            <Shield size={12} /> Admin Dashboard
+                        </div>
+                        {!loadingExtra && pendingUsers.length > 0 && (
+                            <button onClick={() => onNavigate("admin")} className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-400/90 hover:bg-amber-400 text-amber-900 text-xs font-bold transition-colors">
+                                <UserCheck size={12} />
+                                {pendingUsers.length} pending {pendingUsers.length === 1 ? "request" : "requests"} — Review
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
 
-            {/* ── ⚠️ Pending Access Requests Alert (prominent, top) ── */}
-            {!loadingExtra && pendingUsers.length > 0 && (
-                <div className="flex items-center justify-between gap-4 px-4 py-3 rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700/60">
-                    <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center shrink-0">
-                            <UserCheck size={18} className="text-amber-600 dark:text-amber-400" />
-                        </div>
-                        <div>
-                            <p className="text-sm font-bold text-amber-800 dark:text-amber-300">
-                                {pendingUsers.length} pending access {pendingUsers.length === 1 ? "request" : "requests"}
-                            </p>
-                            <p className="text-xs text-amber-600 dark:text-amber-400">
-                                {pendingUsers.slice(0, 2).map(u => u.name || u.email).join(", ")}
-                                {pendingUsers.length > 2 ? ` +${pendingUsers.length - 2} more` : ""}
-                            </p>
-                        </div>
-                    </div>
-                    <button
-                        onClick={() => onNavigate("admin")}
-                        className="shrink-0 flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white transition-colors"
-                    >
-                        Review <ChevronRight size={13} />
+            {/* ══ QUICK ACTIONS ════════════════════════════════════════════════ */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                    { label: "Add Song", icon: <Music size={18} />, color: "from-indigo-500 to-indigo-600", action: () => onNavigate("songs") },
+                    { label: "Schedule Service", icon: <Calendar size={18} />, color: "from-emerald-500 to-emerald-600", action: () => onNavigate("schedule") },
+                    { label: "Add Member", icon: <UserPlus size={18} />, color: "from-violet-500 to-violet-600", action: () => onNavigate("members") },
+                    { label: "New Broadcast", icon: <Megaphone size={18} />, color: "from-amber-500 to-orange-500", action: () => onNavigate("admin") },
+                ].map(({ label, icon, color, action }) => (
+                    <button key={label} onClick={action}
+                        className={`flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-gradient-to-r ${color} text-white text-sm font-semibold shadow-sm hover:shadow-md hover:-translate-y-0.5 active:scale-95 transition-all`}>
+                        {icon} {label}
                     </button>
-                </div>
-            )}
+                ))}
+            </div>
 
-            {/* ── Stat Tiles ── */}
+            {/* ══ STAT TILES ═══════════════════════════════════════════════════ */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                 {[
-                    { label: "Songs", value: songs.length, icon: <Music size={20} />, color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-50 dark:bg-indigo-900/30", view: "songs" as const },
-                    { label: "Team Members", value: members.length, icon: <Users size={20} />, color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-50 dark:bg-violet-900/30", view: "members" as const },
-                    { label: "Events This Month", value: eventsThisMonth, icon: <Calendar size={20} />, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-900/30", view: "schedule" as const },
-                    { label: "Open Notes", value: unresolvedNotes, icon: <NotepadText size={20} />, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-900/30", view: null },
-                ].map(({ label, value, icon, color, bg, view }) => (
-                    <button
-                        key={label}
-                        onClick={() => view && onNavigate(view)}
-                        className={`flex flex-col gap-3 p-4 rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-all text-left ${view ? "hover:-translate-y-0.5 cursor-pointer" : "cursor-default"}`}
-                    >
-                        <div className={`w-10 h-10 rounded-xl ${bg} ${color} flex items-center justify-center`}>
-                            {icon}
-                        </div>
+                    { label: "Songs", value: songs.length, sub: `${songsUsedInSchedules} used in services`, icon: <Music size={20} />, color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-50 dark:bg-indigo-900/30", border: "border-indigo-100 dark:border-indigo-800/50", view: "songs" as const },
+                    { label: "Team Members", value: members.length, sub: `${roleGroups.length} roles`, icon: <Users size={20} />, color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-50 dark:bg-violet-900/30", border: "border-violet-100 dark:border-violet-800/50", view: "members" as const },
+                    { label: "Events This Month", value: eventsThisMonth, sub: `${totalServicesAllTime} total services`, icon: <Calendar size={20} />, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-900/30", border: "border-emerald-100 dark:border-emerald-800/50", view: "schedule" as const },
+                    { label: "Open Notes", value: unresolvedNotes, sub: `${openBugs} bugs · ${openFeatures} features`, icon: <NotepadText size={20} />, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-900/30", border: "border-amber-100 dark:border-amber-800/50", view: null },
+                ].map(({ label, value, sub, icon, color, bg, border, view }) => (
+                    <button key={label} onClick={() => view && onNavigate(view)}
+                        className={`flex flex-col gap-2 p-4 rounded-2xl bg-white dark:bg-gray-800 border ${border} shadow-sm hover:shadow-md transition-all text-left ${view ? "hover:-translate-y-0.5 cursor-pointer" : "cursor-default"}`}>
+                        <div className={`w-10 h-10 rounded-xl ${bg} ${color} flex items-center justify-center`}>{icon}</div>
                         <div>
                             <p className="text-2xl font-bold text-gray-900 dark:text-white">{value}</p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
+                            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</p>
+                            <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{sub}</p>
                         </div>
                     </button>
                 ))}
             </div>
 
-            {/* ── Main Grid: Next Event + Coverage + Issues ── */}
+            {/* ══ MINISTRY MILESTONES ══════════════════════════════════════════ */}
+            <div className="grid grid-cols-3 gap-3">
+                {[
+                    { label: "Total Services", value: totalServicesAllTime, icon: <Zap size={14} />, color: "text-indigo-500" },
+                    { label: "Songs in Library", value: songs.length, icon: <Music size={14} />, color: "text-violet-500" },
+                    { label: "Songs Used in Services", value: songsUsedInSchedules, icon: <BarChart3 size={14} />, color: "text-emerald-500" },
+                ].map(({ label, value, icon, color }) => (
+                    <div key={label} className="flex flex-col items-center justify-center py-4 px-3 rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm text-center gap-1">
+                        <span className={color}>{icon}</span>
+                        <p className="text-xl font-bold text-gray-900 dark:text-white">{value}</p>
+                        <p className="text-[10px] text-gray-400 leading-tight">{label}</p>
+                    </div>
+                ))}
+            </div>
+
+            {/* ══ MAIN GRID: Next Event + Right Column ═══════════════════════ */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
-                {/* Next Event Card */}
+                {/* Next Event */}
                 <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
                     <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
-                        <div className="flex items-center gap-2 font-semibold text-gray-900 dark:text-white">
+                        <div className="flex items-center gap-2 font-semibold text-gray-900 dark:text-white text-sm">
                             <Calendar size={16} className="text-indigo-500" /> Next Event
                         </div>
                         <button onClick={() => onNavigate("schedule")} className="text-xs text-indigo-500 hover:text-indigo-400 flex items-center gap-1 font-medium">
                             View all <ChevronRight size={13} />
                         </button>
                     </div>
-
                     {nextEvent ? (
                         <div className="p-5">
                             <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
                                 <div>
                                     <p className="text-lg font-bold text-gray-900 dark:text-white">{nextEventName}</p>
                                     <div className="flex items-center gap-2 mt-1">
-                                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${serviceTypeColor(nextEvent.serviceType)}`}>
-                                            {serviceTypeLabel(nextEvent.serviceType)}
-                                        </span>
-                                        <span className="text-xs text-gray-400">
-                                            {new Date(nextEvent.date + "T00:00:00").toLocaleDateString("en", { weekday: "short", month: "short", day: "numeric" })}
-                                        </span>
+                                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${svcColor(nextEvent.serviceType)}`}>{svcLabel(nextEvent.serviceType)}</span>
+                                        <span className="text-xs text-gray-400">{new Date(nextEvent.date + "T00:00:00").toLocaleDateString("en", { weekday: "short", month: "short", day: "numeric" })}</span>
                                     </div>
                                 </div>
-                                <span className={`px-3 py-1 rounded-full text-xs font-bold ${daysUntil(nextEvent.date) === "Today" ? "bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400" :
-                                        daysUntil(nextEvent.date) === "Tomorrow" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" :
-                                            "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300"
-                                    }`}>
+                                <span className={`px-3 py-1 rounded-full text-xs font-bold ${daysUntil(nextEvent.date) === "Today" ? "bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400" : daysUntil(nextEvent.date) === "Tomorrow" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" : "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300"}`}>
                                     {daysUntil(nextEvent.date)}
                                 </span>
                             </div>
-
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                 {nextEventLeader ? (
                                     <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3">
@@ -317,7 +286,7 @@ export default function Dashboard({ isAdmin, userRole, userName, songs, members,
                                 ) : (
                                     <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-3">
                                         <p className="text-[10px] font-bold uppercase tracking-wider text-red-400 mb-1">Worship Leader</p>
-                                        <p className="text-red-500 dark:text-red-400 font-medium text-sm flex items-center gap-1"><AlertTriangle size={12} /> Not assigned</p>
+                                        <p className="text-red-500 text-sm flex items-center gap-1"><AlertTriangle size={11} /> Not assigned</p>
                                     </div>
                                 )}
                                 {nextEventMusicians.length > 0 && (
@@ -333,111 +302,105 @@ export default function Dashboard({ isAdmin, userRole, userName, songs, members,
                                     </div>
                                 )}
                             </div>
-
                             {nextEvent.songLineup && (nextEvent.songLineup.solemn || nextEvent.songLineup.joyful) && (
                                 <div className="mt-3 flex flex-wrap gap-2">
                                     {nextEvent.songLineup.solemn && (
                                         <div className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 rounded-xl text-xs">
                                             <Music size={12} className="text-indigo-500" />
-                                            <span className="text-gray-500 dark:text-gray-400">Solemn:</span>
-                                            <span className="font-semibold text-gray-800 dark:text-gray-100">
-                                                {songs.find(s => s.id === nextEvent.songLineup?.solemn)?.title ?? "—"}
-                                            </span>
+                                            <span className="text-gray-400">Solemn:</span>
+                                            <span className="font-semibold text-gray-800 dark:text-gray-100">{songs.find(s => s.id === nextEvent.songLineup?.solemn)?.title ?? "—"}</span>
                                         </div>
                                     )}
                                     {nextEvent.songLineup.joyful && (
                                         <div className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 dark:bg-violet-900/30 rounded-xl text-xs">
                                             <Star size={12} className="text-violet-500" />
-                                            <span className="text-gray-500 dark:text-gray-400">Joyful:</span>
-                                            <span className="font-semibold text-gray-800 dark:text-gray-100">
-                                                {songs.find(s => s.id === nextEvent.songLineup?.joyful)?.title ?? "—"}
-                                            </span>
+                                            <span className="text-gray-400">Joyful:</span>
+                                            <span className="font-semibold text-gray-800 dark:text-gray-100">{songs.find(s => s.id === nextEvent.songLineup?.joyful)?.title ?? "—"}</span>
                                         </div>
                                     )}
                                 </div>
                             )}
                         </div>
                     ) : (
-                        <div className="px-5 py-10 text-center text-gray-400">
-                            <Calendar size={32} className="mx-auto mb-2 opacity-30" />
-                            <p className="text-sm">No upcoming events scheduled</p>
-                            <button onClick={() => onNavigate("schedule")} className="mt-3 text-xs text-indigo-500 hover:text-indigo-400 font-medium flex items-center gap-1 mx-auto">
-                                Add an event <ArrowRight size={12} />
+                        <div className="px-5 py-10 text-center">
+                            <div className="w-14 h-14 rounded-2xl bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center mx-auto mb-3">
+                                <Calendar size={28} className="text-indigo-400" />
+                            </div>
+                            <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">No upcoming events scheduled</p>
+                            <p className="text-gray-400 text-xs mt-1">Plan your next worship service</p>
+                            <button onClick={() => onNavigate("schedule")} className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition-colors">
+                                <Plus size={14} /> Schedule Now
                             </button>
                         </div>
                     )}
                 </div>
 
-                {/* Right Column: Coverage + Issues stacked */}
+                {/* Right Column */}
                 <div className="flex flex-col gap-4">
 
-                    {/* ── Service Coverage Warnings ── */}
-                    {upcomingEvents.length > 0 && (
-                        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-                            <div className="flex items-center gap-2 px-5 py-3.5 border-b border-gray-100 dark:border-gray-700 font-semibold text-gray-900 dark:text-white text-sm">
-                                <AlertTriangle size={15} className="text-amber-500" /> Service Coverage
-                            </div>
-                            <div className="p-3 space-y-1.5">
-                                {coverageWarnings.length === 0 ? (
-                                    <div className="flex items-center gap-2 px-2 py-2 text-xs text-green-600 dark:text-green-400">
-                                        <CheckCheck size={14} /> All upcoming events have leaders assigned
-                                    </div>
-                                ) : (
-                                    coverageWarnings.slice(0, 3).map(ev => (
-                                        <div key={ev.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/15 text-xs">
-                                            <AlertTriangle size={11} className="text-red-500 shrink-0" />
-                                            <div className="min-w-0">
-                                                <span className="font-semibold text-red-700 dark:text-red-400 truncate block">{ev.eventName ?? "Event"}</span>
-                                                <span className="text-red-400">{new Date(ev.date + "T00:00:00").toLocaleDateString("en", { month: "short", day: "numeric" })} · No leader</span>
-                                            </div>
-                                        </div>
-                                    ))
-                                )}
-                                {coverageOk.slice(0, 2).map(ev => (
-                                    <div key={ev.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-gray-500 dark:text-gray-400">
-                                        <CheckCircle2 size={11} className="text-green-500 shrink-0" />
-                                        <span className="truncate">{ev.eventName ?? "Event"} · {ev.worshipLeader?.name}</span>
-                                    </div>
-                                ))}
-                            </div>
+                    {/* Service Coverage — always visible */}
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+                        <div className="flex items-center gap-2 px-5 py-3.5 border-b border-gray-100 dark:border-gray-700 font-semibold text-gray-900 dark:text-white text-sm">
+                            <AlertTriangle size={15} className="text-amber-500" /> Service Coverage
                         </div>
-                    )}
+                        <div className="p-3 space-y-1.5">
+                            {upcomingEvents.length === 0 ? (
+                                <div className="flex flex-col items-center py-4 gap-2 text-center">
+                                    <CheckCheck size={20} className="text-gray-300" />
+                                    <p className="text-xs text-gray-400">No upcoming events to check</p>
+                                </div>
+                            ) : coverageWarnings.length === 0 ? (
+                                <div className="flex items-center gap-2 px-2 py-2.5 rounded-xl bg-green-50 dark:bg-green-900/20 text-xs text-green-700 dark:text-green-400 font-medium">
+                                    <CheckCheck size={14} /> All upcoming events covered ✓
+                                </div>
+                            ) : (
+                                coverageWarnings.slice(0, 3).map(ev => (
+                                    <div key={ev.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/15 text-xs">
+                                        <AlertTriangle size={11} className="text-red-500 shrink-0" />
+                                        <div className="min-w-0">
+                                            <span className="font-semibold text-red-700 dark:text-red-400 block truncate">{ev.eventName ?? "Event"}</span>
+                                            <span className="text-red-400">{new Date(ev.date + "T00:00:00").toLocaleDateString("en", { month: "short", day: "numeric" })} · No leader</span>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                            {coverageOk.slice(0, 2).map(ev => (
+                                <div key={ev.id} className="flex items-center gap-2 px-2 py-1 rounded-lg text-xs text-gray-400">
+                                    <CheckCircle2 size={11} className="text-green-500 shrink-0" />
+                                    <span className="truncate">{ev.eventName ?? "Event"} · {ev.worshipLeader?.name}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
 
-                    {/* ── Open Issues ── */}
+                    {/* Open Issues */}
                     <div className="flex-1 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
                         <div className="flex items-center gap-2 px-5 py-3.5 border-b border-gray-100 dark:border-gray-700 font-semibold text-gray-900 dark:text-white text-sm">
                             <AlertCircle size={15} className="text-amber-500" /> Open Issues
                         </div>
                         <div className="p-3 space-y-2">
                             <div className="grid grid-cols-2 gap-2">
-                                <div className="flex flex-col items-center justify-center py-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/40">
+                                <div className="flex flex-col items-center py-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/40">
                                     <p className="text-xl font-bold text-red-600 dark:text-red-400">{openBugs}</p>
                                     <div className="flex items-center gap-1 text-[11px] text-red-500 font-medium mt-0.5"><Bug size={10} /> Bugs</div>
                                 </div>
-                                <div className="flex flex-col items-center justify-center py-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/40">
+                                <div className="flex flex-col items-center py-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/40">
                                     <p className="text-xl font-bold text-amber-600 dark:text-amber-400">{openFeatures}</p>
                                     <div className="flex items-center gap-1 text-[11px] text-amber-500 font-medium mt-0.5"><Lightbulb size={10} /> Requests</div>
                                 </div>
                             </div>
                             {recentNotes.length === 0 ? (
-                                <div className="text-center py-3 text-gray-400">
-                                    <CheckCircle2 size={20} className="mx-auto mb-1 opacity-30" />
-                                    <p className="text-xs">All clear!</p>
+                                <div className="flex flex-col items-center py-4 gap-1 text-center">
+                                    <CheckCircle2 size={22} className="text-green-400 opacity-60" />
+                                    <p className="text-xs text-gray-400">No open notes — all clear! 🎉</p>
                                 </div>
                             ) : recentNotes.map(n => (
-                                <div key={n.id} className={`flex gap-2 p-2 rounded-xl border text-xs ${n.type === "bug" ? "bg-red-50 dark:bg-red-900/10 border-red-100 dark:border-red-900/30" :
-                                        n.type === "feature" ? "bg-amber-50 dark:bg-amber-900/10 border-amber-100 dark:border-amber-900/30" :
-                                            "bg-gray-50 dark:bg-gray-700/30 border-gray-100 dark:border-gray-700"
-                                    }`}>
+                                <div key={n.id} className={`flex gap-2 p-2 rounded-xl border text-xs ${n.type === "bug" ? "bg-red-50 dark:bg-red-900/10 border-red-100 dark:border-red-900/30" : n.type === "feature" ? "bg-amber-50 dark:bg-amber-900/10 border-amber-100 dark:border-amber-900/30" : "bg-gray-50 dark:bg-gray-700/30 border-gray-100 dark:border-gray-700"}`}>
                                     <span className="shrink-0 mt-0.5">
-                                        {n.type === "bug" ? <Bug size={11} className="text-red-500" /> :
-                                            n.type === "feature" ? <Lightbulb size={11} className="text-amber-500" /> :
-                                                <NotepadText size={11} className="text-gray-400" />}
+                                        {n.type === "bug" ? <Bug size={11} className="text-red-500" /> : n.type === "feature" ? <Lightbulb size={11} className="text-amber-500" /> : <NotepadText size={11} className="text-gray-400" />}
                                     </span>
                                     <div className="min-w-0">
-                                        <p className="text-gray-700 dark:text-gray-200 leading-snug line-clamp-1">
-                                            {(n.content ?? "").slice(0, 60)}{(n.content ?? "").length > 60 ? "…" : ""}
-                                        </p>
+                                        <p className="text-gray-700 dark:text-gray-200 leading-snug line-clamp-1">{(n.content ?? "").slice(0, 55)}{(n.content ?? "").length > 55 ? "…" : ""}</p>
                                         <p className="text-gray-400 mt-0.5">{n.authorName}</p>
                                     </div>
                                 </div>
@@ -447,21 +410,42 @@ export default function Dashboard({ isAdmin, userRole, userName, songs, members,
                 </div>
             </div>
 
-            {/* ── Active Broadcasts ── */}
-            {!loadingExtra && activeBroadcasts.length > 0 && (
-                <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-                    <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
-                        <div className="flex items-center gap-2 font-semibold text-gray-900 dark:text-white text-sm">
-                            <Megaphone size={16} className="text-indigo-500" />
-                            Active Broadcasts
-                            <span className="ml-1 text-[10px] font-bold bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 px-1.5 py-0.5 rounded-full">
-                                {activeBroadcasts.length} live
+            {/* ══ ACTIVE BROADCASTS — always shown ════════════════════════════ */}
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
+                    <div className="flex items-center gap-2 font-semibold text-gray-900 dark:text-white text-sm">
+                        <Megaphone size={16} className="text-indigo-500" /> Active Broadcasts
+                        {activeBroadcasts.length > 0 && (
+                            <span className="text-[10px] font-bold bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-400 px-1.5 py-0.5 rounded-full flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" /> {activeBroadcasts.length} live
                             </span>
+                        )}
+                    </div>
+                    <button onClick={() => onNavigate("admin")} className="text-xs text-indigo-500 hover:text-indigo-400 flex items-center gap-1 font-medium">
+                        Manage <ChevronRight size={13} />
+                    </button>
+                </div>
+                {loadingExtra ? (
+                    <div className="px-5 py-6 animate-pulse flex gap-3">
+                        <div className="w-8 h-8 rounded-xl bg-gray-200 dark:bg-gray-700 shrink-0" />
+                        <div className="flex-1 space-y-2"><div className="h-3 w-1/3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-2 w-2/3 bg-gray-200 dark:bg-gray-700 rounded" /></div>
+                    </div>
+                ) : activeBroadcasts.length === 0 ? (
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-5 py-5">
+                        <div className="flex items-center gap-3 text-gray-400">
+                            <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-700/50 flex items-center justify-center">
+                                <Megaphone size={18} className="opacity-40" />
+                            </div>
+                            <div>
+                                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">No active broadcasts</p>
+                                <p className="text-xs text-gray-400">Send an announcement to your team</p>
+                            </div>
                         </div>
-                        <button onClick={() => onNavigate("admin")} className="text-xs text-indigo-500 hover:text-indigo-400 flex items-center gap-1 font-medium">
-                            Manage <ChevronRight size={13} />
+                        <button onClick={() => onNavigate("admin")} className="shrink-0 flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition-colors">
+                            <Plus size={13} /> New Broadcast
                         </button>
                     </div>
+                ) : (
                     <div className="divide-y divide-gray-100 dark:divide-gray-700">
                         {activeBroadcasts.slice(0, 3).map(b => (
                             <div key={b.id} className="flex items-start gap-3 px-5 py-3">
@@ -479,51 +463,59 @@ export default function Dashboard({ isAdmin, userRole, userName, songs, members,
                             </div>
                         ))}
                     </div>
-                </div>
-            )}
+                )}
+            </div>
 
-            {/* ── Upcoming Events Timeline ── */}
-            {upcomingEvents.length > 1 && (
-                <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-                    <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
-                        <div className="flex items-center gap-2 font-semibold text-gray-900 dark:text-white text-sm">
-                            <Clock size={16} className="text-indigo-500" /> Upcoming Schedule
+            {/* ══ UPCOMING TIMELINE ═══════════════════════════════════════════ */}
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
+                    <div className="flex items-center gap-2 font-semibold text-gray-900 dark:text-white text-sm">
+                        <Clock size={16} className="text-indigo-500" /> Upcoming Schedule
+                    </div>
+                    <button onClick={() => onNavigate("schedule")} className="text-xs text-indigo-500 hover:text-indigo-400 flex items-center gap-1 font-medium">
+                        Full calendar <ChevronRight size={13} />
+                    </button>
+                </div>
+                {upcomingEvents.length === 0 ? (
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-5 py-5">
+                        <div className="flex items-center gap-3 text-gray-400">
+                            <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-700/50 flex items-center justify-center">
+                                <Calendar size={18} className="opacity-40" />
+                            </div>
+                            <div>
+                                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">No upcoming events scheduled</p>
+                                <p className="text-xs text-gray-400">Start planning your worship services</p>
+                            </div>
                         </div>
-                        <button onClick={() => onNavigate("schedule")} className="text-xs text-indigo-500 hover:text-indigo-400 flex items-center gap-1 font-medium">
-                            Full calendar <ChevronRight size={13} />
+                        <button onClick={() => onNavigate("schedule")} className="shrink-0 flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white transition-colors">
+                            <Plus size={13} /> Add Event
                         </button>
                     </div>
+                ) : (
                     <div className="divide-y divide-gray-100 dark:divide-gray-700">
                         {upcomingEvents.slice(0, 5).map(ev => (
                             <div key={ev.id} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
                                 <div className="w-10 text-center shrink-0">
-                                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">
-                                        {new Date(ev.date + "T00:00:00").toLocaleDateString("en", { month: "short" })}
-                                    </p>
-                                    <p className="text-lg font-bold text-gray-900 dark:text-white leading-tight">
-                                        {new Date(ev.date + "T00:00:00").getDate()}
-                                    </p>
+                                    <p className="text-[10px] font-bold text-gray-400 uppercase">{new Date(ev.date + "T00:00:00").toLocaleDateString("en", { month: "short" })}</p>
+                                    <p className="text-lg font-bold text-gray-900 dark:text-white leading-tight">{new Date(ev.date + "T00:00:00").getDate()}</p>
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{ev.eventName ?? "Event"}</p>
-                                    <p className="text-xs truncate">
+                                    <p className="text-xs truncate mt-0.5">
                                         {ev.worshipLeader?.name
                                             ? <span className="text-gray-400">Leader: {ev.worshipLeader.name}</span>
-                                            : <span className="text-red-400 flex items-center gap-1"><AlertTriangle size={10} /> No leader assigned</span>
-                                        }
+                                            : <span className="text-red-400 flex items-center gap-1"><AlertTriangle size={9} /> No leader assigned</span>}
                                     </p>
                                 </div>
-                                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${serviceTypeColor(ev.serviceType)}`}>
-                                    {serviceTypeLabel(ev.serviceType)}
-                                </span>
-                                <span className="text-[11px] text-gray-400 shrink-0 w-16 text-right">{daysUntil(ev.date)}</span>
+                                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${svcColor(ev.serviceType)}`}>{svcLabel(ev.serviceType)}</span>
+                                <span className="text-[10px] text-gray-400 shrink-0 w-14 text-right">{daysUntil(ev.date)}</span>
                             </div>
                         ))}
                     </div>
-                </div>
-            )}
+                )}
+            </div>
 
-            {/* ── Bottom Grid: Songs + Team ── */}
+            {/* ══ BOTTOM GRID: Songs + Team ════════════════════════════════════ */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
                 {/* Recent Songs */}
@@ -537,9 +529,17 @@ export default function Dashboard({ isAdmin, userRole, userName, songs, members,
                         </button>
                     </div>
                     {recentSongs.length === 0 ? (
-                        <div className="px-5 py-8 text-center text-gray-400">
-                            <BookOpen size={28} className="mx-auto mb-2 opacity-30" />
-                            <p className="text-sm">No songs in library yet</p>
+                        <div className="flex flex-col items-center py-8 gap-3 px-5 text-center">
+                            <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center">
+                                <BookOpen size={22} className="text-indigo-400" />
+                            </div>
+                            <div>
+                                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">No songs yet</p>
+                                <p className="text-xs text-gray-400 mt-0.5">Start building your worship library</p>
+                            </div>
+                            <button onClick={() => onNavigate("songs")} className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition-colors">
+                                <Plus size={12} /> Add First Song
+                            </button>
                         </div>
                     ) : (
                         <div className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -558,7 +558,7 @@ export default function Dashboard({ isAdmin, userRole, userName, songs, members,
                         </div>
                     )}
                     <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60">
-                        <p className="text-xs text-gray-400">{songs.length} total songs in library</p>
+                        <p className="text-xs text-gray-400">{songs.length} songs in library · {songsUsedInSchedules} used in services</p>
                     </div>
                 </div>
 
@@ -572,27 +572,37 @@ export default function Dashboard({ isAdmin, userRole, userName, songs, members,
                             All members <ChevronRight size={13} />
                         </button>
                     </div>
-                    <div className="p-5 space-y-3">
+                    <div className="p-5">
                         {roleGroups.length === 0 ? (
-                            <div className="text-center py-6 text-gray-400">
-                                <Users size={28} className="mx-auto mb-2 opacity-30" />
-                                <p className="text-sm">No members yet</p>
-                            </div>
-                        ) : roleGroups.map(([role, count]) => (
-                            <div key={role} className="flex items-center gap-3">
-                                <div className="flex items-center gap-2 min-w-[130px]">
-                                    <span className="text-gray-400">{roleIcon(role)}</span>
-                                    <span className="text-sm text-gray-700 dark:text-gray-300">{roleLabel(role)}</span>
+                            <div className="flex flex-col items-center py-6 gap-3 text-center">
+                                <div className="w-12 h-12 rounded-2xl bg-violet-50 dark:bg-violet-900/30 flex items-center justify-center">
+                                    <UserPlus size={22} className="text-violet-400" />
                                 </div>
-                                <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
-                                    <div
-                                        className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full transition-all duration-500"
-                                        style={{ width: members.length > 0 ? `${Math.round((count / members.length) * 100)}%` : "0%" }}
-                                    />
+                                <div>
+                                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400">No team members yet</p>
+                                    <p className="text-xs text-gray-400 mt-0.5">Add your worship team to get started</p>
                                 </div>
-                                <span className="text-sm font-bold text-gray-900 dark:text-white w-5 text-right">{count}</span>
+                                <button onClick={() => onNavigate("members")} className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white transition-colors">
+                                    <Plus size={12} /> Add Member
+                                </button>
                             </div>
-                        ))}
+                        ) : (
+                            <div className="space-y-3">
+                                {roleGroups.map(([role, count]) => (
+                                    <div key={role} className="flex items-center gap-3">
+                                        <div className="flex items-center gap-2 min-w-[130px]">
+                                            <span className="text-gray-400">{roleIcon(role)}</span>
+                                            <span className="text-sm text-gray-700 dark:text-gray-300">{roleLabel(role)}</span>
+                                        </div>
+                                        <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+                                            <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full transition-all duration-700"
+                                                style={{ width: members.length > 0 ? `${Math.round((count / members.length) * 100)}%` : "0%" }} />
+                                        </div>
+                                        <span className="text-sm font-bold text-gray-900 dark:text-white w-5 text-right">{count}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                     <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60">
                         <p className="text-xs text-gray-400">{members.length} total team members</p>
