@@ -2266,7 +2266,7 @@ export default function App() {
                         if (showDayView) {
                           const dateLabel = new Date(selectedScheduleDate + "T00:00:00").toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
                           return (
-                            <div className="fixed top-0 left-0 right-0 z-50 md:static md:z-auto w-full md:w-80 md:shrink-0 bg-white dark:bg-gray-800 rounded-b-3xl md:rounded-2xl border-b border-gray-200 dark:border-gray-700 md:border p-5 max-h-[85dvh] md:max-h-[calc(100vh-200px)] overflow-y-auto md:self-start md:sticky md:top-0">
+                            <div className="fixed top-1/2 -translate-y-1/2 left-4 right-4 z-50 md:static md:translate-y-0 md:z-auto md:w-80 md:shrink-0 bg-white dark:bg-gray-800 rounded-2xl md:rounded-2xl border border-gray-200 dark:border-gray-700 shadow-2xl p-5 max-h-[85dvh] md:max-h-[calc(100vh-200px)] overflow-y-auto md:self-start md:sticky md:top-0">
                               <div className="flex items-center justify-between mb-4">
                                 <div>
                                   <h3 className="font-bold text-gray-900 dark:text-white text-base">{dateLabel.split(",")[0]}</h3>
@@ -2312,7 +2312,7 @@ export default function App() {
                           ? allMembers.filter(m => m.name.toLowerCase().includes(schedMemberSearch.toLowerCase()))
                           : allMembers;
                         return (
-                          <div className="fixed top-0 left-0 right-0 z-50 md:static md:z-auto w-full md:w-80 md:shrink-0 bg-white dark:bg-gray-800 rounded-b-3xl md:rounded-2xl border-b border-gray-200 dark:border-gray-700 md:border p-5 max-h-[85dvh] md:max-h-[calc(100vh-200px)] overflow-y-auto md:self-start md:sticky md:top-0">
+                          <div className="fixed top-1/2 -translate-y-1/2 left-4 right-4 z-50 md:static md:translate-y-0 md:z-auto md:w-80 md:shrink-0 bg-white dark:bg-gray-800 rounded-2xl md:rounded-2xl border border-gray-200 dark:border-gray-700 shadow-2xl p-5 max-h-[85dvh] md:max-h-[calc(100vh-200px)] overflow-y-auto md:self-start md:sticky md:top-0">
                             {isDatePast && (
                               <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40 rounded-xl px-3 py-2 mb-3 text-xs text-amber-700 dark:text-amber-400">
                                 <Lock size={13} className="shrink-0" /><span>This date has passed — view only</span>
