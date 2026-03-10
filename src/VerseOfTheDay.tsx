@@ -1,29 +1,21 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { BookOpen, Heart, Send, ChevronDown, ChevronUp } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { BookOpen, Heart, Send, ChevronDown, ChevronUp, CheckCircle2 } from "lucide-react";
 import { VERSES } from "./verseData";
 import { db } from "./firebase";
-import { doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove } from "firebase/firestore";
+import { doc, onSnapshot, setDoc, updateDoc, arrayUnion, arrayRemove } from "firebase/firestore";
 
 interface VotdNote { uid: string; name: string; photo: string; text: string; createdAt: string; }
 
-interface Props {
-    userId: string;
-    userName: string;
-    userPhoto: string;
-}
+interface Props { userId: string; userName: string; userPhoto: string; }
 
 const EMOJIS = ["🙏", "❤️", "🔥", "😭", "✨", "🎶"];
 
 function dayOfYear(): number {
     const now = new Date();
-    const start = new Date(now.getFullYear(), 0, 0);
-    const diff = now.getTime() - start.getTime();
-    return Math.floor(diff / 86400000);
+    return Math.floor((now.getTime() - new Date(now.getFullYear(), 0, 0).getTime()) / 86400000);
 }
 
-function todayKey(): string {
-    return new Date().toISOString().split("T")[0];
-}
+function todayKey(): string { return new Date().toISOString().split("T")[0]; }
 
 export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
     const verse = VERSES[(dayOfYear() - 1 + VERSES.length) % VERSES.length];
@@ -32,55 +24,101 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
     const [reactions, setReactions] = useState<Record<string, string[]>>({});
     const [notes, setNotes] = useState<VotdNote[]>([]);
     const [noteInput, setNoteInput] = useState("");
-    const [showNotes, setShowNotes] = useState(false);
+    const [showNotes, setShowNotes] = useState(true);
     const [showInsight, setShowInsight] = useState(true);
     const [savingNote, setSavingNote] = useState(false);
+    const [noteSaved, setNoteSaved] = useState(false);
+    const docRef = useRef(doc(db, "verseOfDay", dateKey)).current;
+    const docInitialized = useRef(false);
 
-    const docRef = doc(db, "verseOfDay", dateKey);
-
-    const load = useCallback(async () => {
-        try {
-            const snap = await getDoc(docRef);
+    // ── Real-time listener — updates instantly when anyone reacts or notes ──
+    useEffect(() => {
+        const unsub = onSnapshot(docRef, (snap) => {
             if (snap.exists()) {
                 const d = snap.data() as { reactions?: Record<string, string[]>; notes?: VotdNote[] };
                 setReactions(d.reactions ?? {});
                 setNotes(d.notes ?? []);
+                docInitialized.current = true;
             }
-        } catch { }
+        });
+        return () => unsub();
     }, [dateKey]);
 
-    useEffect(() => { load(); }, [load]);
-
+    // ── Emoji reaction — optimistic update + single atomic write ──
     const toggleReaction = async (emoji: string) => {
         if (!userId) return;
         const current = reactions[emoji] ?? [];
         const hasIt = current.includes(userId);
-        const updated = { ...reactions, [emoji]: hasIt ? current.filter(u => u !== userId) : [...current, userId] };
-        setReactions(updated);
+
+        // 1. Instant local update (no waiting)
+        setReactions(prev => ({
+            ...prev,
+            [emoji]: hasIt ? current.filter(u => u !== userId) : [...current, userId],
+        }));
+
+        // 2. Write to Firestore — initialize doc if needed, else update field
         try {
-            const snap = await getDoc(docRef);
-            if (snap.exists()) {
-                await updateDoc(docRef, { [`reactions.${emoji}`]: hasIt ? arrayRemove(userId) : arrayUnion(userId) });
+            if (!docInitialized.current) {
+                // First ever reaction: create the doc
+                await setDoc(docRef, {
+                    verse: verse.ref,
+                    reactions: { [emoji]: hasIt ? [] : [userId] },
+                    notes: [],
+                }, { merge: true });
+                docInitialized.current = true;
             } else {
-                await setDoc(docRef, { verse: verse.ref, reactions: updated, notes: [] });
+                await updateDoc(docRef, {
+                    [`reactions.${emoji}`]: hasIt ? arrayRemove(userId) : arrayUnion(userId),
+                });
             }
-        } catch { }
+        } catch (e) {
+            // Rollback on error
+            setReactions(prev => ({
+                ...prev,
+                [emoji]: current,
+            }));
+        }
     };
 
+    // ── Note submission — optimistic, instant ──
     const submitNote = async () => {
-        if (!noteInput.trim() || !userId) return;
+        const text = noteInput.trim();
+        if (!text || !userId || savingNote) return;
+
+        const newNote: VotdNote = {
+            uid: userId,
+            name: userName,
+            photo: userPhoto,
+            text,
+            createdAt: new Date().toISOString(),
+        };
+
+        // 1. Instant local update
+        setNotes(prev => [...prev, newNote]);
+        setNoteInput("");
         setSavingNote(true);
-        const newNote: VotdNote = { uid: userId, name: userName, photo: userPhoto, text: noteInput.trim(), createdAt: new Date().toISOString() };
+
         try {
-            const snap = await getDoc(docRef);
-            if (snap.exists()) {
-                await updateDoc(docRef, { notes: arrayUnion(newNote) });
+            if (!docInitialized.current) {
+                await setDoc(docRef, {
+                    verse: verse.ref,
+                    reactions: {},
+                    notes: [newNote],
+                }, { merge: true });
+                docInitialized.current = true;
             } else {
-                await setDoc(docRef, { verse: verse.ref, reactions: {}, notes: [newNote] });
+                await updateDoc(docRef, { notes: arrayUnion(newNote) });
             }
-            setNotes(prev => [...prev, newNote]);
-            setNoteInput("");
-        } catch { } finally { setSavingNote(false); }
+            // Show saved confirmation
+            setNoteSaved(true);
+            setTimeout(() => setNoteSaved(false), 2000);
+        } catch {
+            // Rollback on error
+            setNotes(prev => prev.filter(n => n.createdAt !== newNote.createdAt));
+            setNoteInput(text);
+        } finally {
+            setSavingNote(false);
+        }
     };
 
     const totalReactions = Object.values(reactions).reduce((s, a) => s + a.length, 0);
@@ -141,12 +179,17 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
                     const mine = (reactions[emoji] ?? []).includes(userId);
                     return (
                         <button key={emoji} onClick={() => toggleReaction(emoji)}
-                            className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold transition-all border ${mine ? "bg-indigo-500/30 border-indigo-400/50 text-white scale-105" : "bg-white/5 border-white/10 text-gray-300 hover:bg-white/10"}`}>
-                            {emoji}{count > 0 && <span className="text-[10px]">{count}</span>}
+                            className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold transition-all border active:scale-95 ${mine
+                                ? "bg-indigo-500/30 border-indigo-400/50 text-white scale-105 shadow-md shadow-indigo-500/20"
+                                : "bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:scale-105"
+                                }`}>
+                            {emoji}{count > 0 && <span className="text-[10px] tabular-nums">{count}</span>}
                         </button>
                     );
                 })}
-                {totalReactions > 0 && <span className="text-[11px] text-indigo-400 ml-1">{totalReactions} reaction{totalReactions !== 1 ? "s" : ""}</span>}
+                {totalReactions > 0 && (
+                    <span className="text-[11px] text-indigo-400 ml-1">{totalReactions} reaction{totalReactions !== 1 ? "s" : ""}</span>
+                )}
             </div>
 
             {/* Notes section */}
@@ -154,17 +197,20 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
                 <button onClick={() => setShowNotes(v => !v)}
                     className="flex items-center gap-1.5 text-xs font-semibold text-indigo-300 hover:text-indigo-200 transition-colors mb-2">
                     <span>📝</span>
-                    {showNotes ? "Hide" : "Team"} Notes{totalNotes > 0 ? ` (${totalNotes})` : ""}
+                    Team Notes{totalNotes > 0 ? ` (${totalNotes})` : ""}
                     {showNotes ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                 </button>
 
                 {showNotes && (
                     <div className="space-y-2">
+                        {notes.length === 0 && (
+                            <p className="text-[11px] text-indigo-500 italic px-1">Be the first to share a reflection ✨</p>
+                        )}
                         {notes.map((n, i) => (
-                            <div key={i} className="flex items-start gap-2">
+                            <div key={`${n.uid}-${i}`} className="flex items-start gap-2">
                                 {n.photo
                                     ? <img src={n.photo} alt={n.name} className="w-6 h-6 rounded-full object-cover shrink-0 mt-0.5 border border-indigo-400/30" />
-                                    : <div className="w-6 h-6 rounded-full bg-indigo-600 shrink-0 mt-0.5 flex items-center justify-center text-[9px] font-bold text-white">{n.name[0]}</div>
+                                    : <div className="w-6 h-6 rounded-full bg-indigo-600 shrink-0 mt-0.5 flex items-center justify-center text-[9px] font-bold text-white">{(n.name || "?")[0]}</div>
                                 }
                                 <div className="flex-1 bg-white/5 rounded-xl px-3 py-2 border border-white/5">
                                     <div className="flex items-center gap-1.5 mb-0.5">
@@ -180,19 +226,24 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
                         <div className="flex items-center gap-2 mt-2">
                             {userPhoto
                                 ? <img src={userPhoto} alt={userName} className="w-6 h-6 rounded-full object-cover shrink-0 border border-indigo-400/30" />
-                                : <div className="w-6 h-6 rounded-full bg-indigo-600 shrink-0 flex items-center justify-center text-[9px] font-bold text-white">{userName[0]}</div>
+                                : <div className="w-6 h-6 rounded-full bg-indigo-600 shrink-0 flex items-center justify-center text-[9px] font-bold text-white">{(userName || "?")[0]}</div>
                             }
                             <div className="flex-1 flex items-center bg-white/5 border border-indigo-400/20 rounded-xl overflow-hidden pr-1">
                                 <input
                                     value={noteInput}
                                     onChange={e => setNoteInput(e.target.value)}
                                     onKeyDown={e => e.key === "Enter" && !e.shiftKey && submitNote()}
-                                    placeholder="Share your reflection…"
+                                    placeholder="Share your reflection… (Enter to send)"
                                     className="flex-1 bg-transparent px-3 py-2 text-xs text-white placeholder-indigo-400/50 outline-none"
                                 />
-                                {noteInput.trim() && (
+                                {noteSaved && (
+                                    <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-semibold pr-1">
+                                        <CheckCircle2 size={11} /> Saved!
+                                    </span>
+                                )}
+                                {noteInput.trim() && !noteSaved && (
                                     <button onClick={submitNote} disabled={savingNote}
-                                        className="p-1.5 rounded-lg bg-indigo-500 text-white hover:bg-indigo-400 transition-colors disabled:opacity-50">
+                                        className="p-1.5 rounded-lg bg-indigo-500 text-white hover:bg-indigo-400 active:scale-95 transition-all disabled:opacity-50">
                                         <Send size={11} />
                                     </button>
                                 )}
