@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { X, PenLine, Trash2, ImagePlus, Loader2, Bug, Lightbulb, MessageSquare, Pencil, Check, CheckCircle2, ChevronDown } from "lucide-react";
+import { X, PenLine, Trash2, ImagePlus, Loader2, Bug, Lightbulb, MessageSquare, Pencil, Check, CheckCircle2, ChevronDown, Link } from "lucide-react";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 export interface TeamNote {
@@ -10,6 +10,7 @@ export interface TeamNote {
     type: "bug" | "feature" | "general";
     content: string;
     imageData?: string | null;
+    videoUrl?: string | null;
     createdAt: string;
     updatedAt?: string | null;
     resolved?: boolean;
@@ -30,6 +31,38 @@ const NOTE_TYPES = [
     { value: "feature", label: "Feature", icon: <Lightbulb size={12} />, cls: "bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800" },
     { value: "general", label: "General", icon: <MessageSquare size={12} />, cls: "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800" },
 ] as const;
+
+const BUG_TEMPLATE = `🐞 Bug Summary:
+(One sentence — what's broken?)
+
+📍 Where did it happen?
+(Which page/section of the app?)
+
+🔁 Steps to Reproduce:
+1. 
+2. 
+3. 
+
+✅ What I Expected:
+
+
+❌ What Actually Happened:
+
+
+📱 Device & Browser:
+Device: (e.g. iPhone 14, Samsung S22, Laptop)
+Browser: (e.g. Chrome, Safari, Firefox)
+
+⚡ How Urgent?
+[ ] Low — minor annoyance
+[ ] Medium — affects my work
+[ ] High — app is unusable
+
+📎 Screenshot:
+(Paste an image below ↔ or attach a file)
+
+🎬 Screen Recording Link (optional):
+(Paste a Google Drive, Loom, or YouTube link here)`;
 
 const EMOJI_REACTIONS = ["👍", "❤️", "👀", "😂", "🙏"];
 const MAX_IMAGE_BYTES = 300 * 1024;
@@ -152,6 +185,16 @@ function NoteCard({ note, userId, userRole, onEdit, onDelete, onReact, onResolve
                 </div>
             )}
 
+            {/* Screen recording link */}
+            {note.videoUrl && (
+                <a href={note.videoUrl} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-2 mb-3 px-3 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 text-xs font-medium hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-all">
+                    <Link size={12} className="shrink-0" />
+                    <span className="truncate">🎬 Screen Recording</span>
+                    <span className="ml-auto opacity-60 shrink-0">↗</span>
+                </a>
+            )}
+
             {/* Reactions */}
             <div className="flex flex-wrap items-center gap-1.5 mt-2">
                 {EMOJI_REACTIONS.map(emoji => {
@@ -218,6 +261,7 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
     const [fType, setFType] = useState<"bug" | "feature" | "general">("general");
     const [fContent, setFContent] = useState("");
     const [fImage, setFImage] = useState<string | null>(null);
+    const [fVideoUrl, setFVideoUrl] = useState("");
     const [imageUploading, setImageUploading] = useState(false);
 
     // Filter/sort state
@@ -266,17 +310,29 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
         return () => window.removeEventListener("paste", handler);
     }, [showForm]);
 
+    // Auto-fill bug template when Bug type selected (only if content is blank or was the old template)
+    useEffect(() => {
+        if (!showForm) return;
+        if (fType === "bug" && (!fContent || fContent === BUG_TEMPLATE)) {
+            setFContent(BUG_TEMPLATE);
+        } else if (fType !== "bug" && fContent === BUG_TEMPLATE) {
+            setFContent(""); // clear template when switching away
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [fType, showForm]);
+
     const openForm = (note?: TeamNote) => {
         if (note) {
-            setEditing(note); setFType(note.type); setFContent(note.content); setFImage(note.imageData ?? null);
+            setEditing(note); setFType(note.type); setFContent(note.content);
+            setFImage(note.imageData ?? null); setFVideoUrl(note.videoUrl ?? "");
         } else {
-            setEditing(null); setFType("general"); setFContent(""); setFImage(null);
+            setEditing(null); setFType("general"); setFContent(""); setFImage(null); setFVideoUrl("");
         }
         setShowForm(true);
         textRef.current?.focus();
     };
 
-    const closeForm = () => { setShowForm(false); setEditing(null); setFContent(""); setFImage(null); };
+    const closeForm = () => { setShowForm(false); setEditing(null); setFContent(""); setFImage(null); setFVideoUrl(""); };
 
     const handleImageFile = async (file: File) => {
         if (!file.type.startsWith("image/")) return;
@@ -290,31 +346,28 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
         const tempId = `temp_${Date.now()}`;
 
         if (editing) {
-            // Optimistic edit: update in-place immediately
-            const updated: TeamNote = { ...editing, type: fType, content: fContent, imageData: fImage, updatedAt: new Date().toISOString() };
+            const updated: TeamNote = { ...editing, type: fType, content: fContent, imageData: fImage, videoUrl: fVideoUrl || null, updatedAt: new Date().toISOString() };
             setNotes(prev => prev.map(n => n.id === editing.id ? updated : n));
             closeForm();
             fetch(`/api/notes/${editing.id}`, {
                 method: "PUT", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ authorId: userId, content: fContent, type: fType, imageData: fImage }),
-            }).catch(() => fetchNotes()); // rollback on error
+                body: JSON.stringify({ authorId: userId, content: fContent, type: fType, imageData: fImage, videoUrl: fVideoUrl || null }),
+            }).catch(() => fetchNotes());
         } else {
-            // Optimistic create: prepend immediately with temp id
             const tempNote: TeamNote = {
                 id: tempId, authorId: userId, authorName: userName, authorPhoto: userPhoto,
-                type: fType, content: fContent, imageData: fImage, createdAt: new Date().toISOString(),
-                reactions: {}, resolved: false,
+                type: fType, content: fContent, imageData: fImage, videoUrl: fVideoUrl || null,
+                createdAt: new Date().toISOString(), reactions: {}, resolved: false,
             };
             setNotes(prev => [tempNote, ...prev]);
             closeForm();
             fetch("/api/notes", {
                 method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ authorId: userId, authorName: userName, authorPhoto: userPhoto, type: fType, content: fContent, imageData: fImage }),
+                body: JSON.stringify({ authorId: userId, authorName: userName, authorPhoto: userPhoto, type: fType, content: fContent, imageData: fImage, videoUrl: fVideoUrl || null }),
             }).then(r => r.json()).then(({ id }) => {
-                // Replace temp id with real id from server
                 if (id) setNotes(prev => prev.map(n => n.id === tempId ? { ...n, id } : n));
             }).catch(() => {
-                setNotes(prev => prev.filter(n => n.id !== tempId)); // rollback
+                setNotes(prev => prev.filter(n => n.id !== tempId));
             });
         }
         setSaving(false);
@@ -492,6 +545,20 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
                                     <button onClick={() => setFImage(null)} className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center shadow">
                                         <X size={10} />
                                     </button>
+                                </div>
+                            )}
+
+                            {/* Screen recording URL (shown for Bug type) */}
+                            {fType === "bug" && (
+                                <div className="flex items-center gap-2">
+                                    <Link size={13} className="text-gray-400 shrink-0" />
+                                    <input
+                                        type="url"
+                                        value={fVideoUrl}
+                                        onChange={e => setFVideoUrl(e.target.value)}
+                                        placeholder="Screen recording link (Google Drive, Loom, YouTube…)"
+                                        className="flex-1 px-3 py-1.5 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    />
                                 </div>
                             )}
 
