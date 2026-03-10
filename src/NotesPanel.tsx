@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { X, PenLine, Trash2, ImagePlus, Loader2, Bug, Lightbulb, MessageSquare, Pencil, Check, CheckCircle2, ChevronDown, Film, RotateCcw, Archive } from "lucide-react";
+import { X, NotepadText, Trash2, ImagePlus, Loader2, Bug, Lightbulb, MessageSquare, Pencil, Check, CheckCircle2, ChevronDown, Film, RotateCcw, Archive } from "lucide-react";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 export interface TeamNote {
@@ -553,7 +553,7 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
                 title="Team Notes"
                 className={`relative p-2 rounded-xl transition-all active:scale-90 ${open ? "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400" : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
             >
-                <PenLine size={18} />
+                <NotepadText size={18} />
                 {unreadNotes > 0 && !open && (
                     <span className="absolute -top-0.5 -right-0.5 min-w-[17px] h-[17px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-0.5 shadow-md animate-pulse">
                         {unreadNotes > 9 ? "9+" : unreadNotes}
@@ -573,7 +573,7 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
                     {/* ── Header ── */}
                     <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/60 shrink-0">
                         <div className="flex items-center gap-2">
-                            <PenLine size={15} className="text-indigo-500" />
+                            <NotepadText size={15} className="text-indigo-500" />
                             <span className="text-sm font-bold text-gray-900 dark:text-white">Team Notes</span>
                             {activeCount > 0 && (
                                 <span className="text-[10px] font-bold bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded-full">{activeCount}</span>
