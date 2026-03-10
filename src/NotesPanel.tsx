@@ -476,7 +476,27 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
         });
 
     const activeCount = notes.filter(n => !n.resolved).length;
-    const hasNewNotes = activeCount > 0;
+
+    // ── Unread tracking (same as notification bell) ─────────────────────────────────────────
+    const SEEN_KEY = `notes_last_seen_${userId}`;
+    const [lastSeen, setLastSeen] = useState<string>(() => localStorage.getItem(SEEN_KEY) ?? new Date(0).toISOString());
+    const unreadNotes = notes.filter(n => !n.resolved && n.createdAt > lastSeen && n.authorId !== userId).length;
+
+    // Mark as seen when panel opens
+    useEffect(() => {
+        if (open) {
+            const now = new Date().toISOString();
+            setLastSeen(now);
+            localStorage.setItem(SEEN_KEY, now);
+        }
+    }, [open]);
+
+    // Background poll every 60s to keep count fresh
+    useEffect(() => {
+        const id = setInterval(() => fetchNotes(true), 60_000);
+        return () => clearInterval(id);
+    }, [fetchNotes]);
+
 
     const SORT_LABELS: Record<SortMode, string> = { newest: "Newest", oldest: "Oldest", most_reacted: "Most Reacted" };
 
@@ -489,8 +509,10 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
                 className={`relative p-2 rounded-xl transition-all active:scale-90 ${open ? "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400" : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
             >
                 <PenLine size={18} />
-                {hasNewNotes && !open && (
-                    <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-indigo-500" />
+                {unreadNotes > 0 && !open && (
+                    <span className="absolute -top-0.5 -right-0.5 min-w-[17px] h-[17px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-0.5 shadow-md animate-pulse">
+                        {unreadNotes > 9 ? "9+" : unreadNotes}
+                    </span>
                 )}
             </button>
 
