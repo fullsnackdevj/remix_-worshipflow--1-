@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect, useCallback } from "react";
+import AdminDashboard from "./AdminDashboard";
 import {
     Music, Users, Calendar, NotepadText, ChevronRight,
     BookOpen, Clock, Star, TrendingUp, Bug, Lightbulb,
@@ -318,6 +319,19 @@ export default function Dashboard({
             setBroadcasts(Array.isArray(b) ? b : []);
         }).finally(() => setLoadingExtra(false));
     }, []);
+
+    // ── Admin → Bento grid dashboard ──────────────────────────────────────
+    if (isAdmin) {
+        return (
+            <AdminDashboard
+                userName={userName} userPhoto={""} userEmail={userEmail}
+                songs={songs} members={members} schedules={schedules} notes={notes}
+                onNavigate={onNavigate}
+                broadcasts={broadcasts} pendingUsers={pendingUsers} loadingExtra={loadingExtra}
+                canAddSong={canAddSong} canWriteSchedule={canWriteSchedule} canAddMember={canAddMember}
+            />
+        );
+    }
 
 
 
