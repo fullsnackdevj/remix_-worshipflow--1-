@@ -258,10 +258,7 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
     const [trashSelected, setTrashSelected] = useState<Set<string>>(new Set());
     const [trashLoading, setTrashLoading] = useState(false);
 
-    // Undo-delete queue
-    const [undoNote, setUndoNote] = useState<{ note: TeamNote; timer: ReturnType<typeof setTimeout> } | null>(null);
-    const [undoProgress, setUndoProgress] = useState(100);
-    const undoProgressRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
 
     // Form state
     const [fType, setFType] = useState<"bug" | "feature" | "general">("general");
@@ -466,46 +463,20 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
         setSaving(false);
     };
 
-    // ── Optimistic delete with undo ─────────────────────────────────────────────
+    // ── Direct-to-Trash delete (instant, no undo toast — use the trash bin to recover) ─────────────
     const deleteNote = (id: string) => {
         const note = notes.find(n => n.id === id);
         if (!note) return;
-
-        // Mark as deleted so fetchNotes filters it out on any re-fetch
+        // Track as deleted so re-fetches never restore it
         deletedIdsRef.current.add(id);
-
-        // Remove immediately from active list
+        // Remove from UI instantly
         setNotes(prev => prev.filter(n => n.id !== id));
-
-        // Clear any existing undo
-        if (undoNote) { clearTimeout(undoNote.timer); clearInterval(undoProgressRef.current!); }
-
-        // Start progress bar
-        setUndoProgress(100);
-        if (undoProgressRef.current) clearInterval(undoProgressRef.current);
-        undoProgressRef.current = setInterval(() => {
-            setUndoProgress(p => { if (p <= 2) { clearInterval(undoProgressRef.current!); return 0; } return p - 2.5; });
-        }, 100);
-
-        // Set undo window (4s) — after that, soft-delete (move to trash)
-        const timer = setTimeout(() => {
-            setUndoNote(null);
-            clearInterval(undoProgressRef.current!);
-            fetch(`/api/notes/${id}`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ authorId: userId, userRole }) });
-        }, 4000);
-
-        setUndoNote({ note, timer });
-    };
-
-    const handleUndo = () => {
-        if (!undoNote) return;
-        clearTimeout(undoNote.timer);
-        clearInterval(undoProgressRef.current!);
-        // Remove from deleted set so it shows up in re-fetches again
-        deletedIdsRef.current.delete(undoNote.note.id);
-        setNotes(prev => [undoNote.note, ...prev]);
-        setUndoNote(null);
-        setUndoProgress(100);
+        // Fire soft-delete to server immediately
+        fetch(`/api/notes/${id}`, {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ authorId: userId, userRole }),
+        });
     };
 
     // ── Optimistic react ────────────────────────────────────────────────────────
@@ -589,24 +560,6 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
                     </span>
                 )}
             </button>
-
-            {/* Undo-delete toast */}
-            {undoNote && (
-                <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[300] flex flex-col gap-0 w-[min(340px,calc(100vw-20px))] rounded-2xl overflow-hidden shadow-2xl border border-gray-700/60 bg-gray-900 text-white"
-                    style={{ animation: "slideUpFade 0.2s ease-out" }}>
-                    <div className="flex items-center gap-3 px-4 py-3">
-                        <Trash2 size={14} className="text-red-400 shrink-0" />
-                        <span className="text-sm flex-1">Note deleted</span>
-                        <button onClick={handleUndo} className="text-xs font-bold text-indigo-400 hover:text-indigo-300 active:scale-95 transition-all px-2 py-1 rounded-lg hover:bg-white/10">
-                            Undo
-                        </button>
-                    </div>
-                    {/* Progress bar */}
-                    <div className="h-0.5 bg-gray-700 w-full">
-                        <div className="h-full bg-indigo-500 transition-none" style={{ width: `${undoProgress}%` }} />
-                    </div>
-                </div>
-            )}
 
             {/* Panel — centered, responsive */}
             {open && (
