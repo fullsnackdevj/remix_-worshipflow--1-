@@ -350,16 +350,13 @@ export default function Dashboard({
     // ── Admin → Bento grid dashboard ──────────────────────────────────────
     if (isAdmin) {
         return (
-            <div className="space-y-0">
-                <VerseOfTheDay userId={userId} userName={userName} userPhoto={userPhoto} />
-                <AdminDashboard
-                    userName={userName} userPhoto={""} userEmail={userEmail}
-                    songs={songs} members={members} schedules={schedules} notes={notes}
-                    onNavigate={onNavigate}
-                    broadcasts={broadcasts} pendingUsers={pendingUsers} loadingExtra={loadingExtra}
-                    canAddSong={canAddSong} canWriteSchedule={canWriteSchedule} canAddMember={canAddMember}
-                />
-            </div>
+            <AdminDashboard
+                userName={userName} userEmail={userEmail} userId={userId}
+                songs={songs} members={members} schedules={schedules} notes={notes}
+                onNavigate={onNavigate}
+                broadcasts={broadcasts} pendingUsers={pendingUsers} loadingExtra={loadingExtra}
+                canAddSong={canAddSong} canWriteSchedule={canWriteSchedule} canAddMember={canAddMember}
+            />
         );
     }
 

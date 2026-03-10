@@ -233,8 +233,11 @@ function NextServiceTile({ ev, songs, members, myMemberId, onClick }: {
 // ── Main AdminDashboard ───────────────────────────────────────────────────────
 export default function AdminDashboard({
     userName, userEmail, userId = "", songs, members, schedules, notes, onNavigate,
-    broadcasts, pendingUsers, loadingExtra, canAddSong, canWriteSchedule, canAddMember,
+    broadcasts: broadcastsProp, pendingUsers: pendingUsersProp, loadingExtra, canAddSong, canWriteSchedule, canAddMember,
 }: Props) {
+    const broadcasts = broadcastsProp ?? [];
+    const pendingUsers = pendingUsersProp ?? [];
+    const canAdd = canAddSong ?? false, canSched = canWriteSchedule ?? false, canMember = canAddMember ?? false;
     const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }, []);
 
     const upcomingEvents = useMemo(() =>
@@ -296,7 +299,7 @@ export default function AdminDashboard({
 
             {/* ── Quick actions — full-width equal icon grid ── */}
             <div className="grid grid-cols-4 gap-2">
-                {canAddSong && (
+                {canAdd && (
                     <button onClick={() => onNavigate("songs")}
                         title="Add Song"
                         className="flex flex-col items-center justify-center gap-1.5 py-3 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors">
@@ -304,7 +307,7 @@ export default function AdminDashboard({
                         <span className="text-[10px] font-semibold hidden sm:block">Songs</span>
                     </button>
                 )}
-                {canWriteSchedule && (
+                {canSched && (
                     <button onClick={() => onNavigate("schedule")}
                         title="Schedule"
                         className="flex flex-col items-center justify-center gap-1.5 py-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors">
@@ -312,7 +315,7 @@ export default function AdminDashboard({
                         <span className="text-[10px] font-semibold hidden sm:block">Schedule</span>
                     </button>
                 )}
-                {canAddMember && (
+                {canMember && (
                     <button onClick={() => onNavigate("members")}
                         title="Add Member"
                         className="flex flex-col items-center justify-center gap-1.5 py-3 rounded-xl bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 text-violet-600 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-900/40 transition-colors">
