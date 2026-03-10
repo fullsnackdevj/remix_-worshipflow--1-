@@ -252,28 +252,28 @@ export default function AdminDashboard({
 
     return (
         <div className="space-y-4 p-0">
-            {/* ── Greeting row — name + Admin badge on same line ── */}
+            {/* ── Greeting row — name left, Admin badge far right ── */}
             <div className="flex items-start justify-between gap-4 pt-1">
                 <div className="flex items-center gap-4">
                     <div className="w-1.5 h-14 rounded-full bg-indigo-500 dark:bg-indigo-400 shrink-0" />
                     <div>
                         <p className="text-sm text-gray-500 dark:text-gray-400">{greeting()},</p>
-                        <div className="flex items-center gap-3">
-                            <h1 className="text-3xl font-bold text-gray-900 dark:text-white leading-tight">{first} 👋</h1>
-                            <div className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold bg-amber-500/15 border border-amber-400/40 text-amber-500 dark:text-amber-300"
-                                style={{ boxShadow: "0 0 10px 3px rgba(245,158,11,0.45), 0 0 20px 4px rgba(245,158,11,0.2)" }}>
-                                <Shield size={11} /> Admin
-                            </div>
-                        </div>
+                        <h1 className="text-3xl font-bold text-gray-900 dark:text-white leading-tight">{first} 👋</h1>
                         <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{new Date().toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</p>
                     </div>
                 </div>
-                {!loadingExtra && pendingUsers.length > 0 && (
-                    <button onClick={() => onNavigate("admin")}
-                        className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 text-amber-700 dark:text-amber-400 text-xs font-semibold hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors">
-                        <UserCheck size={12} />{pendingUsers.length} pending
-                    </button>
-                )}
+                <div className="flex flex-col items-end gap-2 shrink-0">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500/15 border border-amber-400/40 text-amber-500 dark:text-amber-300"
+                        style={{ boxShadow: "0 0 10px 3px rgba(245,158,11,0.45), 0 0 20px 4px rgba(245,158,11,0.2)" }}>
+                        <Shield size={12} /> Admin
+                    </div>
+                    {!loadingExtra && pendingUsers.length > 0 && (
+                        <button onClick={() => onNavigate("admin")}
+                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 text-amber-700 dark:text-amber-400 text-xs font-semibold hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors">
+                            <UserCheck size={11} />{pendingUsers.length} pending
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* ── Quick actions — full-width equal icon grid ── */}
