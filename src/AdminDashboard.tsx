@@ -383,7 +383,7 @@ export default function AdminDashboard({
 
                 {/* Upcoming timeline */}
                 <Tile>
-                    <CardHeader icon={<Clock size={14} className="text-indigo-500" />} title="Upcoming Services" action="Full calendar" onAction={() => onNavigate("schedule")} />
+                    <CardHeader icon={<Clock size={14} className="text-indigo-500" />} title="Upcoming Events" action="Full calendar" onAction={() => onNavigate("schedule")} />
                     <div className="divide-y divide-gray-100 dark:divide-gray-700">
                         {upcomingEvents.length === 0 ? (
                             <div className="flex items-center gap-3 px-5 py-4"><Calendar size={16} className="text-gray-300" /><p className="text-sm text-gray-400">Nothing scheduled</p></div>
