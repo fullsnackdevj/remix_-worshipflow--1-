@@ -1021,6 +1021,7 @@ export default function App() {
     } catch (error: any) {
       if (error?.name !== "AbortError") {
         console.error("Failed to load songs/tags", error);
+        showToast("error", "Failed to load songs. Please refresh.");
         if (!background) {
           setAllSongs([]);
           setTags([]);
@@ -1123,6 +1124,7 @@ export default function App() {
       writeMembersCache(members);
     } catch (error) {
       console.error("Failed to fetch members", error);
+      showToast("error", "Failed to load members. Please refresh.");
       if (!background) setAllMembers([]);
     } finally {
       if (!background) setIsLoadingMembers(false);
@@ -1542,8 +1544,10 @@ export default function App() {
       });
       setNewTagName("");
       fetchTags();
+      showToast("success", "Tag created!");
     } catch (error) {
       console.error("Failed to create tag", error);
+      showToast("error", "Failed to create tag. Try again.");
     }
   };
 
@@ -1854,6 +1858,7 @@ export default function App() {
               userName={user?.displayName ?? user?.email ?? "Unknown"}
               userPhoto={user?.photoURL ?? ""}
               userRole={userRole}
+              onToast={showToast}
             />
 
             {/* Help & Knowledge Base */}
@@ -2850,7 +2855,7 @@ export default function App() {
                    ADMIN PANEL VIEW
               ══════════════════════════════════════════════════════════════ */}
               {currentView === "admin" ? (
-                <AdminPanel />
+                <AdminPanel onToast={showToast} />
               ) : currentView === "members" ? (
                 <div className="max-w-5xl mx-auto">
 

@@ -24,6 +24,7 @@ interface NotesPanelProps {
     userName: string;
     userPhoto: string;
     userRole?: string;
+    onToast?: (type: "success" | "error" | "info" | "warning", message: string) => void;
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -244,7 +245,7 @@ function NoteCard({ note, userId, userRole, onEdit, onDelete, onReact, onResolve
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
-export default function NotesPanel({ userId, userName, userPhoto, userRole }: NotesPanelProps) {
+export default function NotesPanel({ userId, userName, userPhoto, userRole, onToast }: NotesPanelProps) {
     const [open, setOpen] = useState(false);
     const [notes, setNotes] = useState<TeamNote[]>([]);
     const [loading, setLoading] = useState(false);
@@ -338,29 +339,56 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
     );
 
     const restoreNote = async (id: string) => {
-        deletedIdsRef.current.delete(id); // allow this note to show in re-fetches
+        deletedIdsRef.current.delete(id);
         setTrashNotes(prev => prev.filter(n => n.id !== id));
-        await fetch(`/api/notes/trash/restore/${id}`, { method: "POST" });
-        fetchNotes(true); // refresh active list
+        try {
+            const res = await fetch(`/api/notes/trash/restore/${id}`, { method: "POST" });
+            if (!res.ok) throw new Error();
+            fetchNotes(true);
+            onToast?.("success", "Note restored successfully.");
+        } catch {
+            onToast?.("error", "Failed to restore note. Try again.");
+            fetchTrash(); // re-fetch to put it back if failed
+        }
     };
 
     const permanentlyDelete = async (id: string) => {
         setTrashNotes(prev => prev.filter(n => n.id !== id));
-        await fetch(`/api/notes/trash/${id}`, { method: "DELETE" });
+        try {
+            const res = await fetch(`/api/notes/trash/${id}`, { method: "DELETE" });
+            if (!res.ok) throw new Error();
+        } catch {
+            onToast?.("error", "Failed to delete note permanently.");
+            fetchTrash();
+        }
     };
 
     const permanentlyDeleteSelected = async () => {
         const ids = Array.from(trashSelected);
         setTrashNotes(prev => prev.filter(n => !trashSelected.has(n.id)));
         setTrashSelected(new Set());
-        await fetch("/api/notes/trash", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) });
+        try {
+            const res = await fetch("/api/notes/trash", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) });
+            if (!res.ok) throw new Error();
+            onToast?.("success", `${ids.length} note${ids.length !== 1 ? "s" : ""} permanently deleted.`);
+        } catch {
+            onToast?.("error", "Failed to delete selected notes.");
+            fetchTrash();
+        }
     };
 
     const emptyTrash = async () => {
         const ids = trashNotes.map(n => n.id);
         setTrashNotes([]);
         setTrashSelected(new Set());
-        await fetch("/api/notes/trash", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) });
+        try {
+            const res = await fetch("/api/notes/trash", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) });
+            if (!res.ok) throw new Error();
+            onToast?.("success", "Trash emptied.");
+        } catch {
+            onToast?.("error", "Failed to empty trash.");
+            fetchTrash();
+        }
     };
 
     // Helper: days remaining before auto-deletion
@@ -442,7 +470,13 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
             fetch(`/api/notes/${editing.id}`, {
                 method: "PUT", headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ authorId: userId, content: fContent, type: fType, imageData: fImage, videoData: fVideoData }),
-            }).catch(() => fetchNotes());
+            }).then(res => {
+                if (!res.ok) throw new Error();
+                onToast?.("success", "Note updated.");
+            }).catch(() => {
+                onToast?.("error", "Failed to update note.");
+                fetchNotes();
+            });
         } else {
             const tempNote: TeamNote = {
                 id: tempId, authorId: userId, authorName: userName, authorPhoto: userPhoto,
@@ -458,24 +492,28 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
                 if (id) setNotes(prev => prev.map(n => n.id === tempId ? { ...n, id } : n));
             }).catch(() => {
                 setNotes(prev => prev.filter(n => n.id !== tempId));
+                onToast?.("error", "Failed to save note. Try again.");
             });
         }
         setSaving(false);
     };
 
-    // ── Direct-to-Trash delete (instant, no undo toast — use the trash bin to recover) ─────────────
     const deleteNote = (id: string) => {
         const note = notes.find(n => n.id === id);
         if (!note) return;
-        // Track as deleted so re-fetches never restore it
         deletedIdsRef.current.add(id);
-        // Remove from UI instantly
         setNotes(prev => prev.filter(n => n.id !== id));
-        // Fire soft-delete to server immediately
         fetch(`/api/notes/${id}`, {
             method: "DELETE",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ authorId: userId, userRole }),
+        }).then(res => {
+            if (!res.ok) throw new Error();
+        }).catch(() => {
+            // Restore note to list if delete failed
+            setNotes(prev => [note, ...prev]);
+            deletedIdsRef.current.delete(id);
+            onToast?.("error", "Failed to delete note. Try again.");
         });
     };
 

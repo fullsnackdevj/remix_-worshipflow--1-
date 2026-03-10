@@ -34,7 +34,7 @@ function RoleBadge({ role }: { role: string }) {
     );
 }
 
-export default function AdminPanel() {
+export default function AdminPanel({ onToast }: { onToast?: (type: "success" | "error" | "info" | "warning", msg: string) => void }) {
     const { isAdmin } = useAuth();
     const [activeTab, setActiveTab] = useState<"team" | "broadcasts">("team");
     const [users, setUsers] = useState<ApprovedUser[]>([]);
@@ -44,7 +44,6 @@ export default function AdminPanel() {
     const [newRole, setNewRole] = useState("member");
     const [adding, setAdding] = useState(false);
     const [approvingEmail, setApprovingEmail] = useState<string | null>(null);
-    const [feedback, setFeedback] = useState<{ type: "success" | "error"; msg: string } | null>(null);
 
     // ── Role-edit state ──────────────────────────────────────────────────────
     const [editingRoleFor, setEditingRoleFor] = useState<string | null>(null);
@@ -112,14 +111,20 @@ export default function AdminPanel() {
     };
 
     const toggleBroadcast = async (id: string, active: boolean) => {
-        await fetch(`/api/broadcasts/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ active }) });
-        fetchBroadcasts();
+        try {
+            await fetch(`/api/broadcasts/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ active }) });
+            onToast?.("success", active ? "Broadcast activated." : "Broadcast deactivated.");
+            fetchBroadcasts();
+        } catch { onToast?.("error", "Failed to update broadcast."); }
     };
 
     const deleteBroadcast = async (id: string) => {
         if (!confirm("Delete this broadcast?")) return;
-        await fetch(`/api/broadcasts/${id}`, { method: "DELETE" });
-        fetchBroadcasts();
+        try {
+            await fetch(`/api/broadcasts/${id}`, { method: "DELETE" });
+            onToast?.("success", "Broadcast deleted.");
+            fetchBroadcasts();
+        } catch { onToast?.("error", "Failed to delete broadcast."); }
     };
 
     const createBroadcast = async () => {
@@ -128,19 +133,21 @@ export default function AdminPanel() {
         const targetEmails = bTargetAll ? ["__all__"] : bSelected;
         if (!bTargetAll && targetEmails.length === 0) { setBCreating(false); return; }
         const bulletPoints = bBullets.filter(b => b.trim());
-        if (editingBroadcastId) {
-            // — Edit mode: PUT to update existing
-            await fetch(`/api/broadcasts/${editingBroadcastId}`, {
-                method: "PUT", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ type: bType, title: bTitle, message: bMessage, bulletPoints, targetEmails }),
-            });
-        } else {
-            // — Create mode: POST new
-            await fetch("/api/broadcasts", {
-                method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ type: bType, title: bTitle, message: bMessage, bulletPoints, targetEmails }),
-            });
-        }
+        try {
+            if (editingBroadcastId) {
+                await fetch(`/api/broadcasts/${editingBroadcastId}`, {
+                    method: "PUT", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ type: bType, title: bTitle, message: bMessage, bulletPoints, targetEmails }),
+                });
+                onToast?.("success", "Broadcast updated!");
+            } else {
+                await fetch("/api/broadcasts", {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ type: bType, title: bTitle, message: bMessage, bulletPoints, targetEmails }),
+                });
+                onToast?.("success", "Broadcast created!");
+            }
+        } catch { onToast?.("error", "Failed to save broadcast."); }
         setBTitle(""); setBMessage(""); setBBullets(["", "", ""]); setBTargetAll(true); setBSelected([]);
         setShowForm(false); setBCreating(false); setEditingBroadcastId(null);
         fetchBroadcasts();
@@ -175,10 +182,6 @@ export default function AdminPanel() {
 
     useEffect(() => { fetchAll(); fetchBroadcasts(); }, []);
 
-    const showFeedback = (type: "success" | "error", msg: string) => {
-        setFeedback({ type, msg });
-        setTimeout(() => setFeedback(null), 3500);
-    };
 
     const approve = async (email: string, role = "member", fromPending = false) => {
         if (fromPending) setApprovingEmail(email);
@@ -190,9 +193,9 @@ export default function AdminPanel() {
                 body: JSON.stringify({ email, role }),
             });
             if (!fromPending) { setNewEmail(""); setNewRole("member"); }
-            showFeedback("success", `${email} approved as ${role}.`);
+            onToast?.("success", `${email} approved as ${role}.`);
             fetchAll();
-        } catch { showFeedback("error", "Failed to approve. Try again."); }
+        } catch { onToast?.("error", "Failed to approve. Try again."); }
         finally { setApprovingEmail(null); setAdding(false); }
     };
 
@@ -204,9 +207,9 @@ export default function AdminPanel() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ email }),
             });
-            showFeedback("success", `${email} access removed.`);
+            onToast?.("success", `${email} access removed.`);
             fetchAll();
-        } catch { showFeedback("error", "Failed to revoke. Try again."); }
+        } catch { onToast?.("error", "Failed to revoke. Try again."); }
     };
 
     const dismissPending = async (email: string) => {
@@ -217,7 +220,7 @@ export default function AdminPanel() {
                 body: JSON.stringify({ email }),
             });
             setPending(p => p.filter(u => u.email !== email));
-        } catch { }
+        } catch { onToast?.("error", "Failed to dismiss request."); }
     };
 
     const startEditRole = (u: ApprovedUser) => {
@@ -241,10 +244,10 @@ export default function AdminPanel() {
             if (!res.ok) throw new Error("Failed");
             // optimistic update
             setUsers(prev => prev.map(u => u.email === email ? { ...u, role: pendingRole } : u));
-            showFeedback("success", `Role updated to "${ROLE_OPTIONS.find(r => r.value === pendingRole)?.label}" for ${email}.`);
+            onToast?.("success", `Role updated to "${ROLE_OPTIONS.find(r => r.value === pendingRole)?.label}" for ${email}.`);
             setEditingRoleFor(null);
         } catch {
-            showFeedback("error", "Failed to update role. Try again.");
+            onToast?.("error", "Failed to update role. Try again.");
         } finally {
             setSavingRole(false);
         }
@@ -430,13 +433,7 @@ export default function AdminPanel() {
             {/* ── TEAM ACCESS TAB ────────────────────────────────────────── */}
             {activeTab === "team" && <>
 
-                {/* Feedback */}
-                {feedback && (
-                    <div className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium ${feedback.type === "success" ? "bg-green-500/10 text-green-400 border border-green-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20"}`}>
-                        {feedback.type === "success" ? <Check size={16} /> : <X size={16} />}
-                        {feedback.msg}
-                    </div>
-                )}
+
 
                 {/* ── Pending Access Requests ─────────────────────────────── */}
                 {(loading || pending.length > 0) && (
