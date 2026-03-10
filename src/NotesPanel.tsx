@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { X, NotepadText, Trash2, ImagePlus, Loader2, Bug, Lightbulb, MessageSquare, Pencil, Check, CheckCircle2, ChevronDown, Film, RotateCcw, Archive } from "lucide-react";
+import { X, NotepadText, Trash2, ImagePlus, Loader2, Bug, Lightbulb, MessageSquare, Pencil, Check, CheckCircle2, ChevronDown, Film, RotateCcw, Archive, Eye, Search, Code2, Wrench, BellRing, XCircle } from "lucide-react";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 export interface TeamNote {
@@ -66,7 +66,14 @@ Browser: (e.g. Chrome, Safari, Firefox)
 🎬 Screen Recording:
 (Use the video upload button below ↓)`;
 
-const EMOJI_REACTIONS = ["👍", "❤️", "👀", "😂", "🙏"];
+const STATUS_REACTIONS = [
+    { key: "seen", label: "Seen", icon: <Eye size={13} />, activeColor: "bg-sky-100 dark:bg-sky-900/40 border-sky-300 dark:border-sky-700 text-sky-700 dark:text-sky-300" },
+    { key: "investigating", label: "Investigating", icon: <Search size={13} />, activeColor: "bg-amber-100 dark:bg-amber-900/40 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300" },
+    { key: "coding", label: "Coding", icon: <Code2 size={13} />, activeColor: "bg-violet-100 dark:bg-violet-900/40 border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300" },
+    { key: "fixing", label: "Fixing", icon: <Wrench size={13} />, activeColor: "bg-orange-100 dark:bg-orange-900/40 border-orange-300 dark:border-orange-700 text-orange-700 dark:text-orange-300" },
+    { key: "on_it", label: "On it", icon: <BellRing size={13} />, activeColor: "bg-green-100 dark:bg-green-900/40 border-green-300 dark:border-green-700 text-green-700 dark:text-green-300" },
+    { key: "nevermind", label: "Nevermind", icon: <XCircle size={13} />, activeColor: "bg-red-100 dark:bg-red-900/40 border-red-300 dark:border-red-700 text-red-700 dark:text-red-300" },
+] as const;
 const MAX_IMAGE_BYTES = 300 * 1024;
 const MAX_VIDEO_BYTES = 5 * 1024 * 1024; // 5MB
 
@@ -196,23 +203,31 @@ function NoteCard({ note, userId, userRole, onEdit, onDelete, onReact, onResolve
                 </div>
             )}
 
-            {/* Reactions */}
+            {/* Status Reactions */}
             <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                {EMOJI_REACTIONS.map(emoji => {
-                    const users = note.reactions?.[emoji] || [];
+                {STATUS_REACTIONS.map(({ key, label, icon, activeColor }) => {
+                    const users = note.reactions?.[key] || [];
                     const reacted = users.includes(userId);
+                    const tooltip = reacted
+                        ? `Remove "${label}" reaction${users.length > 1 ? ` · ${users.length} people` : ""}`
+                        : `${label}${users.length > 0 ? ` · ${users.length} person${users.length !== 1 ? "s" : ""}` : ""}`;
                     return (
                         <button
-                            key={emoji}
-                            onClick={() => onReact(note.id, emoji)}
-                            title={reacted ? "Remove reaction" : "React"}
-                            className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border transition-all select-none ${reacted
-                                ? "bg-indigo-100 dark:bg-indigo-900/40 border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 scale-105"
-                                : "bg-gray-100 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
+                            key={key}
+                            onClick={() => onReact(note.id, key)}
+                            title={tooltip}
+                            aria-label={tooltip}
+                            className={`group relative flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border transition-all select-none active:scale-95 ${reacted
+                                    ? `${activeColor} scale-105 shadow-sm`
+                                    : "bg-gray-100 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
                                 }`}
                         >
-                            <span>{emoji}</span>
-                            {users.length > 0 && <span className="font-medium">{users.length}</span>}
+                            {icon}
+                            {users.length > 0 && <span className="font-semibold tabular-nums">{users.length}</span>}
+                            {/* Tooltip */}
+                            <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-[10px] px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-10 shadow-lg">
+                                {label}
+                            </span>
                         </button>
                     );
                 })}
