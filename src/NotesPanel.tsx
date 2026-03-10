@@ -277,7 +277,7 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
     // Close on outside click
     useEffect(() => {
         const handler = (e: MouseEvent) => {
-            if (open && panelRef.current && !panelRef.current.contains(e.target as Node)) setOpen(false);
+            if (open && panelRef.current && !panelRef.current.contains(e.target as Node)) { setOpen(false); closeForm(); }
         };
         document.addEventListener("mousedown", handler);
         return () => document.removeEventListener("mousedown", handler);
@@ -456,7 +456,7 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
         <div ref={panelRef} className="relative">
             {/* Trigger */}
             <button
-                onClick={() => setOpen(v => !v)}
+                onClick={() => { setOpen(v => { if (v) closeForm(); return !v; }); }}
                 title="Team Notes"
                 className={`relative p-2 rounded-xl transition-all active:scale-90 ${open ? "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400" : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
             >
@@ -508,7 +508,7 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
                                     <Pencil size={11} /> New Note
                                 </button>
                             )}
-                            <button onClick={() => setOpen(false)} className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all">
+                            <button onClick={() => { setOpen(false); closeForm(); }} className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all">
                                 <X size={15} />
                             </button>
                         </div>
