@@ -247,7 +247,8 @@ export default function App() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "admin">("dashboard");
-  const { isAdmin, userRole, user } = useAuth();
+  const { isAdmin, userRole, user, status: authStatus } = useAuth();
+
 
   // ── QA Specialist simulated role ──────────────────────────────────────────
   const isQA = userRole === "qa_specialist";
@@ -2003,18 +2004,34 @@ export default function App() {
                    DASHBOARD VIEW
               ══════════════════════════════════════════════════════════════ */}
               {currentView === "dashboard" ? (
-                <Dashboard
-                  isAdmin={isAdmin}
-                  userRole={effectiveRole}
-                  userName={user?.displayName ?? user?.email ?? "Team Member"}
-                  userPhoto={user?.photoURL ?? ""}
-                  songs={allSongs}
-                  members={allMembers}
-                  schedules={allSchedules}
-                  notes={dashboardNotes}
-                  onNavigate={setCurrentView}
-                />
+                authStatus === "loading" ? (
+                  /* Auth resolving — show a gentle skeleton so screen isn't blank */
+                  <div className="max-w-6xl mx-auto space-y-6 pb-10 animate-pulse">
+                    <div className="h-10 w-56 bg-gray-200 dark:bg-gray-700 rounded-xl" />
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                      {[1, 2, 3, 4].map(i => <div key={i} className="h-24 bg-gray-200 dark:bg-gray-700 rounded-2xl" />)}
+                    </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                      <div className="lg:col-span-2 h-48 bg-gray-200 dark:bg-gray-700 rounded-2xl" />
+                      <div className="h-48 bg-gray-200 dark:bg-gray-700 rounded-2xl" />
+                    </div>
+                    <div className="h-40 bg-gray-200 dark:bg-gray-700 rounded-2xl" />
+                  </div>
+                ) : (
+                  <Dashboard
+                    isAdmin={isAdmin}
+                    userRole={effectiveRole}
+                    userName={user?.displayName ?? user?.email ?? "Team Member"}
+                    userPhoto={user?.photoURL ?? ""}
+                    songs={allSongs}
+                    members={allMembers}
+                    schedules={allSchedules}
+                    notes={dashboardNotes}
+                    onNavigate={setCurrentView}
+                  />
+                )
               ) : null}
+
 
               {/* ══════════════════════════════════════════════════════════════
                    SCHEDULING VIEW
@@ -3344,7 +3361,7 @@ export default function App() {
                   )}
                 </div>
 
-              ) : currentView !== "schedule" ? (
+              ) : currentView === "songs" ? (
                 <div>
                   {/* ══════════════════════════════════════════════════════════════
                      SONG MANAGEMENT VIEW
