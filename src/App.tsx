@@ -7,7 +7,7 @@ import WelcomeToast from "./WelcomeToast";
 import AdminPanel from "./AdminPanel";
 import HelpPanel from "./HelpPanel";
 import NotesPanel from "./NotesPanel";
-import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, LayoutGrid, List, BookOpen, Mic2, Copy, Pencil, Shield, Mail, Bell, Guitar, Sliders, Palette, Lock, AlertTriangle, CheckCircle, BookMarked, HandMetal, Headphones, HelpCircle } from "lucide-react";
+import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, LayoutGrid, List, BookOpen, Mic2, Copy, Pencil, Shield, Mail, Bell, Guitar, Sliders, Palette, Lock, AlertTriangle, CheckCircle, BookMarked, HandMetal, Headphones, HelpCircle, Undo2, Redo2 } from "lucide-react";
 import { Song, Tag } from "./types";
 
 // ── Member Role Constants ────────────────────────────────────────────────────
@@ -509,6 +509,95 @@ export default function App() {
   const [formErrors, setFormErrors] = useState<{ title?: string; artist?: string; lyrics?: string; tags?: string }>({});
   const [copiedField, setCopiedField] = useState<"lyrics" | "chords" | null>(null);
   const [transposeSteps, setTransposeSteps] = useState(0);
+
+  // ── Undo/Redo history for lyrics & chords ──────────────────────────────────────
+  const lyricsHistory = useRef<string[]>([]);
+  const lyricsIdx = useRef(-1);
+  const chordsHistory = useRef<string[]>([]);
+  const chordsIdx = useRef(-1);
+  const lyricsPushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const chordsPushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [lyricsCanUndo, setLyricsCanUndo] = useState(false);
+  const [lyricsCanRedo, setLyricsCanRedo] = useState(false);
+  const [chordsCanUndo, setChordsCanUndo] = useState(false);
+  const [chordsCanRedo, setChordsCanRedo] = useState(false);
+
+  /** Push a value onto a history stack (truncate redo branch) */
+  const pushHistory = (val: string, history: React.MutableRefObject<string[]>, idx: React.MutableRefObject<number>) => {
+    const stack = history.current;
+    // Trim redo branch
+    stack.splice(idx.current + 1);
+    stack.push(val);
+    // Cap at 100 entries
+    if (stack.length > 100) stack.shift();
+    idx.current = stack.length - 1;
+  };
+
+  /** Debounced push — waits 500ms after the user stops typing */
+  const pushLyricsHistory = (val: string) => {
+    if (lyricsPushTimer.current) clearTimeout(lyricsPushTimer.current);
+    lyricsPushTimer.current = setTimeout(() => {
+      pushHistory(val, lyricsHistory, lyricsIdx);
+      setLyricsCanUndo(lyricsIdx.current > 0);
+      setLyricsCanRedo(lyricsIdx.current < lyricsHistory.current.length - 1);
+    }, 500);
+  };
+
+  const pushChordsHistory = (val: string) => {
+    if (chordsPushTimer.current) clearTimeout(chordsPushTimer.current);
+    chordsPushTimer.current = setTimeout(() => {
+      pushHistory(val, chordsHistory, chordsIdx);
+      setChordsCanUndo(chordsIdx.current > 0);
+      setChordsCanRedo(chordsIdx.current < chordsHistory.current.length - 1);
+    }, 500);
+  };
+
+  const undoLyrics = () => {
+    if (lyricsIdx.current <= 0) return;
+    lyricsIdx.current--;
+    const val = lyricsHistory.current[lyricsIdx.current];
+    setEditLyrics(val);
+    setLyricsCanUndo(lyricsIdx.current > 0);
+    setLyricsCanRedo(true);
+  };
+  const redoLyrics = () => {
+    if (lyricsIdx.current >= lyricsHistory.current.length - 1) return;
+    lyricsIdx.current++;
+    const val = lyricsHistory.current[lyricsIdx.current];
+    setEditLyrics(val);
+    setLyricsCanUndo(true);
+    setLyricsCanRedo(lyricsIdx.current < lyricsHistory.current.length - 1);
+  };
+  const undoChords = () => {
+    if (chordsIdx.current <= 0) return;
+    chordsIdx.current--;
+    const val = chordsHistory.current[chordsIdx.current];
+    setEditChords(val);
+    setChordsCanUndo(chordsIdx.current > 0);
+    setChordsCanRedo(true);
+  };
+  const redoChords = () => {
+    if (chordsIdx.current >= chordsHistory.current.length - 1) return;
+    chordsIdx.current++;
+    const val = chordsHistory.current[chordsIdx.current];
+    setEditChords(val);
+    setChordsCanUndo(true);
+    setChordsCanRedo(chordsIdx.current < chordsHistory.current.length - 1);
+  };
+
+  /** Reset history when editing starts (opening a song or new song) */
+  const resetLyricsHistory = (initial: string) => {
+    lyricsHistory.current = [initial];
+    lyricsIdx.current = 0;
+    setLyricsCanUndo(false);
+    setLyricsCanRedo(false);
+  };
+  const resetChordsHistory = (initial: string) => {
+    chordsHistory.current = [initial];
+    chordsIdx.current = 0;
+    setChordsCanUndo(false);
+    setChordsCanRedo(false);
+  };
 
   const lyricsInputRef = useRef<HTMLInputElement>(null);
   const chordsInputRef = useRef<HTMLInputElement>(null);
@@ -1490,6 +1579,8 @@ export default function App() {
       setEditLyrics(song.lyrics);
       setEditChords(song.chords);
       setEditTags(Array.isArray(song.tags) ? song.tags.map((t) => t.id) : []);
+      resetLyricsHistory(song.lyrics);
+      resetChordsHistory(song.chords);
     } else {
       setSelectedSong(null);
       setEditTitle("");
@@ -1498,6 +1589,8 @@ export default function App() {
       setEditLyrics(LYRICS_TEMPLATE);
       setEditChords(CHORDS_TEMPLATE);
       setEditTags([]);
+      resetLyricsHistory(LYRICS_TEMPLATE);
+      resetChordsHistory(CHORDS_TEMPLATE);
     }
     setIsEditing(true);
     setFormErrors({});
@@ -1546,8 +1639,14 @@ export default function App() {
       if (extractedText) {
         if (type === "lyrics") {
           setEditLyrics(extractedText);
+          pushHistory(extractedText, lyricsHistory, lyricsIdx);
+          setLyricsCanUndo(lyricsIdx.current > 0);
+          setLyricsCanRedo(false);
         } else {
           setEditChords(extractedText);
+          pushHistory(extractedText, chordsHistory, chordsIdx);
+          setChordsCanUndo(chordsIdx.current > 0);
+          setChordsCanRedo(false);
         }
       }
     } catch (error) {
@@ -3343,11 +3442,35 @@ export default function App() {
                               accept="image/*"
                             />
 
+                            {/* Undo/Redo toolbar — Lyrics */}
+                            <div className="flex items-center gap-1 mb-1.5">
+                              <button type="button" onClick={undoLyrics} disabled={!lyricsCanUndo}
+                                title="Undo (Ctrl+Z)"
+                                className="flex items-center gap-1 px-2 py-1 text-xs rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+                                <Undo2 size={12} /> Undo
+                              </button>
+                              <button type="button" onClick={redoLyrics} disabled={!lyricsCanRedo}
+                                title="Redo (Ctrl+Y)"
+                                className="flex items-center gap-1 px-2 py-1 text-xs rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+                                <Redo2 size={12} /> Redo
+                              </button>
+                            </div>
+
                             {/* Seamless textarea box */}
                             <div className={`rounded-xl overflow-hidden border ${formErrors.lyrics ? "border-red-400" : "border-gray-300 dark:border-gray-600"}`}>
                               <textarea
                                 value={editLyrics}
-                                onChange={(e) => { setEditLyrics(e.target.value); if (formErrors.lyrics) setFormErrors(p => ({ ...p, lyrics: undefined })); }}
+                                onChange={(e) => {
+                                  setEditLyrics(e.target.value);
+                                  pushLyricsHistory(e.target.value);
+                                  if (formErrors.lyrics) setFormErrors(p => ({ ...p, lyrics: undefined }));
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.ctrlKey || e.metaKey) {
+                                    if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undoLyrics(); }
+                                    if (e.key === "y" || (e.key === "z" && e.shiftKey)) { e.preventDefault(); redoLyrics(); }
+                                  }
+                                }}
                                 rows={14}
                                 className="w-full h-full px-4 py-3 bg-gray-50 dark:bg-gray-900 outline-none font-sans resize-none focus:ring-2 focus:ring-inset focus:ring-indigo-300 dark:focus:ring-indigo-700"
                                 placeholder="Paste lyrics here..."
@@ -3395,11 +3518,34 @@ export default function App() {
                               accept="image/*"
                             />
 
+                            {/* Undo/Redo toolbar — Chords */}
+                            <div className="flex items-center gap-1 mb-1.5">
+                              <button type="button" onClick={undoChords} disabled={!chordsCanUndo}
+                                title="Undo (Ctrl+Z)"
+                                className="flex items-center gap-1 px-2 py-1 text-xs rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+                                <Undo2 size={12} /> Undo
+                              </button>
+                              <button type="button" onClick={redoChords} disabled={!chordsCanRedo}
+                                title="Redo (Ctrl+Y)"
+                                className="flex items-center gap-1 px-2 py-1 text-xs rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+                                <Redo2 size={12} /> Redo
+                              </button>
+                            </div>
+
                             {/* Seamless textarea box */}
                             <div className="rounded-xl overflow-hidden border border-gray-300 dark:border-gray-600">
                               <textarea
                                 value={editChords}
-                                onChange={(e) => setEditChords(e.target.value)}
+                                onChange={(e) => {
+                                  setEditChords(e.target.value);
+                                  pushChordsHistory(e.target.value);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.ctrlKey || e.metaKey) {
+                                    if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undoChords(); }
+                                    if (e.key === "y" || (e.key === "z" && e.shiftKey)) { e.preventDefault(); redoChords(); }
+                                  }
+                                }}
                                 rows={14}
                                 className="w-full h-full px-4 py-3 bg-gray-50 dark:bg-gray-900 outline-none font-sans text-sm resize-none focus:ring-2 focus:ring-inset focus:ring-purple-300 dark:focus:ring-purple-700"
                                 placeholder="Paste chords here..."
