@@ -126,7 +126,7 @@ function NextServiceTile({ ev, songs, members, myMemberId, onClick }: {
     if (!ev) return (
         <Tile className="p-6 flex flex-col gap-3 h-full" onClick={onClick}>
             <div className="flex items-center gap-2 text-sm font-semibold text-indigo-600 dark:text-indigo-400 mb-1">
-                <Calendar size={15} /> Next Service
+                <Calendar size={15} /> Church Events
             </div>
             <div className="flex flex-col items-center justify-center flex-1 gap-3 py-4">
                 <div className="w-12 h-12 rounded-2xl bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
@@ -154,10 +154,9 @@ function NextServiceTile({ ev, songs, members, myMemberId, onClick }: {
 
     return (
         <Tile className="relative flex flex-col h-full" onClick={onClick}>
-            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-indigo-500 via-violet-500 to-transparent" />
             <CardHeader
                 icon={<Star size={14} className="text-indigo-500" />}
-                title="Next Service"
+                title="Church Events"
                 action="Full schedule"
                 onAction={onClick}
             />
@@ -204,11 +203,19 @@ function NextServiceTile({ ev, songs, members, myMemberId, onClick }: {
                 {/* Avatar row */}
                 <div className="flex items-center gap-2 pt-2 border-t border-gray-100 dark:border-gray-700">
                     <div className="flex -space-x-1.5">
-                        {[ev.worshipLeader, ...(ev.musicians ?? []).slice(0, 3)].filter(Boolean).map((m, i) => (
-                            <div key={i} className="w-6 h-6 rounded-full bg-indigo-100 dark:bg-indigo-700 border-2 border-white dark:border-gray-800 flex items-center justify-center text-[9px] font-bold text-indigo-700 dark:text-indigo-200">
-                                {(m!.name || "?")[0].toUpperCase()}
-                            </div>
-                        ))}
+                        {[ev.worshipLeader, ...(ev.musicians ?? []).slice(0, 3), ...(ev.backupSingers ?? []).slice(0, 1)].filter(Boolean).map((m, i) => {
+                            const photo = getLivePhoto(m!.memberId, m!.photo);
+                            const initials = (m!.name || "?")[0].toUpperCase();
+                            return photo ? (
+                                <img key={i} src={photo} alt={m!.name}
+                                    className="w-6 h-6 rounded-full object-cover border-2 border-white dark:border-gray-800"
+                                    onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                            ) : (
+                                <div key={i} className="w-6 h-6 rounded-full bg-indigo-500 border-2 border-white dark:border-gray-800 flex items-center justify-center text-[9px] font-bold text-white">
+                                    {initials}
+                                </div>
+                            );
+                        })}
                     </div>
                     <p className="text-xs text-gray-400">{[ev.worshipLeader, ...(ev.musicians ?? [])].filter(Boolean).length} serving</p>
                 </div>
