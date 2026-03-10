@@ -571,7 +571,14 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
                                         <button onClick={() => setFVideoData(null)} className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center shadow"><X size={10} /></button>
                                     </div>
                                 )}
-                                {videoError && <p className="text-xs text-red-500 w-full">{videoError}</p>}
+                                {videoError && (
+                                    <div className="flex items-center gap-2 w-full px-3 py-2 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400">
+                                        <span className="text-base leading-none">⚠️</span>
+                                        <span className="text-xs font-medium flex-1">{videoError}</span>
+                                        <button onClick={() => setVideoError("")} className="shrink-0 text-red-400 hover:text-red-600 dark:hover:text-red-300"><X size={12} /></button>
+                                    </div>
+                                )}
+
                             </div>
 
                             {/* Actions */}
