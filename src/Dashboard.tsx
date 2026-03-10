@@ -1,9 +1,11 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
     Music, Users, Calendar, NotepadText, ChevronRight,
     BookOpen, Clock, Star, TrendingUp, Bug, Lightbulb,
     CheckCircle2, AlertCircle, Mic2, Headphones, Guitar,
-    User, Shield, Lock, LayoutGrid, ArrowRight, ClipboardList, FlaskConical
+    User, Shield, Lock, LayoutGrid, ArrowRight, ClipboardList,
+    FlaskConical, Bell, UserCheck, AlertTriangle, Radio,
+    CheckCheck, Megaphone, Eye, RefreshCw
 } from "lucide-react";
 
 // ── Types matching the REAL App.tsx interfaces ─────────────────────────────────
@@ -23,6 +25,8 @@ interface Schedule {
 interface Song { id: string; title: string; artist: string; created_at?: string; }
 interface Member { id: string; name: string; role: string; photoUrl?: string; }
 interface Note { id: string; type: "bug" | "feature" | "general"; content: string; resolved?: boolean; createdAt: string; authorName: string; }
+interface PendingUser { email: string; name: string; photo?: string; requestedAt?: string; }
+interface Broadcast { id: string; title: string; message: string; active: boolean; type?: string; createdAt?: string; }
 
 interface Props {
     isAdmin: boolean;
@@ -121,14 +125,29 @@ export default function Dashboard({ isAdmin, userRole, userName, songs, members,
 
     if (!isAdmin) return <ComingSoonDashboard userName={userName} />;
 
+    // ── Extra admin data (fetched inside dashboard) ───────────────────────────
+    const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([]);
+    const [activeBroadcasts, setActiveBroadcasts] = useState<Broadcast[]>([]);
+    const [loadingExtra, setLoadingExtra] = useState(true);
+
+    useEffect(() => {
+        Promise.all([
+            fetch("/api/auth/pending").then(r => r.json()).catch(() => []),
+            fetch("/api/broadcasts").then(r => r.json()).catch(() => []),
+        ]).then(([pending, broadcasts]) => {
+            setPendingUsers(Array.isArray(pending) ? pending : []);
+            setActiveBroadcasts(Array.isArray(broadcasts) ? broadcasts : []);
+        }).finally(() => setLoadingExtra(false));
+    }, []);
+
     const today = new Date(); today.setHours(0, 0, 0, 0);
 
-    // ── Derived data (all safely guarded) ────────────────────────────────────
+    // ── Derived data ──────────────────────────────────────────────────────────
     const upcomingEvents = useMemo(() =>
         schedules
             .filter(s => { try { return new Date(s.date + "T00:00:00") >= today; } catch { return false; } })
             .sort((a, b) => a.date.localeCompare(b.date))
-            .slice(0, 5),
+            .slice(0, 6),
         [schedules]
     );
 
@@ -141,6 +160,16 @@ export default function Dashboard({ isAdmin, userRole, userName, songs, members,
             catch { return false; }
         }).length;
     }, [schedules]);
+
+    // Coverage warnings: upcoming events missing worship leader
+    const coverageWarnings = useMemo(() =>
+        upcomingEvents.slice(0, 5).filter(ev => !ev.worshipLeader),
+        [upcomingEvents]
+    );
+    const coverageOk = useMemo(() =>
+        upcomingEvents.slice(0, 5).filter(ev => ev.worshipLeader),
+        [upcomingEvents]
+    );
 
     const openBugs = notes.filter(n => n.type === "bug" && !n.resolved).length;
     const openFeatures = notes.filter(n => n.type === "feature" && !n.resolved).length;
@@ -167,17 +196,15 @@ export default function Dashboard({ isAdmin, userRole, userName, songs, members,
         return "Good evening";
     };
 
-    // Safe helpers for next event display
     const nextEventName = nextEvent?.eventName ?? "Upcoming Event";
     const nextEventLeader = nextEvent?.worshipLeader?.name ?? null;
     const nextEventMusicians = nextEvent?.musicians?.map(m => m.name).filter(Boolean) ?? [];
-    // Audio/Tech from assignments array
     const nextEventAudio = nextEvent?.assignments
         ?.filter(a => a.role?.toLowerCase().includes("audio") || a.role?.toLowerCase().includes("tech"))
         .flatMap(a => a.members?.map(m => m.name) ?? []) ?? [];
 
     return (
-        <div className="max-w-6xl mx-auto space-y-6 pb-10">
+        <div className="max-w-6xl mx-auto space-y-5 pb-10">
 
             {/* ── Welcome Header ── */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -194,6 +221,32 @@ export default function Dashboard({ isAdmin, userRole, userName, songs, members,
                     <Shield size={13} /> Admin Dashboard
                 </div>
             </div>
+
+            {/* ── ⚠️ Pending Access Requests Alert (prominent, top) ── */}
+            {!loadingExtra && pendingUsers.length > 0 && (
+                <div className="flex items-center justify-between gap-4 px-4 py-3 rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700/60">
+                    <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center shrink-0">
+                            <UserCheck size={18} className="text-amber-600 dark:text-amber-400" />
+                        </div>
+                        <div>
+                            <p className="text-sm font-bold text-amber-800 dark:text-amber-300">
+                                {pendingUsers.length} pending access {pendingUsers.length === 1 ? "request" : "requests"}
+                            </p>
+                            <p className="text-xs text-amber-600 dark:text-amber-400">
+                                {pendingUsers.slice(0, 2).map(u => u.name || u.email).join(", ")}
+                                {pendingUsers.length > 2 ? ` +${pendingUsers.length - 2} more` : ""}
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => onNavigate("admin")}
+                        className="shrink-0 flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white transition-colors"
+                    >
+                        Review <ChevronRight size={13} />
+                    </button>
+                </div>
+            )}
 
             {/* ── Stat Tiles ── */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
@@ -219,7 +272,7 @@ export default function Dashboard({ isAdmin, userRole, userName, songs, members,
                 ))}
             </div>
 
-            {/* ── Main Grid: Next Service + Notes ── */}
+            {/* ── Main Grid: Next Event + Coverage + Issues ── */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
                 {/* Next Event Card */}
@@ -255,11 +308,16 @@ export default function Dashboard({ isAdmin, userRole, userName, songs, members,
                                 </span>
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-                                {nextEventLeader && (
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                {nextEventLeader ? (
                                     <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3">
                                         <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Worship Leader</p>
                                         <p className="text-gray-900 dark:text-white font-medium text-sm">{nextEventLeader}</p>
+                                    </div>
+                                ) : (
+                                    <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-3">
+                                        <p className="text-[10px] font-bold uppercase tracking-wider text-red-400 mb-1">Worship Leader</p>
+                                        <p className="text-red-500 dark:text-red-400 font-medium text-sm flex items-center gap-1"><AlertTriangle size={12} /> Not assigned</p>
                                     </div>
                                 )}
                                 {nextEventMusicians.length > 0 && (
@@ -310,45 +368,77 @@ export default function Dashboard({ isAdmin, userRole, userName, songs, members,
                     )}
                 </div>
 
-                {/* Open Notes / Issues */}
-                <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-                    <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
-                        <div className="flex items-center gap-2 font-semibold text-gray-900 dark:text-white text-sm">
-                            <AlertCircle size={16} className="text-amber-500" /> Open Issues
-                        </div>
-                    </div>
-                    <div className="p-4 space-y-3">
-                        <div className="grid grid-cols-2 gap-2">
-                            <div className="flex flex-col items-center justify-center py-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/40">
-                                <p className="text-xl font-bold text-red-600 dark:text-red-400">{openBugs}</p>
-                                <div className="flex items-center gap-1 text-[11px] text-red-500 font-medium mt-0.5"><Bug size={11} /> Bugs</div>
+                {/* Right Column: Coverage + Issues stacked */}
+                <div className="flex flex-col gap-4">
+
+                    {/* ── Service Coverage Warnings ── */}
+                    {upcomingEvents.length > 0 && (
+                        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+                            <div className="flex items-center gap-2 px-5 py-3.5 border-b border-gray-100 dark:border-gray-700 font-semibold text-gray-900 dark:text-white text-sm">
+                                <AlertTriangle size={15} className="text-amber-500" /> Service Coverage
                             </div>
-                            <div className="flex flex-col items-center justify-center py-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/40">
-                                <p className="text-xl font-bold text-amber-600 dark:text-amber-400">{openFeatures}</p>
-                                <div className="flex items-center gap-1 text-[11px] text-amber-500 font-medium mt-0.5"><Lightbulb size={11} /> Features</div>
+                            <div className="p-3 space-y-1.5">
+                                {coverageWarnings.length === 0 ? (
+                                    <div className="flex items-center gap-2 px-2 py-2 text-xs text-green-600 dark:text-green-400">
+                                        <CheckCheck size={14} /> All upcoming events have leaders assigned
+                                    </div>
+                                ) : (
+                                    coverageWarnings.slice(0, 3).map(ev => (
+                                        <div key={ev.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/15 text-xs">
+                                            <AlertTriangle size={11} className="text-red-500 shrink-0" />
+                                            <div className="min-w-0">
+                                                <span className="font-semibold text-red-700 dark:text-red-400 truncate block">{ev.eventName ?? "Event"}</span>
+                                                <span className="text-red-400">{new Date(ev.date + "T00:00:00").toLocaleDateString("en", { month: "short", day: "numeric" })} · No leader</span>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                                {coverageOk.slice(0, 2).map(ev => (
+                                    <div key={ev.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-gray-500 dark:text-gray-400">
+                                        <CheckCircle2 size={11} className="text-green-500 shrink-0" />
+                                        <span className="truncate">{ev.eventName ?? "Event"} · {ev.worshipLeader?.name}</span>
+                                    </div>
+                                ))}
                             </div>
                         </div>
-                        <div className="space-y-2">
+                    )}
+
+                    {/* ── Open Issues ── */}
+                    <div className="flex-1 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+                        <div className="flex items-center gap-2 px-5 py-3.5 border-b border-gray-100 dark:border-gray-700 font-semibold text-gray-900 dark:text-white text-sm">
+                            <AlertCircle size={15} className="text-amber-500" /> Open Issues
+                        </div>
+                        <div className="p-3 space-y-2">
+                            <div className="grid grid-cols-2 gap-2">
+                                <div className="flex flex-col items-center justify-center py-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/40">
+                                    <p className="text-xl font-bold text-red-600 dark:text-red-400">{openBugs}</p>
+                                    <div className="flex items-center gap-1 text-[11px] text-red-500 font-medium mt-0.5"><Bug size={10} /> Bugs</div>
+                                </div>
+                                <div className="flex flex-col items-center justify-center py-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/40">
+                                    <p className="text-xl font-bold text-amber-600 dark:text-amber-400">{openFeatures}</p>
+                                    <div className="flex items-center gap-1 text-[11px] text-amber-500 font-medium mt-0.5"><Lightbulb size={10} /> Requests</div>
+                                </div>
+                            </div>
                             {recentNotes.length === 0 ? (
-                                <div className="text-center py-4 text-gray-400">
-                                    <CheckCircle2 size={24} className="mx-auto mb-1 opacity-30" />
-                                    <p className="text-xs">All clear! No open notes.</p>
+                                <div className="text-center py-3 text-gray-400">
+                                    <CheckCircle2 size={20} className="mx-auto mb-1 opacity-30" />
+                                    <p className="text-xs">All clear!</p>
                                 </div>
                             ) : recentNotes.map(n => (
-                                <div key={n.id} className={`flex gap-2 p-2.5 rounded-xl border text-xs ${n.type === "bug" ? "bg-red-50 dark:bg-red-900/10 border-red-100 dark:border-red-900/30" :
+                                <div key={n.id} className={`flex gap-2 p-2 rounded-xl border text-xs ${n.type === "bug" ? "bg-red-50 dark:bg-red-900/10 border-red-100 dark:border-red-900/30" :
                                         n.type === "feature" ? "bg-amber-50 dark:bg-amber-900/10 border-amber-100 dark:border-amber-900/30" :
                                             "bg-gray-50 dark:bg-gray-700/30 border-gray-100 dark:border-gray-700"
                                     }`}>
                                     <span className="shrink-0 mt-0.5">
-                                        {n.type === "bug" ? <Bug size={12} className="text-red-500" /> :
-                                            n.type === "feature" ? <Lightbulb size={12} className="text-amber-500" /> :
-                                                <NotepadText size={12} className="text-gray-400" />}
+                                        {n.type === "bug" ? <Bug size={11} className="text-red-500" /> :
+                                            n.type === "feature" ? <Lightbulb size={11} className="text-amber-500" /> :
+                                                <NotepadText size={11} className="text-gray-400" />}
                                     </span>
                                     <div className="min-w-0">
-                                        <p className="text-gray-700 dark:text-gray-200 line-clamp-2 leading-snug">
-                                            {(n.content ?? "").slice(0, 80)}{(n.content ?? "").length > 80 ? "…" : ""}
+                                        <p className="text-gray-700 dark:text-gray-200 leading-snug line-clamp-1">
+                                            {(n.content ?? "").slice(0, 60)}{(n.content ?? "").length > 60 ? "…" : ""}
                                         </p>
-                                        <p className="text-gray-400 mt-0.5">{n.authorName} · {relativeDate(n.createdAt)}</p>
+                                        <p className="text-gray-400 mt-0.5">{n.authorName}</p>
                                     </div>
                                 </div>
                             ))}
@@ -356,6 +446,41 @@ export default function Dashboard({ isAdmin, userRole, userName, songs, members,
                     </div>
                 </div>
             </div>
+
+            {/* ── Active Broadcasts ── */}
+            {!loadingExtra && activeBroadcasts.length > 0 && (
+                <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+                    <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
+                        <div className="flex items-center gap-2 font-semibold text-gray-900 dark:text-white text-sm">
+                            <Megaphone size={16} className="text-indigo-500" />
+                            Active Broadcasts
+                            <span className="ml-1 text-[10px] font-bold bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 px-1.5 py-0.5 rounded-full">
+                                {activeBroadcasts.length} live
+                            </span>
+                        </div>
+                        <button onClick={() => onNavigate("admin")} className="text-xs text-indigo-500 hover:text-indigo-400 flex items-center gap-1 font-medium">
+                            Manage <ChevronRight size={13} />
+                        </button>
+                    </div>
+                    <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                        {activeBroadcasts.slice(0, 3).map(b => (
+                            <div key={b.id} className="flex items-start gap-3 px-5 py-3">
+                                <div className="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center shrink-0 mt-0.5">
+                                    {b.type === "maintenance" ? <Radio size={14} className="text-orange-500" /> : <Bell size={14} className="text-indigo-500" />}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{b.title}</p>
+                                    <p className="text-xs text-gray-400 line-clamp-1 mt-0.5">{b.message}</p>
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                                    <span className="text-[10px] text-green-600 dark:text-green-400 font-semibold">Live</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* ── Upcoming Events Timeline ── */}
             {upcomingEvents.length > 1 && (
@@ -381,14 +506,17 @@ export default function Dashboard({ isAdmin, userRole, userName, songs, members,
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{ev.eventName ?? "Event"}</p>
-                                    <p className="text-xs text-gray-400 truncate">
-                                        {ev.worshipLeader?.name ? `Leader: ${ev.worshipLeader.name}` : "No leader assigned"}
+                                    <p className="text-xs truncate">
+                                        {ev.worshipLeader?.name
+                                            ? <span className="text-gray-400">Leader: {ev.worshipLeader.name}</span>
+                                            : <span className="text-red-400 flex items-center gap-1"><AlertTriangle size={10} /> No leader assigned</span>
+                                        }
                                     </p>
                                 </div>
                                 <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${serviceTypeColor(ev.serviceType)}`}>
                                     {serviceTypeLabel(ev.serviceType)}
                                 </span>
-                                <span className="text-[11px] text-gray-400 shrink-0">{daysUntil(ev.date)}</span>
+                                <span className="text-[11px] text-gray-400 shrink-0 w-16 text-right">{daysUntil(ev.date)}</span>
                             </div>
                         ))}
                     </div>
@@ -458,7 +586,7 @@ export default function Dashboard({ isAdmin, userRole, userName, songs, members,
                                 </div>
                                 <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
                                     <div
-                                        className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full transition-all"
+                                        className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full transition-all duration-500"
                                         style={{ width: members.length > 0 ? `${Math.round((count / members.length) * 100)}%` : "0%" }}
                                     />
                                 </div>
