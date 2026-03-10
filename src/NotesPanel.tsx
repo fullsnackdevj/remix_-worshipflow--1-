@@ -578,8 +578,8 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
                         </div>
                     )}
 
-                    {/* ── Status Tabs + Filters ── */}
-                    <div className="px-4 pt-3 pb-2 border-b border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/30 shrink-0 space-y-2">
+                    {/* ── Status Tabs + Filters + Notes list — hidden while form is open ── */}
+                    {!showForm && <div className="px-4 pt-3 pb-2 border-b border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/30 shrink-0 space-y-2">
                         {/* Status tabs */}
                         <div className="flex items-center gap-1">
                             {(["active", "resolved", "all"] as StatusTab[]).map(tab => (
@@ -615,10 +615,10 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
                                 </button>
                             ))}
                         </div>
-                    </div>
+                    </div>}
 
-                    {/* ── Notes list ── */}
-                    <div className="overflow-y-auto flex-1 p-3 space-y-3">
+                    {/* ── Notes list — also hidden while form open ── */}
+                    {!showForm && <div className="overflow-y-auto flex-1 p-3 space-y-3">
                         {loading ? (
                             <div className="flex items-center justify-center py-10"><Loader2 size={20} className="animate-spin text-indigo-400" /></div>
                         ) : filtered.length === 0 ? (
@@ -641,7 +641,7 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
                                 />
                             ))
                         )}
-                    </div>
+                    </div>}
                 </div>
             )}
         </div>
