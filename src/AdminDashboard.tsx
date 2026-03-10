@@ -398,8 +398,8 @@ export default function AdminDashboard({
                         ) : upcomingEvents.slice(0, 4).map((ev, i) => {
                             const d = new Date(ev.date + "T00:00:00");
                             return (
-                                <div key={ev.id} className={`flex items - center gap - 3 px - 5 py - 3 hover: bg - gray - 50 dark: hover: bg - gray - 700 / 30 transition - colors ${i === 0 ? "bg-indigo-50/50 dark:bg-indigo-900/10" : ""} `}>
-                                    <div className={`flex flex - col items - center justify - center w - 10 h - 10 rounded - xl shrink - 0 ${i === 0 ? "bg-indigo-600 text-white" : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"} `}>
+                                <div key={ev.id} className={`flex items-center gap-3 px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors ${i === 0 ? "bg-indigo-50/50 dark:bg-indigo-900/10" : ""}`}>
+                                    <div className={`flex flex-col items-center justify-center w-10 h-10 rounded-xl shrink-0 ${i === 0 ? "bg-indigo-600 text-white" : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"}`}>
                                         <p className="text-[8px] font-bold uppercase opacity-80">{d.toLocaleDateString("en", { month: "short" })}</p>
                                         <p className="text-sm font-black leading-none">{d.getDate()}</p>
                                     </div>
@@ -407,7 +407,7 @@ export default function AdminDashboard({
                                         <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{ev.eventName ?? "Event"}</p>
                                         <p className="text-xs text-gray-400 truncate">{ev.worshipLeader?.name ? <span>Leader: {ev.worshipLeader.name}</span> : <span className="text-red-400 flex items-center gap-1"><AlertTriangle size={9} />No leader</span>}</p>
                                     </div>
-                                    <span className={`text - xs font - semibold shrink - 0 ${i === 0 ? "text-indigo-600 dark:text-indigo-400" : "text-gray-400"} `}>{daysUntil(ev.date)}</span>
+                                    <span className={`text-xs font-semibold shrink-0 ${i === 0 ? "text-indigo-600 dark:text-indigo-400" : "text-gray-400"}`}>{daysUntil(ev.date)}</span>
                                 </div>
                             );
                         })}
@@ -510,7 +510,7 @@ export default function AdminDashboard({
                                 </div>
                                 <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                                     <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full"
-                                        style={{ width: members.length > 0 ? `${Math.round(count / members.length * 100)}% ` : "0%" }} />
+                                        style={{ width: members.length > 0 ? `${Math.round(count / members.length * 100)}%` : "0%" }} />
                                 </div>
                             </div>
                         ))}
