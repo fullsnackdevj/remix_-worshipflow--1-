@@ -285,16 +285,27 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole }: No
         return () => document.removeEventListener("mousedown", handler);
     }, [open]);
 
-    const fetchNotes = useCallback(async () => {
-        setLoading(true);
+    const fetchNotes = useCallback(async (silent = false) => {
+        if (!silent) setLoading(true);
         try {
             const res = await fetch("/api/notes");
-            setNotes(await res.json());
-        } catch { setNotes([]); }
-        finally { setLoading(false); }
+            const data = await res.json();
+            setNotes(data);
+        } catch { /* keep existing notes on error */ }
+        finally { if (!silent) setLoading(false); }
     }, []);
 
-    useEffect(() => { if (open) fetchNotes(); }, [open, fetchNotes]);
+    useEffect(() => {
+        if (!open) return;
+        if (notes.length === 0) {
+            // First open ever — show spinner
+            fetchNotes(false);
+        } else {
+            // Already have data — show instantly, refresh silently in background
+            fetchNotes(true);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open]);
 
     // Clipboard paste for images
     useEffect(() => {
