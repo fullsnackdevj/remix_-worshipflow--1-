@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useCallback } from "react";
 import {
     Music, Users, Calendar, NotepadText, ChevronRight,
     BookOpen, Clock, Star, TrendingUp, Bug, Lightbulb,
@@ -55,7 +55,8 @@ function roleIcon(role: string) {
     };
     return map[role] ?? <User size={13} />;
 }
-function roleLabel(role: string) {
+function roleLabel(role: string | undefined) {
+    if (!role) return "Member";
     const map: Record<string, string> = {
         admin: "Admin", leader: "Worship Leader", musician: "Musician",
         audio_tech: "Audio / Tech", planning_lead: "Planning Lead",
@@ -82,11 +83,18 @@ function svcLabel(type?: string) {
 
 // ── Avatar chip ───────────────────────────────────────────────────────────────
 function MemberChip({ name, photo }: { name: string; photo?: string }) {
-    const initials = name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+    const [imgError, setImgError] = useState(false);
+    const initials = (name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+    const showImg = photo && photo.startsWith("http") && !imgError;
     return (
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-gray-100 dark:bg-gray-700 text-xs text-gray-800 dark:text-gray-200 font-medium">
-            {photo ? (
-                <img src={photo} className="w-5 h-5 rounded-full object-cover" alt={name} onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+            {showImg ? (
+                <img
+                    src={photo}
+                    className="w-5 h-5 rounded-full object-cover"
+                    alt={name}
+                    onError={() => setImgError(true)}
+                />
             ) : (
                 <div className="w-5 h-5 rounded-full bg-indigo-200 dark:bg-indigo-700 flex items-center justify-center text-[9px] font-bold text-indigo-700 dark:text-indigo-200">{initials}</div>
             )}
@@ -168,17 +176,29 @@ export default function Dashboard({ isAdmin, userRole, userName, songs, members,
 
     const roleGroups = useMemo(() => {
         const groups: Record<string, number> = {};
-        members.forEach(m => { groups[m.role] = (groups[m.role] ?? 0) + 1; });
+        members.forEach(m => {
+            const r = m.role || "member"; // treat undefined/empty as "member"
+            groups[r] = (groups[r] ?? 0) + 1;
+        });
         return Object.entries(groups).sort((a, b) => b[1] - a[1]);
+    }, [members]);
+
+    // Helper: look up live photo from members array (ScheduleMember.photo is often stale/empty)
+    const getLivePhoto = useCallback((memberId: string, fallback?: string) => {
+        const m = members.find(mem => mem.id === memberId);
+        const url = m?.photoUrl ?? fallback ?? "";
+        return url.startsWith("http") ? url : "";
     }, [members]);
 
     const greeting = () => { const h = new Date().getHours(); if (h < 12) return "Good morning"; if (h < 17) return "Good afternoon"; return "Good evening"; };
 
-    // Next event helpers
+    // Next event helpers — enrich with live photos
     const nextEventLeader = nextEvent?.worshipLeader ?? null;
     const nextEventMusicians = nextEvent?.musicians ?? [];
     const nextEventBackup = nextEvent?.backupSingers ?? [];
     const nextEventAudio = nextEvent?.assignments?.filter(a => a.role?.toLowerCase().includes("audio") || a.role?.toLowerCase().includes("tech")).flatMap(a => a.members ?? []) ?? [];
+
+    const leaderPhoto = nextEventLeader ? getLivePhoto(nextEventLeader.memberId, nextEventLeader.photo) : "";
 
     return (
         <div className="max-w-6xl mx-auto space-y-5 pb-12">
@@ -292,8 +312,8 @@ export default function Dashboard({ isAdmin, userRole, userName, songs, members,
                                 </div>
                             </div>
                             <span className={`px-4 py-1.5 rounded-full text-sm font-bold shrink-0 ${daysUntil(nextEvent.date) === "Today" ? "bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400" :
-                                    daysUntil(nextEvent.date) === "Tomorrow" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" :
-                                        "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300"}`}>
+                                daysUntil(nextEvent.date) === "Tomorrow" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" :
+                                    "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300"}`}>
                                 {daysUntil(nextEvent.date)}
                             </span>
                         </div>
@@ -306,7 +326,7 @@ export default function Dashboard({ isAdmin, userRole, userName, songs, members,
                                     <Mic2 size={10} /> Worship Leader
                                 </p>
                                 {nextEventLeader ? (
-                                    <MemberChip name={nextEventLeader.name} photo={nextEventLeader.photo} />
+                                    <MemberChip name={nextEventLeader.name} photo={leaderPhoto} />
                                 ) : (
                                     <p className="text-red-500 text-xs flex items-center gap-1 font-medium"><AlertTriangle size={11} /> Not assigned</p>
                                 )}
@@ -317,7 +337,7 @@ export default function Dashboard({ isAdmin, userRole, userName, songs, members,
                                 <p className="text-[10px] font-bold uppercase tracking-wider text-violet-500 mb-2 flex items-center gap-1"><Guitar size={10} /> Musicians</p>
                                 {nextEventMusicians.length > 0 ? (
                                     <div className="flex flex-wrap gap-1.5">
-                                        {nextEventMusicians.map(m => <MemberChip key={m.memberId} name={m.name} photo={m.photo} />)}
+                                        {nextEventMusicians.map(m => <MemberChip key={m.memberId} name={m.name} photo={getLivePhoto(m.memberId, m.photo)} />)}
                                     </div>
                                 ) : <p className="text-xs text-gray-400">None assigned</p>}
                             </div>
@@ -327,7 +347,7 @@ export default function Dashboard({ isAdmin, userRole, userName, songs, members,
                                 <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-500 mb-2 flex items-center gap-1"><Headphones size={10} /> Audio / Tech</p>
                                 {nextEventAudio.length > 0 ? (
                                     <div className="flex flex-wrap gap-1.5">
-                                        {nextEventAudio.map(m => <MemberChip key={m.memberId} name={m.name} photo={m.photo} />)}
+                                        {nextEventAudio.map(m => <MemberChip key={m.memberId} name={m.name} photo={getLivePhoto(m.memberId, m.photo)} />)}
                                     </div>
                                 ) : <p className="text-xs text-gray-400">None assigned</p>}
                             </div>
@@ -337,7 +357,7 @@ export default function Dashboard({ isAdmin, userRole, userName, songs, members,
                                 <p className="text-[10px] font-bold uppercase tracking-wider text-amber-500 mb-2 flex items-center gap-1"><Mic2 size={10} /> Backup Singers</p>
                                 {nextEventBackup.length > 0 ? (
                                     <div className="flex flex-wrap gap-1.5">
-                                        {nextEventBackup.map(m => <MemberChip key={m.memberId} name={m.name} photo={m.photo} />)}
+                                        {nextEventBackup.map(m => <MemberChip key={m.memberId} name={m.name} photo={getLivePhoto(m.memberId, m.photo)} />)}
                                     </div>
                                 ) : <p className="text-xs text-gray-400">None assigned</p>}
                             </div>
