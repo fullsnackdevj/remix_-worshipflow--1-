@@ -6,10 +6,22 @@ import {
     User, Shield, Lock, LayoutGrid, ArrowRight, ClipboardList, FlaskConical
 } from "lucide-react";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-interface Song { id: string; title: string; artist: string; tags?: any[]; createdAt?: string; }
+// ── Types matching the REAL App.tsx interfaces ─────────────────────────────────
+interface ScheduleMember { memberId: string; name: string; photo: string; role: string; }
+interface Schedule {
+    id: string;
+    date: string;
+    serviceType?: string;
+    eventName?: string;
+    worshipLeader?: ScheduleMember | null;
+    backupSingers?: ScheduleMember[];
+    musicians?: ScheduleMember[];
+    songLineup?: { joyful?: string; solemn?: string };
+    assignments?: { role: string; members: ScheduleMember[] }[];
+    notes?: string;
+}
+interface Song { id: string; title: string; artist: string; created_at?: string; }
 interface Member { id: string; name: string; role: string; photoUrl?: string; }
-interface Schedule { id: string; date: string; name: string; type?: string; worshipLeader?: string; musicians?: string[]; audioTech?: string[]; songLineup?: any; }
 interface Note { id: string; type: "bug" | "feature" | "general"; content: string; resolved?: boolean; createdAt: string; authorName: string; }
 
 interface Props {
@@ -26,22 +38,26 @@ interface Props {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function relativeDate(iso: string) {
-    const diff = Date.now() - new Date(iso).getTime();
-    const d = Math.floor(diff / 86400000);
-    if (d === 0) return "Today";
-    if (d === 1) return "Yesterday";
-    if (d < 7) return `${d} days ago`;
-    return new Date(iso).toLocaleDateString("en", { month: "short", day: "numeric" });
+    try {
+        const diff = Date.now() - new Date(iso).getTime();
+        const d = Math.floor(diff / 86400000);
+        if (d === 0) return "Today";
+        if (d === 1) return "Yesterday";
+        if (d < 7) return `${d} days ago`;
+        return new Date(iso).toLocaleDateString("en", { month: "short", day: "numeric" });
+    } catch { return ""; }
 }
 
 function daysUntil(dateStr: string) {
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const target = new Date(dateStr + "T00:00:00"); target.setHours(0, 0, 0, 0);
-    const diff = Math.round((target.getTime() - today.getTime()) / 86400000);
-    if (diff === 0) return "Today";
-    if (diff === 1) return "Tomorrow";
-    if (diff > 0) return `In ${diff} days`;
-    return `${Math.abs(diff)}d ago`;
+    try {
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const target = new Date(dateStr + "T00:00:00"); target.setHours(0, 0, 0, 0);
+        const diff = Math.round((target.getTime() - today.getTime()) / 86400000);
+        if (diff === 0) return "Today";
+        if (diff === 1) return "Tomorrow";
+        if (diff > 0) return `In ${diff} days`;
+        return `${Math.abs(diff)}d ago`;
+    } catch { return ""; }
 }
 
 function roleIcon(role: string) {
@@ -62,8 +78,26 @@ function roleLabel(role: string) {
     return map[role] ?? role;
 }
 
+function serviceTypeColor(type?: string) {
+    const map: Record<string, string> = {
+        sunday_service: "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300",
+        midweek_service: "bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300",
+        practice: "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300",
+        special: "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300",
+    };
+    return map[type ?? ""] ?? "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300";
+}
+
+function serviceTypeLabel(type?: string) {
+    const map: Record<string, string> = {
+        sunday_service: "Sunday Service", midweek_service: "Midweek Service",
+        practice: "Practice", special: "Special Event",
+    };
+    return map[type ?? ""] ?? type ?? "Event";
+}
+
 // ── Coming Soon Screen (non-admins) ───────────────────────────────────────────
-function ComingSoonDashboard({ userRole, userName }: { userRole: string; userName: string }) {
+function ComingSoonDashboard({ userName }: { userName: string }) {
     return (
         <div className="min-h-[60vh] flex flex-col items-center justify-center text-center px-6 gap-6">
             <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-indigo-500/20 to-violet-500/20 border border-indigo-500/20 flex items-center justify-center">
@@ -83,16 +117,16 @@ function ComingSoonDashboard({ userRole, userName }: { userRole: string; userNam
 }
 
 // ── Main Dashboard ─────────────────────────────────────────────────────────────
-export default function Dashboard({ isAdmin, userRole, userName, userPhoto, songs, members, schedules, notes, onNavigate }: Props) {
+export default function Dashboard({ isAdmin, userRole, userName, songs, members, schedules, notes, onNavigate }: Props) {
 
-    if (!isAdmin) return <ComingSoonDashboard userRole={userRole} userName={userName} />;
+    if (!isAdmin) return <ComingSoonDashboard userName={userName} />;
 
-    // ── Derived data ─────────────────────────────────────────────────────────
     const today = new Date(); today.setHours(0, 0, 0, 0);
 
+    // ── Derived data (all safely guarded) ────────────────────────────────────
     const upcomingEvents = useMemo(() =>
         schedules
-            .filter(s => new Date(s.date + "T00:00:00") >= today)
+            .filter(s => { try { return new Date(s.date + "T00:00:00") >= today; } catch { return false; } })
             .sort((a, b) => a.date.localeCompare(b.date))
             .slice(0, 5),
         [schedules]
@@ -103,19 +137,21 @@ export default function Dashboard({ isAdmin, userRole, userName, userPhoto, song
     const eventsThisMonth = useMemo(() => {
         const y = today.getFullYear(), m = today.getMonth();
         return schedules.filter(s => {
-            const d = new Date(s.date + "T00:00:00");
-            return d.getFullYear() === y && d.getMonth() === m;
+            try { const d = new Date(s.date + "T00:00:00"); return d.getFullYear() === y && d.getMonth() === m; }
+            catch { return false; }
         }).length;
     }, [schedules]);
 
     const openBugs = notes.filter(n => n.type === "bug" && !n.resolved).length;
     const openFeatures = notes.filter(n => n.type === "feature" && !n.resolved).length;
     const unresolvedNotes = notes.filter(n => !n.resolved).length;
-    const recentNotes = [...notes].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 3);
+    const recentNotes = [...notes]
+        .sort((a, b) => { try { return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(); } catch { return 0; } })
+        .slice(0, 3);
 
     const recentSongs = [...songs]
-        .filter(s => s.createdAt)
-        .sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime())
+        .filter(s => s.created_at)
+        .sort((a, b) => { try { return new Date(b.created_at!).getTime() - new Date(a.created_at!).getTime(); } catch { return 0; } })
         .slice(0, 4);
 
     const roleGroups = useMemo(() => {
@@ -124,30 +160,21 @@ export default function Dashboard({ isAdmin, userRole, userName, userPhoto, song
         return Object.entries(groups).sort((a, b) => b[1] - a[1]);
     }, [members]);
 
-    const eventTypeColor = (type?: string) => {
-        const map: Record<string, string> = {
-            sunday_service: "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300",
-            midweek_service: "bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300",
-            practice: "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300",
-            special: "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300",
-        };
-        return map[type ?? ""] ?? "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300";
-    };
-
-    const eventTypeLabel = (type?: string) => {
-        const map: Record<string, string> = {
-            sunday_service: "Sunday Service", midweek_service: "Midweek Service",
-            practice: "Practice", special: "Special Event",
-        };
-        return map[type ?? ""] ?? type ?? "Event";
-    };
-
     const greeting = () => {
         const h = new Date().getHours();
         if (h < 12) return "Good morning";
         if (h < 17) return "Good afternoon";
         return "Good evening";
     };
+
+    // Safe helpers for next event display
+    const nextEventName = nextEvent?.eventName ?? "Upcoming Event";
+    const nextEventLeader = nextEvent?.worshipLeader?.name ?? null;
+    const nextEventMusicians = nextEvent?.musicians?.map(m => m.name).filter(Boolean) ?? [];
+    // Audio/Tech from assignments array
+    const nextEventAudio = nextEvent?.assignments
+        ?.filter(a => a.role?.toLowerCase().includes("audio") || a.role?.toLowerCase().includes("tech"))
+        .flatMap(a => a.members?.map(m => m.name) ?? []) ?? [];
 
     return (
         <div className="max-w-6xl mx-auto space-y-6 pb-10">
@@ -157,7 +184,7 @@ export default function Dashboard({ isAdmin, userRole, userName, userPhoto, song
                 <div>
                     <p className="text-sm text-gray-500 dark:text-gray-400">{greeting()},</p>
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                        {userName.split(" ")[0]} 👋
+                        {(userName || "Admin").split(" ")[0]} 👋
                     </h1>
                     <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                         {new Date().toLocaleDateString("en", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
@@ -179,7 +206,7 @@ export default function Dashboard({ isAdmin, userRole, userName, userPhoto, song
                     <button
                         key={label}
                         onClick={() => view && onNavigate(view)}
-                        className={`flex flex-col gap-3 p-4 rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-all text-left ${view ? "hover:-translate-y-0.5 active:scale-99 cursor-pointer" : "cursor-default"}`}
+                        className={`flex flex-col gap-3 p-4 rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-all text-left ${view ? "hover:-translate-y-0.5 cursor-pointer" : "cursor-default"}`}
                     >
                         <div className={`w-10 h-10 rounded-xl ${bg} ${color} flex items-center justify-center`}>
                             {icon}
@@ -195,7 +222,7 @@ export default function Dashboard({ isAdmin, userRole, userName, userPhoto, song
             {/* ── Main Grid: Next Service + Notes ── */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
-                {/* Next Service Card */}
+                {/* Next Event Card */}
                 <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
                     <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
                         <div className="flex items-center gap-2 font-semibold text-gray-900 dark:text-white">
@@ -210,10 +237,10 @@ export default function Dashboard({ isAdmin, userRole, userName, userPhoto, song
                         <div className="p-5">
                             <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
                                 <div>
-                                    <p className="text-lg font-bold text-gray-900 dark:text-white">{nextEvent.name}</p>
+                                    <p className="text-lg font-bold text-gray-900 dark:text-white">{nextEventName}</p>
                                     <div className="flex items-center gap-2 mt-1">
-                                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${eventTypeColor(nextEvent.type)}`}>
-                                            {eventTypeLabel(nextEvent.type)}
+                                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${serviceTypeColor(nextEvent.serviceType)}`}>
+                                            {serviceTypeLabel(nextEvent.serviceType)}
                                         </span>
                                         <span className="text-xs text-gray-400">
                                             {new Date(nextEvent.date + "T00:00:00").toLocaleDateString("en", { weekday: "short", month: "short", day: "numeric" })}
@@ -229,28 +256,22 @@ export default function Dashboard({ isAdmin, userRole, userName, userPhoto, song
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-                                {nextEvent.worshipLeader && (
+                                {nextEventLeader && (
                                     <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3">
                                         <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Worship Leader</p>
-                                        <p className="text-gray-900 dark:text-white font-medium text-sm">
-                                            {members.find(m => m.id === nextEvent.worshipLeader)?.name ?? nextEvent.worshipLeader}
-                                        </p>
+                                        <p className="text-gray-900 dark:text-white font-medium text-sm">{nextEventLeader}</p>
                                     </div>
                                 )}
-                                {nextEvent.musicians && nextEvent.musicians.length > 0 && (
+                                {nextEventMusicians.length > 0 && (
                                     <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3">
-                                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Musicians ({nextEvent.musicians.length})</p>
-                                        <p className="text-gray-900 dark:text-white font-medium text-sm truncate">
-                                            {nextEvent.musicians.map(id => members.find(m => m.id === id)?.name ?? id).join(", ")}
-                                        </p>
+                                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Musicians ({nextEventMusicians.length})</p>
+                                        <p className="text-gray-900 dark:text-white font-medium text-sm truncate">{nextEventMusicians.join(", ")}</p>
                                     </div>
                                 )}
-                                {nextEvent.audioTech && nextEvent.audioTech.length > 0 && (
+                                {nextEventAudio.length > 0 && (
                                     <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3">
                                         <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Audio / Tech</p>
-                                        <p className="text-gray-900 dark:text-white font-medium text-sm truncate">
-                                            {nextEvent.audioTech.map(id => members.find(m => m.id === id)?.name ?? id).join(", ")}
-                                        </p>
+                                        <p className="text-gray-900 dark:text-white font-medium text-sm truncate">{nextEventAudio.join(", ")}</p>
                                     </div>
                                 )}
                             </div>
@@ -261,14 +282,18 @@ export default function Dashboard({ isAdmin, userRole, userName, userPhoto, song
                                         <div className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 rounded-xl text-xs">
                                             <Music size={12} className="text-indigo-500" />
                                             <span className="text-gray-500 dark:text-gray-400">Solemn:</span>
-                                            <span className="font-semibold text-gray-800 dark:text-gray-100">{songs.find(s => s.id === nextEvent.songLineup.solemn)?.title ?? "—"}</span>
+                                            <span className="font-semibold text-gray-800 dark:text-gray-100">
+                                                {songs.find(s => s.id === nextEvent.songLineup?.solemn)?.title ?? "—"}
+                                            </span>
                                         </div>
                                     )}
                                     {nextEvent.songLineup.joyful && (
                                         <div className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 dark:bg-violet-900/30 rounded-xl text-xs">
                                             <Star size={12} className="text-violet-500" />
                                             <span className="text-gray-500 dark:text-gray-400">Joyful:</span>
-                                            <span className="font-semibold text-gray-800 dark:text-gray-100">{songs.find(s => s.id === nextEvent.songLineup.joyful)?.title ?? "—"}</span>
+                                            <span className="font-semibold text-gray-800 dark:text-gray-100">
+                                                {songs.find(s => s.id === nextEvent.songLineup?.joyful)?.title ?? "—"}
+                                            </span>
                                         </div>
                                     )}
                                 </div>
@@ -293,7 +318,6 @@ export default function Dashboard({ isAdmin, userRole, userName, userPhoto, song
                         </div>
                     </div>
                     <div className="p-4 space-y-3">
-                        {/* Bug / Feature counts */}
                         <div className="grid grid-cols-2 gap-2">
                             <div className="flex flex-col items-center justify-center py-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/40">
                                 <p className="text-xl font-bold text-red-600 dark:text-red-400">{openBugs}</p>
@@ -304,8 +328,6 @@ export default function Dashboard({ isAdmin, userRole, userName, userPhoto, song
                                 <div className="flex items-center gap-1 text-[11px] text-amber-500 font-medium mt-0.5"><Lightbulb size={11} /> Features</div>
                             </div>
                         </div>
-
-                        {/* Recent notes */}
                         <div className="space-y-2">
                             {recentNotes.length === 0 ? (
                                 <div className="text-center py-4 text-gray-400">
@@ -323,7 +345,9 @@ export default function Dashboard({ isAdmin, userRole, userName, userPhoto, song
                                                 <NotepadText size={12} className="text-gray-400" />}
                                     </span>
                                     <div className="min-w-0">
-                                        <p className="text-gray-700 dark:text-gray-200 line-clamp-2 leading-snug">{n.content.slice(0, 80)}{n.content.length > 80 ? "…" : ""}</p>
+                                        <p className="text-gray-700 dark:text-gray-200 line-clamp-2 leading-snug">
+                                            {(n.content ?? "").slice(0, 80)}{(n.content ?? "").length > 80 ? "…" : ""}
+                                        </p>
                                         <p className="text-gray-400 mt-0.5">{n.authorName} · {relativeDate(n.createdAt)}</p>
                                     </div>
                                 </div>
@@ -356,13 +380,13 @@ export default function Dashboard({ isAdmin, userRole, userName, userPhoto, song
                                     </p>
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{ev.name}</p>
+                                    <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{ev.eventName ?? "Event"}</p>
                                     <p className="text-xs text-gray-400 truncate">
-                                        {ev.worshipLeader ? `Leader: ${members.find(m => m.id === ev.worshipLeader)?.name ?? ev.worshipLeader}` : "No leader assigned"}
+                                        {ev.worshipLeader?.name ? `Leader: ${ev.worshipLeader.name}` : "No leader assigned"}
                                     </p>
                                 </div>
-                                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${eventTypeColor(ev.type)}`}>
-                                    {eventTypeLabel(ev.type)}
+                                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${serviceTypeColor(ev.serviceType)}`}>
+                                    {serviceTypeLabel(ev.serviceType)}
                                 </span>
                                 <span className="text-[11px] text-gray-400 shrink-0">{daysUntil(ev.date)}</span>
                             </div>
@@ -400,7 +424,7 @@ export default function Dashboard({ isAdmin, userRole, userName, userPhoto, song
                                         <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{s.title}</p>
                                         <p className="text-xs text-gray-400 truncate">{s.artist}</p>
                                     </div>
-                                    {s.createdAt && <p className="text-xs text-gray-400 shrink-0">{relativeDate(s.createdAt)}</p>}
+                                    {s.created_at && <p className="text-xs text-gray-400 shrink-0">{relativeDate(s.created_at)}</p>}
                                 </div>
                             ))}
                         </div>
@@ -435,7 +459,7 @@ export default function Dashboard({ isAdmin, userRole, userName, userPhoto, song
                                 <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
                                     <div
                                         className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full transition-all"
-                                        style={{ width: `${Math.round((count / members.length) * 100)}%` }}
+                                        style={{ width: members.length > 0 ? `${Math.round((count / members.length) * 100)}%` : "0%" }}
                                     />
                                 </div>
                                 <span className="text-sm font-bold text-gray-900 dark:text-white w-5 text-right">{count}</span>
