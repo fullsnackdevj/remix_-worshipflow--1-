@@ -318,9 +318,9 @@ export default function AdminDashboard({
             {/* ── Top section: Church Events (left) + 2×2 metric tiles (right) ── */}
             {/* mobile: stacks | desktop (lg+): side by side */}
             <div className="flex flex-col lg:flex-row gap-3">
-                {/* LEFT — Church Events hero */}
+                {/* LEFT — Daily Bible Verse */}
                 <div className="lg:w-1/2 xl:w-3/5">
-                    <NextServiceTile ev={nextEvent} songs={songs} members={members} myMemberId={myMemberId} onClick={() => onNavigate("schedule")} />
+                    <VerseOfTheDay userId={userId} userName={userName.split(" ")[0] || userName} userPhoto="" />
                 </div>
                 {/* RIGHT — 2×2 metric tiles: Songs | Members on top, Events | Issues on bottom */}
                 <div className="lg:w-1/2 xl:w-2/5 grid grid-cols-2 gap-3 content-start">
@@ -366,9 +366,9 @@ export default function AdminDashboard({
              */}
             <div className="grid gap-4 grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
 
-                {/* Daily Verse — full-width on mobile/tablet, spans 2 rows on xl */}
+                {/* Church Events — full-width on mobile/tablet, tall left column on xl */}
                 <div className="lg:col-span-2 xl:col-span-1 xl:row-span-2">
-                    <VerseOfTheDay userId={userId} userName={userName.split(" ")[0] || userName} userPhoto="" />
+                    <NextServiceTile ev={nextEvent} songs={songs} members={members} myMemberId={myMemberId} onClick={() => onNavigate("schedule")} />
                 </div>
 
                 {/* Recently Added Songs */}
