@@ -1,7 +1,19 @@
 {
-    "title": "What's New in WorshipFlow ✨",
-    "message": "Fresh updates just dropped — here's what's new today:",
+    "title": "🚀 Our Dashboard are live!",
+    "message": "Big updates just dropped — here's what's new:",
     "releases": [
+        {
+            "version": "March 12, 2026",
+            "highlights": [
+                "📊 Dashboard for All Roles — Every team member can now access the dashboard with full card visibility.",
+                "🗂️ Dismissed Tab in Notes — Tag a note with 'Dismiss' to move it to its own tab, keeping Active clean.",
+                "🔀 Admin Note Reclassification — Admins can now move notes between Bug, Feature, and General with one tap.",
+                "✅ Song Form Validation — Missing required fields now show an error toast and auto-focus the first empty field.",
+                "🔔 Role-Switch Toast — Switching roles as QA Specialist now shows a toast instead of a floating pill.",
+                "🔒 Smarter Duplicate Detection — Songs with copied lyrics (even with added verses) are now correctly flagged.",
+                "⚡ Reaction Counts Fixed — Fast-clicking multiple reactions no longer resets counts."
+            ]
+        },
         {
             "version": "March 10–11, 2026",
             "highlights": [
