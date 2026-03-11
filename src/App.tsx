@@ -3710,15 +3710,47 @@ export default function App() {
                         </div>
 
                         {/* Divider + Meta */}
-                        <div className="mt-5 pt-5 border-t border-gray-200 dark:border-gray-700 space-y-1">
-                          <p className="text-sm text-gray-400 dark:text-gray-500">
-                            <span className="font-medium text-gray-500 dark:text-gray-400">Added:</span>{" "}
-                            {selectedSong.created_at ? new Date(selectedSong.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : "Unknown"}
-                          </p>
-                          <p className="text-sm text-gray-400 dark:text-gray-500">
-                            <span className="font-medium text-gray-500 dark:text-gray-400">Updated:</span>{" "}
-                            {selectedSong.updated_at ? new Date(selectedSong.updated_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : "Never"}
-                          </p>
+                        <div className="mt-5 pt-5 border-t border-gray-200 dark:border-gray-700 space-y-2">
+                          {(() => {
+                            const fmtDate = (iso: string) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
+                            const fmtName = (full: string) => {
+                              const parts = full.trim().split(/\s+/);
+                              if (parts.length === 1) return parts[0];
+                              return `${parts[0]} ${parts[parts.length - 1][0]}.`;
+                            };
+                            const Avatar = ({ name, photo }: { name?: string; photo?: string }) => {
+                              // Try to find live photo from allMembers by matching name
+                              const liveMember = name ? allMembers.find(m => m.name.toLowerCase().startsWith(name.split(' ')[0].toLowerCase())) : null;
+                              const src = liveMember?.photo || photo;
+                              const colors = ["bg-indigo-500","bg-violet-500","bg-pink-500","bg-emerald-500","bg-amber-500","bg-sky-500"];
+                              const bg = colors[(name?.charCodeAt(0) || 0) % colors.length];
+                              return src
+                                ? <img src={src} alt={name} className="w-5 h-5 rounded-full object-cover ring-1 ring-white dark:ring-gray-700 shrink-0" />
+                                : <div className={`w-5 h-5 rounded-full ${bg} flex items-center justify-center text-white text-[9px] font-bold shrink-0`}>{(name || "?")[0].toUpperCase()}</div>;
+                            };
+                            return (
+                              <>
+                                <div className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500">
+                                  <span className="font-semibold text-gray-500 dark:text-gray-400 shrink-0">Added:</span>
+                                  <span>{selectedSong.created_at ? fmtDate(selectedSong.created_at) : "Unknown"}</span>
+                                  {selectedSong.created_by_name && (
+                                    <><span className="text-gray-300 dark:text-gray-600">·</span>
+                                    <Avatar name={selectedSong.created_by_name} photo={selectedSong.created_by_photo} />
+                                    <span className="font-medium text-gray-500 dark:text-gray-400">{fmtName(selectedSong.created_by_name)}</span></>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500">
+                                  <span className="font-semibold text-gray-500 dark:text-gray-400 shrink-0">Updated:</span>
+                                  <span>{selectedSong.updated_at ? fmtDate(selectedSong.updated_at) : "Never"}</span>
+                                  {selectedSong.updated_by_name && (
+                                    <><span className="text-gray-300 dark:text-gray-600">·</span>
+                                    <Avatar name={selectedSong.updated_by_name} photo={selectedSong.updated_by_photo} />
+                                    <span className="font-medium text-gray-500 dark:text-gray-400">{fmtName(selectedSong.updated_by_name)}</span></>
+                                  )}
+                                </div>
+                              </>
+                            );
+                          })()}
                           {selectedSong.video_url && (
                             <a
                               href={selectedSong.video_url}

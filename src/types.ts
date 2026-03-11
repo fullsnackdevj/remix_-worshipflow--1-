@@ -14,4 +14,9 @@ export interface Song {
   video_url?: string;
   created_at: string;
   updated_at: string;
+  created_by_name?: string;
+  created_by_photo?: string;
+  updated_by_name?: string;
+  updated_by_photo?: string;
 }
+

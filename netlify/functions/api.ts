@@ -557,6 +557,7 @@ Rules:
                 });
             }
 
+            const { actorName = "Someone", actorPhoto = "", actorUserId = "" } = body;
             const docRef = await firestore.collection("songs").add({
                 title: toTitleCase(title),
                 artist: toTitleCase(artist),
@@ -564,10 +565,13 @@ Rules:
                 chords: chords || "",
                 tagIds: tags,
                 video_url: video_url || "",
+                created_by_name: actorName,
+                created_by_photo: actorPhoto,
+                updated_by_name: actorName,
+                updated_by_photo: actorPhoto,
                 created_at: admin.firestore.FieldValue.serverTimestamp(),
                 updated_at: admin.firestore.FieldValue.serverTimestamp(),
             });
-            const { actorName = "Someone", actorPhoto = "", actorUserId = "" } = body;
             writeNotif(firestore, {
                 type: "new_song",
                 message: `${actorName} added a new song`,
@@ -646,6 +650,7 @@ Rules:
                     });
                 }
 
+                const { actorName = "Someone", actorPhoto = "" } = body;
                 await firestore.collection("songs").doc(id).update({
                     title: toTitleCase(title),
                     artist: toTitleCase(artist),
@@ -653,6 +658,8 @@ Rules:
                     chords: chords || "",
                     tagIds: tags,
                     video_url: video_url || "",
+                    updated_by_name: actorName,
+                    updated_by_photo: actorPhoto,
                     updated_at: admin.firestore.FieldValue.serverTimestamp(),
                 });
                 return json(200, { success: true });
