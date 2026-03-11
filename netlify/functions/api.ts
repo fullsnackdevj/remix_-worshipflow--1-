@@ -1080,6 +1080,54 @@ Rules:
         } catch (e) { return json(500, { error: "Failed to resolve" }); }
     }
 
+    // ─── VERSE OF THE DAY ────────────────────────────────────────────────────────
+    // GET /verse-of-day?date=YYYY-MM-DD
+    if (rawPath === "/verse-of-day" && method === "GET") {
+        const date = event.queryStringParameters?.date || new Date().toISOString().split("T")[0];
+        try {
+            const doc = await firestore.collection("verseOfDay").doc(date).get();
+            if (!doc.exists) return json(200, { reactions: {}, notes: [] });
+            const d = doc.data() as any;
+            return json(200, { reactions: d.reactions ?? {}, notes: d.notes ?? [] });
+        } catch { return json(200, { reactions: {}, notes: [] }); }
+    }
+
+    // PATCH /verse-of-day/react  { date, userId, key }
+    if (rawPath === "/verse-of-day/react" && method === "PATCH") {
+        const { date, userId, key, verseRef } = body;
+        if (!date || !userId || !key) return json(400, { error: "Missing date, userId or key" });
+        try {
+            const ref = firestore.collection("verseOfDay").doc(date);
+            const snap = await ref.get();
+            const existing = snap.exists ? (snap.data() as any) : { verse: verseRef || "", reactions: {}, notes: [] };
+            const users: string[] = existing.reactions?.[key] || [];
+            const already = users.includes(userId);
+            const updated = already ? users.filter((u: string) => u !== userId) : [...users, userId];
+            if (snap.exists) {
+                await ref.update({ [`reactions.${key}`]: updated });
+            } else {
+                await ref.set({ verse: verseRef || "", reactions: { [key]: updated }, notes: [] });
+            }
+            return json(200, { success: true, users: updated });
+        } catch (e) { return json(500, { error: "Failed to save reaction" }); }
+    }
+
+    // POST /verse-of-day/note  { date, note: { uid, name, photo, text, createdAt }, verseRef }
+    if (rawPath === "/verse-of-day/note" && method === "POST") {
+        const { date, note, verseRef } = body;
+        if (!date || !note?.uid || !note?.text) return json(400, { error: "Missing date or note" });
+        try {
+            const ref = firestore.collection("verseOfDay").doc(date);
+            const snap = await ref.get();
+            if (snap.exists) {
+                await ref.update({ notes: admin.firestore.FieldValue.arrayUnion(note) });
+            } else {
+                await ref.set({ verse: verseRef || "", reactions: {}, notes: [note] });
+            }
+            return json(200, { success: true });
+        } catch (e) { return json(500, { error: "Failed to save note" }); }
+    }
+
     return json(404, { error: "Not found" });
 };
 

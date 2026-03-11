@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { BookOpen, Heart, Send, ChevronDown, ChevronUp, CheckCircle2, Loader2 } from "lucide-react";
 import { VERSES } from "./verseData";
-import { db } from "./firebase";
-import { doc, getDoc, updateDoc, setDoc, arrayUnion } from "firebase/firestore";
 
 interface VotdNote { uid: string; name: string; photo: string; text: string; createdAt: string; }
 interface Props { userId: string; userName: string; userPhoto: string; }
@@ -25,9 +23,8 @@ function todayKey() { return new Date().toISOString().split("T")[0]; }
 export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
     const verse = VERSES[(dayOfYear() - 1 + VERSES.length) % VERSES.length];
     const dateKey = todayKey();
-    const docRef = doc(db, "verseOfDay", dateKey);
 
-    // ── Local state (single source of truth — same as Notes panel) ─────────
+    // ── Local state — single source of truth, same as Notes panel ─────────
     const [reactions, setReactions] = useState<Record<string, string[]>>({});
     const [notes, setNotes] = useState<VotdNote[]>([]);
     const [noteInput, setNoteInput] = useState("");
@@ -36,25 +33,24 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
     const [savingNote, setSavingNote] = useState(false);
     const [noteSaved, setNoteSaved] = useState(false);
 
-    // ── Load once on mount (just like Notes panel: fetchNotes then done) ────
+    // ── Load via API on mount — same as fetchNotes() in NotesPanel ─────────
     useEffect(() => {
-        getDoc(docRef).then(snap => {
-            if (snap.exists()) {
-                const d = snap.data() as { reactions?: Record<string, string[]>; notes?: VotdNote[] };
-                setReactions(d.reactions ?? {});
-                setNotes(d.notes ?? []);
-            }
-        }).catch(() => { });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        fetch(`/api/verse-of-day?date=${dateKey}`)
+            .then(r => r.json())
+            .then(data => {
+                if (data.reactions) setReactions(data.reactions);
+                if (data.notes) setNotes(data.notes);
+            })
+            .catch(() => { });
     }, [dateKey]);
 
-    // ── React — EXACT copy of Notes panel reactToNote pattern ──────────────
-    // Step 1: Update local state INSTANTLY (no waiting)
-    // Step 2: Fire background Firestore write (fire-and-forget)
+    // ── Toggle reaction — EXACT copy of Notes panel reactToNote() ──────────
+    // 1. Update local state INSTANTLY
+    // 2. Fire-and-forget background API call (no await, no race condition)
     const toggleReaction = (key: string) => {
         if (!userId) return;
 
-        // 1. Instant local update — same as: reactions[emoji] = users.includes(userId) ? remove : add
+        // 1. Instant local update
         setReactions(prev => {
             const users = prev[key] ?? [];
             return {
@@ -65,21 +61,15 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
             };
         });
 
-        // 2. Background Firestore sync — fire and forget (no await, no race)
-        const users = reactions[key] ?? [];
-        const hasIt = users.includes(userId);
-        const newUsers = hasIt ? users.filter(u => u !== userId) : [...users, userId];
-
-        getDoc(docRef).then(snap => {
-            if (snap.exists()) {
-                return updateDoc(docRef, { [`reactions.${key}`]: newUsers });
-            } else {
-                return setDoc(docRef, { verse: verse.ref, reactions: { [key]: newUsers }, notes: [] });
-            }
-        }).catch(() => { });
+        // 2. Background API call — fire and forget (same as fetch in reactToNote)
+        fetch("/api/verse-of-day/react", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ date: dateKey, userId, key, verseRef: verse.ref }),
+        });
     };
 
-    // ── Submit note — same optimistic pattern as Notes panel ───────────────
+    // ── Submit note — same optimistic pattern as Notes panel submit() ──────
     const submitNote = async () => {
         const text = noteInput.trim();
         if (!text || !userId || savingNote) return;
@@ -94,18 +84,17 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
         setNoteInput("");
         setSavingNote(true);
 
-        // 2. Background Firestore sync
+        // 2. Background API save
         try {
-            const snap = await getDoc(docRef);
-            if (snap.exists()) {
-                await updateDoc(docRef, { notes: arrayUnion(newNote) });
-            } else {
-                await setDoc(docRef, { verse: verse.ref, reactions: {}, notes: [newNote] });
-            }
+            await fetch("/api/verse-of-day/note", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ date: dateKey, note: newNote, verseRef: verse.ref }),
+            });
             setNoteSaved(true);
             setTimeout(() => setNoteSaved(false), 2000);
         } catch {
-            // Rollback note on error
+            // Rollback on error
             setNotes(prev => prev.filter(n => n.createdAt !== newNote.createdAt));
             setNoteInput(text);
         } finally {
@@ -188,7 +177,6 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
                             {users.length > 0 && (
                                 <span className="text-xs font-bold tabular-nums">{users.length}</span>
                             )}
-                            {/* Hover tooltip */}
                             <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-gray-900 text-white text-[10px] px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-10 shadow-lg">
                                 {label}
                             </span>
@@ -248,7 +236,7 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
                                     placeholder="Share your reflection… (Enter to send)"
                                     className="flex-1 bg-transparent px-3 py-2 text-xs text-white placeholder-indigo-400/50 outline-none"
                                 />
-                                {savingNote && <Loader2 size={11} className="text-indigo-400 animate-spin mr-1" />}
+                                {savingNote && <Loader2 size={11} className="text-indigo-400 animate-spin mr-1.5" />}
                                 {noteSaved && (
                                     <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-semibold pr-1">
                                         <CheckCircle2 size={11} /> Saved!
