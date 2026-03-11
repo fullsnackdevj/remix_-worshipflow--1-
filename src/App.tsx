@@ -2919,7 +2919,16 @@ export default function App() {
                    ADMIN PANEL VIEW
               ══════════════════════════════════════════════════════════════ */}
               {currentView === "admin" ? (
-                <AdminPanel onToast={showToast} />
+                <AdminPanel
+                  onToast={showToast}
+                  onConfirm={(msg, onOk) => showConfirm({
+                    title: "Are you sure?",
+                    message: msg,
+                    confirmText: "Confirm",
+                    confirmClass: "bg-red-600 hover:bg-red-700 text-white",
+                    onConfirm: onOk,
+                  })}
+                />
               ) : currentView === "members" ? (
                 <div className="max-w-5xl mx-auto">
 

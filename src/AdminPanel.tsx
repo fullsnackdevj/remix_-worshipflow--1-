@@ -34,7 +34,13 @@ function RoleBadge({ role }: { role: string }) {
     );
 }
 
-export default function AdminPanel({ onToast }: { onToast?: (type: "success" | "error" | "info" | "warning", msg: string) => void }) {
+export default function AdminPanel({
+    onToast,
+    onConfirm,
+}: {
+    onToast?: (type: "success" | "error" | "info" | "warning", msg: string) => void;
+    onConfirm?: (msg: string, onOk: () => void) => void;
+}) {
     const { isAdmin } = useAuth();
     const [activeTab, setActiveTab] = useState<"team" | "broadcasts">("team");
     const [users, setUsers] = useState<ApprovedUser[]>([]);
@@ -119,12 +125,15 @@ export default function AdminPanel({ onToast }: { onToast?: (type: "success" | "
     };
 
     const deleteBroadcast = async (id: string) => {
-        if (!confirm("Delete this broadcast?")) return;
-        try {
-            await fetch(`/api/broadcasts/${id}`, { method: "DELETE" });
-            onToast?.("success", "Broadcast deleted.");
-            fetchBroadcasts();
-        } catch { onToast?.("error", "Failed to delete broadcast."); }
+        const doDelete = async () => {
+            try {
+                await fetch(`/api/broadcasts/${id}`, { method: "DELETE" });
+                onToast?.("success", "Broadcast deleted.");
+                fetchBroadcasts();
+            } catch { onToast?.("error", "Failed to delete broadcast."); }
+        };
+        if (onConfirm) onConfirm("Delete this broadcast?", doDelete);
+        else doDelete();
     };
 
     const createBroadcast = async () => {
@@ -200,16 +209,19 @@ export default function AdminPanel({ onToast }: { onToast?: (type: "success" | "
     };
 
     const revokeUser = async (email: string) => {
-        if (!confirm(`Remove access for ${email}?`)) return;
-        try {
-            await fetch("/api/auth/revoke", {
-                method: "DELETE",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email }),
-            });
-            onToast?.("success", `${email} access removed.`);
-            fetchAll();
-        } catch { onToast?.("error", "Failed to revoke. Try again."); }
+        const doRevoke = async () => {
+            try {
+                await fetch("/api/auth/revoke", {
+                    method: "DELETE",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email }),
+                });
+                onToast?.("success", `${email} access removed.`);
+                fetchAll();
+            } catch { onToast?.("error", "Failed to revoke. Try again."); }
+        };
+        if (onConfirm) onConfirm(`Remove access for ${email}?`, doRevoke);
+        else doRevoke();
     };
 
     const dismissPending = async (email: string) => {
@@ -450,8 +462,8 @@ export default function AdminPanel({ onToast }: { onToast?: (type: "success" | "
                         </div>
 
                         {loading ? (
-                            <div className="flex items-center justify-center py-8 text-gray-400">
-                                <Loader2 size={18} className="animate-spin mr-2" /> Loading...
+                            <div className="flex items-center justify-center py-8">
+                                <Loader2 size={18} className="animate-spin text-gray-400" />
                             </div>
                         ) : (
                             <ul className="divide-y divide-amber-500/10">
@@ -554,8 +566,8 @@ export default function AdminPanel({ onToast }: { onToast?: (type: "success" | "
                     </div>
 
                     {loading ? (
-                        <div className="flex items-center justify-center py-10 text-gray-400">
-                            <Loader2 size={20} className="animate-spin mr-2" /> Loading...
+                        <div className="flex items-center justify-center py-10">
+                            <Loader2 size={20} className="animate-spin text-gray-400" />
                         </div>
                     ) : users.length === 0 ? (
                         <div className="text-center py-10 text-gray-400 text-sm">No approved members yet.</div>

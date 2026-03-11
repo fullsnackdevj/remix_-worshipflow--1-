@@ -58,53 +58,34 @@ export default function WelcomeToast() {
     const firstName = user.displayName?.split(" ")[0] || user.email?.split("@")[0] || "there";
 
     return (
+        /* ── Matches App.tsx toast stack position: fixed top-4 right-4 ── */
         <div
-            className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[300] w-[calc(100%-2rem)] max-w-sm transition-all duration-400 ${exiting ? "opacity-0 translate-y-4" : "opacity-100 translate-y-0"}`}
-            style={{ animation: exiting ? undefined : "welcomeSlideUp 0.45s cubic-bezier(0.34,1.56,0.64,1) forwards" }}
+            className={`fixed top-4 right-4 z-[300] pointer-events-auto flex items-start gap-3 min-w-[280px] max-w-[340px] bg-gray-900/95 dark:bg-gray-950/95 backdrop-blur border border-white/10 rounded-xl shadow-2xl px-4 py-3 transition-all duration-400 ${exiting ? "opacity-0 translate-x-4" : "opacity-100 translate-x-0"}`}
+            style={{ animation: exiting ? undefined : "slideInRight 0.25s ease-out" }}
         >
-            <div className="bg-gray-900 border border-gray-700/60 rounded-2xl shadow-2xl overflow-hidden">
-                {/* Rainbow top stripe */}
-                <div className="h-1 w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" />
+            {/* Indigo accent dot — matches toast icon style */}
+            <span className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center">
+                <Heart size={10} className="text-white" />
+            </span>
 
-                <div className="flex items-center gap-3 px-4 py-3.5">
-                    {/* Avatar */}
-                    <div className="shrink-0 relative">
-                        {user.photoURL ? (
-                            <img
-                                src={user.photoURL}
-                                alt={user.displayName ?? ""}
-                                className="w-11 h-11 rounded-full border-2 border-indigo-500/50"
-                            />
-                        ) : (
-                            <div className="w-11 h-11 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-base">
-                                {firstName[0]?.toUpperCase()}
-                            </div>
-                        )}
-                        <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center shadow">
-                            <Heart size={10} className="text-white" />
-                        </span>
-                    </div>
-
-                    {/* Message */}
-                    <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-white leading-tight">
-                            Welcome, {firstName}!
-                        </p>
-                        <p className="text-xs text-gray-400 leading-snug mt-0.5">
-                            You're now part of the WorshipFlow team. <Music size={12} className="inline-block ml-0.5 -mt-0.5 text-indigo-400" />
-                        </p>
-                    </div>
-
-                    {/* Dismiss */}
-                    <button
-                        onClick={dismiss}
-                        className="shrink-0 p-1.5 text-gray-500 hover:text-gray-300 rounded-lg hover:bg-white/5 transition-colors"
-                        aria-label="Dismiss"
-                    >
-                        <X size={13} />
-                    </button>
-                </div>
+            {/* Message */}
+            <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-gray-100 leading-tight">
+                    Welcome, {firstName}! 👋
+                </p>
+                <p className="text-xs text-gray-400 leading-snug mt-0.5">
+                    You're now part of the WorshipFlow team. <Music size={11} className="inline-block ml-0.5 -mt-0.5 text-indigo-400" />
+                </p>
             </div>
+
+            {/* Dismiss */}
+            <button
+                onClick={dismiss}
+                className="flex-shrink-0 text-gray-500 hover:text-gray-200 transition-colors ml-1"
+                aria-label="Dismiss"
+            >
+                <X size={14} />
+            </button>
         </div>
     );
 }
