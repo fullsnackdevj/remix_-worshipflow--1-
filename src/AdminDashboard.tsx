@@ -265,8 +265,9 @@ export default function AdminDashboard({
     }, [schedules]);
     const openBugs = notes.filter(n => n.type === "bug" && !n.resolved).length;
     const openFeqs = notes.filter(n => n.type === "feature" && !n.resolved).length;
-    const SERVICE_TYPES = ["sunday_service", "sunday", "midweek_service", "midweek"];
-    const isServiceEvent = (e: Schedule) => SERVICE_TYPES.includes(e.serviceType ?? "") || ["sunday service", "midweek service"].includes((e.eventName ?? "").toLowerCase());
+    // Only events literally named "Sunday Service" or "Midweek Service" require a worship leader.
+    // serviceType is always "sunday"/"midweek" even for custom events (form default), so we can't use it.
+    const isServiceEvent = (e: Schedule) => ["sunday service", "midweek service"].includes((e.eventName ?? "").toLowerCase());
     const coverageIssues = upcomingEvents.filter(e => isServiceEvent(e) && !e.worshipLeader).length;
     const recentSongs = [...songs].filter(s => s.created_at)
         .sort((a, b) => { try { return new Date(b.created_at!).getTime() - new Date(a.created_at!).getTime(); } catch { return 0; } })
