@@ -315,20 +315,23 @@ export default function AdminDashboard({
             </div>
 
 
-            {/* ── 4 metric tiles + Next Service hero ── */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {/* ── Metric tiles ── */}
+            {/* mobile: 2-col | tablet(sm): 4-col | desktop(lg): 6-col */}
+            {/* NextService: full-width on mobile/tablet, 2-col on lg */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
                 <MetricTile label="Songs" value={songs.length} sub={`${songsUsed} in services`}
                     iconBg="bg-indigo-100 dark:bg-indigo-900/40" icon={<Music size={15} className="text-indigo-600 dark:text-indigo-400" />}
                     onClick={() => onNavigate("songs")} />
                 <MetricTile label="Members" value={members.length} sub={`${members.filter(m => m.status !== "inactive").length} active`}
                     iconBg="bg-violet-100 dark:bg-violet-900/40" icon={<Users size={15} className="text-violet-600 dark:text-violet-400" />}
                     onClick={() => onNavigate("members")} />
-                <MetricTile label="Church Events" value={totalEvents} sub={`${upcomingEvents.length} upcoming`}
+                <MetricTile label="Events" value={totalEvents} sub={`${upcomingEvents.length} upcoming`}
                     iconBg="bg-emerald-100 dark:bg-emerald-900/40" icon={<Zap size={15} className="text-emerald-600 dark:text-emerald-400" />}
                     onClick={() => onNavigate("schedule")} />
                 <MetricTile label="Issues" value={openBugs + openFeqs} sub={`${openBugs} bugs · ${openFeqs} req`}
                     iconBg="bg-amber-100 dark:bg-amber-900/40" icon={<AlertCircle size={15} className="text-amber-600 dark:text-amber-400" />} />
-                <div className="col-span-2">
+                {/* Church Events hero — full width on mobile/sm, 2 cols on lg */}
+                <div className="col-span-2 sm:col-span-4 lg:col-span-2">
                     <NextServiceTile ev={nextEvent} songs={songs} members={members} myMemberId={myMemberId} onClick={() => onNavigate("schedule")} />
                 </div>
             </div>
@@ -352,30 +355,21 @@ export default function AdminDashboard({
                 )}
             </div>
 
-            {/* ══════════════════════════════════════════════════════════
-                BENTO GRID
-                Col 1 (Verse)  Col 2           Col 3
-                [Verse       ] [Songs        ] [Members  ]  row 1
-                [Verse       ] [Church Events] [Issues   ]  row 2
-            ══════════════════════════════════════════════════════════ */}
-            <div
-                className="grid gap-4"
-                style={{
-                    gridTemplateColumns: "1fr 1fr 1fr",
-                    gridTemplateRows: "auto auto",
-                    gridTemplateAreas: `
-                        "verse  songs   members"
-                        "verse  events  issues"
-                    `,
-                }}
-            >
-                {/* Daily Verse — tall left column spans both rows */}
-                <div style={{ gridArea: "verse" }}>
+            {/*
+             * BENTO GRID — Responsive strategy:
+             *   mobile (default): single column, cards stack vertically
+             *   tablet (lg):      2-column grid
+             *   desktop (xl):     3-column bento with verse spanning both rows on the left
+             */}
+            <div className="grid gap-4 grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
+
+                {/* Daily Verse — full-width on mobile/tablet, spans 2 rows on xl */}
+                <div className="lg:col-span-2 xl:col-span-1 xl:row-span-2">
                     <VerseOfTheDay userId={userId} userName={userName.split(" ")[0] || userName} userPhoto="" />
                 </div>
 
-                {/* Songs — row 1 col 2 */}
-                <Tile style={{ gridArea: "songs" }} onClick={() => onNavigate("songs")}>
+                {/* Recently Added Songs */}
+                <Tile className="min-h-[260px]" onClick={() => onNavigate("songs")}>
                     <CardHeader icon={<TrendingUp size={14} className="text-violet-500" />} title="Recently Added Songs" action="Library" onAction={() => onNavigate("songs")} />
                     {recentSongs.length === 0 ? (
                         <div className="flex flex-col items-center py-8 gap-3"><BookOpen size={22} className="text-indigo-300" /><p className="text-sm text-gray-400">No songs yet</p></div>
@@ -395,8 +389,8 @@ export default function AdminDashboard({
                     </div>
                 </Tile>
 
-                {/* Members — row 1 col 3 */}
-                <Tile style={{ gridArea: "members" }} onClick={() => onNavigate("members")}>
+                {/* Team by Role — Members */}
+                <Tile className="min-h-[260px]" onClick={() => onNavigate("members")}>
                     <CardHeader icon={<Users size={14} className="text-violet-500" />} title="Team by Role" action="All members" onAction={() => onNavigate("members")} />
                     <div className="p-5 space-y-3">
                         {roleGroups.length === 0 ? (
@@ -419,8 +413,8 @@ export default function AdminDashboard({
                     </div>
                 </Tile>
 
-                {/* Church Events — spans rows 2–3, col 2 */}
-                <Tile style={{ gridArea: "events" }}>
+                {/* Upcoming Events — full-width on mobile, spans 2 cols on xl */}
+                <Tile className="xl:col-span-1 min-h-[260px]">
                     <CardHeader icon={<Clock size={14} className="text-indigo-500" />} title="Upcoming Events" action="Full calendar" onAction={() => onNavigate("schedule")} />
                     <div className="divide-y divide-gray-100 dark:divide-gray-700">
                         {upcomingEvents.length === 0 ? (
@@ -453,8 +447,8 @@ export default function AdminDashboard({
                     </div>
                 </Tile>
 
-                {/* Issues — row 2 col 3 */}
-                <Tile style={{ gridArea: "issues" }}>
+                {/* Issues */}
+                <Tile className="min-h-[260px]">
                     <CardHeader icon={<Bug size={14} className="text-red-500" />} title="Open Issues" action="Admin panel" onAction={() => onNavigate("admin")} />
                     <div className="p-5 space-y-3">
                         {/* Open issues row */}
