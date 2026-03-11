@@ -84,6 +84,8 @@ interface Schedule {
   songLineup?: { joyful?: string; solemn?: string };
   assignments?: { role: string; members: ScheduleMember[] }[];
   notes?: string;
+  created_by_name?: string;
+  created_by_photo?: string;
 }
 
 // ── Pure utility functions (module-level — no state dependencies) ────────────
@@ -2398,6 +2400,24 @@ export default function App() {
                             {schedPanelMode === "view" && editingExisting ? (
                               /* ── VIEW MODE ── */
                               <div className="space-y-4">
+                                {/* Created by — always shown at top */}
+                                {editingExisting.created_by_name && (() => {
+                                  const name = editingExisting.created_by_name!;
+                                  const photo = allMembers.find(m => m.name?.toLowerCase().startsWith(name.split(" ")[0].toLowerCase()))?.photo || editingExisting.created_by_photo || "";
+                                  const colors = ["bg-indigo-500","bg-violet-500","bg-pink-500","bg-emerald-500","bg-amber-500"];
+                                  const bg = colors[name.charCodeAt(0) % colors.length];
+                                  const parts = name.trim().split(/\s+/);
+                                  const fmtName = parts.length === 1 ? parts[0] : `${parts[0]} ${parts[parts.length - 1][0]}.`;
+                                  return (
+                                    <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-50 dark:bg-gray-700/40 border border-gray-100 dark:border-gray-700">
+                                      {photo
+                                        ? <img src={photo} className="w-6 h-6 rounded-full object-cover shrink-0" alt={name} />
+                                        : <div className={`w-6 h-6 rounded-full ${bg} flex items-center justify-center text-white text-[9px] font-bold shrink-0`}>{name[0].toUpperCase()}</div>
+                                      }
+                                      <span className="text-xs text-gray-500 dark:text-gray-400">Created by <span className="font-semibold text-gray-700 dark:text-gray-200">{fmtName}</span></span>
+                                    </div>
+                                  );
+                                })()}
                                 {isServiceEvent && (() => {
                                   // Helper: get live photo from allMembers by memberId
                                   const livePhoto = (memberId: string) => allMembers.find(m => m.id === memberId)?.photo || "";

@@ -265,7 +265,9 @@ export default function AdminDashboard({
     }, [schedules]);
     const openBugs = notes.filter(n => n.type === "bug" && !n.resolved).length;
     const openFeqs = notes.filter(n => n.type === "feature" && !n.resolved).length;
-    const coverageIssues = upcomingEvents.filter(e => !e.worshipLeader).length;
+    const SERVICE_TYPES = ["sunday_service", "sunday", "midweek_service", "midweek"];
+    const isServiceEvent = (e: Schedule) => SERVICE_TYPES.includes(e.serviceType ?? "") || ["sunday service", "midweek service"].includes((e.eventName ?? "").toLowerCase());
+    const coverageIssues = upcomingEvents.filter(e => isServiceEvent(e) && !e.worshipLeader).length;
     const recentSongs = [...songs].filter(s => s.created_at)
         .sort((a, b) => { try { return new Date(b.created_at!).getTime() - new Date(a.created_at!).getTime(); } catch { return 0; } })
         .slice(0, 5);
@@ -430,7 +432,16 @@ export default function AdminDashboard({
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{ev.eventName ?? "Event"}</p>
-                                        <p className="text-xs text-gray-400 truncate">{ev.worshipLeader?.name ? <span>Leader: {ev.worshipLeader.name}</span> : <span className="text-red-400 flex items-center gap-1"><AlertTriangle size={9} />No leader</span>}</p>
+                                        <p className="text-xs text-gray-400 truncate">
+                                            {isServiceEvent(ev)
+                                                ? ev.worshipLeader?.name
+                                                    ? <span>Leader: {ev.worshipLeader.name}</span>
+                                                    : <span className="text-red-400 flex items-center gap-1"><AlertTriangle size={9} />No leader assigned</span>
+                                                : (ev as any).created_by_name
+                                                    ? <span>Added by: {(ev as any).created_by_name.split(" ")[0]}</span>
+                                                    : <span className="text-gray-400">Custom event</span>
+                                            }
+                                        </p>
                                     </div>
                                     <span className={`text-xs font-semibold shrink-0 ${i === 0 ? "text-indigo-600 dark:text-indigo-400" : "text-gray-400"}`}>{daysUntil(ev.date)}</span>
                                 </div>

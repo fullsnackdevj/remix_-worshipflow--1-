@@ -859,6 +859,8 @@ Rules:
         if (!date) return json(400, { error: "Date is required." });
         const stripPhoto = (m: any) => m ? { memberId: m.memberId, name: m.name, role: m.role || "" } : null;
         try {
+        const { actorName: aN1 = "Someone", actorPhoto: aP1 = "", actorUserId: aU1 = "" } = body;
+            const dl1 = new Date(date + "T00:00:00").toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
             const docRef = await firestore.collection("schedules").add({
                 date,
                 serviceType: serviceType || "sunday",
@@ -869,11 +871,11 @@ Rules:
                 assignments: (assignments || []).map((a: any) => ({ role: a.role, members: (a.members || []).map(stripPhoto) })),
                 songLineup: songLineup || { joyful: "", solemn: "" },
                 notes: notes || "",
+                created_by_name: aN1,
+                created_by_photo: aP1,
                 created_at: admin.firestore.FieldValue.serverTimestamp(),
                 updated_at: admin.firestore.FieldValue.serverTimestamp(),
             });
-            const { actorName: aN1 = "Someone", actorPhoto: aP1 = "", actorUserId: aU1 = "" } = body;
-            const dl1 = new Date(date + "T00:00:00").toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
             writeNotif(firestore, { type: "new_event", message: `${aN1} created a new event`, subMessage: `📅 ${eventName || "Event"} — ${dl1}`, actorName: aN1, actorPhoto: aP1, actorUserId: aU1, targetAudience: "all", resourceId: docRef.id, resourceType: "event", resourceDate: date });
             return json(201, { id: docRef.id });
         } catch (err) {
