@@ -29,24 +29,74 @@ function json(statusCode: number, body: unknown) {
 const toTitleCase = (str: string) =>
     str.trim().replace(/\b\w/g, (char) => char.toUpperCase());
 
-function normalizeLyrics(text: string): string {
-    return text
-        .toLowerCase()
-        .replace(/\b(verse|chorus|bridge|pre[-\s]?chorus|outro|intro|tag|refrain|hook|interlude)\b/gi, "")
-        .replace(/[^a-z0-9]/g, "");
+// ── Duplicate-detection helpers ─────────────────────────────────────────────
+
+function normalizeText(s: string): string {
+    return s.toLowerCase().replace(/[^a-z0-9]/g, "").trim();
 }
 
-function lyricsAreDuplicate(a: string, b: string): boolean {
-    const na = normalizeLyrics(a);
-    const nb = normalizeLyrics(b);
-    if (!na || !nb) return false;
-    if (na === nb) return true;
-    const wordsOf = (s: string) => new Set(s.toLowerCase().split(/\s+/).filter(w => w.length > 3));
-    const wa = wordsOf(a);
-    const wb = wordsOf(b);
-    const intersection = [...wa].filter(w => wb.has(w)).length;
-    const union = new Set([...wa, ...wb]).size;
-    return union > 0 && intersection / union >= 0.85;
+/** Jaccard similarity on character trigrams — robust to minor spelling/spacing differences */
+function trigramSimilarity(a: string, b: string): number {
+    const trigrams = (s: string): Set<string> => {
+        const set = new Set<string>();
+        for (let i = 0; i < s.length - 2; i++) set.add(s.slice(i, i + 3));
+        return set;
+    };
+    const ta = trigrams(normalizeText(a));
+    const tb = trigrams(normalizeText(b));
+    if (ta.size === 0 && tb.size === 0) return 1;
+    if (ta.size === 0 || tb.size === 0) return 0;
+    const intersection = [...ta].filter(t => tb.has(t)).length;
+    const union = new Set([...ta, ...tb]).size;
+    return intersection / union;
+}
+
+/** Lyrics containment: what fraction of the SHORTER song's key words appear in the longer one.
+ *  This catches "I copied lyrics and added extra verses" — Jaccard would miss it. */
+function lyricsContainment(a: string, b: string): number {
+    const sectionHeaders = /\b(verse|chorus|bridge|pre[-\s]?chorus|outro|intro|tag|refrain|hook|interlude)\b/gi;
+    const keyWords = (s: string): string[] =>
+        s.toLowerCase()
+         .replace(sectionHeaders, "")
+         .split(/\s+/)
+         .filter(w => w.length > 3);
+    const wa = keyWords(a);
+    const wb = keyWords(b);
+    if (wa.length === 0 || wb.length === 0) return 0;
+    const smaller = wa.length <= wb.length ? wa : wb;
+    const largerSet = new Set(wa.length <= wb.length ? wb : wa);
+    const matches = smaller.filter(w => largerSet.has(w)).length;
+    return matches / smaller.length;
+}
+
+/** Multi-signal duplicate score: returns 0-1. ≥ 0.65 → flag as duplicate. */
+function songDuplicateScore(
+    incoming: { title: string; artist: string; tags: string[]; lyrics: string },
+    existing:  { title: string; artist: string; tags: string[]; lyrics: string }
+): number {
+    // Title (35%): fuzzy via trigrams
+    const titleScore = trigramSimilarity(incoming.title, existing.title);
+    // Artist (25%): fuzzy via trigrams
+    const artistScore = trigramSimilarity(incoming.artist, existing.artist);
+    // Tags (15%): intersection ratio over union
+    const ta = new Set(incoming.tags.map((t: string) => t.toLowerCase()));
+    const tb = new Set(existing.tags.map((t: string) => t.toLowerCase()));
+    const tagIntersect = [...ta].filter(t => tb.has(t)).length;
+    const tagUnion = new Set([...ta, ...tb]).size;
+    const tagScore = tagUnion > 0 ? tagIntersect / tagUnion : 0;
+    // Lyrics (25%): containment — catches added-lines duplicates
+    const lyricsScore = lyricsContainment(incoming.lyrics, existing.lyrics);
+
+    return titleScore * 0.35 + artistScore * 0.25 + tagScore * 0.15 + lyricsScore * 0.25;
+}
+
+function duplicateSignalSummary(score: number, t: number, a: number, tag: number, l: number): string {
+    const parts: string[] = [];
+    if (t >= 0.8)   parts.push("title");
+    if (a >= 0.8)   parts.push("artist");
+    if (tag >= 0.8) parts.push("tags");
+    if (l >= 0.75)  parts.push("lyrics");
+    return parts.length ? parts.join(", ") : "overall similarity";
 }
 
 // ── Notification helper ─────────────────────────────────────────────────────
@@ -535,25 +585,25 @@ Rules:
         }
 
         try {
-            // Duplicate check: same title+artist OR highly similar lyrics
+            // Duplicate check — multi-signal scoring (title 35%, artist 25%, tags 15%, lyrics containment 25%)
             const existing = await firestore.collection("songs").get();
-            const normalizedTitle = title.trim().toLowerCase();
-            const normalizedArtist = artist.trim().toLowerCase();
-            const incomingLyrics = lyrics.trim();
+            const incomingTags: string[] = Array.isArray(body.tags) ? body.tags : [];
 
-            const duplicate = existing.docs.find((doc) => {
+            let duplicate: FirebaseFirestore.QueryDocumentSnapshot | undefined;
+            let dupScore = 0;
+            for (const doc of existing.docs) {
                 const d = doc.data();
-                const sameTA =
-                    (d.title || "").trim().toLowerCase() === normalizedTitle &&
-                    (d.artist || "").trim().toLowerCase() === normalizedArtist;
-                const sameLyrics = lyricsAreDuplicate(incomingLyrics, d.lyrics || "");
-                return sameTA || sameLyrics;
-            });
+                const score = songDuplicateScore(
+                    { title, artist, tags: incomingTags, lyrics: lyrics.trim() },
+                    { title: d.title || "", artist: d.artist || "", tags: d.tags || [], lyrics: d.lyrics || "" }
+                );
+                if (score >= 0.65 && score > dupScore) { duplicate = doc; dupScore = score; }
+            }
 
             if (duplicate) {
                 const d = duplicate.data();
                 return json(409, {
-                    error: `Duplicate song detected! This appears to be the same song as "${d.title}" by "${d.artist}" already in the database. Please check the existing entry before adding.`,
+                    error: `Possible duplicate detected! "${d.title}" by "${d.artist}" already exists in the database with very similar title, artist, tags, and/or lyrics. Please review the existing entry before saving.`,
                 });
             }
 
@@ -627,26 +677,26 @@ Rules:
             }
 
             try {
-                // Duplicate check: same title+artist OR highly similar lyrics (excluding self)
-                const existing = await firestore.collection("songs").get();
-                const normalizedTitle = title.trim().toLowerCase();
-                const normalizedArtist = artist.trim().toLowerCase();
-                const incomingLyrics = lyrics.trim();
+                // Duplicate check — multi-signal scoring, excluding self
+                const existing2 = await firestore.collection("songs").get();
+                const incomingTags2: string[] = Array.isArray(body.tags) ? body.tags : [];
 
-                const duplicate = existing.docs.find((doc) => {
-                    if (doc.id === id) return false;
+                let duplicate2: FirebaseFirestore.QueryDocumentSnapshot | undefined;
+                let dupScore2 = 0;
+                for (const doc of existing2.docs) {
+                    if (doc.id === id) continue; // don't flag a song as duplicate of itself
                     const d = doc.data();
-                    const sameTA =
-                        (d.title || "").trim().toLowerCase() === normalizedTitle &&
-                        (d.artist || "").trim().toLowerCase() === normalizedArtist;
-                    const sameLyrics = lyricsAreDuplicate(incomingLyrics, d.lyrics || "");
-                    return sameTA || sameLyrics;
-                });
+                    const score = songDuplicateScore(
+                        { title, artist, tags: incomingTags2, lyrics: lyrics.trim() },
+                        { title: d.title || "", artist: d.artist || "", tags: d.tags || [], lyrics: d.lyrics || "" }
+                    );
+                    if (score >= 0.65 && score > dupScore2) { duplicate2 = doc; dupScore2 = score; }
+                }
 
-                if (duplicate) {
-                    const d = duplicate.data();
+                if (duplicate2) {
+                    const d = duplicate2.data();
                     return json(409, {
-                        error: `Duplicate song detected! This appears to be the same song as "${d.title}" by "${d.artist}" already in the database. Please check the existing entry before adding.`,
+                        error: `Possible duplicate detected! "${d.title}" by "${d.artist}" already exists with very similar title, artist, tags, and/or lyrics. Please review before saving.`,
                     });
                 }
 
