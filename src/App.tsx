@@ -2044,7 +2044,13 @@ export default function App() {
                     members={allMembers}
                     schedules={allSchedules}
                     notes={dashboardNotes}
-                    onNavigate={setCurrentView}
+                    onNavigate={(view) => {
+                      if (view === "admin" && !isAdmin) {
+                        showToast("warning", "Only Admins and Leaders can access the Admin Panel.");
+                        return;
+                      }
+                      setCurrentView(view);
+                    }}
                     canAddSong={canAddSong}
                     canWriteSchedule={canWriteSchedule}
                     canAddMember={canAddMember}
