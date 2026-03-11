@@ -356,65 +356,54 @@ export default function AdminDashboard({
             </div>
 
             {/*
-             * BENTO GRID — Responsive strategy:
-             *   mobile (default): single column, cards stack vertically
-             *   tablet (lg):      2-column grid
-             *   desktop (xl):     3-column bento with verse spanning both rows on the left
+             * BENTO GRID 3×2
+             * Row 1: [What's New]  [Church Events]      [Upcoming Events]
+             * Row 2: [Songs]       [Team by Role]        [Open Issues]
+             * Responsive: 1-col mobile → 2-col lg → 3-col xl
              */}
             <div className="grid gap-4 grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
 
-                {/* Church Events — full-width on mobile/tablet, tall left column on xl */}
-                <div className="lg:col-span-2 xl:col-span-1 xl:row-span-2">
-                    <NextServiceTile ev={nextEvent} songs={songs} members={members} myMemberId={myMemberId} onClick={() => onNavigate("schedule")} />
-                </div>
+                {/* ── ROW 1 ─────────────────────────── */}
 
-                {/* Recently Added Songs */}
-                <Tile className="min-h-[260px]" onClick={() => onNavigate("songs")}>
-                    <CardHeader icon={<TrendingUp size={14} className="text-violet-500" />} title="Recently Added Songs" action="Library" onAction={() => onNavigate("songs")} />
-                    {recentSongs.length === 0 ? (
-                        <div className="flex flex-col items-center py-8 gap-3"><BookOpen size={22} className="text-indigo-300" /><p className="text-sm text-gray-400">No songs yet</p></div>
-                    ) : (
-                        <div className="divide-y divide-gray-100 dark:divide-gray-700">
-                            {recentSongs.map(s => (
-                                <div key={s.id} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-                                    <div className="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center shrink-0"><Music size={14} className="text-indigo-600 dark:text-indigo-400" /></div>
-                                    <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{s.title}</p><p className="text-xs text-gray-400 truncate">{s.artist}</p></div>
-                                    {s.created_at && <p className="text-xs text-gray-400 shrink-0">{relDate(s.created_at)}</p>}
-                                </div>
-                            ))}
+                {/* What's New */}
+                <Tile className="min-h-[260px]">
+                    <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
+                        <div className="flex items-center gap-2 font-semibold text-gray-900 dark:text-white text-sm">
+                            <Megaphone size={14} className="text-amber-500" />
+                            {releaseNotes?.title ?? "What's New in WorshipFlow ✨"}
                         </div>
-                    )}
-                    <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60">
-                        <p className="text-xs text-gray-400">{songs.length} songs · {songsUsed} used in services</p>
+                        <button onClick={() => onNavigate("admin")} className="text-xs text-indigo-500 hover:text-indigo-400 flex items-center gap-1 font-medium">
+                            Manage <ChevronRight size={13} />
+                        </button>
                     </div>
-                </Tile>
-
-                {/* Team by Role — Members */}
-                <Tile className="min-h-[260px]" onClick={() => onNavigate("members")}>
-                    <CardHeader icon={<Users size={14} className="text-violet-500" />} title="Team by Role" action="All members" onAction={() => onNavigate("members")} />
-                    <div className="p-5 space-y-3">
-                        {roleGroups.length === 0 ? (
-                            <p className="text-sm text-gray-400">No members yet</p>
-                        ) : roleGroups.slice(0, 5).map(([role, count]) => (
-                            <div key={role}>
-                                <div className="flex justify-between text-sm mb-1.5">
-                                    <span className="text-gray-700 dark:text-gray-300 truncate">{role}</span>
-                                    <span className="text-gray-900 dark:text-white font-bold shrink-0 ml-2">{count}</span>
-                                </div>
-                                <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                                    <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full"
-                                        style={{ width: members.length > 0 ? `${Math.round(count / members.length * 100)}%` : "0%" }} />
-                                </div>
+                    <div className="px-5 py-4">
+                        {releaseNotes ? (
+                            <>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3 italic">{releaseNotes.message}</p>
+                                <ul className="space-y-2">
+                                    {releaseNotes.releases.flatMap(r => r.highlights).slice(0, 5).map((h, i) => (
+                                        <li key={i} className="flex items-start gap-2.5 text-sm text-gray-700 dark:text-gray-200">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0" />
+                                            {h}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </>
+                        ) : (
+                            <div className="flex items-center gap-2 text-gray-400 text-sm py-2">
+                                <Megaphone size={16} className="opacity-40" /> Loading updates…
                             </div>
-                        ))}
-                    </div>
-                    <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60">
-                        <p className="text-xs text-gray-400">{members.length} total team members</p>
+                        )}
                     </div>
                 </Tile>
 
-                {/* Upcoming Events — full-width on mobile, spans 2 cols on xl */}
-                <Tile className="xl:col-span-1 min-h-[260px]">
+                {/* Church Events */}
+                <Tile className="min-h-[260px]">
+                    <NextServiceTile ev={nextEvent} songs={songs} members={members} myMemberId={myMemberId} onClick={() => onNavigate("schedule")} />
+                </Tile>
+
+                {/* Upcoming Events */}
+                <Tile className="min-h-[260px]">
                     <CardHeader icon={<Clock size={14} className="text-indigo-500" />} title="Upcoming Events" action="Full calendar" onAction={() => onNavigate("schedule")} />
                     <div className="divide-y divide-gray-100 dark:divide-gray-700">
                         {upcomingEvents.length === 0 ? (
@@ -447,11 +436,57 @@ export default function AdminDashboard({
                     </div>
                 </Tile>
 
-                {/* Issues */}
+                {/* ── ROW 2 ─────────────────────────── */}
+
+                {/* Recently Added Songs */}
+                <Tile className="min-h-[260px]" onClick={() => onNavigate("songs")}>
+                    <CardHeader icon={<TrendingUp size={14} className="text-violet-500" />} title="Recently Added Songs" action="Library" onAction={() => onNavigate("songs")} />
+                    {recentSongs.length === 0 ? (
+                        <div className="flex flex-col items-center py-8 gap-3"><BookOpen size={22} className="text-indigo-300" /><p className="text-sm text-gray-400">No songs yet</p></div>
+                    ) : (
+                        <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                            {recentSongs.map(s => (
+                                <div key={s.id} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                                    <div className="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center shrink-0"><Music size={14} className="text-indigo-600 dark:text-indigo-400" /></div>
+                                    <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{s.title}</p><p className="text-xs text-gray-400 truncate">{s.artist}</p></div>
+                                    {s.created_at && <p className="text-xs text-gray-400 shrink-0">{relDate(s.created_at)}</p>}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60">
+                        <p className="text-xs text-gray-400">{songs.length} songs · {songsUsed} used in services</p>
+                    </div>
+                </Tile>
+
+                {/* Team by Role */}
+                <Tile className="min-h-[260px]" onClick={() => onNavigate("members")}>
+                    <CardHeader icon={<Users size={14} className="text-violet-500" />} title="Team by Role" action="All members" onAction={() => onNavigate("members")} />
+                    <div className="p-5 space-y-3">
+                        {roleGroups.length === 0 ? (
+                            <p className="text-sm text-gray-400">No members yet</p>
+                        ) : roleGroups.slice(0, 5).map(([role, count]) => (
+                            <div key={role}>
+                                <div className="flex justify-between text-sm mb-1.5">
+                                    <span className="text-gray-700 dark:text-gray-300 truncate">{role}</span>
+                                    <span className="text-gray-900 dark:text-white font-bold shrink-0 ml-2">{count}</span>
+                                </div>
+                                <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                                    <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full"
+                                        style={{ width: members.length > 0 ? `${Math.round(count / members.length * 100)}%` : "0%" }} />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60">
+                        <p className="text-xs text-gray-400">{members.length} total team members</p>
+                    </div>
+                </Tile>
+
+                {/* Open Issues */}
                 <Tile className="min-h-[260px]">
                     <CardHeader icon={<Bug size={14} className="text-red-500" />} title="Open Issues" action="Admin panel" onAction={() => onNavigate("admin")} />
                     <div className="p-5 space-y-3">
-                        {/* Open issues row */}
                         <div className="grid grid-cols-2 gap-3">
                             <div className="flex flex-col items-center py-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/40">
                                 <p className="text-3xl font-black text-red-500 dark:text-red-400">{openBugs}</p>
@@ -462,7 +497,6 @@ export default function AdminDashboard({
                                 <p className="text-[10px] text-amber-400 flex items-center gap-0.5 mt-1"><Lightbulb size={9} />Requests</p>
                             </div>
                         </div>
-                        {/* Resolved + Total row */}
                         <div className="grid grid-cols-2 gap-3">
                             <div className="flex flex-col items-center py-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900/40">
                                 <p className="text-2xl font-black text-emerald-500 dark:text-emerald-400">{resolvedNotes}</p>
@@ -487,38 +521,6 @@ export default function AdminDashboard({
                 </Tile>
 
             </div>
-
-            {/* ── What's New — reads release-notes.json (same content as the popup) ── */}
-            <Tile>
-                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
-                    <div className="flex items-center gap-2 font-semibold text-gray-900 dark:text-white text-sm">
-                        <Megaphone size={14} className="text-amber-500" />
-                        {releaseNotes?.title ?? "What's New"}
-                    </div>
-                    <button onClick={() => onNavigate("admin")} className="text-xs text-indigo-500 hover:text-indigo-400 flex items-center gap-1 font-medium">
-                        Manage <ChevronRight size={13} />
-                    </button>
-                </div>
-                <div className="px-5 py-4">
-                    {releaseNotes ? (
-                        <>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3 italic">{releaseNotes.message}</p>
-                            <ul className="grid sm:grid-cols-2 gap-x-8 gap-y-2">
-                                {releaseNotes.releases.flatMap(r => r.highlights).map((h, i) => (
-                                    <li key={i} className="flex items-start gap-2.5 text-sm text-gray-700 dark:text-gray-200">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0" />
-                                        {h}
-                                    </li>
-                                ))}
-                            </ul>
-                        </>
-                    ) : (
-                        <div className="flex items-center gap-2 text-gray-400 text-sm py-2">
-                            <Megaphone size={16} className="opacity-40" /> Loading updates…
-                        </div>
-                    )}
-                </div>
-            </Tile>
         </div>
     );
 }
