@@ -3550,7 +3550,7 @@ export default function App() {
 
                             {/* Seamless textarea box */}
                             <div className={`rounded-xl overflow-hidden border ${formErrors.lyrics ? "border-red-400" : "border-gray-300 dark:border-gray-600"}`}>
-                              <textarea
+                              <AutoTextarea
                                 value={editLyrics}
                                 onChange={(e) => {
                                   setEditLyrics(e.target.value);
@@ -3563,8 +3563,8 @@ export default function App() {
                                     if (e.key === "y" || (e.key === "z" && e.shiftKey)) { e.preventDefault(); redoLyrics(); }
                                   }
                                 }}
-                                rows={14}
-                                className="w-full h-full px-4 py-3 bg-gray-50 dark:bg-gray-900 outline-none font-sans resize-none overflow-auto whitespace-pre-wrap break-words focus:ring-2 focus:ring-inset focus:ring-indigo-300 dark:focus:ring-indigo-700"
+                                minRows={10}
+                                className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 outline-none font-sans focus:ring-2 focus:ring-inset focus:ring-indigo-300 dark:focus:ring-indigo-700"
                                 placeholder="Paste lyrics here..."
                               />
                             </div>
@@ -3626,7 +3626,7 @@ export default function App() {
 
                             {/* Seamless textarea box */}
                             <div className="rounded-xl overflow-hidden border border-gray-300 dark:border-gray-600">
-                              <textarea
+                              <AutoTextarea
                                 value={editChords}
                                 onChange={(e) => {
                                   setEditChords(e.target.value);
@@ -3638,8 +3638,8 @@ export default function App() {
                                     if (e.key === "y" || (e.key === "z" && e.shiftKey)) { e.preventDefault(); redoChords(); }
                                   }
                                 }}
-                                rows={14}
-                                className="w-full h-full px-4 py-3 bg-gray-50 dark:bg-gray-900 outline-none font-sans text-sm resize-none overflow-auto whitespace-pre-wrap break-words focus:ring-2 focus:ring-inset focus:ring-purple-300 dark:focus:ring-purple-700"
+                                minRows={10}
+                                className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 outline-none font-sans text-sm focus:ring-2 focus:ring-inset focus:ring-purple-300 dark:focus:ring-purple-700"
                                 placeholder="Paste chords here..."
                               />
                             </div>
