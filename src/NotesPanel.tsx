@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { X, NotepadText, Trash2, ImagePlus, Loader2, Bug, Lightbulb, MessageSquare, Pencil, Check, CheckCircle2, ChevronDown, Film, RotateCcw, Archive, Eye, Search, Code2, Wrench, XCircle, ThumbsUp } from "lucide-react";
+import AutoTextarea from "./AutoTextarea";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 export interface TeamNote {
@@ -741,14 +742,13 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
                             </div>
 
                             {/* Text */}
-                            <textarea
-                                ref={textRef}
+                            <AutoTextarea
+                                ref={textRef as any}
                                 value={fContent}
                                 onChange={e => setFContent(e.target.value)}
                                 placeholder="Describe the bug, feature idea, or general note… (paste images here)"
-                                rows={12}
-                                style={{ minHeight: "220px" }}
-                                className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                                minRows={5}
+                                className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                             />
 
                             {/* Attachments preview row */}

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "./AuthContext";
 import { UserPlus, Trash2, Shield, Users, Loader2, Check, X, Clock, UserCheck, Pencil, ShieldCheck, ShieldAlert, Megaphone, Plus, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, Eye, Sparkles, User, Guitar, Mic2, ClipboardList, Sliders, Wrench, ThumbsUp, FlaskConical } from "lucide-react";
+import AutoTextarea from "./AutoTextarea";
 
 interface ApprovedUser {
     email: string;
@@ -350,7 +351,7 @@ export default function AdminPanel({
                             <input value={bTitle} onChange={e => setBTitle(e.target.value)} placeholder={bType === "maintenance" ? "e.g. App Under Maintenance" : "e.g. New Features Added!"} className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
 
                             {/* Message */}
-                            <textarea value={bMessage} onChange={e => setBMessage(e.target.value)} placeholder="Optional message..." rows={2} className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
+                            <AutoTextarea value={bMessage} onChange={e => setBMessage(e.target.value)} placeholder="Optional message..." minRows={2} className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
 
                             {/* Bullet points (What's New only) */}
                             {bType === "whats_new" && (

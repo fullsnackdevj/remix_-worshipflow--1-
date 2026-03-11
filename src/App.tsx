@@ -8,6 +8,7 @@ import AdminPanel from "./AdminPanel";
 import HelpPanel from "./HelpPanel";
 import NotesPanel from "./NotesPanel";
 import Dashboard from "./Dashboard";
+import AutoTextarea from "./AutoTextarea";
 import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, LayoutGrid, List, BookOpen, Mic2, Copy, Pencil, Shield, Mail, Bell, Guitar, Sliders, Palette, Lock, AlertTriangle, CheckCircle, BookMarked, HandMetal, Headphones, HelpCircle, Undo2, Redo2 } from "lucide-react";
 import { Song, Tag } from "./types";
 
@@ -2895,9 +2896,13 @@ export default function App() {
                                 {/* Notes */}
                                 <div>
                                   <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Notes / Announcements</label>
-                                  <textarea value={editSchedNotes} onChange={e => setEditSchedNotes(e.target.value)} rows={3}
+                                  <AutoTextarea
+                                    value={editSchedNotes}
+                                    onChange={e => setEditSchedNotes(e.target.value)}
+                                    minRows={2}
                                     placeholder="Add notes, reminders, or announcements…"
-                                    className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder-gray-400 resize-none" />
+                                    className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder-gray-400"
+                                  />
                                 </div>
 
                                 {/* Save / Delete */}
@@ -3170,11 +3175,11 @@ export default function App() {
                         {/* Notes */}
                         <div>
                           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Notes <span className="text-gray-400 font-normal">(optional)</span></label>
-                          <textarea
+                          <AutoTextarea
                             value={editMemberNotes}
                             onChange={e => setEditMemberNotes(e.target.value)}
-                            rows={3}
-                            className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none resize-none"
+                            minRows={3}
+                            className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none"
                             placeholder="Available weekends only, plays both keys and acoustic..."
                           />
                         </div>
@@ -3559,7 +3564,7 @@ export default function App() {
                                   }
                                 }}
                                 rows={14}
-                                className="w-full h-full px-4 py-3 bg-gray-50 dark:bg-gray-900 outline-none font-sans resize-none focus:ring-2 focus:ring-inset focus:ring-indigo-300 dark:focus:ring-indigo-700"
+                                className="w-full h-full px-4 py-3 bg-gray-50 dark:bg-gray-900 outline-none font-sans resize-none overflow-auto whitespace-pre-wrap break-words focus:ring-2 focus:ring-inset focus:ring-indigo-300 dark:focus:ring-indigo-700"
                                 placeholder="Paste lyrics here..."
                               />
                             </div>
@@ -3634,7 +3639,7 @@ export default function App() {
                                   }
                                 }}
                                 rows={14}
-                                className="w-full h-full px-4 py-3 bg-gray-50 dark:bg-gray-900 outline-none font-sans text-sm resize-none focus:ring-2 focus:ring-inset focus:ring-purple-300 dark:focus:ring-purple-700"
+                                className="w-full h-full px-4 py-3 bg-gray-50 dark:bg-gray-900 outline-none font-sans text-sm resize-none overflow-auto whitespace-pre-wrap break-words focus:ring-2 focus:ring-inset focus:ring-purple-300 dark:focus:ring-purple-700"
                                 placeholder="Paste chords here..."
                               />
                             </div>
