@@ -89,3 +89,22 @@ button.no-scale:active {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* Thin, dark-themed scrollbar */
+.pretty-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(99, 102, 241, 0.5) transparent;
+}
+.pretty-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.pretty-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.pretty-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.5);
+  border-radius: 99px;
+}
+.pretty-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.8);
+}

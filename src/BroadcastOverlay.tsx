@@ -131,7 +131,7 @@ export default function BroadcastOverlay() {
                 <div className="h-1.5 w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 shrink-0" />
 
                 {/* Scrollable content */}
-                <div className="overflow-y-auto flex-1 px-6 pt-6 space-y-5">
+                <div className="overflow-y-auto flex-1 px-6 pt-6 space-y-5 pretty-scrollbar">
                     {/* Logo + Confetti badge */}
                     <div className="flex items-start gap-4">
                         <div className="relative shrink-0 w-14 h-14">
