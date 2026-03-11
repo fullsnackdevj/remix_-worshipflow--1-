@@ -298,6 +298,43 @@ export default function AdminDashboard({
             </div>
 
 
+            {/* ── 4 metric tiles + Next Service hero ── */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                <MetricTile label="Songs" value={songs.length} sub={`${songsUsed} in services`}
+                    iconBg="bg-indigo-100 dark:bg-indigo-900/40" icon={<Music size={15} className="text-indigo-600 dark:text-indigo-400" />}
+                    onClick={() => onNavigate("songs")} />
+                <MetricTile label="Members" value={members.length} sub={`${members.filter(m => m.status !== "inactive").length} active`}
+                    iconBg="bg-violet-100 dark:bg-violet-900/40" icon={<Users size={15} className="text-violet-600 dark:text-violet-400" />}
+                    onClick={() => onNavigate("members")} />
+                <MetricTile label="Church Events" value={totalEvents} sub={`${upcomingEvents.length} upcoming`}
+                    iconBg="bg-emerald-100 dark:bg-emerald-900/40" icon={<Zap size={15} className="text-emerald-600 dark:text-emerald-400" />}
+                    onClick={() => onNavigate("schedule")} />
+                <MetricTile label="Issues" value={openBugs + openFeqs} sub={`${openBugs} bugs · ${openFeqs} req`}
+                    iconBg="bg-amber-100 dark:bg-amber-900/40" icon={<AlertCircle size={15} className="text-amber-600 dark:text-amber-400" />} />
+                <div className="col-span-2">
+                    <NextServiceTile ev={nextEvent} songs={songs} members={members} myMemberId={myMemberId} onClick={() => onNavigate("schedule")} />
+                </div>
+            </div>
+
+            {/* Alert banners */}
+            <div className="flex flex-wrap gap-2">
+                {coverageIssues === 0 ? (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 text-xs font-semibold">
+                        <CheckCheck size={12} /> All services have leaders ✓
+                    </div>
+                ) : (
+                    <button onClick={() => onNavigate("schedule")} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-xs font-semibold hover:bg-red-100 transition-colors">
+                        <AlertTriangle size={12} />{coverageIssues} service{coverageIssues !== 1 ? "s" : ""} missing a leader
+                    </button>
+                )}
+                {broadcasts.length > 0 && (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-400 text-xs font-semibold">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
+                        {broadcasts.length} active broadcast{broadcasts.length !== 1 ? "s" : ""}
+                    </div>
+                )}
+            </div>
+
             {/* ══════════════════════════════════════════════════════════
                 BENTO GRID
                 Col 1 (Verse)  Col 2           Col 3
