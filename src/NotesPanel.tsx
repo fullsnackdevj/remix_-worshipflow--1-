@@ -73,12 +73,12 @@ const STATUS_REACTIONS = [
     { key: "coding", label: "Coding", icon: <Code2 size={13} />, activeColor: "bg-violet-100 dark:bg-violet-900/40 border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300" },
     { key: "fixing", label: "Fixing", icon: <Wrench size={13} />, activeColor: "bg-orange-100 dark:bg-orange-900/40 border-orange-300 dark:border-orange-700 text-orange-700 dark:text-orange-300" },
     { key: "on_it", label: "On it", icon: <ThumbsUp size={13} />, activeColor: "bg-green-100 dark:bg-green-900/40 border-green-300 dark:border-green-700 text-green-700 dark:text-green-300" },
-    { key: "nevermind", label: "Nevermind", icon: <XCircle size={13} />, activeColor: "bg-red-100 dark:bg-red-900/40 border-red-300 dark:border-red-700 text-red-700 dark:text-red-300" },
+    { key: "nevermind", label: "Dismiss", icon: <XCircle size={13} />, activeColor: "bg-red-100 dark:bg-red-900/40 border-red-300 dark:border-red-700 text-red-700 dark:text-red-300" },
 ] as const;
 const MAX_IMAGE_BYTES = 300 * 1024;
 const MAX_VIDEO_BYTES = 5 * 1024 * 1024; // 5MB
 
-type StatusTab = "active" | "resolved" | "all";
+type StatusTab = "active" | "resolved" | "dismissed" | "all";
 type SortMode = "newest" | "oldest" | "most_reacted";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -591,7 +591,13 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
 
     // Filter + sort
     const filtered = notes
-        .filter(n => statusTab === "active" ? !n.resolved : statusTab === "resolved" ? !!n.resolved : true)
+        .filter(n => {
+            const isDismissed = (n.reactions?.nevermind?.length ?? 0) > 0;
+            if (statusTab === "dismissed") return isDismissed;
+            if (statusTab === "active")    return !n.resolved && !isDismissed;
+            if (statusTab === "resolved")  return !!n.resolved;
+            return true; // "all"
+        })
         .filter(n => typeFilter === "all" ? true : n.type === typeFilter)
         .sort((a, b) => {
             if (sort === "oldest") return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
@@ -603,7 +609,9 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
             return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(); // newest
         });
 
-    const activeCount = notes.filter(n => !n.resolved).length;
+    const isDismissedFn = (n: TeamNote) => (n.reactions?.nevermind?.length ?? 0) > 0;
+    const activeCount = notes.filter(n => !n.resolved && !isDismissedFn(n)).length;
+    const dismissedCount = notes.filter(isDismissedFn).length;
 
     // ── Unread tracking (same as notification bell) ─────────────────────────────────────────
     const SEEN_KEY = `notes_last_seen_${userId}`;
@@ -834,10 +842,13 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
                     {!showForm && !showTrash && <div className="px-4 pt-3 pb-2 border-b border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/30 shrink-0 space-y-2">
                         {/* Status tabs */}
                         <div className="flex items-center gap-1">
-                            {(["active", "resolved", "all"] as StatusTab[]).map(tab => (
+                            {(["active", "resolved", "dismissed", "all"] as StatusTab[]).map(tab => (
                                 <button key={tab} onClick={() => setStatusTab(tab)}
-                                    className={`px-3 py-1 rounded-lg text-xs font-semibold capitalize transition-all ${statusTab === tab ? "bg-indigo-600 text-white" : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"}`}>
-                                    {tab === "active" ? `Active${activeCount > 0 ? ` (${activeCount})` : ""}` : tab === "resolved" ? `Resolved (${notes.filter(n => n.resolved).length})` : "All"}
+                                    className={`px-3 py-1 rounded-lg text-xs font-semibold capitalize transition-all ${statusTab === tab ? (tab === "dismissed" ? "bg-red-600 text-white" : "bg-indigo-600 text-white") : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"}`}>
+                                    {tab === "active"    ? `Active${activeCount > 0 ? ` (${activeCount})` : ""}` :
+                                     tab === "resolved"  ? `Resolved (${notes.filter(n => n.resolved).length})` :
+                                     tab === "dismissed" ? `Dismissed${dismissedCount > 0 ? ` (${dismissedCount})` : ""}` :
+                                     "All"}
                                 </button>
                             ))}
                             {/* Sort */}
@@ -876,7 +887,7 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
                         ) : filtered.length === 0 ? (
                             <div className="text-center py-10 space-y-2">
                                 <p className="text-3xl">📝</p>
-                                <p className="text-sm text-gray-400">{statusTab === "resolved" ? "No resolved notes yet" : "No notes yet"}</p>
+                                <p className="text-sm text-gray-400">{statusTab === "resolved" ? "No resolved notes yet" : statusTab === "dismissed" ? "No dismissed notes yet" : "No notes yet"}</p>
                                 {statusTab === "active" && <button onClick={() => openForm()} className="mt-1 text-xs text-indigo-500 hover:underline">Add the first note</button>}
                             </div>
                         ) : (
