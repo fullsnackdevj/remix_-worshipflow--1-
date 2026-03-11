@@ -2046,7 +2046,7 @@ export default function App() {
                     notes={dashboardNotes}
                     onNavigate={(view) => {
                       if (view === "admin" && !isAdmin) {
-                        showToast("warning", "Only Admins and Leaders can access the Admin Panel.");
+                        showToast("warning", "Only the Admin can access the Admin Panel.");
                         return;
                       }
                       setCurrentView(view);
