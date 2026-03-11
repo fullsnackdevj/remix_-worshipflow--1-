@@ -491,60 +491,6 @@ export default function AdminDashboard({
                     </div>
                 </Tile>
 
-                {/* What's New broadcast card — row 3 col 1 */}
-                <Tile style={{ gridArea: "whatsnew" }}>
-                    <CardHeader
-                        icon={<Megaphone size={14} className="text-amber-500" />}
-                        title={`What's New${broadcasts.length > 0 ? ` · ${broadcasts.length} live` : ""}`}
-                        action="Manage"
-                        onAction={() => onNavigate("admin")}
-                    />
-                    {loadingExtra ? (
-                        <div className="px-5 py-5 animate-pulse flex gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-gray-200 dark:bg-gray-700 shrink-0" />
-                            <div className="flex-1 space-y-2 pt-1"><div className="h-3 w-1/3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-2 w-2/3 bg-gray-200 dark:bg-gray-700 rounded" /></div>
-                        </div>
-                    ) : broadcasts.length === 0 ? (
-                        <div className="flex flex-col items-center gap-3 px-5 py-6 text-center">
-                            <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-                                <Megaphone size={18} className="text-amber-400" />
-                            </div>
-                            <div>
-                                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">No active broadcasts</p>
-                                <p className="text-xs text-gray-400 mt-0.5">Send a What's New update to the team</p>
-                            </div>
-                            <button onClick={() => onNavigate("admin")}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold transition-colors">
-                                <Megaphone size={11} /> Create Broadcast
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="divide-y divide-gray-100 dark:divide-gray-700">
-                            {broadcasts.slice(0, 3).map((b: any) => (
-                                <div key={b.id} className="flex items-start gap-3 px-5 py-4">
-                                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${b.type === "maintenance" ? "bg-orange-100 dark:bg-orange-900/40" : "bg-amber-100 dark:bg-amber-900/40"}`}>
-                                        <Megaphone size={14} className={b.type === "maintenance" ? "text-orange-500" : "text-amber-500"} />
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-bold text-gray-900 dark:text-white">{b.title}</p>
-                                        <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{b.message}</p>
-                                        {(b.bulletPoints ?? []).length > 0 && (
-                                            <ul className="mt-2 space-y-0.5">
-                                                {(b.bulletPoints as string[]).slice(0, 3).map((pt, i) => (
-                                                    <li key={i} className="flex items-start gap-1.5 text-xs text-gray-600 dark:text-gray-300">
-                                                        <span className="w-1 h-1 rounded-full bg-amber-400 mt-1.5 shrink-0" />
-                                                        <span className="line-clamp-1">{pt}</span>
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        )}
-                                    </div>
-                                    <div className="flex items-center gap-1 shrink-0 mt-1"><span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" /><span className="text-[10px] text-green-600 dark:text-green-400 font-semibold">Live</span></div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </Tile>
             </div>
 
             {/* ── What's New — reads release-notes.json (same content as the popup) ── */}
