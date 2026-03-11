@@ -1112,16 +1112,24 @@ Rules:
         const { userId, emoji } = body;
         if (!userId || !emoji) return json(400, { error: "Missing userId or emoji" });
         try {
-            const ref = firestore?.collection("team_notes").doc(nid);
-            const doc = await ref?.get();
-            if (!doc?.exists) return json(404, { error: "Note not found" });
-            const reactions = doc.data()?.reactions || {};
-            const users: string[] = reactions[emoji] || [];
-            const already = users.includes(userId);
-            reactions[emoji] = already ? users.filter((u: string) => u !== userId) : [...users, userId];
-            await ref?.update({ reactions });
+            const ref = firestore!.collection("team_notes").doc(nid);
+            let reactions: Record<string, string[]> = {};
+            // runTransaction ensures concurrent fast-clicks each see the latest committed
+            // state before applying their toggle — prevents reaction count resets
+            await firestore!.runTransaction(async (tx) => {
+                const doc = await tx.get(ref);
+                if (!doc.exists) throw new Error("not_found");
+                reactions = { ...(doc.data()?.reactions || {}) };
+                const users: string[] = reactions[emoji] || [];
+                const already = users.includes(userId);
+                reactions[emoji] = already ? users.filter((u: string) => u !== userId) : [...users, userId];
+                tx.update(ref, { reactions });
+            });
             return json(200, { success: true, reactions });
-        } catch (e) { return json(500, { error: "Failed to react" }); }
+        } catch (e: any) {
+            if (e?.message === "not_found") return json(404, { error: "Note not found" });
+            return json(500, { error: "Failed to react" });
+        }
     }
 
     // PATCH /notes/:id/resolve
