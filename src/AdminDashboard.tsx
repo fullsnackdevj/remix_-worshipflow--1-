@@ -22,12 +22,22 @@ interface Note { id: string; type: "bug" | "feature" | "general"; content: strin
 
 
 interface Props {
-    userName: string; userEmail: string; userId?: string; userPhoto?: string;
+    userName: string; userEmail: string; userId?: string; userPhoto?: string; userRole?: string;
     songs: Song[]; members: Member[]; schedules: Schedule[]; notes: Note[];
     onNavigate: (view: "songs" | "members" | "schedule" | "admin") => void;
     broadcasts?: any[]; pendingUsers?: any[]; loadingExtra?: boolean;
     canAddSong?: boolean; canWriteSchedule?: boolean; canAddMember?: boolean;
 }
+
+const ROLE_STYLE: Record<string, { label: string; bg: string; text: string; border: string; glow: string }> = {
+    admin: { label: "Admin", bg: "bg-amber-500/15", text: "text-amber-300", border: "border-amber-400/30", glow: "rgba(245,158,11,0.28)" },
+    leader: { label: "Worship Leader", bg: "bg-indigo-500/15", text: "text-indigo-300", border: "border-indigo-500/40", glow: "rgba(99,102,241,0.28)" },
+    planning_lead: { label: "Planning Lead", bg: "bg-rose-500/15", text: "text-rose-300", border: "border-rose-500/40", glow: "rgba(244,63,94,0.25)" },
+    musician: { label: "Musician", bg: "bg-purple-500/15", text: "text-purple-300", border: "border-purple-500/40", glow: "rgba(168,85,247,0.25)" },
+    audio_tech: { label: "Audio / Tech", bg: "bg-teal-500/15", text: "text-teal-300", border: "border-teal-500/40", glow: "rgba(20,184,166,0.25)" },
+    member: { label: "Member", bg: "bg-gray-500/10", text: "text-gray-400", border: "border-gray-500/20", glow: "none" },
+    qa_specialist: { label: "QA Specialist", bg: "bg-fuchsia-500/15", text: "text-fuchsia-300", border: "border-fuchsia-500/40", glow: "rgba(217,70,239,0.25)" },
+};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function daysUntil(dateStr: string) {
@@ -249,7 +259,8 @@ function NextServiceTile({ ev, songs, members, myMemberId, onClick }: {
 // ── Main AdminDashboard ───────────────────────────────────────────────────────
 export default function AdminDashboard({
     userName, userEmail, userId = "", songs, members, schedules, notes, onNavigate,
-    broadcasts: broadcastsProp, pendingUsers: pendingUsersProp, loadingExtra, canAddSong, canWriteSchedule, canAddMember,
+    broadcasts: broadcastsProp, pendingUsers: pendingUsersProp, loadingExtra = false,
+    canAddSong, canWriteSchedule, canAddMember, userRole = "admin",
 }: Props) {
     const broadcasts = broadcastsProp ?? [];
     const pendingUsers = pendingUsersProp ?? [];
@@ -307,10 +318,12 @@ export default function AdminDashboard({
                     </div>
                 </div>
                 <div className="flex flex-col items-end gap-2 shrink-0">
-                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500/15 border border-amber-400/30 text-amber-500 dark:text-amber-300"
-                        style={{ boxShadow: "0 0 8px 2px rgba(245,158,11,0.25)" }}>
-                        <Shield size={12} /> Admin
-                    </div>
+                    {(() => { const rs = ROLE_STYLE[userRole] ?? ROLE_STYLE.admin; return (
+                        <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${rs.bg} border ${rs.border} ${rs.text}`}
+                            style={{ boxShadow: rs.glow !== "none" ? `0 0 8px 2px ${rs.glow}` : undefined }}>
+                            <Shield size={12} /> {rs.label}
+                        </div>
+                    ); })()}
                     {!loadingExtra && pendingUsers.length > 0 && (
                         <button onClick={() => onNavigate("admin")}
                             className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 text-amber-700 dark:text-amber-400 text-xs font-semibold hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors">
