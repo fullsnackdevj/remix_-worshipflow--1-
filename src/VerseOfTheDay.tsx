@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from "react";
-import { BookOpen, Heart, Send, ChevronDown, ChevronUp, CheckCircle2 } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { BookOpen, Heart, Send, ChevronDown, ChevronUp, CheckCircle2, Loader2 } from "lucide-react";
 import { VERSES } from "./verseData";
 import { db } from "./firebase";
-import { doc, onSnapshot, setDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc, setDoc, arrayUnion } from "firebase/firestore";
 
 interface VotdNote { uid: string; name: string; photo: string; text: string; createdAt: string; }
 interface Props { userId: string; userName: string; userPhoto: string; }
@@ -25,10 +25,9 @@ function todayKey() { return new Date().toISOString().split("T")[0]; }
 export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
     const verse = VERSES[(dayOfYear() - 1 + VERSES.length) % VERSES.length];
     const dateKey = todayKey();
+    const docRef = doc(db, "verseOfDay", dateKey);
 
-    // ── Single source of truth: onSnapshot ──────────────────────────────────
-    // Firestore SDK writes to LOCAL CACHE first → onSnapshot fires instantly →
-    // no need for separate optimistic state. onSnapshot IS the optimistic update.
+    // ── Local state (single source of truth — same as Notes panel) ─────────
     const [reactions, setReactions] = useState<Record<string, string[]>>({});
     const [notes, setNotes] = useState<VotdNote[]>([]);
     const [noteInput, setNoteInput] = useState("");
@@ -37,61 +36,78 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
     const [savingNote, setSavingNote] = useState(false);
     const [noteSaved, setNoteSaved] = useState(false);
 
-    // Stable doc reference (recreated only when day changes)
-    const docRef = useRef(doc(db, "verseOfDay", dateKey));
-    useEffect(() => { docRef.current = doc(db, "verseOfDay", dateKey); }, [dateKey]);
-
-    // Real-time listener — fires immediately on every local write (optimistic)
+    // ── Load once on mount (just like Notes panel: fetchNotes then done) ────
     useEffect(() => {
-        const unsub = onSnapshot(docRef.current, (snap) => {
+        getDoc(docRef).then(snap => {
             if (snap.exists()) {
                 const d = snap.data() as { reactions?: Record<string, string[]>; notes?: VotdNote[] };
                 setReactions(d.reactions ?? {});
                 setNotes(d.notes ?? []);
             }
-        });
-        return () => unsub();
+        }).catch(() => { });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [dateKey]);
 
-    // ── Toggle reaction — write only; onSnapshot handles the UI ────────────
-    const toggleReaction = async (key: string) => {
+    // ── React — EXACT copy of Notes panel reactToNote pattern ──────────────
+    // Step 1: Update local state INSTANTLY (no waiting)
+    // Step 2: Fire background Firestore write (fire-and-forget)
+    const toggleReaction = (key: string) => {
         if (!userId) return;
-        const current = reactions[key] ?? [];
-        const hasIt = current.includes(userId);
-        // Compute new user list
-        const newUsers = hasIt
-            ? current.filter(u => u !== userId)
-            : [...current, userId];
-        // setDoc with merge works whether doc exists or not — NO arrayUnion/Remove
-        // needed because we already have the current list from onSnapshot state.
-        try {
-            await setDoc(docRef.current,
-                { verse: verse.ref, reactions: { [key]: newUsers } },
-                { merge: true }
-            );
-        } catch { /* silent — UI stays in sync via onSnapshot */ }
+
+        // 1. Instant local update — same as: reactions[emoji] = users.includes(userId) ? remove : add
+        setReactions(prev => {
+            const users = prev[key] ?? [];
+            return {
+                ...prev,
+                [key]: users.includes(userId)
+                    ? users.filter(u => u !== userId)
+                    : [...users, userId],
+            };
+        });
+
+        // 2. Background Firestore sync — fire and forget (no await, no race)
+        const users = reactions[key] ?? [];
+        const hasIt = users.includes(userId);
+        const newUsers = hasIt ? users.filter(u => u !== userId) : [...users, userId];
+
+        getDoc(docRef).then(snap => {
+            if (snap.exists()) {
+                return updateDoc(docRef, { [`reactions.${key}`]: newUsers });
+            } else {
+                return setDoc(docRef, { verse: verse.ref, reactions: { [key]: newUsers }, notes: [] });
+            }
+        }).catch(() => { });
     };
 
-    // ── Submit note — write only; onSnapshot handles the UI ───────────────
+    // ── Submit note — same optimistic pattern as Notes panel ───────────────
     const submitNote = async () => {
         const text = noteInput.trim();
         if (!text || !userId || savingNote) return;
+
         const newNote: VotdNote = {
             uid: userId, name: userName, photo: userPhoto,
             text, createdAt: new Date().toISOString(),
         };
+
+        // 1. Instant local update
+        setNotes(prev => [...prev, newNote]);
         setNoteInput("");
         setSavingNote(true);
+
+        // 2. Background Firestore sync
         try {
-            // Merge the full note array (preserves concurrent writes already in state)
-            await setDoc(docRef.current,
-                { verse: verse.ref, notes: [...notes, newNote] },
-                { merge: true }
-            );
+            const snap = await getDoc(docRef);
+            if (snap.exists()) {
+                await updateDoc(docRef, { notes: arrayUnion(newNote) });
+            } else {
+                await setDoc(docRef, { verse: verse.ref, reactions: {}, notes: [newNote] });
+            }
             setNoteSaved(true);
             setTimeout(() => setNoteSaved(false), 2000);
         } catch {
-            setNoteInput(text); // restore on failure
+            // Rollback note on error
+            setNotes(prev => prev.filter(n => n.createdAt !== newNote.createdAt));
+            setNoteInput(text);
         } finally {
             setSavingNote(false);
         }
@@ -103,7 +119,7 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
     return (
         <div className="rounded-2xl bg-gradient-to-br from-indigo-950/80 via-indigo-900/60 to-violet-900/40 border border-indigo-500/20 shadow-xl overflow-hidden mb-4">
 
-            {/* ── Header ── */}
+            {/* Header */}
             <div className="flex items-center justify-between px-5 pt-4 pb-2">
                 <div className="flex items-center gap-2">
                     <div className="w-7 h-7 rounded-lg bg-indigo-500/20 flex items-center justify-center">
@@ -116,7 +132,7 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
                 </span>
             </div>
 
-            {/* ── Verse ── */}
+            {/* Verse */}
             <div className="px-5 pb-4">
                 <blockquote className="text-white text-sm sm:text-base font-medium leading-relaxed italic mb-2">
                     "{verse.text}"
@@ -124,7 +140,7 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
                 <p className="text-indigo-300 text-xs font-bold tracking-wide">— {verse.ref} (NLT)</p>
             </div>
 
-            {/* ── Insight ── */}
+            {/* Insight */}
             <div className="px-5 pb-3">
                 <button
                     onClick={() => setShowInsight(v => !v)}
@@ -149,7 +165,7 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
                 )}
             </div>
 
-            {/* ── Reactions — Notes-panel pill style ── */}
+            {/* Reactions — Notes panel pill style */}
             <div className="px-5 pb-3 flex flex-wrap items-center gap-1.5">
                 {VERSE_REACTIONS.map(({ key, label, icon, activeColor }) => {
                     const users = reactions[key] ?? [];
@@ -172,7 +188,7 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
                             {users.length > 0 && (
                                 <span className="text-xs font-bold tabular-nums">{users.length}</span>
                             )}
-                            {/* Tooltip */}
+                            {/* Hover tooltip */}
                             <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-gray-900 text-white text-[10px] px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-10 shadow-lg">
                                 {label}
                             </span>
@@ -186,7 +202,7 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
                 )}
             </div>
 
-            {/* ── Team Notes ── */}
+            {/* Team Notes */}
             <div className="border-t border-indigo-500/10 px-5 pt-3 pb-4">
                 <button onClick={() => setShowNotes(v => !v)}
                     className="flex items-center gap-1.5 text-xs font-semibold text-indigo-300 hover:text-indigo-200 transition-colors mb-2">
@@ -232,14 +248,15 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
                                     placeholder="Share your reflection… (Enter to send)"
                                     className="flex-1 bg-transparent px-3 py-2 text-xs text-white placeholder-indigo-400/50 outline-none"
                                 />
+                                {savingNote && <Loader2 size={11} className="text-indigo-400 animate-spin mr-1" />}
                                 {noteSaved && (
                                     <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-semibold pr-1">
                                         <CheckCircle2 size={11} /> Saved!
                                     </span>
                                 )}
-                                {noteInput.trim() && !noteSaved && (
-                                    <button onClick={submitNote} disabled={savingNote}
-                                        className="p-1.5 rounded-lg bg-indigo-500 text-white hover:bg-indigo-400 active:scale-95 transition-all disabled:opacity-50">
+                                {noteInput.trim() && !savingNote && !noteSaved && (
+                                    <button onClick={submitNote}
+                                        className="p-1.5 rounded-lg bg-indigo-500 text-white hover:bg-indigo-400 active:scale-95 transition-all">
                                         <Send size={11} />
                                     </button>
                                 )}
