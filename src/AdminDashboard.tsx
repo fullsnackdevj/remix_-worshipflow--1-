@@ -265,6 +265,8 @@ export default function AdminDashboard({
     }, [schedules]);
     const openBugs = notes.filter(n => n.type === "bug" && !n.resolved).length;
     const openFeqs = notes.filter(n => n.type === "feature" && !n.resolved).length;
+    const resolvedNotes = notes.filter(n => n.resolved).length;
+    const totalNotes = notes.length;
     // Only events literally named "Sunday Service" or "Midweek Service" require a worship leader.
     // serviceType is always "sunday"/"midweek" even for custom events (form default), so we can't use it.
     const isServiceEvent = (e: Schedule) => ["sunday service", "midweek service"].includes((e.eventName ?? "").toLowerCase());
@@ -455,6 +457,7 @@ export default function AdminDashboard({
                 <Tile style={{ gridArea: "issues" }}>
                     <CardHeader icon={<Bug size={14} className="text-red-500" />} title="Open Issues" action="Admin panel" onAction={() => onNavigate("admin")} />
                     <div className="p-5 space-y-3">
+                        {/* Open issues row */}
                         <div className="grid grid-cols-2 gap-3">
                             <div className="flex flex-col items-center py-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/40">
                                 <p className="text-3xl font-black text-red-500 dark:text-red-400">{openBugs}</p>
@@ -463,6 +466,17 @@ export default function AdminDashboard({
                             <div className="flex flex-col items-center py-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/40">
                                 <p className="text-3xl font-black text-amber-500 dark:text-amber-400">{openFeqs}</p>
                                 <p className="text-[10px] text-amber-400 flex items-center gap-0.5 mt-1"><Lightbulb size={9} />Requests</p>
+                            </div>
+                        </div>
+                        {/* Resolved + Total row */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="flex flex-col items-center py-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900/40">
+                                <p className="text-2xl font-black text-emerald-500 dark:text-emerald-400">{resolvedNotes}</p>
+                                <p className="text-[10px] text-emerald-500 dark:text-emerald-400 flex items-center gap-0.5 mt-1"><CheckCheck size={9} />Resolved</p>
+                            </div>
+                            <div className="flex flex-col items-center py-3 rounded-xl bg-sky-50 dark:bg-sky-900/20 border border-sky-100 dark:border-sky-900/40">
+                                <p className="text-2xl font-black text-sky-500 dark:text-sky-400">{totalNotes}</p>
+                                <p className="text-[10px] text-sky-500 dark:text-sky-400 flex items-center gap-0.5 mt-1"><NotepadText size={9} />Total Notes</p>
                             </div>
                         </div>
                         {openBugs + openFeqs === 0 ? (
