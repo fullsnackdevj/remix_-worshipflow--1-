@@ -65,11 +65,11 @@ function greeting() { const h = new Date().getHours(); return h < 12 ? "Good mor
 const CARD = "bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm";
 
 // ── Bento Tile ────────────────────────────────────────────────────────────────
-function Tile({ children, className = "", onClick }: {
-    children: React.ReactNode; className?: string; onClick?: () => void;
+function Tile({ children, className = "", onClick, style }: {
+    children: React.ReactNode; className?: string; onClick?: () => void; style?: React.CSSProperties;
 }) {
     return (
-        <div onClick={onClick}
+        <div onClick={onClick} style={style}
             className={`${CARD} overflow-hidden
                 ${onClick ? "cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-700 hover:shadow-md transition-all duration-150" : ""}
                 ${className}`}>
@@ -370,7 +370,184 @@ export default function AdminDashboard({
                 )}
             </div>
 
-            {/* ── ROW 2: Coverage | Upcoming | Broadcasts ── */}
+            {/* ══════════════════════════════════════════════════════════
+                MAIN BENTO GRID
+                Col 1         Col 2           Col 3
+                [verse      ] [songs        ] [members  ]  ← row 1
+                [verse      ] [church events] [issues   ]  ← row 2
+                [what's new ] [church events]               ← row 3
+            ══════════════════════════════════════════════════════════ */}
+            <div
+                className="grid gap-4"
+                style={{
+                    gridTemplateColumns: "1fr 1fr 1fr",
+                    gridTemplateRows: "auto auto auto",
+                    gridTemplateAreas: `
+                        "verse  songs  members"
+                        "verse  events issues"
+                        "whatsnew events ."
+                    `,
+                }}
+            >
+                {/* Verse of the Day — spans rows 1–2 */}
+                <div style={{ gridArea: "verse" }}>
+                    <VerseOfTheDay userId={userId} userName={userName.split(" ")[0] || userName} userPhoto="" />
+                </div>
+
+                {/* Songs — row 1 col 2 */}
+                <Tile style={{ gridArea: "songs" }} onClick={() => onNavigate("songs")}>
+                    <CardHeader icon={<TrendingUp size={14} className="text-violet-500" />} title="Recently Added Songs" action="Library" onAction={() => onNavigate("songs")} />
+                    {recentSongs.length === 0 ? (
+                        <div className="flex flex-col items-center py-8 gap-3"><BookOpen size={22} className="text-indigo-300" /><p className="text-sm text-gray-400">No songs yet</p></div>
+                    ) : (
+                        <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                            {recentSongs.map(s => (
+                                <div key={s.id} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                                    <div className="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center shrink-0"><Music size={14} className="text-indigo-600 dark:text-indigo-400" /></div>
+                                    <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{s.title}</p><p className="text-xs text-gray-400 truncate">{s.artist}</p></div>
+                                    {s.created_at && <p className="text-xs text-gray-400 shrink-0">{relDate(s.created_at)}</p>}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60">
+                        <p className="text-xs text-gray-400">{songs.length} songs · {songsUsed} used in services</p>
+                    </div>
+                </Tile>
+
+                {/* Members — row 1 col 3 */}
+                <Tile style={{ gridArea: "members" }} onClick={() => onNavigate("members")}>
+                    <CardHeader icon={<Users size={14} className="text-violet-500" />} title="Team by Role" action="All members" onAction={() => onNavigate("members")} />
+                    <div className="p-5 space-y-3">
+                        {roleGroups.length === 0 ? (
+                            <p className="text-sm text-gray-400">No members yet</p>
+                        ) : roleGroups.slice(0, 5).map(([role, count]) => (
+                            <div key={role}>
+                                <div className="flex justify-between text-sm mb-1.5">
+                                    <span className="text-gray-700 dark:text-gray-300 truncate">{role}</span>
+                                    <span className="text-gray-900 dark:text-white font-bold shrink-0 ml-2">{count}</span>
+                                </div>
+                                <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                                    <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full"
+                                        style={{ width: members.length > 0 ? `${Math.round(count / members.length * 100)}%` : "0%" }} />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60">
+                        <p className="text-xs text-gray-400">{members.length} total team members</p>
+                    </div>
+                </Tile>
+
+                {/* Church Events — spans rows 2–3, col 2 */}
+                <Tile style={{ gridArea: "events" }}>
+                    <CardHeader icon={<Clock size={14} className="text-indigo-500" />} title="Upcoming Events" action="Full calendar" onAction={() => onNavigate("schedule")} />
+                    <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                        {upcomingEvents.length === 0 ? (
+                            <div className="flex items-center gap-3 px-5 py-4"><Calendar size={16} className="text-gray-300" /><p className="text-sm text-gray-400">Nothing scheduled</p></div>
+                        ) : upcomingEvents.slice(0, 6).map((ev, i) => {
+                            const d = new Date(ev.date + "T00:00:00");
+                            return (
+                                <div key={ev.id} className={`flex items-center gap-3 px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors ${i === 0 ? "bg-indigo-50/50 dark:bg-indigo-900/10" : ""}`}>
+                                    <div className={`flex flex-col items-center justify-center w-10 h-10 rounded-xl shrink-0 ${i === 0 ? "bg-indigo-600 text-white" : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"}`}>
+                                        <p className="text-[8px] font-bold uppercase opacity-80">{d.toLocaleDateString("en", { month: "short" })}</p>
+                                        <p className="text-sm font-black leading-none">{d.getDate()}</p>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{ev.eventName ?? "Event"}</p>
+                                        <p className="text-xs text-gray-400 truncate">{ev.worshipLeader?.name ? <span>Leader: {ev.worshipLeader.name}</span> : <span className="text-red-400 flex items-center gap-1"><AlertTriangle size={9} />No leader</span>}</p>
+                                    </div>
+                                    <span className={`text-xs font-semibold shrink-0 ${i === 0 ? "text-indigo-600 dark:text-indigo-400" : "text-gray-400"}`}>{daysUntil(ev.date)}</span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </Tile>
+
+                {/* Issues — row 2 col 3 */}
+                <Tile style={{ gridArea: "issues" }}>
+                    <CardHeader icon={<Bug size={14} className="text-red-500" />} title="Open Issues" action="Admin panel" onAction={() => onNavigate("admin")} />
+                    <div className="p-5 space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="flex flex-col items-center py-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/40">
+                                <p className="text-3xl font-black text-red-500 dark:text-red-400">{openBugs}</p>
+                                <p className="text-[10px] text-red-400 flex items-center gap-0.5 mt-1"><Bug size={9} />Bugs</p>
+                            </div>
+                            <div className="flex flex-col items-center py-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/40">
+                                <p className="text-3xl font-black text-amber-500 dark:text-amber-400">{openFeqs}</p>
+                                <p className="text-[10px] text-amber-400 flex items-center gap-0.5 mt-1"><Lightbulb size={9} />Requests</p>
+                            </div>
+                        </div>
+                        {openBugs + openFeqs === 0 ? (
+                            <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 text-xs font-medium">
+                                <CheckCircle2 size={12} />All clear! 🎉
+                            </div>
+                        ) : pendingUsers.length > 0 && (
+                            <button onClick={() => onNavigate("admin")} className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 text-xs font-semibold hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors">
+                                <span className="flex items-center gap-1.5"><UserCheck size={11} />{pendingUsers.length} pending request{pendingUsers.length !== 1 ? "s" : ""}</span>
+                                <ChevronRight size={11} />
+                            </button>
+                        )}
+                    </div>
+                </Tile>
+
+                {/* What's New broadcast card — row 3 col 1 */}
+                <Tile style={{ gridArea: "whatsnew" }}>
+                    <CardHeader
+                        icon={<Megaphone size={14} className="text-amber-500" />}
+                        title={`What's New${broadcasts.length > 0 ? ` · ${broadcasts.length} live` : ""}`}
+                        action="Manage"
+                        onAction={() => onNavigate("admin")}
+                    />
+                    {loadingExtra ? (
+                        <div className="px-5 py-5 animate-pulse flex gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-gray-200 dark:bg-gray-700 shrink-0" />
+                            <div className="flex-1 space-y-2 pt-1"><div className="h-3 w-1/3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-2 w-2/3 bg-gray-200 dark:bg-gray-700 rounded" /></div>
+                        </div>
+                    ) : broadcasts.length === 0 ? (
+                        <div className="flex flex-col items-center gap-3 px-5 py-6 text-center">
+                            <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                                <Megaphone size={18} className="text-amber-400" />
+                            </div>
+                            <div>
+                                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">No active broadcasts</p>
+                                <p className="text-xs text-gray-400 mt-0.5">Send a What's New update to the team</p>
+                            </div>
+                            <button onClick={() => onNavigate("admin")}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold transition-colors">
+                                <Megaphone size={11} /> Create Broadcast
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                            {broadcasts.slice(0, 3).map((b: any) => (
+                                <div key={b.id} className="flex items-start gap-3 px-5 py-4">
+                                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${b.type === "maintenance" ? "bg-orange-100 dark:bg-orange-900/40" : "bg-amber-100 dark:bg-amber-900/40"}`}>
+                                        <Megaphone size={14} className={b.type === "maintenance" ? "text-orange-500" : "text-amber-500"} />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-bold text-gray-900 dark:text-white">{b.title}</p>
+                                        <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{b.message}</p>
+                                        {(b.bulletPoints ?? []).length > 0 && (
+                                            <ul className="mt-2 space-y-0.5">
+                                                {(b.bulletPoints as string[]).slice(0, 3).map((pt, i) => (
+                                                    <li key={i} className="flex items-start gap-1.5 text-xs text-gray-600 dark:text-gray-300">
+                                                        <span className="w-1 h-1 rounded-full bg-amber-400 mt-1.5 shrink-0" />
+                                                        <span className="line-clamp-1">{pt}</span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-1 shrink-0 mt-1"><span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" /><span className="text-[10px] text-green-600 dark:text-green-400 font-semibold">Live</span></div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </Tile>
+            </div>
+
+            {/* ── REST: Coverage + Team side by side ── */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
                 {/* Coverage */}
