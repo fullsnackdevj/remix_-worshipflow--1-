@@ -317,9 +317,9 @@ export default function AdminDashboard({
 
             {/* ── Top section: Church Events (left) + 2×2 metric tiles (right) ── */}
             {/* mobile: stacks | desktop (lg+): side by side */}
-            <div className="flex flex-col lg:flex-row gap-3">
+            <div className="flex flex-col lg:flex-row lg:items-stretch gap-3">
                 {/* LEFT — Daily Bible Verse */}
-                <div className="lg:w-1/2 xl:w-3/5">
+                <div className="lg:w-1/2 xl:w-3/5 h-full">
                     <VerseOfTheDay userId={userId} userName={userName.split(" ")[0] || userName} userPhoto="" />
                 </div>
                 {/* RIGHT — 2×2 metric tiles: Songs | Members on top, Events | Issues on bottom */}

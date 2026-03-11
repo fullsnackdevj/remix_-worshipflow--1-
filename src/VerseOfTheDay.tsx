@@ -79,7 +79,7 @@ export default function VerseOfTheDay({ userId }: Props) {
 
 
     return (
-        <div className="rounded-2xl bg-gradient-to-br from-indigo-950/80 via-indigo-900/60 to-violet-900/40 border border-indigo-500/20 shadow-xl overflow-hidden mb-4">
+        <div className="rounded-2xl bg-gradient-to-br from-indigo-950/80 via-indigo-900/60 to-violet-900/40 border border-indigo-500/20 shadow-xl overflow-hidden h-full">
 
             {/* Header */}
             <div className="flex items-center justify-between px-5 pt-4 pb-2">
