@@ -832,7 +832,7 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
                         <div className="flex gap-1.5 overflow-x-auto pb-0.5 no-scrollbar">
                             {["all", "bug", "feature", "general"].map(f => (
                                 <button key={f} onClick={() => setTypeFilter(f)}
-                                    className={`shrink-0 px-2.5 py-1 rounded-lg text-xs font-medium capitalize transition-all ${typeFilter === f ? "bg-gray-900 dark:bg-white text-white dark:text-gray-900" : "text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"}`}>
+                                    className={`shrink-0 px-2.5 py-1 rounded-lg text-xs font-medium capitalize transition-all ${typeFilter === f ? "bg-gray-800 dark:bg-white text-white dark:text-gray-900" : "text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"}`}>
                                     {f === "all" ? `All (${notes.length})` : f.charAt(0).toUpperCase() + f.slice(1)}
                                 </button>
                             ))}

@@ -2935,10 +2935,10 @@ export default function App() {
                   {/* ── Camera Modal ── */}
                   {showCameraModal && (
                     <div className="fixed inset-0 bg-black/80 z-[999] flex items-center justify-center p-4" onClick={closeCamera}>
-                      <div className="bg-gray-900 rounded-2xl overflow-hidden w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700">
-                          <p className="text-white font-semibold flex items-center gap-2"><Camera size={16} className="text-indigo-400" /> Take a Photo</p>
-                          <button onClick={closeCamera} className="p-1.5 text-gray-400 hover:text-white rounded-lg transition-colors"><X size={18} /></button>
+                      <div className="bg-white dark:bg-gray-900 rounded-2xl overflow-hidden w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+                          <p className="text-gray-900 dark:text-white font-semibold flex items-center gap-2"><Camera size={16} className="text-indigo-500 dark:text-indigo-400" /> Take a Photo</p>
+                          <button onClick={closeCamera} className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-white rounded-lg transition-colors"><X size={18} /></button>
                         </div>
                         {cameraError ? (
                           <div className="p-8 text-center">
@@ -4278,29 +4278,29 @@ export default function App() {
             onClick={closeConfirm}
           />
           {/* Panel */}
-          <div className="relative w-full max-w-sm bg-gray-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
+          <div className="relative w-full max-w-sm bg-white dark:bg-gray-900 border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden">
             {/* Header */}
-            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-white/10">
-              <h2 className="text-lg font-bold text-white">{confirmConfig.title}</h2>
+            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-200 dark:border-white/10">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">{confirmConfig.title}</h2>
               <button
                 onClick={closeConfirm}
-                className="text-gray-400 hover:text-white transition-colors p-1 rounded-lg hover:bg-white/10"
+                className="text-gray-400 hover:text-gray-700 dark:hover:text-white transition-colors p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10"
               >
                 <X size={18} />
               </button>
             </div>
             {/* Body */}
             <div className="px-6 py-5 space-y-2">
-              <p className="text-gray-300 text-sm leading-relaxed">{confirmConfig.message}</p>
+              <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed">{confirmConfig.message}</p>
               {confirmConfig.detail && (
-                <p className="text-gray-400 text-sm font-semibold">{confirmConfig.detail}</p>
+                <p className="text-gray-500 dark:text-gray-400 text-sm font-semibold">{confirmConfig.detail}</p>
               )}
             </div>
             {/* Footer */}
             <div className="flex items-center justify-end gap-3 px-6 pb-6">
               <button
                 onClick={closeConfirm}
-                className="px-5 py-2 text-sm text-gray-400 hover:text-white transition-colors rounded-xl hover:bg-white/10 font-medium"
+                className="px-5 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white transition-colors rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 font-medium"
               >
                 Cancel
               </button>

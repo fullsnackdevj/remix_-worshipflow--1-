@@ -60,7 +60,7 @@ export default function WelcomeToast() {
     return (
         /* ── Matches App.tsx toast stack position: fixed top-4 right-4 ── */
         <div
-            className={`fixed top-4 right-4 z-[300] pointer-events-auto flex items-start gap-3 min-w-[280px] max-w-[340px] bg-gray-900/95 dark:bg-gray-950/95 backdrop-blur border border-white/10 rounded-xl shadow-2xl px-4 py-3 transition-all duration-400 ${exiting ? "opacity-0 translate-x-4" : "opacity-100 translate-x-0"}`}
+            className={`fixed top-4 right-4 z-[300] pointer-events-auto flex items-start gap-3 min-w-[280px] max-w-[340px] bg-white/95 dark:bg-gray-900/95 backdrop-blur border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl px-4 py-3 transition-all duration-400 ${exiting ? "opacity-0 translate-x-4" : "opacity-100 translate-x-0"}`}
             style={{ animation: exiting ? undefined : "slideInRight 0.25s ease-out" }}
         >
             {/* Indigo accent dot — matches toast icon style */}
@@ -70,18 +70,18 @@ export default function WelcomeToast() {
 
             {/* Message */}
             <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-gray-100 leading-tight">
+                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 leading-tight">
                     Welcome, {firstName}! 👋
                 </p>
-                <p className="text-xs text-gray-400 leading-snug mt-0.5">
-                    You're now part of the WorshipFlow team. <Music size={11} className="inline-block ml-0.5 -mt-0.5 text-indigo-400" />
+                <p className="text-xs text-gray-500 dark:text-gray-400 leading-snug mt-0.5">
+                    You're now part of the WorshipFlow team. <Music size={11} className="inline-block ml-0.5 -mt-0.5 text-indigo-500 dark:text-indigo-400" />
                 </p>
             </div>
 
             {/* Dismiss */}
             <button
                 onClick={dismiss}
-                className="flex-shrink-0 text-gray-500 hover:text-gray-200 transition-colors ml-1"
+                className="flex-shrink-0 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors ml-1"
                 aria-label="Dismiss"
             >
                 <X size={14} />
