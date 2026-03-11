@@ -53,7 +53,8 @@ export default function VerseOfTheDay({ userId }: Props) {
         });
     };
 
-    const totalReactions = Object.values(reactions).reduce((s: number, a: string[]) => s + a.length, 0);
+    const totalReactions = (Object.values(reactions) as string[][]).reduce((s, a) => s + a.length, 0);
+
 
     return (
         <div className="rounded-2xl bg-gradient-to-br from-indigo-950/80 via-indigo-900/60 to-violet-900/40 border border-indigo-500/20 shadow-xl overflow-hidden mb-4">

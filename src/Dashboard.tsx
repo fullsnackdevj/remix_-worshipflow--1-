@@ -260,13 +260,13 @@ function MyServiceCard({ schedule, myMemberId, songs, members, onNavigate }: {
                             <Chip name={schedule.worshipLeader.name} photo={getLivePhoto(schedule.worshipLeader.memberId, schedule.worshipLeader.photo)} />
                         )}
                         {(schedule.musicians ?? []).filter(m => m.memberId !== myMemberId).map(m => (
-                            <Chip key={m.memberId} name={m.name} photo={getLivePhoto(m.memberId, m.photo)} />
+                            <React.Fragment key={m.memberId}><Chip name={m.name} photo={getLivePhoto(m.memberId, m.photo)} /></React.Fragment>
                         ))}
                         {(schedule.backupSingers ?? []).filter(m => m.memberId !== myMemberId).map(m => (
-                            <Chip key={m.memberId} name={m.name} photo={getLivePhoto(m.memberId, m.photo)} />
+                            <React.Fragment key={m.memberId}><Chip name={m.name} photo={getLivePhoto(m.memberId, m.photo)} /></React.Fragment>
                         ))}
                         {(schedule.assignments ?? []).flatMap(a => a.members).filter(m => m.memberId !== myMemberId).map(m => (
-                            <Chip key={m.memberId} name={m.name} photo={getLivePhoto(m.memberId, m.photo)} />
+                            <React.Fragment key={m.memberId}><Chip name={m.name} photo={getLivePhoto(m.memberId, m.photo)} /></React.Fragment>
                         ))}
                         {/* Fallback if solo */}
                         {!schedule.worshipLeader && (schedule.musicians ?? []).length === 0 && (schedule.backupSingers ?? []).length === 0 && (schedule.assignments ?? []).length === 0 && (

@@ -85,23 +85,24 @@ interface Schedule {
   notes?: string;
 }
 
-interface ScheduleMember {
-  memberId: string;
-  name: string;
-  photo: string;
-  role: string;
+// ── Pure utility functions (module-level — no state dependencies) ────────────
+function timeAgo(iso: string): string {
+  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (diff < 60) return "just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
 }
 
-interface Schedule {
-  id: string;
-  date: string;
-  serviceType?: string;
-  eventName?: string;
-  worshipLeader?: ScheduleMember | null;
-  backupSingers?: ScheduleMember[];
-  musicians?: ScheduleMember[];
-  songLineup?: { joyful?: string; solemn?: string };
-  notes?: string;
+function eventEmoji(name: string): string {
+  const n = name.toLowerCase();
+  if (n.includes("sunday")) return "🙌";
+  if (n.includes("midweek")) return "✝️";
+  if (n.includes("prayer")) return "🙏";
+  if (n.includes("worship")) return "🎵";
+  if (n.includes("youth")) return "👆";
+  if (n.includes("revival")) return "🔥";
+  return "📅";
 }
 
 const CustomYoutubeIcon = ({ size = 24, className = "" }: { size?: number, className?: string }) => (
@@ -337,13 +338,7 @@ export default function App() {
     }
   };
 
-  const timeAgo = (iso: string) => {
-    const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-    if (diff < 60) return "just now";
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-    return `${Math.floor(diff / 86400)}d ago`;
-  };
+
 
   const [notifActionFor, setNotifActionFor] = useState<string | null>(null);
 
@@ -699,7 +694,8 @@ export default function App() {
     if (currentView === "members" && allMembers.length === 0 && !isLoadingMembers) {
       fetchMembers();
     }
-  }, [currentView]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentView, isLoadingMembers]);
 
   // ── Schedule helpers ──────────────────────────────────────────────────────
   const SCHED_CACHE_KEY = "wf_schedules_cache";
@@ -709,16 +705,7 @@ export default function App() {
     try { localStorage.setItem(SCHED_CACHE_KEY, JSON.stringify(data)); localStorage.setItem(SCHED_CACHE_TS_KEY, Date.now().toString()); } catch { }
   };
 
-  const eventEmoji = (name: string) => {
-    const n = name.toLowerCase();
-    if (n.includes("sunday")) return "🙌";
-    if (n.includes("midweek")) return "✝️";
-    if (n.includes("prayer")) return "🙏";
-    if (n.includes("worship")) return "🎵";
-    if (n.includes("youth")) return "👆";
-    if (n.includes("revival")) return "🔥";
-    return "📅";
-  };
+
 
   const fetchSchedules = async ({ background = false } = {}) => {
     if (!background) setIsLoadingSchedules(true);
@@ -738,15 +725,21 @@ export default function App() {
     }
   };
 
-  // derived: map dateStr -> Schedule[]
-  const dateEventsMap = allSchedules.reduce<Record<string, Schedule[]>>((acc, s) => {
+  // derived: map dateStr -> Schedule[] (memoized to avoid recomputation every render)
+  const dateEventsMap = useMemo(() => allSchedules.reduce<Record<string, Schedule[]>>((acc, s) => {
     if (!acc[s.date]) acc[s.date] = [];
     acc[s.date].push(s);
     return acc;
-  }, {});
+  }, {}), [allSchedules]);
 
-  const selectedDateEvents: Schedule[] = selectedScheduleDate ? (dateEventsMap[selectedScheduleDate] ?? []) : [];
-  const editingExisting: Schedule | null = selectedEventId ? (allSchedules.find(s => s.id === selectedEventId) ?? null) : null;
+  const selectedDateEvents: Schedule[] = useMemo(
+    () => selectedScheduleDate ? (dateEventsMap[selectedScheduleDate] ?? []) : [],
+    [selectedScheduleDate, dateEventsMap]
+  );
+  const editingExisting: Schedule | null = useMemo(
+    () => selectedEventId ? (allSchedules.find(s => s.id === selectedEventId) ?? null) : null,
+    [selectedEventId, allSchedules]
+  );
 
   const openBlankEventForm = (dateStr: string) => {
     setSelectedScheduleDate(dateStr);
@@ -1419,9 +1412,7 @@ export default function App() {
   };
 
 
-  const fetchTagsStandalone = async () => {
-    // No-op: tags are now always loaded as part of fetchSongs (parallel)
-  };
+
 
 
 

@@ -565,9 +565,8 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
         .sort((a, b) => {
             if (sort === "oldest") return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
             if (sort === "most_reacted") {
-                const sumB = Object.values(b.reactions ?? {}).reduce((s: number, arr: unknown) => s + (arr as string[]).length, 0);
-                const sumA = Object.values(a.reactions ?? {}).reduce((s: number, arr: unknown) => s + (arr as string[]).length, 0);
-                return sumB - sumA;
+                const getSum = (note: typeof a) => (Object.values(note.reactions ?? {}) as string[][]).reduce((s, arr) => s + arr.length, 0);
+                return getSum(b) - getSum(a);
             }
 
             return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(); // newest
@@ -852,8 +851,8 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
                             </div>
                         ) : (
                             filtered.map(note => (
+                                <React.Fragment key={note.id}>
                                 <NoteCard
-                                    key={note.id}
                                     note={note}
                                     userId={userId}
                                     userRole={userRole}
@@ -862,6 +861,7 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
                                     onReact={reactToNote}
                                     onResolve={resolveNote}
                                 />
+                                </React.Fragment>
                             ))
                         )}
                     </div>}

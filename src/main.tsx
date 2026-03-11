@@ -7,7 +7,8 @@ import LoginPage from './LoginPage.tsx';
 import AccessDenied from './AccessDenied.tsx';
 import SplashScreen from './SplashScreen.tsx';
 
-const MIN_SPLASH_MS = 5000;
+const MIN_SPLASH_MS = 2000; // 2 seconds — enough for brand impression without feeling slow
+
 
 function Root() {
   const { status } = useAuth();
