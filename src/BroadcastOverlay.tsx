@@ -150,7 +150,7 @@ export default function BroadcastOverlay() {
                             <p className="text-[11px] text-indigo-400 font-bold uppercase tracking-wider mb-0.5">What's New</p>
                             <h2 className="text-lg font-bold text-white leading-tight">{broadcast.title}</h2>
                             {broadcast.createdAt && (
-                                <p className="text-[10px] text-gray-500 mt-0.5">
+                                <p className="text-xs text-gray-400 mt-1 font-medium">
                                     Updated: {(() => {
                                         const d = new Date(broadcast.createdAt!);
                                         const mm = String(d.getMonth() + 1).padStart(2, "0");
