@@ -1128,6 +1128,94 @@ Rules:
         } catch (e) { return json(500, { error: "Failed to save note" }); }
     }
 
+    // PATCH /verse-of-day/note/edit  { date, noteId, userId, text }
+    if (rawPath === "/verse-of-day/note/edit" && method === "PATCH") {
+        const { date, noteId, userId: uid, text } = body;
+        if (!date || !noteId || !uid || !text?.trim()) return json(400, { error: "Missing fields" });
+        try {
+            const ref = firestore.collection("verseOfDay").doc(date);
+            const snap = await ref.get();
+            if (!snap.exists) return json(404, { error: "Not found" });
+            const notes = (snap.data() as any).notes || [];
+            const idx = notes.findIndex((n: any) => n.id === noteId);
+            if (idx === -1) return json(404, { error: "Comment not found" });
+            if (notes[idx].uid !== uid) return json(403, { error: "Not your comment" });
+            notes[idx] = { ...notes[idx], text: text.trim(), updatedAt: new Date().toISOString() };
+            await ref.update({ notes });
+            return json(200, { success: true });
+        } catch { return json(500, { error: "Failed to edit comment" }); }
+    }
+
+    // DELETE /verse-of-day/note/delete  { date, noteId, userId }
+    if (rawPath === "/verse-of-day/note/delete" && method === "DELETE") {
+        const { date, noteId, userId: uid } = body;
+        if (!date || !noteId || !uid) return json(400, { error: "Missing fields" });
+        try {
+            const ref = firestore.collection("verseOfDay").doc(date);
+            const snap = await ref.get();
+            if (!snap.exists) return json(404, { error: "Not found" });
+            const notes = ((snap.data() as any).notes || []).filter((n: any) => n.id !== noteId);
+            await ref.update({ notes });
+            return json(200, { success: true });
+        } catch { return json(500, { error: "Failed to delete comment" }); }
+    }
+
+    // POST /verse-of-day/note/reply  { date, noteId, reply }
+    if (rawPath === "/verse-of-day/note/reply" && method === "POST") {
+        const { date, noteId, reply } = body;
+        if (!date || !noteId || !reply?.uid || !reply?.text) return json(400, { error: "Missing fields" });
+        try {
+            const ref = firestore.collection("verseOfDay").doc(date);
+            const snap = await ref.get();
+            if (!snap.exists) return json(404, { error: "Not found" });
+            const notes = (snap.data() as any).notes || [];
+            const idx = notes.findIndex((n: any) => n.id === noteId);
+            if (idx === -1) return json(404, { error: "Comment not found" });
+            notes[idx].replies = [...(notes[idx].replies || []), reply];
+            await ref.update({ notes });
+            return json(200, { success: true });
+        } catch { return json(500, { error: "Failed to add reply" }); }
+    }
+
+    // PATCH /verse-of-day/note/reply/edit  { date, noteId, replyId, userId, text }
+    if (rawPath === "/verse-of-day/note/reply/edit" && method === "PATCH") {
+        const { date, noteId, replyId, userId: uid, text } = body;
+        if (!date || !noteId || !replyId || !uid || !text?.trim()) return json(400, { error: "Missing fields" });
+        try {
+            const ref = firestore.collection("verseOfDay").doc(date);
+            const snap = await ref.get();
+            if (!snap.exists) return json(404, { error: "Not found" });
+            const notes = (snap.data() as any).notes || [];
+            const ni = notes.findIndex((n: any) => n.id === noteId);
+            if (ni === -1) return json(404, { error: "Comment not found" });
+            const replies = notes[ni].replies || [];
+            const ri = replies.findIndex((r: any) => r.id === replyId);
+            if (ri === -1) return json(404, { error: "Reply not found" });
+            if (replies[ri].uid !== uid) return json(403, { error: "Not your reply" });
+            replies[ri] = { ...replies[ri], text: text.trim(), updatedAt: new Date().toISOString() };
+            notes[ni].replies = replies;
+            await ref.update({ notes });
+            return json(200, { success: true });
+        } catch { return json(500, { error: "Failed to edit reply" }); }
+    }
+
+    // DELETE /verse-of-day/note/reply/delete  { date, noteId, replyId, userId }
+    if (rawPath === "/verse-of-day/note/reply/delete" && method === "DELETE") {
+        const { date, noteId, replyId, userId: uid } = body;
+        if (!date || !noteId || !replyId || !uid) return json(400, { error: "Missing fields" });
+        try {
+            const ref = firestore.collection("verseOfDay").doc(date);
+            const snap = await ref.get();
+            if (!snap.exists) return json(404, { error: "Not found" });
+            const notes = (snap.data() as any).notes || [];
+            const ni = notes.findIndex((n: any) => n.id === noteId);
+            if (ni === -1) return json(404, { error: "Not found" });
+            notes[ni].replies = (notes[ni].replies || []).filter((r: any) => r.id !== replyId);
+            await ref.update({ notes });
+            return json(200, { success: true });
+        } catch { return json(500, { error: "Failed to delete reply" }); }
+    }
+
     return json(404, { error: "Not found" });
 };
 
