@@ -359,45 +359,6 @@ export default function Dashboard({
             />
         );
     }
-    // ── All other roles → Coming Soon ─────────────────────────────────────
-    return (
-        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 text-center px-4">
-            {/* Greeting */}
-            <div className="flex items-center gap-4 self-start w-full max-w-xl">
-                <div className="w-1.5 h-14 rounded-full bg-indigo-500 dark:bg-indigo-400 shrink-0" />
-                <div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">{greetingStr()},</p>
-                    <h1 className="text-3xl font-bold text-gray-900 dark:text-white leading-tight">{userName.split(" ")[0] || userName} 👋</h1>
-                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{new Date().toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</p>
-                </div>
-                <div className="ml-auto shrink-0">
-                    <RoleBadgeChip role={userRole} />
-                </div>
-            </div>
-
-            {/* Coming Soon card */}
-            <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-3xl border border-gray-200 dark:border-gray-700 shadow-xl p-10 flex flex-col items-center gap-5">
-                <div className="w-20 h-20 rounded-3xl bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center">
-                    <span className="text-4xl">🚧</span>
-                </div>
-                <div className="space-y-2">
-                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Dashboard Coming Soon</h2>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
-                        We're building an amazing personalized dashboard for your role.<br />
-                        Check back soon — it's going to be great! 🙌
-                    </p>
-                </div>
-                <div className="flex gap-2 flex-wrap justify-center">
-                    <button onClick={() => onNavigate("songs")}
-                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition-colors">
-                        🎵 Song Library
-                    </button>
-                    <button onClick={() => onNavigate("schedule")}
-                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-sm font-semibold transition-colors">
-                        📅 Schedule
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
+    // ── All other roles → null (Dashboard nav item is disabled for non-admins)
+    return null;
 }

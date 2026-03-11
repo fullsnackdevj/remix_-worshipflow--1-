@@ -1743,18 +1743,33 @@ export default function App() {
             <p className="px-3 text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 mt-2">Worship</p>
           )}
 
-          {/* Dashboard */}
-          <button
-            onClick={() => { setCurrentView("dashboard"); setIsMobileMenuOpen(false); }}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "dashboard"
-              ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300"
-              : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-              } ${isSidebarCollapsed ? "justify-center" : ""}`}
-            title="Dashboard"
-          >
-            <LayoutGrid size={20} className="shrink-0" />
-            {!isSidebarCollapsed && <span>Dashboard</span>}
-          </button>
+          {/* Dashboard — admin only; others see disabled + Soon badge */}
+          {isAdmin ? (
+            <button
+              onClick={() => { setCurrentView("dashboard"); setIsMobileMenuOpen(false); }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "dashboard"
+                ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300"
+                : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                } ${isSidebarCollapsed ? "justify-center" : ""}`}
+              title="Dashboard"
+            >
+              <LayoutGrid size={20} className="shrink-0" />
+              {!isSidebarCollapsed && <span>Dashboard</span>}
+            </button>
+          ) : (
+            <div
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium opacity-40 cursor-not-allowed select-none text-gray-500 dark:text-gray-500 ${isSidebarCollapsed ? "justify-center" : ""}`}
+              title="Dashboard — Coming Soon"
+            >
+              <LayoutGrid size={20} className="shrink-0" />
+              {!isSidebarCollapsed && (
+                <span className="flex items-center gap-2">
+                  Dashboard
+                  <span className="text-[10px] font-bold uppercase tracking-wider bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded-full">Soon</span>
+                </span>
+              )}
+            </div>
+          )}
 
           {/* Song Management */}
           <button
