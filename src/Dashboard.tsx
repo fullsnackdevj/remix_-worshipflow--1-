@@ -359,236 +359,45 @@ export default function Dashboard({
             />
         );
     }
-
-
-
-    // Role flags
-    const isLeader = userRole === "leader";
-    const isPlanningLead = userRole === "planning_lead";
-    const canSeeSchedule = isAdmin || isLeader || isPlanningLead;
-    const canSeeTeam = isAdmin || isLeader || isPlanningLead;
-    const canSeeSongs = userRole !== "member";
-
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-
-    // Find current user's member record by email
-    const myMember = useMemo(() =>
-        members.find(m => m.email?.toLowerCase().trim() === userEmail?.toLowerCase().trim())
-        , [members, userEmail]);
-    const myMemberId = myMember?.id ?? null;
-
-    // Upcoming events
-    const upcomingEvents = useMemo(() =>
-        schedules.filter(s => { try { return new Date(s.date + "T00:00:00") >= today; } catch { return false; } })
-            .sort((a, b) => a.date.localeCompare(b.date))
-        , [schedules]);
-
-    // My upcoming services
-    const myServices = useMemo(() => {
-        if (!myMemberId) return [];
-        return upcomingEvents.filter(s =>
-            s.worshipLeader?.memberId === myMemberId ||
-            (s.musicians ?? []).some(m => m.memberId === myMemberId) ||
-            (s.backupSingers ?? []).some(m => m.memberId === myMemberId) ||
-            (s.assignments ?? []).some(a => a.members.some(m => m.memberId === myMemberId))
-        );
-    }, [upcomingEvents, myMemberId]);
-
-    const myNextService = myServices[0] ?? null;
-
-    // Admin stats
-    const getLivePhoto = useCallback((id: string, fb?: string) => {
-        const m = members.find(mem => mem.id === id); const u = m?.photo ?? fb ?? "";
-        return u.startsWith("http") ? u : "";
-    }, [members]);
-
-    const eventsThisMonth = useMemo(() => {
-        const y = today.getFullYear(), mo = today.getMonth();
-        return schedules.filter(s => { try { const d = new Date(s.date + "T00:00:00"); return d.getFullYear() === y && d.getMonth() === mo; } catch { return false; } }).length;
-    }, [schedules]);
-    const totalServicesAllTime = schedules.filter(s => s.serviceType === "sunday_service" || s.serviceType === "midweek_service").length;
-    const songsUsedInServices = useMemo(() => {
-        const ids = new Set<string>();
-        schedules.forEach(s => { if (s.songLineup?.solemn) ids.add(s.songLineup.solemn); if (s.songLineup?.joyful) ids.add(s.songLineup.joyful); });
-        return ids.size;
-    }, [schedules]);
-    const roleGroups = useMemo(() => {
-        const g: Record<string, number> = {};
-        members.forEach(m => { const r = m.roles?.[0] || "member"; g[r] = (g[r] ?? 0) + 1; });
-        return Object.entries(g).sort((a, b) => b[1] - a[1]);
-    }, [members]);
-    const coverageWarnings = useMemo(() => upcomingEvents.slice(0, 5).filter(e => !e.worshipLeader), [upcomingEvents]);
-    const coverageOk = useMemo(() => upcomingEvents.slice(0, 5).filter(e => !!e.worshipLeader), [upcomingEvents]);
-    const openBugs = notes.filter(n => n.type === "bug" && !n.resolved).length;
-    const openFeatures = notes.filter(n => n.type === "feature" && !n.resolved).length;
-    const unresolvedNotes = notes.filter(n => !n.resolved).length;
-    const recentNotes = [...notes].sort((a, b) => { try { return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(); } catch { return 0; } }).slice(0, 3);
-    const recentSongs = [...songs].filter(s => s.created_at).sort((a, b) => { try { return new Date(b.created_at!).getTime() - new Date(a.created_at!).getTime(); } catch { return 0; } }).slice(0, 4);
-
-    // Quick Actions — filtered by permissions
-    const quickActions = [
-        canAddSong && { label: "Add Song", icon: <Music size={14} className="text-indigo-400" />, action: () => onNavigate("songs") },
-        canWriteSchedule && { label: "Schedule Service", icon: <Calendar size={14} className="text-emerald-400" />, action: () => onNavigate("schedule") },
-        canAddMember && { label: "Add Member", icon: <UserPlus size={14} className="text-violet-400" />, action: () => onNavigate("members") },
-        isAdmin && { label: "New Broadcast", icon: <Megaphone size={14} className="text-amber-400" />, action: () => onNavigate("admin") },
-        // View-only links for everyone
-        !canAddSong && { label: "Song Library", icon: <Music size={14} className="text-indigo-400" />, action: () => onNavigate("songs") },
-        !canWriteSchedule && { label: "View Schedule", icon: <Calendar size={14} className="text-emerald-400" />, action: () => onNavigate("schedule") },
-    ].filter(Boolean).filter((v, i, arr) => { const a = v as any; return arr.findIndex((x: any) => x && a && x.label === a.label) === i; }) as { label: string; icon: React.ReactNode; action: () => void }[];
-
+    // ── All other roles → Coming Soon ─────────────────────────────────────
     return (
-        <div className="space-y-4 p-0 pb-12">
-
-            {/* ── Greeting row — mirrors AdminDashboard style ── */}
-            <div className="flex items-center justify-between gap-4 pt-1">
-                <div className="flex items-center gap-4">
-                    <div className="w-1.5 h-14 rounded-full bg-indigo-500 dark:bg-indigo-400 shrink-0" />
-                    <div>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">{greetingStr()},</p>
-                        <h1 className="text-3xl font-bold text-gray-900 dark:text-white leading-tight">{userName.split(" ")[0] || userName} 👋</h1>
-                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{new Date().toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</p>
-                    </div>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 text-center px-4">
+            {/* Greeting */}
+            <div className="flex items-center gap-4 self-start w-full max-w-xl">
+                <div className="w-1.5 h-14 rounded-full bg-indigo-500 dark:bg-indigo-400 shrink-0" />
+                <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{greetingStr()},</p>
+                    <h1 className="text-3xl font-bold text-gray-900 dark:text-white leading-tight">{userName.split(" ")[0] || userName} 👋</h1>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{new Date().toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</p>
                 </div>
-                <div className="flex flex-col items-end gap-2 shrink-0">
+                <div className="ml-auto shrink-0">
                     <RoleBadgeChip role={userRole} />
                 </div>
             </div>
 
-            {/* ── Verse of the Day — below greeting ── */}
-            <VerseOfTheDay userId={userId} userName={userName} userPhoto={userPhoto} />
-
-            {/* ── Quick actions — 4-col icon grid same as admin ── */}
-            <div className={`grid gap-2 ${quickActions.length <= 2 ? "grid-cols-2" : quickActions.length === 3 ? "grid-cols-3" : "grid-cols-4"}`}>
-                {quickActions.map(({ label, icon, action }) => (
-                    <button key={label} onClick={action}
-                        className="flex flex-col items-center justify-center gap-1.5 py-3 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors">
-                        {icon}
-                        <span className="text-[10px] font-semibold hidden sm:block">{label}</span>
+            {/* Coming Soon card */}
+            <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-3xl border border-gray-200 dark:border-gray-700 shadow-xl p-10 flex flex-col items-center gap-5">
+                <div className="w-20 h-20 rounded-3xl bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center">
+                    <span className="text-4xl">🚧</span>
+                </div>
+                <div className="space-y-2">
+                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Dashboard Coming Soon</h2>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
+                        We're building an amazing personalized dashboard for your role.<br />
+                        Check back soon — it's going to be great! 🙌
+                    </p>
+                </div>
+                <div className="flex gap-2 flex-wrap justify-center">
+                    <button onClick={() => onNavigate("songs")}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition-colors">
+                        🎵 Song Library
                     </button>
-                ))}
+                    <button onClick={() => onNavigate("schedule")}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-sm font-semibold transition-colors">
+                        📅 Schedule
+                    </button>
+                </div>
             </div>
-
-            {/* ── Metric tiles — role-gated ── */}
-            {canSeeSchedule && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                    {[
-                        { label: "Songs", value: songs.length, sub: `${songsUsedInServices} in services`, iconBg: "bg-indigo-100 dark:bg-indigo-900/40", icon: <Music size={15} className="text-indigo-600 dark:text-indigo-400" />, nav: "songs" as const },
-                        { label: "Team Members", value: members.length, sub: `${members.filter(m => m.status !== "inactive").length} active`, iconBg: "bg-violet-100 dark:bg-violet-900/40", icon: <Users size={15} className="text-violet-600 dark:text-violet-400" />, nav: "members" as const },
-                        { label: "Church Events", value: upcomingEvents.length, sub: `${eventsThisMonth} this month`, iconBg: "bg-emerald-100 dark:bg-emerald-900/40", icon: <Calendar size={15} className="text-emerald-600 dark:text-emerald-400" />, nav: "schedule" as const },
-                        { label: "Open Notes", value: unresolvedNotes, sub: `${openBugs} bugs · ${openFeatures} req`, iconBg: "bg-amber-100 dark:bg-amber-900/40", icon: <NotepadText size={15} className="text-amber-600 dark:text-amber-400" />, nav: null as null },
-                    ].map(({ label, value, sub, iconBg, icon, nav }) => (
-                        <div key={label}
-                            onClick={() => nav && onNavigate(nav)}
-                            className={`bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-4 flex flex-col justify-between overflow-hidden ${nav ? "cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-700 hover:shadow-md transition-all duration-150" : ""}`}>
-                            <div className="flex items-start justify-between">
-                                <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${iconBg}`}>{icon}</div>
-                                {nav && <ArrowUpRight size={13} className="text-gray-300 dark:text-gray-600 mt-0.5" />}
-                            </div>
-                            <div className="mt-2">
-                                <p className="text-3xl font-black text-gray-900 dark:text-white tracking-tight leading-none">{value}</p>
-                                <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 mt-1">{label}</p>
-                                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">{sub}</p>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
-
-            {/* ── My Next Service hero ── */}
-            <MyServiceCard schedule={myNextService} myMemberId={myMemberId} songs={songs} members={members} onNavigate={onNavigate} />
-
-            {/* ── Broadcasts ── */}
-            <BroadcastsCard broadcasts={broadcasts} loading={loadingExtra} isAdmin={isAdmin} onNavigate={onNavigate} />
-
-            {/* ── Upcoming Schedule timeline ── */}
-            {canSeeSchedule && (
-                <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-                    <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
-                        <div className="flex items-center gap-2 font-semibold text-gray-900 dark:text-white text-sm"><Clock size={15} className="text-indigo-500" /> Upcoming Events</div>
-                        <button onClick={() => onNavigate("schedule")} className="text-xs text-indigo-500 hover:text-indigo-400 flex items-center gap-1 font-medium">Full calendar <ChevronRight size={13} /></button>
-                    </div>
-                    {upcomingEvents.length === 0 ? (
-                        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-5 py-5">
-                            <div className="flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-700/60 flex items-center justify-center"><Calendar size={18} className="text-gray-400" /></div><p className="text-sm text-gray-500 dark:text-gray-400">No upcoming events scheduled</p></div>
-                            {canWriteSchedule && <button onClick={() => onNavigate("schedule")} className="shrink-0 flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"><Plus size={13} /> Add Event</button>}
-                        </div>
-                    ) : (
-                        <div className="divide-y divide-gray-100 dark:divide-gray-700">
-                            {upcomingEvents.slice(0, 5).map((ev, i) => (
-                                <div key={ev.id} className={`flex items-center gap-4 px-5 py-3.5 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors ${i === 0 ? "bg-indigo-50/50 dark:bg-indigo-900/10" : ""}`}>
-                                    <div className={`w-10 h-10 rounded-xl shrink-0 flex flex-col items-center justify-center ${i === 0 ? "bg-indigo-600 text-white" : "bg-gray-100 dark:bg-gray-700"}`}>
-                                        <p className="text-[9px] font-bold uppercase opacity-80">{new Date(ev.date + "T00:00:00").toLocaleDateString("en", { month: "short" })}</p>
-                                        <p className={`text-base font-black leading-tight ${i === 0 ? "text-white" : "text-gray-900 dark:text-white"}`}>{new Date(ev.date + "T00:00:00").getDate()}</p>
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{ev.eventName ?? "Event"}</p>
-                                        <p className="text-xs mt-0.5 truncate">{ev.worshipLeader?.name ? <span className="text-gray-400">Leader: {ev.worshipLeader.name}</span> : <span className="text-red-400 flex items-center gap-1"><AlertTriangle size={9} /> No leader assigned</span>}</p>
-                                    </div>
-                                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${svcColor(ev.serviceType)}`}>{svcLabel(ev.serviceType)}</span>
-                                    <span className={`text-xs font-semibold shrink-0 ${i === 0 ? "text-indigo-600 dark:text-indigo-400" : "text-gray-400"}`}>{daysUntil(ev.date)}</span>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {/* ── Bottom bento: Songs + Team ── */}
-            {(canSeeSongs || canSeeTeam) && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    {canSeeSongs && (
-                        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-                            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
-                                <div className="flex items-center gap-2 font-semibold text-gray-900 dark:text-white text-sm"><TrendingUp size={15} className="text-indigo-500" /> Recently Added Songs</div>
-                                <button onClick={() => onNavigate("songs")} className="text-xs text-indigo-500 hover:text-indigo-400 flex items-center gap-1 font-medium">Library <ChevronRight size={13} /></button>
-                            </div>
-                            {recentSongs.length === 0 ? (
-                                <div className="flex flex-col items-center py-8 gap-3 text-center px-5">
-                                    <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center"><BookOpen size={22} className="text-indigo-400" /></div>
-                                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400">No songs yet</p>
-                                    {canAddSong && <button onClick={() => onNavigate("songs")} className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"><Plus size={12} /> Add First Song</button>}
-                                </div>
-                            ) : (
-                                <div className="divide-y divide-gray-100 dark:divide-gray-700">
-                                    {recentSongs.map(s => (
-                                        <div key={s.id} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-                                            <div className="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center shrink-0"><Music size={14} className="text-indigo-600 dark:text-indigo-400" /></div>
-                                            <div className="min-w-0 flex-1"><p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{s.title}</p><p className="text-xs text-gray-400 truncate">{s.artist}</p></div>
-                                            {s.created_at && <p className="text-xs text-gray-400 shrink-0">{relativeDate(s.created_at)}</p>}
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                            <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60">
-                                <p className="text-xs text-gray-400">{songs.length} songs · {songsUsedInServices} used in services</p>
-                            </div>
-                        </div>
-                    )}
-                    {canSeeTeam && (
-                        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-                            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
-                                <div className="flex items-center gap-2 font-semibold text-gray-900 dark:text-white text-sm"><Users size={15} className="text-violet-500" /> Team by Role</div>
-                                <button onClick={() => onNavigate("members")} className="text-xs text-indigo-500 hover:text-indigo-400 flex items-center gap-1 font-medium">All members <ChevronRight size={13} /></button>
-                            </div>
-                            <div className="p-5 space-y-3">
-                                {roleGroups.length === 0 ? (
-                                    <div className="flex flex-col items-center py-4 gap-2 text-center"><UserPlus size={22} className="text-violet-400 opacity-50" /><p className="text-xs text-gray-400">No team members yet</p></div>
-                                ) : roleGroups.map(([role, count]) => (
-                                    <div key={role} className="flex items-center gap-3">
-                                        <div className="flex items-center gap-1.5 w-36 shrink-0 text-sm text-gray-700 dark:text-gray-300 truncate">{role}</div>
-                                        <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-2 overflow-hidden"><div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full" style={{ width: members.length > 0 ? `${Math.round((count / members.length) * 100)}%` : "0%" }} /></div>
-                                        <span className="text-sm font-bold text-gray-900 dark:text-white w-5 text-right shrink-0">{count}</span>
-                                    </div>
-                                ))}
-                            </div>
-                            <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60">
-                                <p className="text-xs text-gray-400">{members.length} total team members</p>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            )}
         </div>
     );
 }
-
