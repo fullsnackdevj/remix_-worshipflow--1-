@@ -315,15 +315,13 @@ export default function AdminDashboard({
             </div>
 
 
-            {/* ── Top section: Church Events (left) + 2×2 metric tiles (right) ── */}
-            {/* mobile: stacks | desktop (lg+): side by side */}
-            <div className="flex flex-col lg:flex-row lg:items-stretch gap-3">
-                {/* LEFT — Daily Bible Verse */}
-                <div className="lg:w-1/2 xl:w-3/5 h-full">
-                    <VerseOfTheDay userId={userId} userName={userName.split(" ")[0] || userName} userPhoto="" />
-                </div>
+            {/* ── Top section: Daily Verse (left) + 2×2 metric tiles (right) ── */}
+            {/* grid: mobile=1col, lg+=2col with 3:2 ratio. Grid cells auto-stretch to equal height */}
+            <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-3">
+                {/* LEFT — Daily Bible Verse fills the full grid cell height */}
+                <VerseOfTheDay userId={userId} userName={userName.split(" ")[0] || userName} userPhoto="" />
                 {/* RIGHT — 2×2 metric tiles: Songs | Members on top, Events | Issues on bottom */}
-                <div className="lg:w-1/2 xl:w-2/5 grid grid-cols-2 gap-3 content-start">
+                <div className="grid grid-cols-2 gap-3 content-start">
                     <MetricTile label="Songs" value={songs.length} sub={`${songsUsed} in services`}
                         iconBg="bg-indigo-100 dark:bg-indigo-900/40" icon={<Music size={15} className="text-indigo-600 dark:text-indigo-400" />}
                         onClick={() => onNavigate("songs")} />
@@ -337,7 +335,6 @@ export default function AdminDashboard({
                         iconBg="bg-amber-100 dark:bg-amber-900/40" icon={<AlertCircle size={15} className="text-amber-600 dark:text-amber-400" />} />
                 </div>
             </div>
-
 
             {/* Alert banners */}
             <div className="flex flex-wrap gap-2">
