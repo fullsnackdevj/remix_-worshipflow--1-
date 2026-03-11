@@ -176,7 +176,10 @@ function NextServiceTile({ ev, songs, members, myMemberId, onClick }: {
                             <p className="text-lg font-bold text-gray-900 dark:text-white leading-tight truncate">{ev.eventName ?? "Event"}</p>
                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${isUrgent ? "bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400" : "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300"}`}>{du}</span>
                         </div>
-                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full mt-1 inline-block ${svcColor(ev.serviceType)}`}>{svcLabel(ev.serviceType)}</span>
+                        {["sunday service", "midweek service"].includes((ev.eventName ?? "").toLowerCase())
+                            ? <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full mt-1 inline-block ${svcColor(ev.serviceType)}`}>{svcLabel(ev.serviceType)}</span>
+                            : <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full mt-1 inline-block bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">Custom Event</span>
+                        }
                         {ev.worshipLeader && <p className="text-xs text-gray-400 mt-1 flex items-center gap-1"><Mic2 size={10} />Leader: {ev.worshipLeader.name}</p>}
                     </div>
                 </div>
