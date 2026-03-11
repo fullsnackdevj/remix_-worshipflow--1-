@@ -260,9 +260,15 @@ export default function App() {
   const [simulatedRole, setSimulatedRole] = useState<string>(() => {
     try { return localStorage.getItem(`wf_qa_role_${user?.uid}`) || "qa_specialist"; } catch { return "qa_specialist"; }
   });
+  // ref so handleRoleSwitch can call showToast before it is defined below
+  const showToastRef = useRef<((type: string, msg: string) => void) | null>(null);
   const handleRoleSwitch = (role: string) => {
     setSimulatedRole(role);
     try { localStorage.setItem(`wf_qa_role_${user?.uid}`, role); } catch { /* noop */ }
+    const label = role === "qa_specialist"
+      ? "Reset to QA Specialist"
+      : `Now testing as: ${ROLE_BADGE[role]?.label ?? role}`;
+    showToastRef.current?.("info", label);
   };
   // The role used for ALL permission checks
   const effectiveRole = isQA ? simulatedRole : userRole;
@@ -644,6 +650,9 @@ export default function App() {
     setToasts(prev => [...prev, { id, type, message }]);
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3500);
   };
+  // Keep the ref always pointing to the latest showToast so handleRoleSwitch can call it
+  useEffect(() => { showToastRef.current = showToast; });
+
 
   const dismissToast = (id: number) =>
     setToasts(prev => prev.filter(t => t.id !== id));
@@ -1984,17 +1993,6 @@ export default function App() {
           </div>
         </header>
 
-        {/* QA Specialist floating testing indicator */}
-        {isQA && simulatedRole !== "qa_specialist" && (
-          <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[300] pointer-events-none">
-            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-fuchsia-600/90 backdrop-blur-sm shadow-lg border border-fuchsia-400/30">
-              <span className="w-2 h-2 rounded-full bg-fuchsia-300 animate-pulse" />
-              <span className="text-xs font-semibold text-white tracking-wide">
-                Testing as: {ROLE_BADGE[simulatedRole]?.label ?? simulatedRole}
-              </span>
-            </div>
-          </div>
-        )}
 
         {/* Content Area */}
         <main className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-900">
