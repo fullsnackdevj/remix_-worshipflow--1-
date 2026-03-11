@@ -526,6 +526,10 @@ export default function App() {
   const [formErrors, setFormErrors] = useState<{ title?: string; artist?: string; lyrics?: string; tags?: string }>({});
   const [copiedField, setCopiedField] = useState<"lyrics" | "chords" | null>(null);
   const [transposeSteps, setTransposeSteps] = useState(0);
+  // refs for focus-on-error
+  const songTitleRef = useRef<HTMLInputElement>(null);
+  const songArtistRef = useRef<HTMLInputElement>(null);
+  const songLyricsWrapRef = useRef<HTMLDivElement>(null);
 
   // ── Undo/Redo history for lyrics & chords ──────────────────────────────────────
   const lyricsHistory = useRef<string[]>([]);
@@ -1440,6 +1444,17 @@ export default function App() {
     const errors = validateForm();
     if (Object.keys(errors).length > 0) {
       setFormErrors(errors);
+      // Build a readable list of what's missing
+      const missing: string[] = [];
+      if (errors.title)  missing.push("Song Title");
+      if (errors.artist) missing.push("Artist");
+      if (errors.tags)   missing.push("At least one Tag");
+      if (errors.lyrics) missing.push("Lyrics");
+      showToast("error", `Please fill in: ${missing.join(", ")}.`);
+      // Focus the first empty field
+      if (errors.title)       { songTitleRef.current?.focus(); }
+      else if (errors.artist) { songArtistRef.current?.focus(); }
+      else if (errors.lyrics) { songLyricsWrapRef.current?.querySelector("textarea")?.focus(); }
       return;
     }
     setFormErrors({});
@@ -3425,6 +3440,7 @@ export default function App() {
                               Title <span className="text-red-500">*</span>
                             </label>
                             <input
+                              ref={songTitleRef}
                               type="text"
                               value={editTitle}
                               onChange={(e) => { setEditTitle(e.target.value); if (formErrors.title) setFormErrors(p => ({ ...p, title: undefined })); }}
@@ -3438,6 +3454,7 @@ export default function App() {
                               Artist <span className="text-red-500">*</span>
                             </label>
                             <input
+                              ref={songArtistRef}
                               type="text"
                               value={editArtist}
                               onChange={(e) => { setEditArtist(e.target.value); if (formErrors.artist) setFormErrors(p => ({ ...p, artist: undefined })); }}
@@ -3546,7 +3563,7 @@ export default function App() {
                             </div>
 
                             {/* Seamless textarea box */}
-                            <div className={`rounded-xl overflow-hidden border ${formErrors.lyrics ? "border-red-400" : "border-gray-300 dark:border-gray-600"}`}>
+                            <div ref={songLyricsWrapRef} className={`rounded-xl overflow-hidden border ${formErrors.lyrics ? "border-red-400" : "border-gray-300 dark:border-gray-600"}`}>
                               <AutoTextarea
                                 value={editLyrics}
                                 onChange={(e) => {
