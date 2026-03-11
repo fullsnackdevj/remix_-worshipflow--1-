@@ -1,23 +1,13 @@
 {
-    "title": "What's New in WorshipFlow",
-    "message": "Here's everything that's been added and improved as of March 2026:",
+    "title": "What's New in WorshipFlow ✨",
+    "message": "Fresh updates just dropped — here's what's new today:",
     "releases": [
         {
-            "version": "March 2026",
+            "version": "March 10–11, 2026",
             "highlights": [
-                "Verse of the Day — a daily NLT Bible verse with inspiring insight and cross-references now sits at the top of every dashboard. React with 6 emotion emojis (Praying, Love, Fire, Touched, Blessed, Worship) — reactions save instantly and persist across all users.",
-                "Bento-grid dashboard — all team members (Worship Leader, Music Director, Member) now see a beautiful card-based layout tailored to their own role and permissions, matching the Admin layout style.",
-                "Dashboard greeting — personalized greeting now appears above the Verse of the Day with the user's name and time of day.",
-                "Church Events tile — renamed and redesigned to correctly count upcoming events (not just services) with member avatars drawn from the schedule.",
-                "Dashboard cards height — reduced card heights across the board to show more information without excessive scrolling.",
-                "What's New broadcast — auto-generate now pulls from the curated release notes file for accurate and up-to-date feature highlights.",
-                "Broadcast targeting — admins can now target broadcasts to all members, specific roles, or individuals.",
-                "Quick Actions — the icon grid now stretches edge-to-edge for faster one-tap access on mobile.",
-                "Calendar event panel — tapping a date on mobile now opens a centered modal instead of a bottom sheet.",
-                "Profile photo fallbacks — member avatars resolve through multiple fallback strategies for higher accuracy.",
-                "Sidebar navigation — automatically closes on mobile when navigating to Scheduling.",
-                "Admin badge — redesigned with a subtle glow and correct alignment next to the greeting name.",
-                "Performance — multiple rendering bugs fixed across dashboard and scheduling modules."
+                "🙏 Verse of the Day — A fresh NLT Bible verse now greets every team member at the top of the dashboard each day, with a heartfelt insight and cross-references. React with emojis (Praying, Love, Fire, Touched, Blessed, Worship) — your reactions are saved and visible to the whole team.",
+                "📊 Bento Dashboard for Everyone — All team members now see the same beautiful card-based dashboard layout, each tailored to their role. Leaders, Musicians, Audio/Tech, and Members each see what matters to them — cleanly and without clutter.",
+                "👋 Personalized Greeting — Your name and the time of day now appear above the Verse at the top of your dashboard. A small touch that makes the app feel more personal."
             ]
         }
     ]
