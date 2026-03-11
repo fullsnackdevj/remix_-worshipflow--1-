@@ -64,7 +64,9 @@ body {
 }
 
 /* Global button press feedback — tactile active state */
-button {
+button,
+a {
+  cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
 
