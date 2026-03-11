@@ -126,11 +126,12 @@ export default function BroadcastOverlay() {
     // ── What's New Screen ──────────────────────────────────────────────────────
     return (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
-            <div className="relative bg-gray-900 border border-gray-700/60 rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="relative bg-gray-900 border border-gray-700/60 rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col max-h-[85vh]">
                 {/* Header gradient strip */}
-                <div className="h-1.5 w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" />
+                <div className="h-1.5 w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 shrink-0" />
 
-                <div className="px-6 pt-6 pb-8 space-y-5">
+                {/* Scrollable content */}
+                <div className="overflow-y-auto flex-1 px-6 pt-6 space-y-5">
                     {/* Logo + Confetti badge */}
                     <div className="flex items-start gap-4">
                         <div className="relative shrink-0 w-14 h-14">
@@ -157,7 +158,7 @@ export default function BroadcastOverlay() {
 
                     {/* Bullet points */}
                     {broadcast.bulletPoints?.length > 0 && (
-                        <ul className="space-y-2.5">
+                        <ul className="space-y-2.5 pb-2">
                             {broadcast.bulletPoints.filter(Boolean).map((point, i) => (
                                 <li key={i} className="flex items-start gap-3">
                                     <span className="shrink-0 w-5 h-5 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center mt-0.5">
@@ -170,8 +171,10 @@ export default function BroadcastOverlay() {
                             ))}
                         </ul>
                     )}
+                </div>
 
-                    {/* Dismiss button */}
+                {/* Dismiss button — always pinned at the bottom */}
+                <div className="px-6 py-5 shrink-0 bg-gray-900">
                     <button
                         onClick={handleDismiss}
                         disabled={dismissing}
@@ -182,5 +185,6 @@ export default function BroadcastOverlay() {
                 </div>
             </div>
         </div>
+
     );
 }
