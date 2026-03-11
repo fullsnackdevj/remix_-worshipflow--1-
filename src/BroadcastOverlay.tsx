@@ -11,6 +11,7 @@ interface Broadcast {
     active: boolean;
     targetEmails: string[];
     dismissedBy: string[];
+    createdAt?: string;
 }
 
 export default function BroadcastOverlay() {
@@ -148,6 +149,20 @@ export default function BroadcastOverlay() {
                         <div>
                             <p className="text-[11px] text-indigo-400 font-bold uppercase tracking-wider mb-0.5">What's New</p>
                             <h2 className="text-lg font-bold text-white leading-tight">{broadcast.title}</h2>
+                            {broadcast.createdAt && (
+                                <p className="text-[10px] text-gray-500 mt-0.5">
+                                    Updated: {(() => {
+                                        const d = new Date(broadcast.createdAt!);
+                                        const mm = String(d.getMonth() + 1).padStart(2, "0");
+                                        const dd = String(d.getDate()).padStart(2, "0");
+                                        const yy = String(d.getFullYear()).slice(2);
+                                        let h = d.getHours(), ampm = h >= 12 ? "PM" : "AM";
+                                        h = h % 12 || 12;
+                                        const min = String(d.getMinutes()).padStart(2, "0");
+                                        return `${mm}-${dd}-${yy} | ${h}:${min} ${ampm}`;
+                                    })()}
+                                </p>
+                            )}
                         </div>
                     </div>
 

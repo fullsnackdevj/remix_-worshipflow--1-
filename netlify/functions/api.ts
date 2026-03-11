@@ -343,8 +343,8 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
             // No composite index — filter active only, sort in memory
             const snap = await firestore?.collection("broadcasts").where("active", "==", true).get();
             const docs = (snap?.docs || [])
-                .map(d => ({ id: d.id, ...d.data() } as any))
-                .sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+                .map(d => { const data = d.data(); return { id: d.id, ...data, createdAt: data.createdAt?.toDate?.()?.toISOString() ?? null } as any; })
+                .sort((a: any, b: any) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
             for (const data of docs) {
                 const targets: string[] = data.targetEmails || [];
                 if (!targets.includes("__all__") && !targets.includes(email)) continue;
@@ -360,11 +360,12 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
             // No composite index — fetch all, sort in memory
             const snap = await firestore?.collection("broadcasts").get();
             const sorted = (snap?.docs || [])
-                .map(d => ({ id: d.id, ...d.data() } as any))
-                .sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+                .map(d => { const data = d.data(); return { id: d.id, ...data, createdAt: data.createdAt?.toDate?.()?.toISOString() ?? null } as any; })
+                .sort((a: any, b: any) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
             return json(200, sorted);
         } catch (e) { return json(200, []); }
     }
+
 
     // GET /api/release-notes — auto-generate What's New from GitHub commits
     if (rawPath === "/release-notes" && method === "GET") {
