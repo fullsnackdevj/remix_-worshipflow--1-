@@ -246,13 +246,15 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
-  const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "admin">("dashboard");
+  const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "admin">("songs");
   const { isAdmin, userRole, user, status: authStatus } = useAuth();
 
-  // Redirect non-admin users away from the dashboard (admin-only) to Song Library
+  // On first auth resolution: send admins to the dashboard, everyone else stays on Song Management
+  const initialViewSet = useRef(false);
   useEffect(() => {
-    if (authStatus === "authenticated" && !isAdmin && currentView === "dashboard") {
-      setCurrentView("songs");
+    if (!initialViewSet.current && authStatus === "authenticated") {
+      initialViewSet.current = true;
+      if (isAdmin) setCurrentView("dashboard");
     }
   }, [authStatus, isAdmin]);
 
