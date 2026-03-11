@@ -28,7 +28,7 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
     const [reactions, setReactions] = useState<Record<string, string[]>>({});
     const [notes, setNotes] = useState<VotdNote[]>([]);
     const [noteInput, setNoteInput] = useState("");
-    const [showNotes, setShowNotes] = useState(true);
+    const [showNotes, setShowNotes] = useState(false);
     const [showInsight, setShowInsight] = useState(true);
     const [savingNote, setSavingNote] = useState(false);
     const [noteSaved, setNoteSaved] = useState(false);
@@ -103,7 +103,7 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
     };
 
     const totalNotes = notes.length;
-    const totalReactions = Object.values(reactions).reduce((s, a) => s + a.length, 0);
+    const totalReactions = Object.values(reactions).reduce((s: number, a: string[]) => s + a.length, 0);
 
     return (
         <div className="rounded-2xl bg-gradient-to-br from-indigo-950/80 via-indigo-900/60 to-violet-900/40 border border-indigo-500/20 shadow-xl overflow-hidden mb-4">
@@ -169,8 +169,8 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
                             title={tooltip}
                             aria-label={tooltip}
                             className={`group relative flex items-center gap-1 text-sm px-2.5 py-0.5 rounded-full border transition-all select-none active:scale-95 ${reacted
-                                    ? `${activeColor} scale-105 shadow-sm`
-                                    : "bg-white/5 border-white/10 text-gray-200 hover:bg-white/10 hover:border-white/20"
+                                ? `${activeColor} scale-105 shadow-sm`
+                                : "bg-white/5 border-white/10 text-gray-200 hover:bg-white/10 hover:border-white/20"
                                 }`}
                         >
                             <span className="text-[15px] leading-none">{icon}</span>
@@ -195,32 +195,35 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
                 <button onClick={() => setShowNotes(v => !v)}
                     className="flex items-center gap-1.5 text-xs font-semibold text-indigo-300 hover:text-indigo-200 transition-colors mb-2">
                     <span>📝</span>
-                    Team Notes{totalNotes > 0 ? ` (${totalNotes})` : ""}
+                    Comments{totalNotes > 0 ? ` (${totalNotes})` : ""}
                     {showNotes ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                 </button>
 
                 {showNotes && (
                     <div className="space-y-2">
-                        {notes.length === 0 && (
-                            <p className="text-[11px] text-indigo-500 italic px-1">Be the first to share a reflection ✨</p>
-                        )}
-                        {notes.map((n, i) => (
-                            <div key={`${n.uid}-${i}`} className="flex items-start gap-2">
-                                {n.photo
-                                    ? <img src={n.photo} alt={n.name} className="w-6 h-6 rounded-full object-cover shrink-0 mt-0.5 border border-indigo-400/30" />
-                                    : <div className="w-6 h-6 rounded-full bg-indigo-600 shrink-0 mt-0.5 flex items-center justify-center text-[9px] font-bold text-white">{(n.name || "?")[0]}</div>
-                                }
-                                <div className="flex-1 bg-white/5 rounded-xl px-3 py-2 border border-white/5">
-                                    <div className="flex items-center gap-1.5 mb-0.5">
-                                        <span className="text-[11px] font-bold text-indigo-300">{n.name.split(" ")[0]}</span>
-                                        <span className="text-[10px] text-indigo-500">
-                                            {new Date(n.createdAt).toLocaleTimeString("en", { hour: "2-digit", minute: "2-digit" })}
-                                        </span>
+                        {/* Scrollable comment list — max 3 visible, scrolls beyond that */}
+                        <div className="max-h-48 overflow-y-auto space-y-2 pr-1 scrollbar-thin scrollbar-thumb-indigo-500/30 scrollbar-track-transparent">
+                            {notes.length === 0 && (
+                                <p className="text-[11px] text-indigo-500 italic px-1">Be the first to share a reflection ✨</p>
+                            )}
+                            {notes.map((n, i) => (
+                                <div key={`${n.uid}-${i}`} className="flex items-start gap-2">
+                                    {n.photo
+                                        ? <img src={n.photo} alt={n.name} className="w-6 h-6 rounded-full object-cover shrink-0 mt-0.5 border border-indigo-400/30" />
+                                        : <div className="w-6 h-6 rounded-full bg-indigo-600 shrink-0 mt-0.5 flex items-center justify-center text-[9px] font-bold text-white">{(n.name || "?")[0]}</div>
+                                    }
+                                    <div className="flex-1 bg-white/5 rounded-xl px-3 py-2 border border-white/5">
+                                        <div className="flex items-center gap-1.5 mb-0.5">
+                                            <span className="text-[11px] font-bold text-indigo-300">{n.name.split(" ")[0]}</span>
+                                            <span className="text-[10px] text-indigo-500">
+                                                {new Date(n.createdAt).toLocaleTimeString("en", { hour: "2-digit", minute: "2-digit" })}
+                                            </span>
+                                        </div>
+                                        <p className="text-xs text-gray-200 leading-relaxed">{n.text}</p>
                                     </div>
-                                    <p className="text-xs text-gray-200 leading-relaxed">{n.text}</p>
                                 </div>
-                            </div>
-                        ))}
+                            ))}
+                        </div>
 
                         {/* Input */}
                         <div className="flex items-center gap-2 mt-2">
