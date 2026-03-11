@@ -372,27 +372,21 @@ export default function AdminDashboard({
 
             {/* ══════════════════════════════════════════════════════════
                 MAIN BENTO GRID
-                Col 1         Col 2           Col 3
-                [verse      ] [songs        ] [members  ]  ← row 1
-                [verse      ] [church events] [issues   ]  ← row 2
-                [what's new ] [church events]               ← row 3
+                Col 1            Col 2           Col 3
+                [What's New   ]  [Songs        ] [Members  ]  ← row 1
+                [What's New   ]  [Church Events] [Issues   ]  ← row 2
             ══════════════════════════════════════════════════════════ */}
             <div
                 className="grid gap-4"
                 style={{
                     gridTemplateColumns: "1fr 1fr 1fr",
-                    gridTemplateRows: "auto auto auto",
+                    gridTemplateRows: "auto auto",
                     gridTemplateAreas: `
-                        "verse  songs  members"
-                        "verse  events issues"
-                        "whatsnew events ."
+                        "whatsnew  songs   members"
+                        "whatsnew  events  issues"
                     `,
                 }}
             >
-                {/* Verse of the Day — spans rows 1–2 */}
-                <div style={{ gridArea: "verse" }}>
-                    <VerseOfTheDay userId={userId} userName={userName.split(" ")[0] || userName} userPhoto="" />
-                </div>
 
                 {/* Songs — row 1 col 2 */}
                 <Tile style={{ gridArea: "songs" }} onClick={() => onNavigate("songs")}>
