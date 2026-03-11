@@ -1517,6 +1517,7 @@ export default function App() {
       confirmText: "Yes, Delete",
       confirmClass: "bg-red-500 hover:bg-red-600",
       onConfirm: async () => {
+        closeConfirm();
         try {
           const res = await fetch(`/api/songs/${id}`, { method: "DELETE" });
           if (!res.ok) throw new Error("Failed to delete song");
@@ -1528,11 +1529,9 @@ export default function App() {
           clearSongsCache();
           fetchSongs();
           showToast("success", "Song deleted successfully.");
-          closeConfirm();
         } catch (error) {
           console.error("Failed to delete song", error);
           showToast("error", "Failed to delete song. Please try again.");
-          closeConfirm();
         }
       }
     });
@@ -1547,6 +1546,7 @@ export default function App() {
       confirmText: `Delete ${selectedSongIds.length} Songs`,
       confirmClass: "bg-red-500 hover:bg-red-600",
       onConfirm: async () => {
+        closeConfirm();
         try {
           await Promise.all(selectedSongIds.map(id => fetch(`/api/songs/${id}`, { method: "DELETE" })));
           setSelectedSongIds([]);
@@ -1554,11 +1554,9 @@ export default function App() {
           clearSongsCache();
           fetchSongs();
           showToast("success", `${selectedSongIds.length} songs deleted successfully.`);
-          closeConfirm();
         } catch (error) {
           console.error("Failed to delete songs", error);
           showToast("error", "Failed to delete some songs. Please try again.");
-          closeConfirm();
         }
       }
     });
@@ -1595,16 +1593,15 @@ export default function App() {
       confirmText: "Delete Tag",
       confirmClass: "bg-red-500 hover:bg-red-600",
       onConfirm: async () => {
+        closeConfirm();
         try {
           await fetch(`/api/tags/${id}`, { method: "DELETE" });
           clearSongsCache();
           fetchSongs();
           showToast("success", "Tag deleted successfully.");
-          closeConfirm();
         } catch (error) {
           console.error("Failed to delete tag", error);
           showToast("error", "Failed to delete tag.");
-          closeConfirm();
         }
       }
     });
