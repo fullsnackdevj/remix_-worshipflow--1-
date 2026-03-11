@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { X, NotepadText, Trash2, ImagePlus, Loader2, Bug, Lightbulb, MessageSquare, Pencil, Check, CheckCircle2, ChevronDown, Film, RotateCcw, Archive, Eye, Search, Code2, Wrench, XCircle } from "lucide-react";
+import { X, NotepadText, Trash2, ImagePlus, Loader2, Bug, Lightbulb, MessageSquare, Pencil, Check, CheckCircle2, ChevronDown, Film, RotateCcw, Archive, Eye, Search, Code2, Wrench, XCircle, ThumbsUp } from "lucide-react";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 export interface TeamNote {
@@ -71,7 +71,7 @@ const STATUS_REACTIONS = [
     { key: "investigating", label: "Investigating", icon: <Search size={13} />, activeColor: "bg-amber-100 dark:bg-amber-900/40 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300" },
     { key: "coding", label: "Coding", icon: <Code2 size={13} />, activeColor: "bg-violet-100 dark:bg-violet-900/40 border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300" },
     { key: "fixing", label: "Fixing", icon: <Wrench size={13} />, activeColor: "bg-orange-100 dark:bg-orange-900/40 border-orange-300 dark:border-orange-700 text-orange-700 dark:text-orange-300" },
-    { key: "on_it", label: "On it", icon: <span className="text-[13px] leading-none">🫡</span>, activeColor: "bg-green-100 dark:bg-green-900/40 border-green-300 dark:border-green-700 text-green-700 dark:text-green-300" },
+    { key: "on_it", label: "On it", icon: <ThumbsUp size={13} />, activeColor: "bg-green-100 dark:bg-green-900/40 border-green-300 dark:border-green-700 text-green-700 dark:text-green-300" },
     { key: "nevermind", label: "Nevermind", icon: <XCircle size={13} />, activeColor: "bg-red-100 dark:bg-red-900/40 border-red-300 dark:border-red-700 text-red-700 dark:text-red-300" },
 ] as const;
 const MAX_IMAGE_BYTES = 300 * 1024;
