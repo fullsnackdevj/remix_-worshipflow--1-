@@ -18,7 +18,8 @@ interface Schedule {
 }
 interface Song { id: string; title: string; artist: string; created_at?: string; }
 interface Member { id: string; name: string; email: string; photo: string; roles: string[]; status: string; }
-interface Note { id: string; type: "bug" | "feature" | "general"; content: string; resolved?: boolean; createdAt: string; authorName: string; }
+interface Note { id: string; type: "bug" | "feature" | "general"; content: string; resolved?: boolean; createdAt: string; authorName: string; reactions?: Record<string, string[]>; }
+
 
 interface Props {
     userName: string; userEmail: string; userId?: string; userPhoto?: string;
@@ -263,8 +264,10 @@ export default function AdminDashboard({
         schedules.forEach(s => { if (s.songLineup?.solemn) ids.add(s.songLineup.solemn); if (s.songLineup?.joyful) ids.add(s.songLineup.joyful); });
         return ids.size;
     }, [schedules]);
-    const openBugs = notes.filter(n => n.type === "bug" && !n.resolved).length;
-    const openFeqs = notes.filter(n => n.type === "feature" && !n.resolved).length;
+    const isDismissed = (n: Note) => (n.reactions?.nevermind?.length ?? 0) > 0;
+    const openBugs = notes.filter(n => n.type === "bug" && !n.resolved && !isDismissed(n)).length;
+    const openFeqs = notes.filter(n => n.type === "feature" && !n.resolved && !isDismissed(n)).length;
+
     const resolvedNotes = notes.filter(n => n.resolved).length;
     const totalNotes = notes.length;
     // Only events literally named "Sunday Service" or "Midweek Service" require a worship leader.
