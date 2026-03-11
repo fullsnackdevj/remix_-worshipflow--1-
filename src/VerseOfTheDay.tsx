@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
     BookOpen, Heart, Send, ChevronDown, ChevronUp,
-    CheckCircle2, Loader2, Pencil, Trash2, CornerDownRight, X, Check,
+    CheckCircle2, Loader2, X, Check,
 } from "lucide-react";
 import { VERSES } from "./verseData";
 
@@ -17,7 +17,7 @@ interface VotdNote {
 }
 interface Props { userId: string; userName: string; userPhoto: string; }
 
-// ── Reaction pill config ─────────────────────────────────────────────────────
+// ── Reaction config ──────────────────────────────────────────────────────────
 const VERSE_REACTIONS = [
     { key: "prayer", label: "Praying", icon: "🙏", activeColor: "bg-sky-100 dark:bg-sky-900/40 border-sky-300 dark:border-sky-700 text-sky-700 dark:text-sky-300" },
     { key: "love", label: "Love this", icon: "❤️", activeColor: "bg-rose-100 dark:bg-rose-900/40 border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-300" },
@@ -40,15 +40,24 @@ function relTime(iso: string) {
     if (m < 60) return `${m}m ago`;
     const h = Math.floor(m / 60);
     if (h < 24) return `${h}h ago`;
-    return new Date(iso).toLocaleTimeString("en", { hour: "2-digit", minute: "2-digit" });
+    const d = Math.floor(h / 24);
+    return d < 7 ? `${d}d ago` : new Date(iso).toLocaleDateString("en", { month: "short", day: "numeric" });
+}
+// Ensure every note/reply has a string id — fixes the bug where old items had id:undefined
+function hydrate(notes: any[]): VotdNote[] {
+    return notes.map(n => ({
+        ...n,
+        id: n.id || genId(),
+        replies: (n.replies || []).map((r: any) => ({ ...r, id: r.id || genId() })),
+    }));
 }
 
-// ── Avatar helper ─────────────────────────────────────────────────────────────
-function Avatar({ photo, name, size = "sm" }: { photo: string; name: string; size?: "sm" | "xs" }) {
-    const cls = size === "xs" ? "w-5 h-5 text-[8px]" : "w-6 h-6 text-[9px]";
+// ── Avatar ───────────────────────────────────────────────────────────────────
+function Avatar({ photo, name, size = "md" }: { photo: string; name: string; size?: "md" | "sm" }) {
+    const cls = size === "sm" ? "w-6 h-6 text-[9px]" : "w-8 h-8 text-[11px]";
     return photo
-        ? <img src={photo} alt={name} className={`${cls} rounded-full object-cover shrink-0 border border-indigo-400/30`} />
-        : <div className={`${cls} rounded-full bg-indigo-600 shrink-0 flex items-center justify-center font-bold text-white`}>{(name || "?")[0]}</div>;
+        ? <img src={photo} alt={name} className={`${cls} rounded-full object-cover shrink-0 border-2 border-indigo-400/20`} />
+        : <div className={`${cls} rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 shrink-0 flex items-center justify-center font-bold text-white`}>{(name || "?")[0].toUpperCase()}</div>;
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
@@ -56,7 +65,6 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
     const verse = VERSES[(dayOfYear() - 1 + VERSES.length) % VERSES.length];
     const dateKey = todayKey();
 
-    // ── Core state ────────────────────────────────────────────────────────────
     const [reactions, setReactions] = useState<Record<string, string[]>>({});
     const [notes, setNotes] = useState<VotdNote[]>([]);
     const [noteInput, setNoteInput] = useState("");
@@ -65,39 +73,37 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
     const [savingNote, setSavingNote] = useState(false);
     const [noteSaved, setNoteSaved] = useState(false);
 
-    // ── Comment interaction state ─────────────────────────────────────────────
-    // editingId: "noteId" for comments, "noteId::replyId" for replies
-    const [editingId, setEditingId] = useState<string | null>(null);
+    // One active state at a time — keyed by unique IDs so they NEVER bleed across items
+    const [editingId, setEditingId] = useState<string | null>(null); // "noteId" or "noteId::replyId"
     const [editText, setEditText] = useState("");
-    const [replyingToId, setReplyingToId] = useState<string | null>(null);
+    const [replyingToId, setReplyingToId] = useState<string | null>(null); // exact noteId string
     const [replyText, setReplyText] = useState("");
 
     const commentsEndRef = useRef<HTMLDivElement>(null);
+    const prevNoteCount = useRef(0);
 
-    // ── Load on mount ─────────────────────────────────────────────────────────
+    // ── Load ──────────────────────────────────────────────────────────────────
     useEffect(() => {
         fetch(`/api/verse-of-day?date=${dateKey}`)
             .then(r => r.json())
             .then(data => {
                 if (data.reactions) setReactions(data.reactions);
-                if (data.notes) setNotes(data.notes);
+                // hydrate ensures ALL notes/replies have a proper string ID
+                if (data.notes) setNotes(hydrate(data.notes));
             }).catch(() => { });
     }, [dateKey]);
 
-    // Auto-scroll when a new top-level note is added by current user
-    const prevNoteCount = useRef(0);
     useEffect(() => {
-        if (notes.length > prevNoteCount.current && showNotes) {
+        if (notes.length > prevNoteCount.current && showNotes)
             commentsEndRef.current?.scrollIntoView({ behavior: "smooth" });
-        }
         prevNoteCount.current = notes.length;
     }, [notes.length, showNotes]);
 
-    // ── Fire-and-forget API helper ────────────────────────────────────────────
+    // ── API ───────────────────────────────────────────────────────────────────
     const api = (path: string, method: string, data: object) =>
         fetch(`/api${path}`, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
 
-    // ── Reactions (same proven pattern) ──────────────────────────────────────
+    // ── Reactions ─────────────────────────────────────────────────────────────
     const toggleReaction = (key: string) => {
         if (!userId) return;
         setReactions(prev => {
@@ -107,7 +113,7 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
         api("/verse-of-day/react", "PATCH", { date: dateKey, userId, key, verseRef: verse.ref });
     };
 
-    // ── Submit new top-level comment ──────────────────────────────────────────
+    // ── Submit top-level comment ──────────────────────────────────────────────
     const submitNote = async () => {
         const text = noteInput.trim();
         if (!text || !userId || savingNote) return;
@@ -125,33 +131,27 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
         } finally { setSavingNote(false); }
     };
 
-    // ── Edit comment ──────────────────────────────────────────────────────────
-    const startEdit = (id: string, currentText: string) => {
-        setEditingId(id);
+    // ── Edit ──────────────────────────────────────────────────────────────────
+    const startEdit = (compositeId: string, currentText: string) => {
+        setEditingId(compositeId);
         setEditText(currentText);
-        setReplyingToId(null);
+        setReplyingToId(null); // close any open reply box
     };
     const cancelEdit = () => { setEditingId(null); setEditText(""); };
-
     const saveEdit = (noteId: string, replyId?: string) => {
         const text = editText.trim();
         if (!text) return;
-        const compositeId = replyId ? `${noteId}::${replyId}` : noteId;
-        if (editingId !== compositeId) return;
-
-        // Optimistic update
         setNotes(prev => prev.map(n => {
             if (n.id !== noteId) return n;
             if (!replyId) return { ...n, text, updatedAt: new Date().toISOString() };
             return { ...n, replies: (n.replies || []).map(r => r.id === replyId ? { ...r, text, updatedAt: new Date().toISOString() } : r) };
         }));
         setEditingId(null); setEditText("");
-
         if (!replyId) api("/verse-of-day/note/edit", "PATCH", { date: dateKey, noteId, userId, text });
         else api("/verse-of-day/note/reply/edit", "PATCH", { date: dateKey, noteId, replyId, userId, text });
     };
 
-    // ── Delete comment / reply ────────────────────────────────────────────────
+    // ── Delete ────────────────────────────────────────────────────────────────
     const deleteNote = (noteId: string) => {
         setNotes(prev => prev.filter(n => n.id !== noteId));
         api("/verse-of-day/note/delete", "DELETE", { date: dateKey, noteId, userId });
@@ -161,42 +161,61 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
         api("/verse-of-day/note/reply/delete", "DELETE", { date: dateKey, noteId, replyId, userId });
     };
 
-    // ── Add reply ─────────────────────────────────────────────────────────────
-    const startReply = (noteId: string) => {
-        setReplyingToId(replyingToId === noteId ? null : noteId);
+    // ── Reply ─────────────────────────────────────────────────────────────────
+    const toggleReplyBox = (noteId: string) => {
+        // Toggle: clicking Reply on the same comment closes it
+        setReplyingToId(prev => prev === noteId ? null : noteId);
         setReplyText("");
         setEditingId(null);
     };
-    const submitReply = (noteId: string) => {
+    const submitReply = (noteId: string, replyToName: string) => {
         const text = replyText.trim();
         if (!text || !userId) return;
         const reply: VotdReply = { id: genId(), uid: userId, name: userName, photo: userPhoto, text, createdAt: new Date().toISOString() };
         setNotes(prev => prev.map(n => n.id !== noteId ? n : { ...n, replies: [...(n.replies || []), reply] }));
-        setReplyText("");
-        setReplyingToId(null);
+        setReplyText(""); setReplyingToId(null);
         api("/verse-of-day/note/reply", "POST", { date: dateKey, noteId, reply });
     };
 
     const totalNotes = notes.reduce((s, n) => s + 1 + (n.replies?.length ?? 0), 0);
     const totalReactions = Object.values(reactions).reduce((s: number, a: string[]) => s + a.length, 0);
 
-    // ── Reusable inline edit box ──────────────────────────────────────────────
-    const EditBox = ({ id, onSave, onCancel }: { id: string; onSave: () => void; onCancel: () => void }) => (
-        <div className="mt-1 space-y-1">
-            <textarea
-                autoFocus
-                value={editText}
-                onChange={e => setEditText(e.target.value)}
+    // ── Inline edit textarea ──────────────────────────────────────────────────
+    const EditBox = ({ onSave, onCancel }: { onSave: () => void; onCancel: () => void }) => (
+        <div className="space-y-1.5 mt-1">
+            <textarea autoFocus value={editText} onChange={e => setEditText(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSave(); } if (e.key === "Escape") onCancel(); }}
                 rows={2}
-                className="w-full bg-white/5 border border-indigo-400/30 rounded-lg px-2 py-1.5 text-xs text-white placeholder-indigo-400/40 outline-none focus:border-indigo-400/60 resize-none"
+                className="w-full bg-white/8 border border-indigo-400/40 rounded-xl px-3 py-2 text-xs text-white placeholder-indigo-400/40 outline-none focus:border-indigo-400/70 resize-none"
             />
             <div className="flex gap-1.5">
-                <button onClick={onSave} className="flex items-center gap-1 px-2 py-1 bg-indigo-500 hover:bg-indigo-400 text-white text-[10px] font-semibold rounded-lg transition-all active:scale-95">
+                <button onClick={onSave} className="flex items-center gap-1 px-3 py-1 bg-indigo-500 hover:bg-indigo-400 text-white text-[10px] font-bold rounded-lg transition-all active:scale-95">
                     <Check size={10} /> Save
                 </button>
-                <button onClick={onCancel} className="flex items-center gap-1 px-2 py-1 bg-white/5 hover:bg-white/10 text-gray-300 text-[10px] rounded-lg transition-all">
+                <button onClick={onCancel} className="flex items-center gap-1 px-3 py-1 text-gray-400 hover:text-gray-200 text-[10px] font-semibold border border-white/10 rounded-lg transition-all hover:bg-white/5">
                     <X size={10} /> Cancel
+                </button>
+            </div>
+        </div>
+    );
+
+    // ── Reply input row ───────────────────────────────────────────────────────
+    const ReplyInput = ({ noteId, replyToName }: { noteId: string; replyToName: string }) => (
+        <div className="flex items-center gap-2 mt-2">
+            <Avatar photo={userPhoto} name={userName} size="sm" />
+            <div className="flex-1 flex items-center bg-white/5 border border-indigo-400/20 rounded-2xl overflow-hidden pr-1 focus-within:border-indigo-400/50 transition-colors">
+                <input autoFocus value={replyText} onChange={e => setReplyText(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") submitReply(noteId, replyToName); if (e.key === "Escape") setReplyingToId(null); }}
+                    placeholder={`Reply to ${replyToName.split(" ")[0]}…`}
+                    className="flex-1 bg-transparent px-3 py-2 text-xs text-white placeholder-indigo-400/40 outline-none"
+                />
+                {replyText.trim() && (
+                    <button onClick={() => submitReply(noteId, replyToName)} className="p-1.5 m-0.5 rounded-xl bg-indigo-500 text-white hover:bg-indigo-400 active:scale-95 transition-all">
+                        <Send size={10} />
+                    </button>
+                )}
+                <button onClick={() => setReplyingToId(null)} className="p-1.5 rounded-xl text-indigo-500 hover:text-gray-300 transition-all">
+                    <X size={10} />
                 </button>
             </div>
         </div>
@@ -208,9 +227,7 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
             {/* Header */}
             <div className="flex items-center justify-between px-5 pt-4 pb-2">
                 <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-indigo-500/20 flex items-center justify-center">
-                        <BookOpen size={14} className="text-indigo-300" />
-                    </div>
+                    <div className="w-7 h-7 rounded-lg bg-indigo-500/20 flex items-center justify-center"><BookOpen size={14} className="text-indigo-300" /></div>
                     <span className="text-xs font-bold uppercase tracking-widest text-indigo-300">Verse of the Day</span>
                 </div>
                 <span className="text-[11px] text-indigo-400/70 font-medium">
@@ -220,9 +237,7 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
 
             {/* Verse */}
             <div className="px-5 pb-4">
-                <blockquote className="text-white text-sm sm:text-base font-medium leading-relaxed italic mb-2">
-                    "{verse.text}"
-                </blockquote>
+                <blockquote className="text-white text-sm sm:text-base font-medium leading-relaxed italic mb-2">"{verse.text}"</blockquote>
                 <p className="text-indigo-300 text-xs font-bold tracking-wide">— {verse.ref} (NLT)</p>
             </div>
 
@@ -239,9 +254,7 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
                         {verse.cross.length > 0 && (
                             <div className="mt-2 flex flex-wrap gap-1.5">
                                 <span className="text-[10px] text-indigo-400 font-semibold uppercase tracking-wider">Cross refs:</span>
-                                {verse.cross.map(c => (
-                                    <span key={c} className="text-[11px] font-semibold text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded-full">{c}</span>
-                                ))}
+                                {verse.cross.map(c => <span key={c} className="text-[11px] font-semibold text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded-full">{c}</span>)}
                             </div>
                         )}
                     </div>
@@ -253,150 +266,114 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
                 {VERSE_REACTIONS.map(({ key, label, icon, activeColor }) => {
                     const users = reactions[key] ?? [];
                     const reacted = users.includes(userId);
-                    const tooltip = reacted
-                        ? `Remove "${label}"${users.length > 1 ? ` · ${users.length} people` : ""}`
-                        : `${label}${users.length > 0 ? ` · ${users.length} person${users.length !== 1 ? "s" : ""}` : ""}`;
                     return (
-                        <button key={key} onClick={() => toggleReaction(key)} title={tooltip} aria-label={tooltip}
+                        <button key={key} onClick={() => toggleReaction(key)} title={label} aria-label={label}
                             className={`group relative flex items-center gap-1 text-sm px-2.5 py-0.5 rounded-full border transition-all select-none active:scale-95 ${reacted ? `${activeColor} scale-105 shadow-sm` : "bg-white/5 border-white/10 text-gray-200 hover:bg-white/10 hover:border-white/20"}`}>
                             <span className="text-[15px] leading-none">{icon}</span>
                             {users.length > 0 && <span className="text-xs font-bold tabular-nums">{users.length}</span>}
-                            <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-gray-900 text-white text-[10px] px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-10 shadow-lg">{label}</span>
+                            <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-gray-900 text-white text-[10px] px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity z-10 shadow-lg">{label}</span>
                         </button>
                     );
                 })}
                 {totalReactions > 0 && <span className="text-[11px] text-indigo-400 ml-1">{totalReactions} reaction{totalReactions !== 1 ? "s" : ""}</span>}
             </div>
 
-            {/* Comments section */}
-            <div className="border-t border-indigo-500/10 px-5 pt-3 pb-4">
-                {/* Section header toggle */}
-                <button onClick={() => setShowNotes(v => !v)}
-                    className="flex items-center gap-1.5 text-xs font-semibold text-indigo-300 hover:text-indigo-200 transition-colors mb-2">
-                    <span>💬</span>
-                    Comments{totalNotes > 0 ? ` (${totalNotes})` : ""}
+            {/* ── Comments ── */}
+            <div className="border-t border-indigo-500/10 px-4 pt-3 pb-4">
+                <button onClick={() => setShowNotes(v => !v)} className="flex items-center gap-1.5 text-xs font-semibold text-indigo-300 hover:text-indigo-200 transition-colors mb-3">
+                    <span>💬</span>Comments{totalNotes > 0 ? ` (${totalNotes})` : ""}
                     {showNotes ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                 </button>
 
                 {showNotes && (
                     <div className="space-y-1">
-                        {/* Scrollable comment list */}
-                        <div className="max-h-56 overflow-y-auto space-y-2 pr-0.5" style={{ scrollbarWidth: "thin" }}>
+                        {/* Scrollable list */}
+                        <div className="max-h-72 overflow-y-auto space-y-4 pb-1 pr-0.5" style={{ scrollbarWidth: "thin" }}>
                             {notes.length === 0 && (
-                                <p className="text-[11px] text-indigo-500 italic px-1 py-2">Be the first to share a reflection ✨</p>
+                                <p className="text-[11px] text-indigo-500 italic text-center py-3">Be the first to share a reflection ✨</p>
                             )}
 
                             {notes.map(note => {
-                                const isOwnNote = note.uid === userId;
-                                const isEditingNote = editingId === note.id;
+                                const isOwn = note.uid === userId;
+                                const isEditing = editingId === note.id;    // EXACT string match
+                                const isReplying = replyingToId === note.id; // EXACT string match
 
                                 return (
-                                    <div key={note.id} className="group">
-                                        {/* ── Comment ── */}
-                                        <div className="flex items-start gap-2">
-                                            <Avatar photo={note.photo} name={note.name} />
-                                            <div className="flex-1 min-w-0">
-                                                {/* Meta row */}
-                                                <div className="flex items-center gap-1.5 mb-0.5">
-                                                    <span className="text-[11px] font-bold text-indigo-300">{note.name.split(" ")[0]}</span>
-                                                    <span className="text-[10px] text-indigo-500">{relTime(note.updatedAt ?? note.createdAt)}</span>
-                                                    {note.updatedAt && <span className="text-[9px] text-indigo-600 italic">(edited)</span>}
-
-                                                    {/* Action buttons — visible on hover */}
-                                                    <div className="ml-auto flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        <button onClick={() => startReply(note.id)}
-                                                            className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] text-indigo-400 hover:text-indigo-200 hover:bg-white/5 transition-all">
-                                                            <CornerDownRight size={10} /> Reply
-                                                        </button>
-                                                        {isOwnNote && !isEditingNote && (
-                                                            <>
-                                                                <button onClick={() => startEdit(note.id, note.text)} title="Edit"
-                                                                    className="p-1 rounded-md text-indigo-500 hover:text-indigo-200 hover:bg-white/5 transition-all">
-                                                                    <Pencil size={10} />
-                                                                </button>
-                                                                <button onClick={() => deleteNote(note.id)} title="Delete"
-                                                                    className="p-1 rounded-md text-indigo-500 hover:text-rose-400 hover:bg-rose-500/10 transition-all">
-                                                                    <Trash2 size={10} />
-                                                                </button>
-                                                            </>
-                                                        )}
-                                                    </div>
+                                    <div key={note.id} className="flex gap-2.5">
+                                        <Avatar photo={note.photo} name={note.name} />
+                                        <div className="flex-1 min-w-0">
+                                            {/* Bubble */}
+                                            {isEditing ? (
+                                                <div className="bg-white/5 rounded-2xl rounded-tl-sm px-3 pt-2 pb-2 border border-indigo-400/20">
+                                                    <p className="text-[11px] font-bold text-indigo-300 mb-1">{note.name.split(" ")[0]}</p>
+                                                    <EditBox onSave={() => saveEdit(note.id)} onCancel={cancelEdit} />
                                                 </div>
+                                            ) : (
+                                                <div className="bg-white/5 rounded-2xl rounded-tl-sm px-3 py-2 border border-white/5 inline-block max-w-full">
+                                                    <p className="text-[11px] font-bold text-indigo-300 mb-0.5">{note.name.split(" ")[0]}</p>
+                                                    <p className="text-xs text-gray-200 leading-relaxed break-words">{note.text}</p>
+                                                </div>
+                                            )}
 
-                                                {/* Text or edit box */}
-                                                {isEditingNote
-                                                    ? <EditBox id={note.id} onSave={() => saveEdit(note.id)} onCancel={cancelEdit} />
-                                                    : <p className="text-xs text-gray-200 leading-relaxed">{note.text}</p>
-                                                }
+                                            {/* Action row — Facebook style */}
+                                            {!isEditing && (
+                                                <div className="flex items-center gap-3 px-1 mt-1">
+                                                    <span className="text-[10px] text-indigo-600">{relTime(note.updatedAt ?? note.createdAt)}{note.updatedAt ? " · Edited" : ""}</span>
+                                                    <button onClick={() => toggleReplyBox(note.id)} className={`text-[10px] font-bold transition-colors ${isReplying ? "text-indigo-300" : "text-indigo-500 hover:text-indigo-300"}`}>Reply</button>
+                                                    {isOwn && (
+                                                        <>
+                                                            <button onClick={() => startEdit(note.id, note.text)} className="text-[10px] font-bold text-indigo-500 hover:text-indigo-300 transition-colors">Edit</button>
+                                                            <button onClick={() => deleteNote(note.id)} className="text-[10px] font-bold text-indigo-500 hover:text-rose-400 transition-colors">Delete</button>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            )}
 
-                                                {/* ── Replies ── */}
-                                                {(note.replies ?? []).length > 0 && (
-                                                    <div className="mt-2 ml-1 pl-3 border-l border-indigo-500/20 space-y-2">
-                                                        {(note.replies ?? []).map(reply => {
-                                                            const isOwnReply = reply.uid === userId;
-                                                            const replyEditId = `${note.id}::${reply.id}`;
-                                                            const isEditingReply = editingId === replyEditId;
-                                                            return (
-                                                                <div key={reply.id} className="group/reply flex items-start gap-1.5">
-                                                                    <Avatar photo={reply.photo} name={reply.name} size="xs" />
-                                                                    <div className="flex-1 min-w-0">
-                                                                        <div className="flex items-center gap-1.5 mb-0.5">
-                                                                            <span className="text-[10px] font-bold text-indigo-300">{reply.name.split(" ")[0]}</span>
-                                                                            <span className="text-[9px] text-indigo-500">{relTime(reply.updatedAt ?? reply.createdAt)}</span>
-                                                                            {reply.updatedAt && <span className="text-[9px] text-indigo-600 italic">(edited)</span>}
-                                                                            <div className="ml-auto flex items-center gap-0.5 opacity-0 group-hover/reply:opacity-100 transition-opacity">
-                                                                                {isOwnReply && !isEditingReply && (
-                                                                                    <>
-                                                                                        <button onClick={() => startEdit(replyEditId, reply.text)} title="Edit"
-                                                                                            className="p-1 rounded-md text-indigo-500 hover:text-indigo-200 hover:bg-white/5 transition-all">
-                                                                                            <Pencil size={9} />
-                                                                                        </button>
-                                                                                        <button onClick={() => deleteReply(note.id, reply.id)} title="Delete"
-                                                                                            className="p-1 rounded-md text-indigo-500 hover:text-rose-400 hover:bg-rose-500/10 transition-all">
-                                                                                            <Trash2 size={9} />
-                                                                                        </button>
-                                                                                    </>
-                                                                                )}
-                                                                            </div>
+                                            {/* Replies */}
+                                            {(note.replies ?? []).length > 0 && (
+                                                <div className="mt-3 ml-1 pl-3 border-l border-indigo-500/20 space-y-3">
+                                                    {(note.replies ?? []).map(reply => {
+                                                        const isOwnReply = reply.uid === userId;
+                                                        const replyComposite = `${note.id}::${reply.id}`; // guaranteed unique
+                                                        const isEditingReply = editingId === replyComposite;
+
+                                                        return (
+                                                            <div key={reply.id} className="flex gap-2">
+                                                                <Avatar photo={reply.photo} name={reply.name} size="sm" />
+                                                                <div className="flex-1 min-w-0">
+                                                                    {/* Reply bubble */}
+                                                                    {isEditingReply ? (
+                                                                        <div className="bg-white/5 rounded-2xl rounded-tl-sm px-3 pt-2 pb-2 border border-indigo-400/20">
+                                                                            <p className="text-[10px] font-bold text-indigo-300 mb-1">{reply.name.split(" ")[0]}</p>
+                                                                            <EditBox onSave={() => saveEdit(note.id, reply.id)} onCancel={cancelEdit} />
                                                                         </div>
-                                                                        {isEditingReply
-                                                                            ? <EditBox id={replyEditId} onSave={() => saveEdit(note.id, reply.id)} onCancel={cancelEdit} />
-                                                                            : <p className="text-[11px] text-gray-300 leading-relaxed">{reply.text}</p>
-                                                                        }
-                                                                    </div>
+                                                                    ) : (
+                                                                        <div className="bg-white/5 rounded-2xl rounded-tl-sm px-3 py-2 border border-white/5 inline-block max-w-full">
+                                                                            <p className="text-[10px] font-bold text-indigo-300 mb-0.5">{reply.name.split(" ")[0]}</p>
+                                                                            <p className="text-[11px] text-gray-300 leading-relaxed break-words">{reply.text}</p>
+                                                                        </div>
+                                                                    )}
+                                                                    {/* Reply action row */}
+                                                                    {!isEditingReply && (
+                                                                        <div className="flex items-center gap-3 px-1 mt-0.5">
+                                                                            <span className="text-[10px] text-indigo-600">{relTime(reply.updatedAt ?? reply.createdAt)}{reply.updatedAt ? " · Edited" : ""}</span>
+                                                                            {isOwnReply && (
+                                                                                <>
+                                                                                    <button onClick={() => startEdit(replyComposite, reply.text)} className="text-[10px] font-bold text-indigo-500 hover:text-indigo-300 transition-colors">Edit</button>
+                                                                                    <button onClick={() => deleteReply(note.id, reply.id)} className="text-[10px] font-bold text-indigo-500 hover:text-rose-400 transition-colors">Delete</button>
+                                                                                </>
+                                                                            )}
+                                                                        </div>
+                                                                    )}
                                                                 </div>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                )}
-
-                                                {/* ── Reply input box ── */}
-                                                {replyingToId === note.id && (
-                                                    <div className="mt-2 ml-1 pl-3 border-l border-indigo-400/20">
-                                                        <div className="flex items-center gap-1.5">
-                                                            <Avatar photo={userPhoto} name={userName} size="xs" />
-                                                            <div className="flex-1 flex items-center bg-white/5 border border-indigo-400/20 rounded-lg overflow-hidden pr-1">
-                                                                <input
-                                                                    autoFocus
-                                                                    value={replyText}
-                                                                    onChange={e => setReplyText(e.target.value)}
-                                                                    onKeyDown={e => { if (e.key === "Enter") submitReply(note.id); if (e.key === "Escape") setReplyingToId(null); }}
-                                                                    placeholder={`Reply to ${note.name.split(" ")[0]}… (Enter)`}
-                                                                    className="flex-1 bg-transparent px-2 py-1.5 text-[11px] text-white placeholder-indigo-400/40 outline-none"
-                                                                />
-                                                                {replyText.trim() && (
-                                                                    <button onClick={() => submitReply(note.id)} className="p-1 rounded-md bg-indigo-500 text-white hover:bg-indigo-400 active:scale-95 transition-all">
-                                                                        <Send size={10} />
-                                                                    </button>
-                                                                )}
-                                                                <button onClick={() => setReplyingToId(null)} className="p-1 ml-0.5 rounded-md text-indigo-500 hover:text-gray-300 transition-all">
-                                                                    <X size={10} />
-                                                                </button>
                                                             </div>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+
+                                            {/* Reply input — only shows for THIS comment */}
+                                            {isReplying && <ReplyInput noteId={note.id} replyToName={note.name} />}
                                         </div>
                                     </div>
                                 );
@@ -405,24 +382,17 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
                         </div>
 
                         {/* New comment input */}
-                        <div className="flex items-center gap-2 pt-2 border-t border-indigo-500/10">
+                        <div className="flex items-center gap-2.5 pt-3 border-t border-indigo-500/10 mt-2">
                             <Avatar photo={userPhoto} name={userName} />
-                            <div className="flex-1 flex items-center bg-white/5 border border-indigo-400/20 rounded-xl overflow-hidden pr-1">
-                                <input
-                                    value={noteInput}
-                                    onChange={e => setNoteInput(e.target.value)}
+                            <div className="flex-1 flex items-center bg-white/5 border border-indigo-400/20 rounded-2xl overflow-hidden pr-1 focus-within:border-indigo-400/50 transition-colors">
+                                <input value={noteInput} onChange={e => setNoteInput(e.target.value)}
                                     onKeyDown={e => e.key === "Enter" && !e.shiftKey && submitNote()}
-                                    placeholder="Share your reflection… (Enter to send)"
-                                    className="flex-1 bg-transparent px-3 py-2 text-xs text-white placeholder-indigo-400/50 outline-none"
-                                />
-                                {savingNote && <Loader2 size={11} className="text-indigo-400 animate-spin mr-1.5" />}
-                                {noteSaved && (
-                                    <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-semibold pr-1">
-                                        <CheckCircle2 size={11} /> Saved!
-                                    </span>
-                                )}
+                                    placeholder="Write a comment… (Enter to send)"
+                                    className="flex-1 bg-transparent px-3 py-2 text-xs text-white placeholder-indigo-400/40 outline-none" />
+                                {savingNote && <Loader2 size={11} className="text-indigo-400 animate-spin mr-2" />}
+                                {noteSaved && <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-semibold pr-1"><CheckCircle2 size={11} /> Sent!</span>}
                                 {noteInput.trim() && !savingNote && !noteSaved && (
-                                    <button onClick={submitNote} className="p-1.5 rounded-lg bg-indigo-500 text-white hover:bg-indigo-400 active:scale-95 transition-all">
+                                    <button onClick={submitNote} className="p-1.5 m-0.5 rounded-xl bg-indigo-500 text-white hover:bg-indigo-400 active:scale-95 transition-all">
                                         <Send size={11} />
                                     </button>
                                 )}
