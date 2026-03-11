@@ -336,24 +336,7 @@ export default function AdminDashboard({
                 </div>
             </div>
 
-            {/* Alert banners */}
-            <div className="flex flex-wrap gap-2">
-                {coverageIssues === 0 ? (
-                    <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 text-xs font-semibold">
-                        <CheckCheck size={12} /> All services have leaders ✓
-                    </div>
-                ) : (
-                    <button onClick={() => onNavigate("schedule")} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-xs font-semibold hover:bg-red-100 transition-colors">
-                        <AlertTriangle size={12} />{coverageIssues} service{coverageIssues !== 1 ? "s" : ""} missing a leader
-                    </button>
-                )}
-                {broadcasts.length > 0 && (
-                    <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-400 text-xs font-semibold">
-                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
-                        {broadcasts.length} active broadcast{broadcasts.length !== 1 ? "s" : ""}
-                    </div>
-                )}
-            </div>
+
 
             {/*
              * BENTO GRID 3×2

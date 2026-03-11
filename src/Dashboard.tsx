@@ -347,18 +347,14 @@ export default function Dashboard({
         }).finally(() => setLoadingExtra(false));
     }, []);
 
-    // ── Admin → Bento grid dashboard ──────────────────────────────────────
-    if (isAdmin) {
-        return (
-            <AdminDashboard
-                userName={userName} userEmail={userEmail} userId={userId}
-                songs={songs} members={members} schedules={schedules} notes={notes}
-                onNavigate={onNavigate}
-                broadcasts={broadcasts} pendingUsers={pendingUsers} loadingExtra={loadingExtra}
-                canAddSong={canAddSong} canWriteSchedule={canWriteSchedule} canAddMember={canAddMember}
-            />
-        );
-    }
-    // ── All other roles → null (Dashboard nav item is disabled for non-admins)
-    return null;
+    // All roles see the full bento dashboard
+    return (
+        <AdminDashboard
+            userName={userName} userEmail={userEmail} userId={userId}
+            songs={songs} members={members} schedules={schedules} notes={notes}
+            onNavigate={onNavigate}
+            broadcasts={broadcasts} pendingUsers={pendingUsers} loadingExtra={loadingExtra}
+            canAddSong={canAddSong} canWriteSchedule={canWriteSchedule} canAddMember={canAddMember}
+        />
+    );
 }

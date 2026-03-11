@@ -250,17 +250,10 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
-  const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "admin">("songs");
+  const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "admin">("dashboard");
   const { isAdmin, userRole, user, status: authStatus } = useAuth();
 
-  // On first auth resolution: send admins to the dashboard, everyone else stays on Song Management
-  const initialViewSet = useRef(false);
-  useEffect(() => {
-    if (!initialViewSet.current && authStatus === "authenticated") {
-      initialViewSet.current = true;
-      if (isAdmin) setCurrentView("dashboard");
-    }
-  }, [authStatus, isAdmin]);
+  // Dashboard is the default landing for all roles — no redirect needed.
 
   // ── QA Specialist simulated role ──────────────────────────────────────────
   const isQA = userRole === "qa_specialist";
