@@ -315,26 +315,29 @@ export default function AdminDashboard({
             </div>
 
 
-            {/* ── Metric tiles ── */}
-            {/* mobile: 2-col | tablet(sm): 4-col | desktop(lg): 6-col */}
-            {/* NextService: full-width on mobile/tablet, 2-col on lg */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
-                <MetricTile label="Songs" value={songs.length} sub={`${songsUsed} in services`}
-                    iconBg="bg-indigo-100 dark:bg-indigo-900/40" icon={<Music size={15} className="text-indigo-600 dark:text-indigo-400" />}
-                    onClick={() => onNavigate("songs")} />
-                <MetricTile label="Members" value={members.length} sub={`${members.filter(m => m.status !== "inactive").length} active`}
-                    iconBg="bg-violet-100 dark:bg-violet-900/40" icon={<Users size={15} className="text-violet-600 dark:text-violet-400" />}
-                    onClick={() => onNavigate("members")} />
-                <MetricTile label="Events" value={totalEvents} sub={`${upcomingEvents.length} upcoming`}
-                    iconBg="bg-emerald-100 dark:bg-emerald-900/40" icon={<Zap size={15} className="text-emerald-600 dark:text-emerald-400" />}
-                    onClick={() => onNavigate("schedule")} />
-                <MetricTile label="Issues" value={openBugs + openFeqs} sub={`${openBugs} bugs · ${openFeqs} req`}
-                    iconBg="bg-amber-100 dark:bg-amber-900/40" icon={<AlertCircle size={15} className="text-amber-600 dark:text-amber-400" />} />
-                {/* Church Events hero — full width on mobile/sm, 2 cols on lg */}
-                <div className="col-span-2 sm:col-span-4 lg:col-span-2">
+            {/* ── Top section: Church Events (left) + 2×2 metric tiles (right) ── */}
+            {/* mobile: stacks | desktop (lg+): side by side */}
+            <div className="flex flex-col lg:flex-row gap-3">
+                {/* LEFT — Church Events hero */}
+                <div className="lg:w-1/2 xl:w-3/5">
                     <NextServiceTile ev={nextEvent} songs={songs} members={members} myMemberId={myMemberId} onClick={() => onNavigate("schedule")} />
                 </div>
+                {/* RIGHT — 2×2 metric tiles: Songs | Members on top, Events | Issues on bottom */}
+                <div className="lg:w-1/2 xl:w-2/5 grid grid-cols-2 gap-3 content-start">
+                    <MetricTile label="Songs" value={songs.length} sub={`${songsUsed} in services`}
+                        iconBg="bg-indigo-100 dark:bg-indigo-900/40" icon={<Music size={15} className="text-indigo-600 dark:text-indigo-400" />}
+                        onClick={() => onNavigate("songs")} />
+                    <MetricTile label="Members" value={members.length} sub={`${members.filter(m => m.status !== "inactive").length} active`}
+                        iconBg="bg-violet-100 dark:bg-violet-900/40" icon={<Users size={15} className="text-violet-600 dark:text-violet-400" />}
+                        onClick={() => onNavigate("members")} />
+                    <MetricTile label="Events" value={totalEvents} sub={`${upcomingEvents.length} upcoming`}
+                        iconBg="bg-emerald-100 dark:bg-emerald-900/40" icon={<Zap size={15} className="text-emerald-600 dark:text-emerald-400" />}
+                        onClick={() => onNavigate("schedule")} />
+                    <MetricTile label="Issues" value={openBugs + openFeqs} sub={`${openBugs} bugs · ${openFeqs} req`}
+                        iconBg="bg-amber-100 dark:bg-amber-900/40" icon={<AlertCircle size={15} className="text-amber-600 dark:text-amber-400" />} />
+                </div>
             </div>
+
 
             {/* Alert banners */}
             <div className="flex flex-wrap gap-2">
