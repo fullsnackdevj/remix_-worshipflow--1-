@@ -13,20 +13,42 @@ const VERSE_REACTIONS = [
     { key: "worship", label: "Worship", icon: "🎶", activeColor: "bg-violet-100 dark:bg-violet-900/40 border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300" },
 ] as const;
 
-function dayOfYear() {
-    const now = new Date();
-    return Math.floor((now.getTime() - new Date(now.getFullYear(), 0, 0).getTime()) / 86400000);
+/** Returns a Date object in Philippines time (UTC+8), always. */
+function phNow() {
+    // toLocaleString with timeZone then re-parse gives us accurate PH local time
+    const ph = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+    return ph;
 }
-function todayKey() { return new Date().toISOString().split("T")[0]; }
+function todayKey() {
+    const d = phNow();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function dayOfYear() {
+    const d = phNow();
+    const start = new Date(d.getFullYear(), 0, 0);
+    return Math.floor((d.getTime() - start.getTime()) / 86_400_000);
+}
 
 export default function VerseOfTheDay({ userId }: Props) {
+    const [dateKey, setDateKey] = useState(todayKey);
     const verse = VERSES[(dayOfYear() - 1 + VERSES.length) % VERSES.length];
-    const dateKey = todayKey();
 
     const [reactions, setReactions] = useState<Record<string, string[]>>({});
     const [showInsight, setShowInsight] = useState(true);
 
-    // Load saved reactions from server on mount
+    // Auto-refresh at PH midnight: check every 30s if the date has ticked over
+    useEffect(() => {
+        const id = setInterval(() => {
+            const newKey = todayKey();
+            if (newKey !== dateKey) {
+                setDateKey(newKey);
+                setReactions({});   // wipe local reactions so fresh ones load
+            }
+        }, 30_000);
+        return () => clearInterval(id);
+    }, [dateKey]);
+
+    // Load saved reactions from server whenever the date changes
     useEffect(() => {
         fetch(`/api/verse-of-day?date=${dateKey}`)
             .then(r => r.json())

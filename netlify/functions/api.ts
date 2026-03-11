@@ -1090,7 +1090,10 @@ Rules:
     // ─── VERSE OF THE DAY ────────────────────────────────────────────────────────
     // GET /verse-of-day?date=YYYY-MM-DD
     if (rawPath === "/verse-of-day" && method === "GET") {
-        const date = event.queryStringParameters?.date || new Date().toISOString().split("T")[0];
+        // Default date: Philippines time (UTC+8) so midnight PH = new verse/reactions
+        const phDate = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+        const phKey = `${phDate.getFullYear()}-${String(phDate.getMonth() + 1).padStart(2, "0")}-${String(phDate.getDate()).padStart(2, "0")}`;
+        const date = event.queryStringParameters?.date || phKey;
         try {
             const doc = await firestore.collection("verseOfDay").doc(date).get();
             if (!doc.exists) return json(200, { reactions: {}, notes: [] });
