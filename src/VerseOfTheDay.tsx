@@ -5,16 +5,52 @@ import { db } from "./firebase";
 import { doc, onSnapshot, setDoc, updateDoc, arrayUnion, arrayRemove } from "firebase/firestore";
 
 interface VotdNote { uid: string; name: string; photo: string; text: string; createdAt: string; }
-
 interface Props { userId: string; userName: string; userPhoto: string; }
 
-const EMOJIS = ["🙏", "❤️", "🔥", "😭", "✨", "🎶"];
+// ── Reactions — same pill style as Notes panel ─────────────────────────────
+const VERSE_REACTIONS = [
+    {
+        key: "prayer",
+        label: "Praying",
+        icon: <span className="text-[13px] leading-none">🙏</span>,
+        activeColor: "bg-sky-100 dark:bg-sky-900/40 border-sky-300 dark:border-sky-700 text-sky-700 dark:text-sky-300",
+    },
+    {
+        key: "love",
+        label: "Love this",
+        icon: <span className="text-[13px] leading-none">❤️</span>,
+        activeColor: "bg-rose-100 dark:bg-rose-900/40 border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-300",
+    },
+    {
+        key: "fire",
+        label: "On fire",
+        icon: <span className="text-[13px] leading-none">🔥</span>,
+        activeColor: "bg-orange-100 dark:bg-orange-900/40 border-orange-300 dark:border-orange-700 text-orange-700 dark:text-orange-300",
+    },
+    {
+        key: "touched",
+        label: "Touched",
+        icon: <span className="text-[13px] leading-none">😭</span>,
+        activeColor: "bg-indigo-100 dark:bg-indigo-900/40 border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300",
+    },
+    {
+        key: "blessed",
+        label: "Blessed",
+        icon: <span className="text-[13px] leading-none">✨</span>,
+        activeColor: "bg-amber-100 dark:bg-amber-900/40 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300",
+    },
+    {
+        key: "worship",
+        label: "Worship",
+        icon: <span className="text-[13px] leading-none">🎶</span>,
+        activeColor: "bg-violet-100 dark:bg-violet-900/40 border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300",
+    },
+] as const;
 
 function dayOfYear(): number {
     const now = new Date();
     return Math.floor((now.getTime() - new Date(now.getFullYear(), 0, 0).getTime()) / 86400000);
 }
-
 function todayKey(): string { return new Date().toISOString().split("T")[0]; }
 
 export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
@@ -31,7 +67,7 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
     const docRef = useRef(doc(db, "verseOfDay", dateKey)).current;
     const docInitialized = useRef(false);
 
-    // ── Real-time listener — updates instantly when anyone reacts or notes ──
+    // ── Real-time listener ─────────────────────────────────────────────────────
     useEffect(() => {
         const unsub = onSnapshot(docRef, (snap) => {
             if (snap.exists()) {
@@ -44,88 +80,64 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
         return () => unsub();
     }, [dateKey]);
 
-    // ── Emoji reaction — optimistic update + single atomic write ──
-    const toggleReaction = async (emoji: string) => {
+    // ── Emoji reaction — optimistic + single atomic Firestore write ────────────
+    const toggleReaction = async (key: string) => {
         if (!userId) return;
-        const current = reactions[emoji] ?? [];
+        const current = reactions[key] ?? [];
         const hasIt = current.includes(userId);
 
-        // 1. Instant local update (no waiting)
+        // Instant local update
         setReactions(prev => ({
             ...prev,
-            [emoji]: hasIt ? current.filter(u => u !== userId) : [...current, userId],
+            [key]: hasIt ? current.filter(u => u !== userId) : [...current, userId],
         }));
 
-        // 2. Write to Firestore — initialize doc if needed, else update field
         try {
             if (!docInitialized.current) {
-                // First ever reaction: create the doc
-                await setDoc(docRef, {
-                    verse: verse.ref,
-                    reactions: { [emoji]: hasIt ? [] : [userId] },
-                    notes: [],
-                }, { merge: true });
+                await setDoc(docRef, { verse: verse.ref, reactions: { [key]: hasIt ? [] : [userId] }, notes: [] }, { merge: true });
                 docInitialized.current = true;
             } else {
                 await updateDoc(docRef, {
-                    [`reactions.${emoji}`]: hasIt ? arrayRemove(userId) : arrayUnion(userId),
+                    [`reactions.${key}`]: hasIt ? arrayRemove(userId) : arrayUnion(userId),
                 });
             }
-        } catch (e) {
-            // Rollback on error
-            setReactions(prev => ({
-                ...prev,
-                [emoji]: current,
-            }));
+        } catch {
+            // Rollback
+            setReactions(prev => ({ ...prev, [key]: current }));
         }
     };
 
-    // ── Note submission — optimistic, instant ──
+    // ── Note submission — optimistic ───────────────────────────────────────────
     const submitNote = async () => {
         const text = noteInput.trim();
         if (!text || !userId || savingNote) return;
+        const newNote: VotdNote = { uid: userId, name: userName, photo: userPhoto, text, createdAt: new Date().toISOString() };
 
-        const newNote: VotdNote = {
-            uid: userId,
-            name: userName,
-            photo: userPhoto,
-            text,
-            createdAt: new Date().toISOString(),
-        };
-
-        // 1. Instant local update
         setNotes(prev => [...prev, newNote]);
         setNoteInput("");
         setSavingNote(true);
 
         try {
             if (!docInitialized.current) {
-                await setDoc(docRef, {
-                    verse: verse.ref,
-                    reactions: {},
-                    notes: [newNote],
-                }, { merge: true });
+                await setDoc(docRef, { verse: verse.ref, reactions: {}, notes: [newNote] }, { merge: true });
                 docInitialized.current = true;
             } else {
                 await updateDoc(docRef, { notes: arrayUnion(newNote) });
             }
-            // Show saved confirmation
             setNoteSaved(true);
             setTimeout(() => setNoteSaved(false), 2000);
         } catch {
-            // Rollback on error
             setNotes(prev => prev.filter(n => n.createdAt !== newNote.createdAt));
             setNoteInput(text);
-        } finally {
-            setSavingNote(false);
-        }
+        } finally { setSavingNote(false); }
     };
 
-    const totalReactions = Object.values(reactions).reduce((s, a) => s + a.length, 0);
     const totalNotes = notes.length;
+    const totalReactions = Object.values(reactions).reduce((s, a) => s + a.length, 0);
 
     return (
         <div className="rounded-2xl bg-gradient-to-br from-indigo-950/80 via-indigo-900/60 to-violet-900/40 border border-indigo-500/20 shadow-xl overflow-hidden mb-4">
+
             {/* Header */}
             <div className="flex items-center justify-between px-5 pt-4 pb-2">
                 <div className="flex items-center gap-2">
@@ -172,18 +184,33 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
                 )}
             </div>
 
-            {/* Emoji reactions */}
-            <div className="px-5 pb-3 flex items-center gap-2 flex-wrap">
-                {EMOJIS.map(emoji => {
-                    const count = (reactions[emoji] ?? []).length;
-                    const mine = (reactions[emoji] ?? []).includes(userId);
+            {/* ── Reactions — Notes-panel pill style ── */}
+            <div className="px-5 pb-3 flex flex-wrap items-center gap-1.5">
+                {VERSE_REACTIONS.map(({ key, label, icon, activeColor }) => {
+                    const users = reactions[key] ?? [];
+                    const reacted = users.includes(userId);
+                    const tooltip = reacted
+                        ? `Remove "${label}"${users.length > 1 ? ` · ${users.length} people` : ""}`
+                        : `${label}${users.length > 0 ? ` · ${users.length} person${users.length !== 1 ? "s" : ""}` : ""}`;
                     return (
-                        <button key={emoji} onClick={() => toggleReaction(emoji)}
-                            className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold transition-all border active:scale-95 ${mine
-                                ? "bg-indigo-500/30 border-indigo-400/50 text-white scale-105 shadow-md shadow-indigo-500/20"
-                                : "bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:scale-105"
-                                }`}>
-                            {emoji}{count > 0 && <span className="text-[10px] tabular-nums">{count}</span>}
+                        <button
+                            key={key}
+                            onClick={() => toggleReaction(key)}
+                            title={tooltip}
+                            aria-label={tooltip}
+                            className={`group relative flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full border transition-all select-none active:scale-95 ${reacted
+                                ? `${activeColor} scale-105 shadow-sm`
+                                : "bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:border-white/20"
+                                }`}
+                        >
+                            {icon}
+                            {users.length > 0 && (
+                                <span className="font-semibold tabular-nums">{users.length}</span>
+                            )}
+                            {/* Tooltip */}
+                            <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-gray-900 text-white text-[10px] px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-10 shadow-lg">
+                                {label}
+                            </span>
                         </button>
                     );
                 })}
@@ -192,7 +219,7 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
                 )}
             </div>
 
-            {/* Notes section */}
+            {/* ── Team Notes ── */}
             <div className="border-t border-indigo-500/10 px-5 pt-3 pb-4">
                 <button onClick={() => setShowNotes(v => !v)}
                     className="flex items-center gap-1.5 text-xs font-semibold text-indigo-300 hover:text-indigo-200 transition-colors mb-2">
@@ -222,7 +249,7 @@ export default function VerseOfTheDay({ userId, userName, userPhoto }: Props) {
                             </div>
                         ))}
 
-                        {/* Note input */}
+                        {/* Input */}
                         <div className="flex items-center gap-2 mt-2">
                             {userPhoto
                                 ? <img src={userPhoto} alt={userName} className="w-6 h-6 rounded-full object-cover shrink-0 border border-indigo-400/30" />
