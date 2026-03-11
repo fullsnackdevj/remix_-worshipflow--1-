@@ -1089,6 +1089,23 @@ Rules:
         } catch (e) { return json(500, { error: "Failed to resolve" }); }
     }
 
+    // PATCH /notes/:id/retype  — Admin / Leader only
+    const retypeMatch = rawPath.match(/^\/notes\/([^/]+)\/retype$/);
+    if (retypeMatch && method === "PATCH") {
+        const nid = retypeMatch[1];
+        const { userId, userRole, newType } = body;
+        const isAdmin = userRole === "admin" || userRole === "leader";
+        if (!isAdmin) return json(403, { error: "Only admins can reclassify notes" });
+        if (!["bug", "feature", "general"].includes(newType)) return json(400, { error: "Invalid note type" });
+        try {
+            const ref = firestore?.collection("team_notes").doc(nid);
+            const doc = await ref?.get();
+            if (!doc?.exists) return json(404, { error: "Note not found" });
+            await ref?.update({ type: newType, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+            return json(200, { success: true });
+        } catch (e) { return json(500, { error: "Failed to reclassify note" }); }
+    }
+
     // ─── VERSE OF THE DAY ────────────────────────────────────────────────────────
     // GET /verse-of-day?date=YYYY-MM-DD
     if (rawPath === "/verse-of-day" && method === "GET") {

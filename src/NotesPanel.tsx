@@ -139,9 +139,10 @@ interface NoteCardProps {
     onDelete: (id: string) => void;
     onReact: (id: string, emoji: string) => void;
     onResolve: (id: string, resolved: boolean) => void;
+    onRetype: (id: string, newType: string) => void;
 }
 
-function NoteCard({ note, userId, userRole, onEdit, onDelete, onReact, onResolve }: NoteCardProps) {
+function NoteCard({ note, userId, userRole, onEdit, onDelete, onReact, onResolve, onRetype }: NoteCardProps) {
     const [imgExpanded, setImgExpanded] = useState(false);
     const cfg = typeConfig(note.type);
     const isAuthor = note.authorId === userId;
@@ -235,6 +236,25 @@ function NoteCard({ note, userId, userRole, onEdit, onDelete, onReact, onResolve
 
                 {/* Action buttons */}
                 <div className="ml-auto flex items-center gap-1">
+                    {/* Admin-only: reclassify note type */}
+                    {isAdmin && (
+                        <div className="flex items-center gap-0.5 mr-1 border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
+                            {NOTE_TYPES.map(t => (
+                                <button
+                                    key={t.value}
+                                    onClick={() => note.type !== t.value && onRetype(note.id, t.value)}
+                                    title={note.type === t.value ? `Type: ${t.label}` : `Move to ${t.label}`}
+                                    className={`flex items-center gap-1 px-1.5 py-1 text-[10px] font-semibold transition-all ${
+                                        note.type === t.value
+                                            ? `${t.cls} cursor-default`
+                                            : "text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                    }`}
+                                >
+                                    {t.icon}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                     {canResolve && (
                         <button
                             onClick={() => onResolve(note.id, !note.resolved)}
@@ -550,13 +570,23 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
         });
     };
 
-    // ── Optimistic resolve (already was optimistic, keeping) ────────────────────
+    // ── Optimistic resolve ───────────────────────────────────────────────────────
     const resolveNote = (id: string, resolved: boolean) => {
         setNotes(prev => prev.map(n => n.id === id ? { ...n, resolved } : n));
         fetch(`/api/notes/${id}/resolve`, {
             method: "PATCH", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ userId, resolved }),
         });
+    };
+
+    // ── Admin: reclassify note type ──────────────────────────────────────────────
+    const retypeNote = (id: string, newType: string) => {
+        setNotes(prev => prev.map(n => n.id === id ? { ...n, type: newType as TeamNote["type"] } : n));
+        fetch(`/api/notes/${id}/retype`, {
+            method: "PATCH", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId, userRole, newType }),
+        }).then(r => { if (!r.ok) { setNotes(prev => prev.map(n => n.id === id ? { ...n, type: (prev.find(x => x.id === id)?.type ?? newType) as TeamNote["type"] } : n)); onToast?.("error", "Failed to reclassify note."); } })
+          .catch(() => onToast?.("error", "Failed to reclassify note."));
     };
 
     // Filter + sort
@@ -860,6 +890,7 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
                                     onDelete={deleteNote}
                                     onReact={reactToNote}
                                     onResolve={resolveNote}
+                                    onRetype={retypeNote}
                                 />
                                 </React.Fragment>
                             ))
