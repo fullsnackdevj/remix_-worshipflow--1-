@@ -790,14 +790,19 @@ export default function App() {
     setSelectedScheduleDate(dateStr);
     const eventsOnDate = allSchedules.filter(s => s.date === dateStr);
     if (eventsOnDate.length === 0) {
-      if (isPastDate) {
+      if (isPastDate && !isAdmin) {
         setSelectedScheduleDate(null);
         showToast("error", "This date has passed. New events can't be added.");
         return;
       }
-      // Just select the date — user clicks +Add Event to open the form
-      setSchedPanelMode("view");
-      setSelectedEventId(null);
+      // Admins can open past empty dates to add events; others wait for date selection
+      if (isAdmin && isPastDate) {
+        openBlankEventForm(dateStr);
+        setSchedPanelMode("edit");
+      } else {
+        setSchedPanelMode("view");
+        setSelectedEventId(null);
+      }
     } else if (eventsOnDate.length === 1) {
       openEventById(eventsOnDate[0].id, dateStr);
     } else {
@@ -2095,11 +2100,11 @@ export default function App() {
                         {(() => {
                           const isListView = scheduleView === "list";
                           const hasExisting = selectedDateEvents.length > 0;
-                          const hasDate = !!selectedScheduleDate && selectedScheduleDate >= todayStr;
+                          const hasDate = !!selectedScheduleDate && (selectedScheduleDate >= todayStr || isAdmin);
                           const isPast = !!selectedScheduleDate && selectedScheduleDate < todayStr;
                           const isEditingExistingEvent = schedPanelMode === "edit" && !!selectedEventId;
                           const isFormOpen = schedPanelMode === "edit"; // true for both new & existing event form
-                          // Enable only in month view, future empty date, form not already open
+                          // Admins can add anywhere; others only on future empty dates in month view
                           const canAdd = (canWriteSchedule || leaderCanAddOnDate) && !isListView && hasDate && !hasExisting && !isFormOpen;
                           const label = isListView || hasExisting ? "Add Another Event" : "Add Event";
                           const disabledTitle = (!canWriteSchedule && !isLeader)
@@ -2306,7 +2311,7 @@ export default function App() {
                                   );
                                 })}
                               </div>
-                              {!isDatePast && (
+                              {(!isDatePast || isAdmin) && (
                                 <button onClick={() => openBlankEventForm(selectedScheduleDate!)}
                                   className="w-full flex items-center justify-center gap-2 py-2.5 border-2 border-dashed border-indigo-300 dark:border-indigo-600 text-indigo-600 dark:text-indigo-400 rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-900/20 text-sm font-medium transition-colors">
                                   <Plus size={16} /> Add Another Event
@@ -2331,9 +2336,11 @@ export default function App() {
                           <div className="fixed top-1/2 -translate-y-1/2 left-4 right-4 z-50 md:static md:translate-y-0 md:z-auto md:w-80 md:shrink-0 bg-white dark:bg-gray-800 rounded-2xl md:rounded-2xl border border-gray-200 dark:border-gray-700 shadow-2xl p-5 max-h-[85dvh] md:max-h-[calc(100vh-200px)] overflow-y-auto md:self-start md:sticky md:top-0">
                             {isDatePast && (
                               <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40 rounded-xl px-3 py-2 mb-3 text-xs text-amber-700 dark:text-amber-400">
-                                <Lock size={13} className="shrink-0" /><span>This date has passed — view only</span>
+                                <Lock size={13} className="shrink-0" />
+                                <span>This date has passed — {isAdmin ? "admin override active" : "view only"}</span>
                               </div>
                             )}
+
                             {selectedDateEvents.length >= 2 && selectedEventId && (
                               <button onClick={() => { setSelectedEventId(null); setSchedPanelMode("view"); }}
                                 className="flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium mb-3 transition-colors">
@@ -2352,7 +2359,7 @@ export default function App() {
                                 </p>
                               </div>
                               <div className="flex items-center gap-1">
-                                {schedPanelMode === "view" && editingExisting && !isDatePast && (canWriteSchedule || leaderCanEditEvent) && (
+                                {schedPanelMode === "view" && editingExisting && (!isDatePast || isAdmin) && (canWriteSchedule || leaderCanEditEvent) && (
                                   <button onClick={() => setSchedPanelMode("edit")} className="p-1.5 text-gray-400 hover:text-indigo-500 rounded-lg transition-colors"><Pencil size={16} /></button>
                                 )}
                                 {editingExisting && (
@@ -2892,7 +2899,7 @@ export default function App() {
                                 </div>
 
                                 {/* Save / Delete */}
-                                {!isDatePast && (
+                                {(!isDatePast || isAdmin) && (
                                   <div className="flex flex-col gap-2 pt-2 border-t border-gray-100 dark:border-gray-700">
                                     <button onClick={handleSaveSchedule} disabled={isSavingSchedule}
                                       className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-60">
