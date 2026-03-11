@@ -288,7 +288,7 @@ export default function AdminDashboard({
     const first = userName.split(" ")[0] || "Admin";
     const nextEvent = upcomingEvents[0] ?? null;
 
-    const [releaseNotes, setReleaseNotes] = useState<{ title: string; message: string; releases: { version: string; highlights: string[] }[] } | null>(null);
+    const [releaseNotes, setReleaseNotes] = useState<{ title: string; message: string; updatedAt?: string; releases: { version: string; highlights: string[] }[] } | null>(null);
     useEffect(() => { fetch("/release-notes.json").then(r => r.json()).then(setReleaseNotes).catch(() => { }); }, []);
 
     return (
@@ -362,6 +362,11 @@ export default function AdminDashboard({
                             Manage <ChevronRight size={13} />
                         </button>
                     </div>
+                    {releaseNotes?.updatedAt && (
+                        <div className="px-5 pt-2">
+                            <span className="text-[10px] text-gray-400 dark:text-gray-500 font-medium">Updated: {releaseNotes.updatedAt}</span>
+                        </div>
+                    )}
                     <div className="px-5 py-4">
                         {releaseNotes ? (
                             <>
