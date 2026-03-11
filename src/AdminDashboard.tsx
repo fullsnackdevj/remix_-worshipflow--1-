@@ -205,7 +205,12 @@ function NextServiceTile({ ev, songs, members, myMemberId, onClick }: {
                 {/* Avatar row */}
                 <div className="flex items-center gap-2 pt-2 border-t border-gray-100 dark:border-gray-700">
                     <div className="flex -space-x-1.5">
-                        {[ev.worshipLeader, ...(ev.musicians ?? []).slice(0, 3), ...(ev.backupSingers ?? []).slice(0, 1)].filter(Boolean).map((m, i) => {
+                        {[
+                            ev.worshipLeader,
+                            ...(ev.musicians ?? []).slice(0, 2),
+                            ...(ev.backupSingers ?? []).slice(0, 1),
+                            ...(ev.assignments ?? []).flatMap(a => a.members).slice(0, 2),
+                        ].filter(Boolean).map((m, i) => {
                             const directPhoto = m!.photo?.startsWith("http") ? m!.photo : "";
                             const byId = members.find(mem => mem.id === m!.memberId);
                             const byName = members.find(mem => mem.name?.toLowerCase() === m!.name?.toLowerCase());
@@ -223,7 +228,14 @@ function NextServiceTile({ ev, songs, members, myMemberId, onClick }: {
                             );
                         })}
                     </div>
-                    <p className="text-xs text-gray-400">{[ev.worshipLeader, ...(ev.musicians ?? [])].filter(Boolean).length} serving</p>
+                    <p className="text-xs text-gray-400">
+                        {[
+                            ev.worshipLeader,
+                            ...(ev.musicians ?? []),
+                            ...(ev.backupSingers ?? []),
+                            ...(ev.assignments ?? []).flatMap(a => a.members),
+                        ].filter(Boolean).length} serving
+                    </p>
                 </div>
             </div>
         </Tile>
