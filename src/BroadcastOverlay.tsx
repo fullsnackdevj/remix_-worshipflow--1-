@@ -17,14 +17,40 @@ export default function BroadcastOverlay() {
     const { user, isAdmin, logOut } = useAuth();
     const [broadcast, setBroadcast] = useState<Broadcast | null>(null);
     const [dismissing, setDismissing] = useState(false);
+    // Start true so we block the dashboard until the check resolves.
+    // Admins skip everything so we default to false for them immediately.
+    const [isChecking, setIsChecking] = useState(!isAdmin);
 
     useEffect(() => {
-        if (!user?.email || isAdmin) return; // 👑 Admins are never blocked — they control broadcasts
+        // Admins are never blocked — they control broadcasts
+        if (isAdmin) { setIsChecking(false); return; }
+        // Wait until Firebase has resolved the user
+        if (user?.email === undefined) return;
+        if (!user?.email) { setIsChecking(false); return; }
+
         fetch(`/api/broadcasts?email=${encodeURIComponent(user.email)}`)
             .then(r => r.json())
             .then(data => { if (data?.id) setBroadcast(data); })
-            .catch(() => { });
-    }, [user?.email]);
+            .catch(() => { })
+            .finally(() => setIsChecking(false));
+    }, [user?.email, isAdmin]);
+
+    // ── Still loading: render an opaque overlay so dashboard never flashes ──
+    if (isChecking) {
+        return (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center bg-gray-950">
+                <div className="flex flex-col items-center gap-4">
+                    <img src="/icon-192x192.png" alt="WorshipFlow" className="w-20 h-20 animate-pulse" />
+                    <div className="flex gap-1.5">
+                        {[0, 1, 2].map(i => (
+                            <span key={i} className="w-2 h-2 rounded-full bg-indigo-500/60 animate-bounce"
+                                style={{ animationDelay: `${i * 0.15}s` }} />
+                        ))}
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     if (!broadcast) return null;
 
