@@ -249,6 +249,12 @@ export default function App() {
   const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "admin">("dashboard");
   const { isAdmin, userRole, user, status: authStatus } = useAuth();
 
+  // Redirect non-admin users away from the dashboard (admin-only) to Song Library
+  useEffect(() => {
+    if (authStatus === "authenticated" && !isAdmin && currentView === "dashboard") {
+      setCurrentView("songs");
+    }
+  }, [authStatus, isAdmin]);
 
   // ── QA Specialist simulated role ──────────────────────────────────────────
   const isQA = userRole === "qa_specialist";
