@@ -776,10 +776,15 @@ export default function App() {
   );
 
   const openBlankEventForm = (dateStr: string) => {
+    // Absolute rule: past dates are view-only for everyone — no exceptions
+    const todayStr = new Date().toISOString().split("T")[0];
+    if (dateStr < todayStr) {
+      showToast("error", "This date has passed. Events cannot be added.");
+      return;
+    }
     setSelectedScheduleDate(dateStr);
     setSelectedEventId(null);
     setSchedPanelMode("edit");
-    // Auto-select event name for Worship Leaders based on day of week
     const dow = new Date(dateStr + "T00:00:00").getDay();
     const autoName = isLeader
       ? (dow === 0 ? "Sunday Service" : "Midweek Service")
@@ -824,19 +829,14 @@ export default function App() {
     setSelectedScheduleDate(dateStr);
     const eventsOnDate = allSchedules.filter(s => s.date === dateStr);
     if (eventsOnDate.length === 0) {
-      if (isPastDate && !(isAdmin || isQA)) {
+      if (isPastDate) {
+        // Past date with no events — nothing to show, ignore click
         setSelectedScheduleDate(null);
-        showToast("error", "This date has passed. New events can't be added.");
         return;
       }
-      // Admins & QA can open past empty dates to add events; others wait for date selection
-      if ((isAdmin || isQA) && isPastDate) {
-        openBlankEventForm(dateStr);
-        setSchedPanelMode("edit");
-      } else {
-        setSchedPanelMode("view");
-        setSelectedEventId(null);
-      }
+      // Future date, no events yet — open blank form if permitted
+      setSchedPanelMode("view");
+      setSelectedEventId(null);
     } else if (eventsOnDate.length === 1) {
       openEventById(eventsOnDate[0].id, dateStr);
     } else {
@@ -2151,8 +2151,8 @@ export default function App() {
                         {(() => {
                           const isListView = scheduleView === "list";
                           const hasExisting = selectedDateEvents.length > 0;
-                          const canBypassPast = isAdmin || isQA;
-                          const hasDate = !!selectedScheduleDate && (selectedScheduleDate >= todayStr || canBypassPast);
+                          const canBypassPast = false; // no one bypasses past dates
+                          const hasDate = !!selectedScheduleDate && selectedScheduleDate >= todayStr;
                           const isPast = !!selectedScheduleDate && selectedScheduleDate < todayStr;
                           const isEditingExistingEvent = schedPanelMode === "edit" && !!selectedEventId;
                           const isFormOpen = schedPanelMode === "edit"; // true for both new & existing event form
@@ -2386,17 +2386,17 @@ export default function App() {
                                   );
                                 })}
                               </div>
-                              {isDatePast && !isAdmin && !isQA ? (
+                              {isDatePast ? (
                                 <div className="w-full flex items-center gap-2 py-2.5 px-3 border border-amber-200 dark:border-amber-700/40 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 rounded-xl text-xs font-medium">
                                   <Lock size={13} className="shrink-0" />
                                   This date has passed — view only
                                 </div>
-                              ) : (!isDatePast || isAdmin || isQA) ? (
+                              ) : (
                                 <button onClick={() => openBlankEventForm(selectedScheduleDate!)}
                                   className="w-full flex items-center justify-center gap-2 py-2.5 border-2 border-dashed border-indigo-300 dark:border-indigo-600 text-indigo-600 dark:text-indigo-400 rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-900/20 text-sm font-medium transition-colors">
                                   <Plus size={16} /> Add Another Event
                                 </button>
-                              ) : null}
+                              )}
                             </div>
                           );
                         }
@@ -2417,7 +2417,7 @@ export default function App() {
                             {isDatePast && (
                               <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40 rounded-xl px-3 py-2 mb-3 text-xs text-amber-700 dark:text-amber-400">
                                 <Lock size={13} className="shrink-0" />
-                                <span>This date has passed — {(isAdmin || isQA) ? "admin/QA override active" : "view only"}</span>
+                                <span>This date has passed — view only</span>
                               </div>
                             )}
 
@@ -2440,7 +2440,7 @@ export default function App() {
                                 </p>
                               </div>
                               <div className="flex items-center gap-1">
-                                {schedPanelMode === "view" && editingExisting && (!isDatePast || isAdmin || isQA) && (canWriteSchedule || leaderCanEditEvent) && (
+                                {schedPanelMode === "view" && editingExisting && !isDatePast && (canWriteSchedule || leaderCanEditEvent) && (
                                   <button onClick={() => setSchedPanelMode("edit")} className="p-1.5 text-gray-400 hover:text-indigo-500 rounded-lg transition-colors"><Pencil size={16} /></button>
                                 )}
                                 {editingExisting && (
@@ -3002,7 +3002,7 @@ export default function App() {
                                 </div>
 
                                 {/* Save / Delete */}
-                                {(!isDatePast || isAdmin || isQA) && (
+                                {!isDatePast && (
                                   <div className="flex flex-col gap-2 pt-2 border-t border-gray-100 dark:border-gray-700">
                                     <button onClick={handleSaveSchedule} disabled={isSavingSchedule}
                                       className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-60">
