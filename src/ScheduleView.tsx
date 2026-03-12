@@ -347,7 +347,7 @@ const handleDeleteSchedule = () => {
   });
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="max-w-7xl mx-auto">
       {/* ── Scheduling Header ── */}
       <div className="flex flex-col gap-2 mb-4">
         {/* Row 1: centered month navigation */}
@@ -421,7 +421,7 @@ const handleDeleteSchedule = () => {
               </div>
               <div className="grid grid-cols-7">
                 {Array.from({ length: firstDow }).map((_, i) => (
-                  <div key={`e${i}`} className="min-h-[70px] border-b border-r border-gray-200 dark:border-gray-700/50" />
+                  <div key={`e${i}`} className="min-h-[80px] lg:min-h-[110px] border-b border-r border-gray-200 dark:border-gray-700/50" />
                 ))}
                 {Array.from({ length: daysInMonth }).map((_, i) => {
                   const day = i + 1;
@@ -436,7 +436,7 @@ const handleDeleteSchedule = () => {
                       key={dateStr}
                       onClick={() => openScheduleEditor(dateStr)}
                       title={isCellPast && !cellHasEvents ? "Past date — no new events can be added" : undefined}
-                      className={`group relative min-h-[70px] border-b border-r border-gray-200 dark:border-gray-700/50 p-1.5 text-left transition-colors ${isCellPast && !cellHasEvents ? "opacity-40 cursor-not-allowed" : "hover:bg-indigo-50 dark:hover:bg-indigo-900/20"} ${isSelected ? "bg-indigo-50 dark:bg-indigo-900/30" : ""}`}
+                      className={`group relative min-h-[80px] lg:min-h-[110px] border-b border-r border-gray-200 dark:border-gray-700/50 p-1.5 lg:p-2 text-left transition-colors ${isCellPast && !cellHasEvents ? "opacity-40 cursor-not-allowed" : "hover:bg-indigo-50 dark:hover:bg-indigo-900/20"} ${isSelected ? "bg-indigo-50 dark:bg-indigo-900/30" : ""}`}
                     >
                       <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-medium mb-1 ${isToday ? "bg-indigo-600 text-white" : "text-gray-700 dark:text-gray-300"}`}>{day}</span>
                       {(canWriteSchedule || isLeader) && !isCellPast && (
@@ -457,7 +457,7 @@ const handleDeleteSchedule = () => {
                         if (schedEvents.length >= 3) {
                           return (
                             <div className="flex flex-col gap-0.5">
-                              <p className="text-[10px] font-semibold text-fuchsia-600 dark:text-fuchsia-300 leading-tight">● {schedEvents.length} events</p>
+                              <p className="text-xs font-semibold text-fuchsia-600 dark:text-fuchsia-300 leading-tight">● {schedEvents.length} events</p>
                             </div>
                           );
                         }
@@ -469,7 +469,7 @@ const handleDeleteSchedule = () => {
                               return (
                                 <div key={ei} className="flex items-center gap-0.5">
                                   <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${clr.dot}`} />
-                                  <p className={`text-[10px] font-medium truncate leading-tight ${clr.text}`}>{nm}</p>
+                                   <p className={`text-[11px] lg:text-xs font-medium truncate leading-tight ${clr.text}`}>{nm}</p>
                                 </div>
                               );
                             })}
