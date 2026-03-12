@@ -314,6 +314,11 @@ export default function SongsView({
     }
   }, []);
 
+  // ── Fetch songs on mount ─────────────────────────────────────────────────
+  useEffect(() => {
+    fetchSongs();
+  }, []);
+
   const fetchTags = fetchSongs; // aliases — tags are always loaded together
 
 

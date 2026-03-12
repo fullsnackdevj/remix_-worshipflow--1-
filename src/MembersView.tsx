@@ -121,6 +121,10 @@ export default function MembersView({
     }
   }, []);
 
+  // ── Fetch members on mount ─────────────────────────────────────────
+  useEffect(() => {
+    fetchMembers();
+  }, []);
 
   const filteredMembers = useMemo(() => {
     if (!memberSearchQuery.trim()) return allMembers;
