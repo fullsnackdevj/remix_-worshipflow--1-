@@ -40,7 +40,7 @@ export default function DatePicker({
   icon,
 }: DatePickerProps) {
   const today = new Date();
-  const todayYMD = toYMD(today.getFullYear(), today.getMonth() + 1, today.getDate());
+  const todayYMD = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" }); // YYYY-MM-DD in PH timezone
 
   const [open, setOpen] = useState(false);
   const [yearMode, setYearMode] = useState(false);

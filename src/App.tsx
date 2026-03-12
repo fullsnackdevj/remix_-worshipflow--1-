@@ -415,7 +415,7 @@ export default function App() {
   const [newRoleInput, setNewRoleInput] = useState("");
   // Leader-specific schedule derived flags (placed here, after state declarations)
   const isServiceEventType = ["sunday service", "midweek service"].includes(editSchedEventName.toLowerCase());
-  const leaderCanAddOnDate = isLeader && !!selectedScheduleDate && selectedScheduleDate >= new Date().toISOString().split("T")[0]; // no past dates
+  const leaderCanAddOnDate = isLeader && !!selectedScheduleDate && selectedScheduleDate >= new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" }); // no past dates
   const leaderCanEditEvent = isLeader && isServiceEventType;    // leader can only edit service-type events
   const [newGroupFocusIdx, setNewGroupFocusIdx] = useState<number | null>(null);
   const [editSchedSongLineup, setEditSchedSongLineup] = useState<{ joyful?: string; solemn?: string }>({});
@@ -777,7 +777,7 @@ export default function App() {
 
   const openBlankEventForm = (dateStr: string) => {
     // Absolute rule: past dates are view-only for everyone — no exceptions
-    const todayStr = new Date().toISOString().split("T")[0];
+    const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
     if (dateStr < todayStr) {
       showToast("error", "This date has passed. Events cannot be added.");
       return;
@@ -824,7 +824,7 @@ export default function App() {
   };
 
   const openScheduleEditor = (dateStr: string) => {
-    const todayStr = new Date().toISOString().split("T")[0];
+    const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
     const isPastDate = dateStr < todayStr;
     setSelectedScheduleDate(dateStr);
     const eventsOnDate = allSchedules.filter(s => s.date === dateStr);
@@ -2113,7 +2113,7 @@ export default function App() {
                    SCHEDULING VIEW
               ══════════════════════════════════════════════════════════════ */}
               {currentView === "schedule" ? (() => {
-                const todayStr = new Date().toISOString().split("T")[0];
+                const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
                 const year = calendarMonth.getFullYear();
                 const month = calendarMonth.getMonth();
                 const firstDow = new Date(year, month, 1).getDay();
@@ -3224,7 +3224,7 @@ export default function App() {
                           </label>
                           <DatePicker
                             value={editMemberBirthdate}
-                            max={new Date().toISOString().split("T")[0]}
+                            max={new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" })}
                             onChange={v => { setEditMemberBirthdate(v); if (memberFormErrors.birthdate) setMemberFormErrors(p => ({ ...p, birthdate: undefined })); }}
                             error={!!memberFormErrors.birthdate}
                             placeholder="Select birthdate"
