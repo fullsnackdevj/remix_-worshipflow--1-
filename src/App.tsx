@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+
 import { useAuth } from "./AuthContext";
 import { getAuth } from "firebase/auth";
 import { usePushNotifications } from "./usePushNotifications";
@@ -13,7 +14,8 @@ import DatePicker from "./DatePicker";
 import BirthdatePromptModal from "./BirthdatePromptModal";
 import Playground from "./Playground";
 import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, LayoutGrid, List, BookOpen, Mic2, Copy, Pencil, Shield, Mail, Bell, Guitar, Sliders, Palette, Lock, AlertTriangle, CheckCircle, BookMarked, HandMetal, Headphones, HelpCircle, Undo2, Redo2, FlaskConical } from "lucide-react";
-import { Song, Tag } from "./types";
+import { Song, Tag, Member, ScheduleMember, Schedule } from "./types";
+
 
 // ── Member Role Constants ────────────────────────────────────────────────────
 const ROLE_CATEGORIES = [
@@ -56,40 +58,7 @@ const STATUS_CONFIG = {
   inactive: { label: "Inactive", dot: "bg-gray-400", badge: "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400" },
 } as const;
 
-interface Member {
-  id: string;
-  name: string;
-  phone: string;
-  email: string;
-  photo: string;
-  roles: string[];
-  status: "active" | "on-leave" | "inactive";
-  notes: string;
-  created_at?: string;
-  updated_at?: string;
-}
 
-interface ScheduleMember {
-  memberId: string;
-  name: string;
-  photo: string;
-  role: string;
-}
-
-interface Schedule {
-  id: string;
-  date: string;
-  serviceType?: string;
-  eventName?: string;
-  worshipLeader?: ScheduleMember | null;
-  backupSingers?: ScheduleMember[];
-  musicians?: ScheduleMember[];
-  songLineup?: { joyful?: string; solemn?: string };
-  assignments?: { role: string; members: ScheduleMember[] }[];
-  notes?: string;
-  created_by_name?: string;
-  created_by_photo?: string;
-}
 
 // ── Pure utility functions (module-level — no state dependencies) ────────────
 function timeAgo(iso: string): string {
@@ -1100,9 +1069,9 @@ export default function App() {
       result = result.filter(song =>
         song.title?.toLowerCase().includes(q) ||
         song.artist?.toLowerCase().includes(q) ||
-        (song.lyrics as any)?.toLowerCase().includes(q) ||
-        (song.chords as any)?.toLowerCase().includes(q) ||
-        song.tags?.some((t: any) => t.name?.toLowerCase().includes(q))
+        song.lyrics?.toLowerCase().includes(q) ||
+        song.chords?.toLowerCase().includes(q) ||
+        song.tags?.some((t: Tag) => t.name?.toLowerCase().includes(q))
       );
     }
 
@@ -1112,14 +1081,14 @@ export default function App() {
 
     if (tagFilters.length > 0) {
       result = result.filter(song =>
-        tagFilters.some(tagId => (song as any).tagIds?.includes(tagId))
+        tagFilters.some(tagId => song.tags.some(t => t.id === tagId))
       );
     }
 
     // Sort
     if (recentlyAdded) {
       result = [...result].sort((a, b) =>
-        new Date((b as any).created_at).getTime() - new Date((a as any).created_at).getTime()
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
     }
 
@@ -1218,7 +1187,7 @@ export default function App() {
         }
       }
       setEditMemberPhone(member.phone);
-      setEditMemberEmail((member as any).email || "");
+      setEditMemberEmail(member.email || "");
       setEditMemberPhoto(member.photo || "");
       setEditMemberRoles(member.roles || []);
       setEditMemberStatus(member.status || "active");

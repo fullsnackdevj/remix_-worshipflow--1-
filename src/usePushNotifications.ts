@@ -41,7 +41,6 @@ export function usePushNotifications(userId: string | null, userRole: string | n
             if (permission === "granted") {
                 setPushEnabled(true);
                 await registerAndStoreToken(userId!, userRole!);
-                console.log("✅ [Push] Notifications enabled!");
             }
         } catch (err) {
             console.warn("[Push] Permission request failed:", err);
