@@ -1,8 +1,20 @@
 {
-    "title": "🚀 Our Dashboard are live!",
+    "title": "⚡ Major Performance & Code Overhaul",
     "message": "Big updates just dropped — here's what's new:",
-    "updatedAt": "03-12-26 | 4:00 AM",
+    "updatedAt": "03-13-26 | 5:26 AM",
     "releases": [
+        {
+            "version": "March 13, 2026",
+            "highlights": [
+                "⚡ Blazing Fast Load Times — The app's core code has been split into smaller, dedicated modules. Songs, Members, Dashboard, and Scheduling each now load independently, making everything snappier and more responsive.",
+                "🧩 Modular Architecture — App.tsx has been reduced by 75%. Songs, Members, and Dashboard now live in their own components, resulting in a cleaner and more maintainable codebase under the hood.",
+                "🎨 Shared Design Tokens — Role styles, status badges, and category colors are now centralized in a single constants file — ensuring visual consistency across every screen.",
+                "🛡️ Smarter Permission Logic — Member management permissions (Add, Edit, Delete) are now more granular and consistent: Leaders can add members, only Admins can delete, and everyone can edit their own profile.",
+                "🔄 Instant Member Updates — Member data now syncs with a smarter cache system built directly into the Members screen, so your list always reflects the latest data without full-page refreshes.",
+                "🖨️ Print-Ready Song Sheets — Print any song with clean, formatted lyrics and chords via the print button in the Song Detail view.",
+                "🐛 Deep-Link Fixes — Tapping a push notification for a new song now reliably opens the correct song, even if the app hadn't loaded yet."
+            ]
+        },
         {
             "version": "March 12, 2026",
             "highlights": [
