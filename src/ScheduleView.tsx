@@ -316,6 +316,17 @@ const handleDeleteSchedule = () => {
   });
 };
 
+  // ── Fetch schedules on mount ──────────────────────────────────────────────
+  useEffect(() => {
+    if (allSchedules.length > 0) {
+      // Data already seeded from App.tsx cache — silent background refresh
+      fetchSchedules({ background: true });
+    } else {
+      fetchSchedules();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── Deep-link: open specific event from notification ─────────────────────
   useEffect(() => {
     if (!deepLinkEventId || !deepLinkEventDate || !allSchedules.length) return;

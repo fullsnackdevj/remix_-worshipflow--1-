@@ -365,7 +365,17 @@ export default function App() {
   const canWriteSchedule = isAdmin || isPlanningLead;
 
   // ── Scheduling state (kept in App for shared access + notification deep-link) ─
-  const [allSchedules, setAllSchedules] = React.useState<Schedule[]>([]);
+  // ── Schedules shared state — seed from cache for instant dashboard cards ──────────
+  const [allSchedules, setAllSchedules] = React.useState<Schedule[]>(() => {
+    try {
+      const raw = localStorage.getItem("wf_schedules_cache");
+      if (!raw) return [];
+      const data = JSON.parse(raw);
+      const ts = localStorage.getItem("wf_schedules_cache_ts");
+      if (ts && Date.now() - Number(ts) < 10 * 60 * 1000 && Array.isArray(data)) return data;
+    } catch { /* noop */ }
+    return [];
+  });
   // Deep-link: open a specific event when navigating from a notification
   const [pendingDeepLinkEventId, setPendingDeepLinkEventId] = React.useState<string | null>(null);
   const [pendingDeepLinkEventDate, setPendingDeepLinkEventDate] = React.useState<string | null>(null);
@@ -495,9 +505,31 @@ export default function App() {
         console.warn("Boot members fetch failed:", e);
       }
     };
-    // Fire both in true parallel — no await between them
+    // Schedules
+    const fetchSchedules = async () => {
+      try {
+        const res = await fetch("/api/schedules");
+        if (!res.ok) throw new Error("fetch failed");
+        const data = await res.json();
+        const schedules = Array.isArray(data) ? data : [];
+        setAllSchedules(schedules);
+        try {
+          localStorage.setItem("wf_schedules_cache", JSON.stringify(schedules));
+          localStorage.setItem("wf_schedules_cache_ts", Date.now().toString());
+        } catch { /* noop */ }
+      } catch (e) {
+        console.warn("Boot schedules fetch failed:", e);
+        // Fall back to stale cache
+        try {
+          const cached = localStorage.getItem("wf_schedules_cache");
+          if (cached) setAllSchedules(JSON.parse(cached));
+        } catch { /* noop */ }
+      }
+    };
+    // Fire all three in true parallel
     fetchSongs();
     fetchMembers();
+    fetchSchedules();
   }, []);
 
   // NOTE: View-specific fetch functions in SongsView/MembersView serve as
