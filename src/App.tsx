@@ -9,6 +9,7 @@ import HelpPanel from "./HelpPanel";
 import NotesPanel from "./NotesPanel";
 import Dashboard from "./Dashboard";
 import AutoTextarea from "./AutoTextarea";
+import DatePicker from "./DatePicker";
 import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, LayoutGrid, List, BookOpen, Mic2, Copy, Pencil, Shield, Mail, Bell, Guitar, Sliders, Palette, Lock, AlertTriangle, CheckCircle, BookMarked, HandMetal, Headphones, HelpCircle, Undo2, Redo2 } from "lucide-react";
 import { Song, Tag } from "./types";
 
@@ -3183,16 +3184,13 @@ export default function App() {
                           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                             Birthdate <span className="text-red-500">*</span>
                           </label>
-                          <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-base select-none pointer-events-none">🎂</span>
-                            <input
-                              type="date"
-                              value={editMemberBirthdate}
-                              max={new Date().toISOString().split("T")[0]}
-                              onChange={e => { setEditMemberBirthdate(e.target.value); if (memberFormErrors.birthdate) setMemberFormErrors(p => ({ ...p, birthdate: undefined })); }}
-                              className={`w-full pl-9 pr-4 py-2 border ${memberFormErrors.birthdate ? "border-red-400 focus:border-red-400 focus:ring-red-200" : "border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-indigo-200"} bg-white dark:bg-gray-700 rounded-xl focus:ring-2 outline-none text-gray-900 dark:text-gray-100`}
-                            />
-                          </div>
+                          <DatePicker
+                            value={editMemberBirthdate}
+                            max={new Date().toISOString().split("T")[0]}
+                            onChange={v => { setEditMemberBirthdate(v); if (memberFormErrors.birthdate) setMemberFormErrors(p => ({ ...p, birthdate: undefined })); }}
+                            error={!!memberFormErrors.birthdate}
+                            placeholder="Select birthdate"
+                          />
                           {memberFormErrors.birthdate && <p className="mt-1 text-xs text-red-500">{memberFormErrors.birthdate}</p>}
                         </div>
 
