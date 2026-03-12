@@ -425,6 +425,14 @@ export default function App() {
   const [editSchedNotes, setEditSchedNotes] = useState("");
   const [schedMemberSearch, setSchedMemberSearch] = useState("");
 
+  // ── Admin-only Calendar Filters ───────────────────────────────────────────
+  const [filterEventTypes, setFilterEventTypes] = useState<string[]>([]);
+  const [filterMemberId, setFilterMemberId] = useState<string | null>(null);
+  const [filterMemberSearch, setFilterMemberSearch] = useState("");
+  const [filterMySchedule, setFilterMySchedule] = useState(false);
+  const [filterUpcomingOnly, setFilterUpcomingOnly] = useState(false);
+  const [filterBarOpen, setFilterBarOpen] = useState(false);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
@@ -745,6 +753,7 @@ export default function App() {
     return acc;
   }, {}), [allSchedules]);
 
+
   /** Map of "MM-DD" -> Member[] for birthday lookups — zero extra network calls */
   const birthdayMap = useMemo(() => {
     const map: Record<string, Member[]> = {};
@@ -766,6 +775,69 @@ export default function App() {
 
   /** True when the user has a member profile but hasn't set their birthdate yet */
   const needsBirthdatePrompt = !!myMemberProfile && !myMemberProfile.birthdate;
+
+  // ── Admin-only: filtered schedule list ─────────────────────────────────────────
+  const filteredSchedules = useMemo(() => {
+    const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+    let result = allSchedules;
+    // 1. Event type filter
+    if (filterEventTypes.length > 0) {
+      result = result.filter(s => {
+        const name = ((s as any).eventName || "").toLowerCase();
+        return filterEventTypes.some(ft => name.includes(ft.toLowerCase()));
+      });
+    }
+    // 2. Member filter
+    if (filterMemberId) {
+      result = result.filter(s =>
+        s.worshipLeader?.memberId === filterMemberId ||
+        s.backupSingers?.some(m => m.memberId === filterMemberId) ||
+        s.musicians?.some(m => m.memberId === filterMemberId) ||
+        s.assignments?.some(a => a.members.some(m => m.memberId === filterMemberId))
+      );
+    }
+    // 3. My schedule toggle
+    if (filterMySchedule && myMemberProfile) {
+      const myId = myMemberProfile.id;
+      result = result.filter(s =>
+        s.worshipLeader?.memberId === myId ||
+        s.backupSingers?.some(m => m.memberId === myId) ||
+        s.musicians?.some(m => m.memberId === myId) ||
+        s.assignments?.some(a => a.members.some(m => m.memberId === myId))
+      );
+    }
+    // 4. Upcoming only filter
+    if (filterUpcomingOnly) {
+      result = result.filter(s => s.date >= todayStr);
+    }
+    return result;
+  }, [allSchedules, filterEventTypes, filterMemberId, filterMySchedule, filterUpcomingOnly, myMemberProfile]);
+
+  // Admin sees filtered data; everyone else gets the raw list unchanged
+  const scheduleSource = isAdmin ? filteredSchedules : allSchedules;
+
+  // Admin-only derived dateEventsMap fed by scheduleSource
+  const filteredDateEventsMap = useMemo(() => scheduleSource.reduce<Record<string, Schedule[]>>((acc, s) => {
+    if (!acc[s.date]) acc[s.date] = [];
+    acc[s.date].push(s);
+    return acc;
+  }, {}), [scheduleSource]);
+
+  // Active filter count (for the badge)
+  const activeFilterCount =
+    filterEventTypes.length +
+    (filterMemberId ? 1 : 0) +
+    (filterMySchedule ? 1 : 0) +
+    (filterUpcomingOnly ? 1 : 0);
+
+  const clearAllFilters = () => {
+    setFilterEventTypes([]);
+    setFilterMemberId(null);
+    setFilterMemberSearch("");
+    setFilterMySchedule(false);
+    setFilterUpcomingOnly(false);
+  };
+
 
   const selectedDateEvents: Schedule[] = useMemo(
     () => selectedScheduleDate ? (dateEventsMap[selectedScheduleDate] ?? []) : [],
@@ -2135,10 +2207,11 @@ export default function App() {
                 const month = calendarMonth.getMonth();
                 const firstDow = new Date(year, month, 1).getDay();
                 const daysInMonth = new Date(year, month + 1, 0).getDate();
-                const monthSchedules = allSchedules.filter(s => {
+                const monthSchedules = scheduleSource.filter(s => {
                   const d = new Date(s.date + "T00:00:00");
                   return d.getFullYear() === year && d.getMonth() === month;
                 });
+
                 return (
                   <div className="max-w-5xl mx-auto">
                     {/* ── Scheduling Header ── */}
@@ -2203,6 +2276,146 @@ export default function App() {
                       </div>
                     </div>
 
+                    {/* ── Admin-only Filter Bar ── */}
+                    {isAdmin && (
+                      <div className="mb-4">
+                        {/* Filter trigger button */}
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setFilterBarOpen(o => !o)}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-medium border transition-all ${
+                              filterBarOpen || activeFilterCount > 0
+                                ? "bg-indigo-50 dark:bg-indigo-900/30 border-indigo-300 dark:border-indigo-600 text-indigo-700 dark:text-indigo-300"
+                                : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-indigo-300 dark:hover:border-indigo-600"
+                            }`}
+                          >
+                            <Filter size={14} />
+                            <span>Filters</span>
+                            {activeFilterCount > 0 && (
+                              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] font-bold">
+                                {activeFilterCount}
+                              </span>
+                            )}
+                          </button>
+                          {activeFilterCount > 0 && (
+                            <button
+                              onClick={clearAllFilters}
+                              className="flex items-center gap-1 text-xs text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                            >
+                              <X size={12} /> Clear all
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Expanded filter panel */}
+                        {filterBarOpen && (
+                          <div className="mt-2 p-4 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm space-y-4">
+
+                            {/* Row 1: Event Type chips */}
+                            <div>
+                              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Event Type</p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {["Sunday Service", "Midweek Service", "Prayer Night", "Worship Night", "Youth Service", "Revival"].map(type => {
+                                  const active = filterEventTypes.includes(type);
+                                  return (
+                                    <button
+                                      key={type}
+                                      onClick={() => setFilterEventTypes(prev =>
+                                        active ? prev.filter(t => t !== type) : [...prev, type]
+                                      )}
+                                      className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${
+                                        active
+                                          ? "bg-indigo-600 border-indigo-600 text-white"
+                                          : "bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-indigo-400"
+                                      }`}
+                                    >
+                                      {type}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Row 2: Member search */}
+                            <div>
+                              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Member</p>
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  placeholder="Search member…"
+                                  value={filterMemberSearch}
+                                  onChange={e => {
+                                    setFilterMemberSearch(e.target.value);
+                                    if (!e.target.value) setFilterMemberId(null);
+                                  }}
+                                  className="w-full text-sm px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                />
+                                {filterMemberSearch && (() => {
+                                  const hits = allMembers.filter(m =>
+                                    m.name.toLowerCase().includes(filterMemberSearch.toLowerCase())
+                                  ).slice(0, 8);
+                                  if (!hits.length) return null;
+                                  return (
+                                    <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg z-30 overflow-hidden max-h-48 overflow-y-auto">
+                                      {hits.map(m => (
+                                        <button
+                                          key={m.id}
+                                          onClick={() => {
+                                            setFilterMemberId(m.id);
+                                            setFilterMemberSearch(m.name);
+                                          }}
+                                          className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors ${
+                                            filterMemberId === m.id ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300" : "text-gray-800 dark:text-gray-200"
+                                          }`}
+                                        >
+                                          {m.photo
+                                            ? <img src={m.photo} className="w-6 h-6 rounded-full object-cover shrink-0" alt={m.name} />
+                                            : <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">{m.name[0]}</div>
+                                          }
+                                          {m.name}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                              {filterMemberId && (
+                                <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-1 flex items-center gap-1">
+                                  <CheckCircle size={11} /> Filtering by: <strong>{filterMemberSearch}</strong>
+                                  <button onClick={() => { setFilterMemberId(null); setFilterMemberSearch(""); }} className="ml-1 text-gray-400 hover:text-red-400"><X size={11} /></button>
+                                </p>
+                              )}
+                            </div>
+
+                            {/* Row 3: Quick toggles */}
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                onClick={() => setFilterMySchedule(v => !v)}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                                  filterMySchedule
+                                    ? "bg-violet-600 border-violet-600 text-white"
+                                    : "bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-violet-400"
+                                }`}
+                              >
+                                <Users size={12} /> My Schedule
+                              </button>
+                              <button
+                                onClick={() => setFilterUpcomingOnly(v => !v)}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                                  filterUpcomingOnly
+                                    ? "bg-emerald-600 border-emerald-600 text-white"
+                                    : "bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-emerald-400"
+                                }`}
+                              >
+                                <ChevronRight size={12} /> Upcoming Only
+                              </button>
+                            </div>
+
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <div className="flex gap-4 relative">
                       <div className="flex-1 min-w-0">
                         {scheduleView === "month" ? (
@@ -2219,7 +2432,7 @@ export default function App() {
                               {Array.from({ length: daysInMonth }).map((_, i) => {
                                 const day = i + 1;
                                 const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-                                const schedEvents = dateEventsMap[dateStr] ?? [];
+                                const schedEvents = filteredDateEventsMap[dateStr] ?? [];
                                 const isToday = dateStr === todayStr;
                                 const isSelected = dateStr === selectedScheduleDate;
                                 const isCellPast = dateStr < todayStr;
