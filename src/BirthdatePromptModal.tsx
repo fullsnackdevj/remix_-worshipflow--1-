@@ -44,7 +44,7 @@ export default function BirthdatePromptModal({ memberName, memberId, onSuccess }
     setError("");
     try {
       const res = await fetch(`/api/members/${memberId}`, {
-        method: "PUT",
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ birthdate }),
       });
@@ -63,8 +63,8 @@ export default function BirthdatePromptModal({ memberName, memberId, onSuccess }
 
   return (
     // Fullscreen blocking overlay — no pointer-events on backdrop so nothing behind is reachable
-    <div className="fixed inset-0 z-[500] flex items-center justify-center bg-gray-950/80 backdrop-blur-sm p-4">
-      <div className="w-full max-w-md bg-white dark:bg-gray-900 rounded-3xl shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-[500] flex items-start sm:items-center justify-center bg-gray-950/80 backdrop-blur-sm p-4 overflow-y-auto">
+      <div className="w-full max-w-md bg-white dark:bg-gray-900 rounded-3xl shadow-2xl my-auto">
 
         {done ? (
           /* ── Success state ── */

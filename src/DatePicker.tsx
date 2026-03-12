@@ -137,12 +137,10 @@ export default function DatePicker({
       {open && (
         <div className={[
           "absolute z-[300] top-full mt-2",
-          "w-[320px]",          // fixed compact width — does NOT stretch
+          "min-w-[280px] w-full max-w-[340px]",   // responsive: fills parent, capped at 340px
           "bg-white dark:bg-gray-900",
           "border border-gray-200 dark:border-gray-700",
           "rounded-2xl shadow-2xl overflow-hidden",
-          // position: prefer left-align; flip right if needed
-          "left-0",
         ].join(" ")}>
 
           {/* ── Header ── */}

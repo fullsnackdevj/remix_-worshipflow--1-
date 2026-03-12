@@ -849,7 +849,7 @@ Rules:
         const id = memberMatch[1];
 
         if (method === "PUT") {
-            const { name, phone, email, photo, roles, status, notes } = body;
+            const { name, phone, email, photo, roles, status, notes, birthdate, firstName, middleInitial, lastName } = body;
             const missingFields: string[] = [];
             if (!name?.trim()) missingFields.push("Name");
             if (!phone?.trim()) missingFields.push("Phone");
@@ -857,7 +857,7 @@ Rules:
                 return json(400, { error: `Missing required fields: ${missingFields.join(", ")}.` });
             }
             try {
-                await firestore.collection("members").doc(id).update({
+                const updateData: any = {
                     name: toTitleCase(name),
                     phone: phone.trim(),
                     email: (email || "").trim().toLowerCase(),
@@ -866,10 +866,29 @@ Rules:
                     status: status || "active",
                     notes: notes || "",
                     updated_at: admin.firestore.FieldValue.serverTimestamp(),
-                });
+                };
+                // Preserve birthdate — do not wipe if not provided
+                if (birthdate !== undefined) updateData.birthdate = birthdate || null;
+                // Structured name fields
+                if (firstName !== undefined) updateData.firstName = firstName || "";
+                if (middleInitial !== undefined) updateData.middleInitial = middleInitial || "";
+                if (lastName !== undefined) updateData.lastName = lastName || "";
+                await firestore.collection("members").doc(id).update(updateData);
                 return json(200, { success: true });
             } catch (err) {
                 return json(500, { error: "Failed to update member" });
+            }
+        }
+
+        // PATCH /members/:id — lightweight partial update (e.g., birthdate-only from onboarding prompt)
+        if (method === "PATCH") {
+            try {
+                const patchData: any = { updated_at: admin.firestore.FieldValue.serverTimestamp() };
+                if (body.birthdate !== undefined) patchData.birthdate = body.birthdate || null;
+                await firestore.collection("members").doc(id).update(patchData);
+                return json(200, { success: true });
+            } catch (err) {
+                return json(500, { error: "Failed to patch member" });
             }
         }
 
