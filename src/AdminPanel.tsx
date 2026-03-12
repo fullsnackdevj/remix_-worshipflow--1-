@@ -35,6 +35,88 @@ function RoleBadge({ role }: { role: string }) {
     );
 }
 
+function fmtBirthdate(ymd: string): string {
+    if (!ymd) return "";
+    const MONTHS = ["January","February","March","April","May","June",
+                    "July","August","September","October","November","December"];
+    const [y, m, d] = ymd.split("-").map(Number);
+    return `${MONTHS[m-1]} ${d}, ${y}`;
+}
+
+function BirthdayTab({ members }: { members: any[] }) {
+    const withBday    = members.filter(m => m.birthdate);
+    const withoutBday = members.filter(m => !m.birthdate);
+    return (
+        <div className="space-y-5">
+            {/* Stats */}
+            <div className="grid grid-cols-2 gap-3">
+                <div className="bg-pink-50 dark:bg-pink-900/20 border border-pink-200 dark:border-pink-800/40 rounded-2xl px-4 py-3 text-center">
+                    <p className="text-2xl font-bold text-pink-600 dark:text-pink-400">{withBday.length}</p>
+                    <p className="text-xs text-pink-500 dark:text-pink-400 mt-0.5">Submitted birthdays</p>
+                </div>
+                <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl px-4 py-3 text-center">
+                    <p className="text-2xl font-bold text-gray-500 dark:text-gray-400">{withoutBday.length}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">Pending submission</p>
+                </div>
+            </div>
+
+            {/* Submitted */}
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">🎂 Birthday Submissions</h3>
+                    <span className="text-xs text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full">{withBday.length}</span>
+                </div>
+                {withBday.length === 0 ? (
+                    <p className="text-center py-8 text-sm text-gray-400">No birthdays submitted yet.</p>
+                ) : (
+                    <ul className="divide-y divide-gray-100 dark:divide-gray-700">
+                        {withBday.map(m => (
+                            <li key={m.id} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                                {m.photo
+                                    ? <img src={m.photo} alt={m.name} className="w-9 h-9 rounded-full object-cover shrink-0 ring-2 ring-pink-300 dark:ring-pink-700" />
+                                    : <div className="w-9 h-9 rounded-full bg-pink-100 dark:bg-pink-900/40 flex items-center justify-center text-pink-600 dark:text-pink-400 font-bold text-sm shrink-0">{(m.name||"?")[0].toUpperCase()}</div>
+                                }
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{m.name}</p>
+                                    <p className="text-xs text-gray-400 truncate">{m.email}</p>
+                                </div>
+                                <div className="text-right shrink-0">
+                                    <p className="text-sm font-semibold text-pink-600 dark:text-pink-400">{fmtBirthdate(m.birthdate)}</p>
+                                    {m.updated_at && <p className="text-[10px] text-gray-400">Saved {new Date(m.updated_at).toLocaleDateString("en", { month:"short", day:"numeric", year:"numeric" })}</p>}
+                                </div>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </div>
+
+            {/* Pending */}
+            {withoutBday.length > 0 && (
+                <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                    <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+                        <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400">⏳ Awaiting Birthday</h3>
+                    </div>
+                    <ul className="divide-y divide-gray-100 dark:divide-gray-700">
+                        {withoutBday.map(m => (
+                            <li key={m.id} className="flex items-center gap-3 px-4 py-2.5">
+                                {m.photo
+                                    ? <img src={m.photo} alt={m.name} className="w-7 h-7 rounded-full object-cover shrink-0 opacity-60" />
+                                    : <div className="w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-400 font-bold text-xs shrink-0">{(m.name||"?")[0].toUpperCase()}</div>
+                                }
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm text-gray-600 dark:text-gray-400 truncate">{m.name}</p>
+                                    <p className="text-xs text-gray-400 truncate">{m.email}</p>
+                                </div>
+                                <span className="text-[10px] text-amber-500 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded-full font-semibold">Pending</span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+        </div>
+    );
+}
+
 export default function AdminPanel({
     onToast,
     onConfirm,
@@ -43,7 +125,8 @@ export default function AdminPanel({
     onConfirm?: (msg: string, onOk: () => void) => void;
 }) {
     const { isAdmin } = useAuth();
-    const [activeTab, setActiveTab] = useState<"team" | "broadcasts">("team");
+    const [activeTab, setActiveTab] = useState<"team" | "broadcasts" | "birthdays">("team");
+    const [members, setMembers] = useState<any[]>([]);
     const [users, setUsers] = useState<ApprovedUser[]>([]);
     const [pending, setPending] = useState<PendingUser[]>([]);
     const [loading, setLoading] = useState(true);
@@ -191,6 +274,11 @@ export default function AdminPanel({
     };
 
     useEffect(() => { fetchAll(); fetchBroadcasts(); }, []);
+    useEffect(() => {
+        if (activeTab === "birthdays" && members.length === 0) {
+            fetch("/api/members").then(r => r.json()).then(setMembers).catch(() => {});
+        }
+    }, [activeTab]);
 
 
     const approve = async (email: string, role = "member", fromPending = false) => {
@@ -283,12 +371,15 @@ export default function AdminPanel({
                     <Shield size={20} className="text-indigo-500" /> Admin Panel
                 </h2>
                 <p className="text-sm text-gray-400 mt-1">Manage team access and app announcements.</p>
-                <div className="flex gap-1 mt-4 p-1 bg-gray-100 dark:bg-gray-800 rounded-xl w-fit">
+                <div className="flex gap-1 mt-4 p-1 bg-gray-100 dark:bg-gray-800 rounded-xl w-fit flex-wrap">
                     <button onClick={() => setActiveTab("team")} className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${activeTab === "team" ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"}`}>
                         <span className="flex items-center gap-1.5"><Users size={14} /> Team Access</span>
                     </button>
                     <button onClick={() => setActiveTab("broadcasts")} className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${activeTab === "broadcasts" ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"}`}>
                         <span className="flex items-center gap-1.5"><Megaphone size={14} /> Broadcasts {broadcasts.filter(b => b.active).length > 0 && <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />}</span>
+                    </button>
+                    <button onClick={() => setActiveTab("birthdays")} className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${activeTab === "birthdays" ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"}`}>
+                        <span className="flex items-center gap-1.5">🎂 Birthdays</span>
                     </button>
                 </div>
             </div>
@@ -648,6 +739,11 @@ export default function AdminPanel({
                     )}
                 </div>
             </>}
+
+            {/* ── BIRTHDAYS TAB ───────────────────────────────────────────── */}
+            {activeTab === "birthdays" && (
+                <BirthdayTab members={members} />
+            )}
 
             {/* ── What's New Preview Modal ─────────────────────────────────── */}
             {previewBroadcast && (

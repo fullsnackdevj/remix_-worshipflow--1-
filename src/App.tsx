@@ -10,6 +10,7 @@ import NotesPanel from "./NotesPanel";
 import Dashboard from "./Dashboard";
 import AutoTextarea from "./AutoTextarea";
 import DatePicker from "./DatePicker";
+import BirthdatePromptModal from "./BirthdatePromptModal";
 import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, LayoutGrid, List, BookOpen, Mic2, Copy, Pencil, Shield, Mail, Bell, Guitar, Sliders, Palette, Lock, AlertTriangle, CheckCircle, BookMarked, HandMetal, Headphones, HelpCircle, Undo2, Redo2 } from "lucide-react";
 import { Song, Tag } from "./types";
 
@@ -755,6 +756,16 @@ export default function App() {
     return map;
   }, [allMembers]);
 
+  /** The currently signed-in user's Member document (matched by email), if any */
+  const myMemberProfile = useMemo(() => {
+    if (!user?.email) return null;
+    const email = user.email.trim().toLowerCase();
+    return allMembers.find(m => (m.email || "").trim().toLowerCase() === email) ?? null;
+  }, [allMembers, user]);
+
+  /** True when the user has a member profile but hasn't set their birthdate yet */
+  const needsBirthdatePrompt = !!myMemberProfile && !myMemberProfile.birthdate;
+
   const selectedDateEvents: Schedule[] = useMemo(
     () => selectedScheduleDate ? (dateEventsMap[selectedScheduleDate] ?? []) : [],
     [selectedScheduleDate, dateEventsMap]
@@ -1186,15 +1197,22 @@ export default function App() {
   const openMemberEditor = (member?: Member) => {
     if (member) {
       setSelectedMember(member);
-      const parts = (member.name || "").trim().split(/\s+/);
-      setEditMemberFirstName(parts[0] || "");
-      // If the second part is a single letter (with or without dot) treat it as middle initial
-      if (parts.length >= 3 && /^[A-Za-z]\.?$/.test(parts[1])) {
-        setEditMemberMiddleInitial(parts[1].replace('.', ''));
-        setEditMemberLastName(parts.slice(2).join(" ") || "");
+      // Prefer stored structured name fields; fall back to parsing the combined name
+      if (member.firstName) {
+        setEditMemberFirstName(member.firstName);
+        setEditMemberMiddleInitial(member.middleInitial || "");
+        setEditMemberLastName(member.lastName || "");
       } else {
-        setEditMemberMiddleInitial("");
-        setEditMemberLastName(parts.slice(1).join(" ") || "");
+        const parts = (member.name || "").trim().split(/\s+/);
+        setEditMemberFirstName(parts[0] || "");
+        // If the second part is a single letter (with or without dot) treat it as middle initial
+        if (parts.length >= 3 && /^[A-Za-z]\.?$/.test(parts[1])) {
+          setEditMemberMiddleInitial(parts[1].replace('.', ''));
+          setEditMemberLastName(parts.slice(2).join(" ") || "");
+        } else {
+          setEditMemberMiddleInitial("");
+          setEditMemberLastName(parts.slice(1).join(" ") || "");
+        }
       }
       setEditMemberPhone(member.phone);
       setEditMemberEmail((member as any).email || "");
@@ -1263,6 +1281,9 @@ export default function App() {
 
     const payload = {
       name: fullName,
+      firstName: editMemberFirstName.trim(),
+      middleInitial: editMemberMiddleInitial.trim().replace(/\.$/, ''),
+      lastName: editMemberLastName.trim(),
       phone: editMemberPhone,
       email: editMemberEmail.trim().toLowerCase(),
       photo: editMemberPhoto,
@@ -1746,6 +1767,20 @@ export default function App() {
         </div>
       )}
 
+      {/* 🎂 Birthdate Prompt — blocks UI for members who haven't set their birthday yet */}
+      {needsBirthdatePrompt && myMemberProfile && (
+        <BirthdatePromptModal
+          memberName={myMemberProfile.name}
+          memberId={myMemberProfile.id}
+          onSuccess={bdate => {
+            // Optimistically update local state so modal closes immediately
+            setAllMembers(prev => prev.map(m =>
+              m.id === myMemberProfile.id ? { ...m, birthdate: bdate } : m
+            ));
+          }}
+        />
+      )}
+
       {/* 📢 Broadcast Overlay — maintenance / what's new screens */}
       <BroadcastOverlay />
 
@@ -2121,9 +2156,9 @@ export default function App() {
                           const isPast = !!selectedScheduleDate && selectedScheduleDate < todayStr;
                           const isEditingExistingEvent = schedPanelMode === "edit" && !!selectedEventId;
                           const isFormOpen = schedPanelMode === "edit"; // true for both new & existing event form
-                          // Only admin/QA can add on past dates; others can only add on future empty dates in month view
-                          const canAdd = (canWriteSchedule || leaderCanAddOnDate) && !isListView && hasDate && !hasExisting && !isFormOpen;
-                          const label = isListView || hasExisting ? "Add Another Event" : "Add Event";
+                          // Permitted users can always add another event on any date in month view
+                          const canAdd = (canWriteSchedule || leaderCanAddOnDate) && !isListView && hasDate && !isFormOpen;
+                          const label = hasExisting ? "Add Another Event" : "Add Event";
                           const disabledTitle = (!canWriteSchedule && !isLeader)
                             ? "You don't have permission to add events"
                             : (isLeader && !leaderCanAddOnDate)
@@ -2132,9 +2167,8 @@ export default function App() {
                                 ? "Close the current form before adding a new event"
                                 : isListView
                                   ? "Switch to Month view to add events"
-                                  : hasExisting ? "This date already has events — open a card to edit"
-                                    : isPast ? "Past date — cannot add events"
-                                      : "Select an empty date on the calendar first";
+                                  : isPast ? "Past date — cannot add events"
+                                    : "Select a date on the calendar first";
                           if (canAdd) {
                             return (
                               <button onClick={() => { setSelectedEventId(null); setSchedPanelMode("edit"); openBlankEventForm(selectedScheduleDate!); }}
@@ -2182,7 +2216,7 @@ export default function App() {
                                     className={`group relative min-h-[70px] border-b border-r border-gray-200 dark:border-gray-700/50 p-1.5 text-left transition-colors ${isCellPast && !cellHasEvents ? "opacity-40 cursor-not-allowed" : "hover:bg-indigo-50 dark:hover:bg-indigo-900/20"} ${isSelected ? "bg-indigo-50 dark:bg-indigo-900/30" : ""}`}
                                   >
                                     <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-medium mb-1 ${isToday ? "bg-indigo-600 text-white" : "text-gray-700 dark:text-gray-300"}`}>{day}</span>
-                                    {!isCellPast && (canWriteSchedule || (isLeader && isServiceDay(dateStr))) && (
+                                    {(canWriteSchedule || (isLeader && isServiceDay(dateStr))) && (
                                       <span
                                         onClick={e => { e.stopPropagation(); openBlankEventForm(dateStr); }}
                                         className="hidden sm:flex absolute top-1.5 right-1.5 w-5 h-5 items-center justify-center rounded-full bg-indigo-600 text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:bg-indigo-700"

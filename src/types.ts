@@ -25,6 +25,10 @@ export interface Song {
 export interface Member {
   id: string;
   name: string;
+  // Structured name fields — preferred over parsing `name` when present
+  firstName?: string;
+  middleInitial?: string;
+  lastName?: string;
   phone: string;
   email: string;
   photo: string;
