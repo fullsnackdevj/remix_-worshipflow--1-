@@ -3049,7 +3049,50 @@ export default function App() {
                 /* ══════════════════════════════════════════════════
                      PLAYGROUND — admin only sandbox
                 ══════════════════════════════════════════════════ */
-                isAdmin ? <Playground /> : null
+                isAdmin ? (
+                  <Playground
+                    allSchedules={allSchedules}
+                    allMembers={allMembers}
+                    allSongs={allSongs}
+                    isAdmin={isAdmin}
+                    isLeader={isLeader}
+                    canWriteSchedule={canWriteSchedule}
+                    myMemberProfile={myMemberProfile}
+                    isLoadingSchedules={isLoadingSchedules}
+                    onAddEvent={(dateStr) => {
+                      setCurrentView("schedule");
+                      openBlankEventForm(dateStr);
+                    }}
+                    onEditEvent={(id, dateStr) => {
+                      setCurrentView("schedule");
+                      openEventById(id, dateStr);
+                    }}
+                    onDeleteEvent={(id) => {
+                      // reuse existing delete handler by temporarily setting the event
+                      const ev = allSchedules.find(s => s.id === id);
+                      if (!ev) return;
+                      showConfirm({
+                        title: "Remove Event",
+                        message: `Remove "${(ev as any).eventName || "this event"}" from ${ev.date}?`,
+                        confirmText: "Remove",
+                        confirmClass: "bg-red-500 hover:bg-red-600",
+                        onConfirm: () => {
+                          closeConfirm();
+                          setAllSchedules(prev => prev.filter(s => s.id !== id));
+                          showToast("success", "Event removed.");
+                          fetch(`/api/schedules/${id}`, { method: "DELETE" })
+                            .then(res => { if (!res.ok) throw new Error(); })
+                            .catch(() => {
+                              setAllSchedules(prev => [...prev, ev]);
+                              showToast("error", "Could not remove event. Restored.");
+                            });
+                        }
+                      });
+                    }}
+                    onCopyEvent={(s, songs) => { /* handled inside Playground */ }}
+                    onShowToast={showToast}
+                  />
+                ) : null
               ) : currentView === "admin" ? (
                 <AdminPanel
                   onToast={showToast}
