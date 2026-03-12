@@ -424,8 +424,6 @@ export default function App() {
   const [solemnSearch, setSolemnSearch] = useState("");
   const [editSchedNotes, setEditSchedNotes] = useState("");
   const [schedMemberSearch, setSchedMemberSearch] = useState("");
-  /** When true: admin sees the original scheduling edit form instead of Calendar 2.0 */
-  const [showCalendar2EditForm, setShowCalendar2EditForm] = useState(false);
 
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -854,7 +852,6 @@ export default function App() {
     setSelectedScheduleDate(null);
     setSelectedEventId(null);
     setSchedPanelMode("view");
-    setShowCalendar2EditForm(false); // return to Calendar 2.0 when canceling
   };
 
 
@@ -910,7 +907,6 @@ export default function App() {
       showToast("error", err.message || "Could not save event.");
     } finally {
       setIsSavingSchedule(false);
-      setShowCalendar2EditForm(false); // return to Calendar 2.0 after save
     }
   };
 
@@ -2145,56 +2141,8 @@ export default function App() {
                   const d = new Date(s.date + "T00:00:00");
                   return d.getFullYear() === year && d.getMonth() === month;
                 });
-                // ── Calendar 2.0: shown to admin when NOT in the edit form ──────────────
-                if (isAdmin && !showCalendar2EditForm) {
-                  return (
-                    <Playground
-                      allSchedules={allSchedules}
-                      allMembers={allMembers}
-                      allSongs={allSongs}
-                      isAdmin={isAdmin}
-                      isLeader={isLeader}
-                      canWriteSchedule={canWriteSchedule}
-                      myMemberProfile={myMemberProfile}
-                      isLoadingSchedules={isLoadingSchedules}
-                      onAddEvent={(dateStr) => {
-                        openBlankEventForm(dateStr);
-                        setShowCalendar2EditForm(true);
-                      }}
-                      onEditEvent={(id, dateStr) => {
-                        openEventById(id, dateStr);
-                        setSchedPanelMode("edit");
-                        setShowCalendar2EditForm(true);
-                      }}
-                      onDeleteEvent={(id) => {
-                        const ev = allSchedules.find(s => s.id === id);
-                        if (!ev) return;
-                        showConfirm({
-                          title: "Remove Event",
-                          message: `Remove "${(ev as any).eventName || "this event"}" from ${ev.date}?`,
-                          confirmText: "Remove",
-                          confirmClass: "bg-red-500 hover:bg-red-600",
-                          onConfirm: () => {
-                            closeConfirm();
-                            setAllSchedules(prev => prev.filter(s => s.id !== id));
-                            showToast("success", "Event removed.");
-                            fetch(`/api/schedules/${id}`, { method: "DELETE" })
-                              .then(res => { if (!res.ok) throw new Error(); })
-                              .catch(() => {
-                                setAllSchedules(prev => [...prev, ev]);
-                                showToast("error", "Could not remove event. Restored.");
-                              });
-                          }
-                        });
-                      }}
-                      onCopyEvent={() => { /* handled inside Playground */ }}
-                      onShowToast={showToast}
-                    />
-                  );
-                }
 
                 return (
-
                   <div className="max-w-5xl mx-auto">
                     {/* ── Scheduling Header ── */}
                     <div className="flex flex-col gap-2 mb-4">
@@ -3104,50 +3052,7 @@ export default function App() {
                 /* ══════════════════════════════════════════════════
                      PLAYGROUND — admin only sandbox
                 ══════════════════════════════════════════════════ */
-                isAdmin ? (
-                  <Playground
-                    allSchedules={allSchedules}
-                    allMembers={allMembers}
-                    allSongs={allSongs}
-                    isAdmin={isAdmin}
-                    isLeader={isLeader}
-                    canWriteSchedule={canWriteSchedule}
-                    myMemberProfile={myMemberProfile}
-                    isLoadingSchedules={isLoadingSchedules}
-                    onAddEvent={(dateStr) => {
-                      setCurrentView("schedule");
-                      openBlankEventForm(dateStr);
-                    }}
-                    onEditEvent={(id, dateStr) => {
-                      setCurrentView("schedule");
-                      openEventById(id, dateStr);
-                    }}
-                    onDeleteEvent={(id) => {
-                      // reuse existing delete handler by temporarily setting the event
-                      const ev = allSchedules.find(s => s.id === id);
-                      if (!ev) return;
-                      showConfirm({
-                        title: "Remove Event",
-                        message: `Remove "${(ev as any).eventName || "this event"}" from ${ev.date}?`,
-                        confirmText: "Remove",
-                        confirmClass: "bg-red-500 hover:bg-red-600",
-                        onConfirm: () => {
-                          closeConfirm();
-                          setAllSchedules(prev => prev.filter(s => s.id !== id));
-                          showToast("success", "Event removed.");
-                          fetch(`/api/schedules/${id}`, { method: "DELETE" })
-                            .then(res => { if (!res.ok) throw new Error(); })
-                            .catch(() => {
-                              setAllSchedules(prev => [...prev, ev]);
-                              showToast("error", "Could not remove event. Restored.");
-                            });
-                        }
-                      });
-                    }}
-                    onCopyEvent={(s, songs) => { /* handled inside Playground */ }}
-                    onShowToast={showToast}
-                  />
-                ) : null
+                isAdmin ? <Playground /> : null
               ) : currentView === "admin" ? (
                 <AdminPanel
                   onToast={showToast}
