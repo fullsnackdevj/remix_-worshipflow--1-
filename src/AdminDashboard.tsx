@@ -361,8 +361,8 @@ export default function AdminDashboard({
                 {/* ── ROW 1 ─────────────────────────── */}
 
                 {/* What's New */}
-                <Tile className="min-h-[260px]">
-                    <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
+                <Tile className="h-[260px] flex flex-col">
+                    <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 shrink-0">
                         <div className="flex items-center gap-2 font-semibold text-gray-900 dark:text-white text-base">
                             <Megaphone size={15} className="text-amber-500" />
                             {releaseNotes?.title ?? "What's New in WorshipFlow ✨"}
@@ -371,17 +371,15 @@ export default function AdminDashboard({
                             Manage <ChevronRight size={13} />
                         </button>
                     </div>
-                    {releaseNotes?.updatedAt && (
-                        <div className="px-5 pt-2">
-                            <span className="text-xs text-gray-400 dark:text-gray-400 font-medium">Updated: {releaseNotes.updatedAt}</span>
-                        </div>
-                    )}
-                    <div className="px-5 py-4">
+                    <div className="flex-1 overflow-y-auto px-5 py-4">
                         {releaseNotes ? (
                             <>
-                            <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">{releaseNotes.message}</p>
+                                {releaseNotes.updatedAt && (
+                                    <span className="text-xs text-gray-400 font-medium block mb-2">Updated: {releaseNotes.updatedAt}</span>
+                                )}
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">{releaseNotes.message}</p>
                                 <ul className="space-y-2.5">
-                                    {releaseNotes.releases.flatMap(r => r.highlights).slice(0, 5).map((h, i) => (
+                                    {releaseNotes.releases.flatMap(r => r.highlights).map((h, i) => (
                                         <li key={i} className="flex items-start gap-2.5 text-sm text-gray-700 dark:text-gray-200">
                                             <span className="w-2 h-2 rounded-full bg-amber-400 mt-1.5 shrink-0" />
                                             {h}
