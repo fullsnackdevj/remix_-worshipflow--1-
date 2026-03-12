@@ -385,8 +385,8 @@ export default function App() {
     !!user?.email && !!member?.email &&
     member.email.trim().toLowerCase() === user.email.trim().toLowerCase();
   const canAddMember = isAdmin || isLeader;
-  const canEditMember = (member: any) => isAdmin || isLeader || isMyProfile(member);
-  const canDeleteMember = isAdmin || isLeader;
+  const canEditMember = (member: any) => isAdmin || isMyProfile(member); // leader can only edit their own profile
+  const canDeleteMember = isAdmin; // only admin can delete members
 
   // Schedule helpers
   // Returns true if dateStr falls on a Sunday (0) or Wednesday (3)
@@ -415,8 +415,8 @@ export default function App() {
   const [newRoleInput, setNewRoleInput] = useState("");
   // Leader-specific schedule derived flags (placed here, after state declarations)
   const isServiceEventType = ["sunday service", "midweek service"].includes(editSchedEventName.toLowerCase());
-  const leaderCanAddOnDate = isLeader && !!selectedScheduleDate && isServiceDay(selectedScheduleDate);
-  const leaderCanEditEvent = isLeader && isServiceEventType;
+  const leaderCanAddOnDate = isLeader && !!selectedScheduleDate; // leader can add events on any date (no service-day restriction)
+  const leaderCanEditEvent = isLeader && isServiceEventType;    // leader can only edit service-type events
   const [newGroupFocusIdx, setNewGroupFocusIdx] = useState<number | null>(null);
   const [editSchedSongLineup, setEditSchedSongLineup] = useState<{ joyful?: string; solemn?: string }>({});
   const [joyfulSearch, setJoyfulSearch] = useState("");
