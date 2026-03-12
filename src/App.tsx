@@ -11,7 +11,7 @@ import Dashboard from "./Dashboard";
 import AutoTextarea from "./AutoTextarea";
 import DatePicker from "./DatePicker";
 import BirthdatePromptModal from "./BirthdatePromptModal";
-import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, LayoutGrid, List, BookOpen, Mic2, Copy, Pencil, Shield, Mail, Bell, Guitar, Sliders, Palette, Lock, AlertTriangle, CheckCircle, BookMarked, HandMetal, Headphones, HelpCircle, Undo2, Redo2 } from "lucide-react";
+import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, LayoutGrid, List, BookOpen, Mic2, Copy, Pencil, Shield, Mail, Bell, Guitar, Sliders, Palette, Lock, AlertTriangle, CheckCircle, BookMarked, HandMetal, Headphones, HelpCircle, Undo2, Redo2, FlaskConical } from "lucide-react";
 import { Song, Tag } from "./types";
 
 // ── Member Role Constants ────────────────────────────────────────────────────
@@ -252,7 +252,7 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
-  const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "admin">("dashboard");
+  const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "playground" | "admin">("dashboard");
   const { isAdmin, userRole, user, status: authStatus } = useAuth();
 
   // Dashboard is the default landing for all roles — no redirect needed.
@@ -1873,6 +1873,22 @@ export default function App() {
             )}
           </button>
 
+          {/* Playground — admin only */}
+          {isAdmin && (
+            <button
+              onClick={() => { setCurrentView("playground"); setIsMobileMenuOpen(false); }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${
+                currentView === "playground"
+                  ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
+                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
+              } ${isSidebarCollapsed ? "justify-center" : ""}`}
+              title="Playground"
+            >
+              <FlaskConical size={20} className="shrink-0" />
+              {!isSidebarCollapsed && <span>Playground</span>}
+            </button>
+          )}
+
           {/* Admin Panel — admin only, always hidden for QA Specialist */}
           {isAdmin && !isQA && (
             <button
@@ -1934,7 +1950,7 @@ export default function App() {
 
           <div className="flex-1 flex items-center">
             <h1 className="text-base sm:text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap">
-              {currentView === "dashboard" ? "Dashboard" : currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : "Song Management"}
+              {currentView === "dashboard" ? "Dashboard" : currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : currentView === "playground" ? "Playground" : "Song Management"}
             </h1>
           </div>
           <div className="flex items-center gap-2">
@@ -3028,7 +3044,51 @@ export default function App() {
               {/* ══════════════════════════════════════════════════════════════
                    ADMIN PANEL VIEW
               ══════════════════════════════════════════════════════════════ */}
-              {currentView === "admin" ? (
+              {currentView === "playground" ? (
+                /* ══════════════════════════════════════════════════
+                     PLAYGROUND — admin only sandbox
+                ══════════════════════════════════════════════════ */
+                isAdmin ? (
+                  <div className="max-w-4xl mx-auto">
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-lg">
+                        <FlaskConical size={20} className="text-white" />
+                      </div>
+                      <div>
+                        <h1 className="text-xl font-bold text-gray-900 dark:text-white">Playground</h1>
+                        <p className="text-xs text-gray-400 dark:text-gray-500">Admin-only sandbox for testing & experiments</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Placeholder card */}
+                      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-dashed border-gray-300 dark:border-gray-600 p-8 flex flex-col items-center justify-center gap-3 text-center">
+                        <div className="w-12 h-12 rounded-2xl bg-violet-50 dark:bg-violet-900/20 flex items-center justify-center">
+                          <FlaskConical size={22} className="text-violet-500" />
+                        </div>
+                        <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Experiment Area</p>
+                        <p className="text-xs text-gray-400">Drop new features here to test before releasing to the team.</p>
+                      </div>
+
+                      {/* Stats placeholder */}
+                      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-dashed border-gray-300 dark:border-gray-600 p-8 flex flex-col items-center justify-center gap-3 text-center">
+                        <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center">
+                          <Sliders size={22} className="text-indigo-500" />
+                        </div>
+                        <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Feature Flags</p>
+                        <p className="text-xs text-gray-400">Toggle experimental features on/off before they go live.</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40 rounded-2xl px-4 py-3 flex items-start gap-2">
+                      <AlertTriangle size={15} className="text-amber-500 shrink-0 mt-0.5" />
+                      <p className="text-xs text-amber-700 dark:text-amber-400">
+                        <strong>Admin only.</strong> This module is invisible to all other roles. Use it to prototype, test, and experiment safely.
+                      </p>
+                    </div>
+                  </div>
+                ) : null
+              ) : currentView === "admin" ? (
                 <AdminPanel
                   onToast={showToast}
                   onConfirm={(msg, onOk) => showConfirm({
