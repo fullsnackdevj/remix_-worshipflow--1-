@@ -1,0 +1,1239 @@
+import React, { useState, useEffect, useMemo } from "react";
+import { getAuth } from "firebase/auth";
+import AutoTextarea from "./AutoTextarea";
+import { Member, ScheduleMember, Schedule, Song, Tag } from "./types";
+import {
+  ChevronLeft, ChevronRight, Plus, Calendar, List, X,
+  Copy, Pencil, Lock, Users, Sun, Music, BookOpen,
+} from "lucide-react";
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function eventEmoji(name: string): string {
+  const n = name.toLowerCase();
+  if (n.includes("sunday"))  return "🙌";
+  if (n.includes("midweek")) return "✝️";
+  if (n.includes("prayer"))  return "🙏";
+  if (n.includes("worship")) return "🎵";
+  if (n.includes("youth"))   return "👆";
+  if (n.includes("revival")) return "🔥";
+  return "📅";
+}
+
+// ── Props ─────────────────────────────────────────────────────────────────────
+export interface ScheduleViewProps {
+  /** Shared schedules state from App.tsx */
+  allSchedules: Schedule[];
+  setAllSchedules: React.Dispatch<React.SetStateAction<Schedule[]>>;
+  /** Shared data from App.tsx */
+  allMembers: Member[];
+  allSongs: Song[];
+  birthdayMap: Record<string, Member[]>;
+  /** Auth flags */
+  isAdmin: boolean;
+  isLeader: boolean;
+  isPlanningLead: boolean;
+  canWriteSchedule: boolean;
+  user: any; // Firebase user
+  /** UI callbacks */
+  showToast: (type: string, msg: string) => void;
+  showConfirm: (config: {
+    title: string;
+    message: string;
+    confirmText: string;
+    confirmClass?: string;
+    onConfirm: () => void;
+  }) => void;
+  closeConfirm: () => void;
+  /** Notification deep-link */
+  deepLinkEventId?: string | null;
+  deepLinkEventDate?: string | null;
+  onDeepLinkHandled?: () => void;
+}
+
+export default function ScheduleView({
+  allSchedules,
+  setAllSchedules,
+  allMembers,
+  allSongs,
+  birthdayMap,
+  isAdmin,
+  isLeader,
+  isPlanningLead,
+  canWriteSchedule,
+  user,
+  showToast,
+  showConfirm,
+  closeConfirm,
+  deepLinkEventId,
+  deepLinkEventDate,
+  onDeepLinkHandled,
+}: ScheduleViewProps) {
+
+  // ── Local scheduling state ────────────────────────────────────────────────
+  // (allSchedules & setAllSchedules come from props)
+  const [isLoadingSchedules, setIsLoadingSchedules] = useState(false);
+const [selectedScheduleDate, setSelectedScheduleDate] = useState<string | null>(null);
+const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+const [schedPanelMode, setSchedPanelMode] = useState<"view" | "edit">("view");
+const [isSavingSchedule, setIsSavingSchedule] = useState(false);
+const [scheduleView, setScheduleView] = useState<"month" | "list">("month");
+const [calendarMonth, setCalendarMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
+// Edit form fields
+const [editSchedServiceType, setEditSchedServiceType] = useState<"sunday" | "midweek">("sunday");
+const [editSchedEventName, setEditSchedEventName] = useState("");
+const [editSchedWorshipLeader, setEditSchedWorshipLeader] = useState<ScheduleMember | null>(null);
+const [editSchedBackupSingers, setEditSchedBackupSingers] = useState<ScheduleMember[]>([]);
+const [editSchedMusicians, setEditSchedMusicians] = useState<ScheduleMember[]>([]);
+const [pendingRolePick, setPendingRolePick] = useState<{ m: typeof allMembers[0]; roles: string[] } | null>(null);
+const [editSchedAssignments, setEditSchedAssignments] = useState<{ role: string; members: ScheduleMember[]; search: string }[]>([]);
+const [newRoleInput, setNewRoleInput] = useState("");
+// Leader-specific schedule derived flags (placed here, after state declarations)
+const isServiceEventType = ["sunday service", "midweek service"].includes(editSchedEventName.toLowerCase());
+const leaderCanAddOnDate = isLeader && !!selectedScheduleDate && selectedScheduleDate >= new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" }); // no past dates
+const leaderCanEditEvent = isLeader && isServiceEventType;    // leader can only edit service-type events
+const [newGroupFocusIdx, setNewGroupFocusIdx] = useState<number | null>(null);
+const [editSchedSongLineup, setEditSchedSongLineup] = useState<{ joyful?: string; solemn?: string }>({});
+const [joyfulSearch, setJoyfulSearch] = useState("");
+const [solemnSearch, setSolemnSearch] = useState("");
+const [editSchedNotes, setEditSchedNotes] = useState("");
+const [schedMemberSearch, setSchedMemberSearch] = useState("");
+
+  // ── Schedule cache helpers ────────────────────────────────────────────────
+// ── Schedule helpers ──────────────────────────────────────────────────────
+const SCHED_CACHE_KEY = "wf_schedules_cache";
+const SCHED_CACHE_TS_KEY = "wf_schedules_cache_ts";
+
+const writeSchedulesCache = (data: Schedule[]) => {
+  try { localStorage.setItem(SCHED_CACHE_KEY, JSON.stringify(data)); localStorage.setItem(SCHED_CACHE_TS_KEY, Date.now().toString()); } catch { }
+};
+
+
+
+const fetchSchedules = async ({ background = false } = {}) => {
+  if (!background) setIsLoadingSchedules(true);
+  try {
+    const res = await fetch("/api/schedules");
+    if (!res.ok) throw new Error("fetch failed");
+    const data: Schedule[] = await res.json();
+    setAllSchedules(data);
+    writeSchedulesCache(data);
+  } catch {
+    try {
+      const cached = localStorage.getItem(SCHED_CACHE_KEY);
+      if (cached) setAllSchedules(JSON.parse(cached));
+    } catch { }
+  } finally {
+    if (!background) setIsLoadingSchedules(false);
+  }
+};
+
+// derived: map dateStr -> Schedule[] (memoized to avoid recomputation every render)
+const dateEventsMap = useMemo(() => allSchedules.reduce<Record<string, Schedule[]>>((acc, s) => {
+  if (!acc[s.date]) acc[s.date] = [];
+  acc[s.date].push(s);
+  return acc;
+}, {}), [allSchedules]);
+
+
+
+/** The currently signed-in user's Member document (matched by email), if any */
+const myMemberProfile = useMemo(() => {
+  if (!user?.email) return null;
+  const email = user.email.trim().toLowerCase();
+  return allMembers.find(m => (m.email || "").trim().toLowerCase() === email) ?? null;
+}, [allMembers, user]);
+
+/** True when the user has a member profile but hasn't set their birthdate yet */
+const needsBirthdatePrompt = !!myMemberProfile && !myMemberProfile.birthdate;
+
+const selectedDateEvents: Schedule[] = useMemo(
+  () => selectedScheduleDate ? (dateEventsMap[selectedScheduleDate] ?? []) : [],
+  [selectedScheduleDate, dateEventsMap]
+);
+const editingExisting: Schedule | null = useMemo(
+  () => selectedEventId ? (allSchedules.find(s => s.id === selectedEventId) ?? null) : null,
+  [selectedEventId, allSchedules]
+);
+
+const openBlankEventForm = (dateStr: string) => {
+  // Absolute rule: past dates are view-only for everyone — no exceptions
+  const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+  if (dateStr < todayStr) {
+    showToast("error", "This date has passed. Events cannot be added.");
+    return;
+  }
+  setSelectedScheduleDate(dateStr);
+  setSelectedEventId(null);
+  setSchedPanelMode("edit");
+  const dow = new Date(dateStr + "T00:00:00").getDay();
+  const autoName = isLeader
+    ? (dow === 0 ? "Sunday Service" : "Midweek Service")
+    : "";
+  setEditSchedEventName(autoName);
+  setEditSchedServiceType(dow === 3 ? "midweek" : "sunday");
+  setEditSchedWorshipLeader(null);
+  setEditSchedBackupSingers([]);
+  setEditSchedMusicians([]);
+  setEditSchedAssignments([]);
+  setNewRoleInput("");
+  setEditSchedSongLineup({});
+  setJoyfulSearch("");
+  setSolemnSearch("");
+  setEditSchedNotes("");
+  setSchedMemberSearch("");
+};
+
+const openEventById = (eventId: string, dateStr: string) => {
+  const ev = allSchedules.find(s => s.id === eventId);
+  if (!ev) return;
+  setSelectedScheduleDate(dateStr);
+  setSelectedEventId(eventId);
+  setSchedPanelMode("view");
+  setEditSchedEventName((ev as any).eventName || (ev.serviceType === "sunday" ? "Sunday Service" : "Midweek Service"));
+  setEditSchedServiceType((ev.serviceType as any) || "sunday");
+  setEditSchedWorshipLeader(ev.worshipLeader ?? null);
+  setEditSchedBackupSingers(ev.backupSingers ?? []);
+  setEditSchedMusicians(ev.musicians ?? []);
+  setEditSchedAssignments(((ev as any).assignments ?? []).map((a: any) => ({ ...a, search: "" })));
+  setNewRoleInput("");
+  setEditSchedSongLineup(ev.songLineup ?? {});
+  setJoyfulSearch("");
+  setSolemnSearch("");
+  setEditSchedNotes(ev.notes ?? "");
+  setSchedMemberSearch("");
+};
+
+const openScheduleEditor = (dateStr: string) => {
+  const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+  const isPastDate = dateStr < todayStr;
+  setSelectedScheduleDate(dateStr);
+  const eventsOnDate = allSchedules.filter(s => s.date === dateStr);
+  if (eventsOnDate.length === 0) {
+    if (isPastDate) {
+      // Past date with no events — nothing to show, ignore click
+      setSelectedScheduleDate(null);
+      return;
+    }
+    // Future date, no events yet — open blank form if permitted
+    setSchedPanelMode("view");
+    setSelectedEventId(null);
+  } else if (eventsOnDate.length === 1) {
+    openEventById(eventsOnDate[0].id, dateStr);
+  } else {
+    // Day view — show list
+    setSelectedEventId(null);
+    setSchedPanelMode("view");
+  }
+};
+
+const closeScheduleEditor = () => {
+  setSelectedScheduleDate(null);
+  setSelectedEventId(null);
+  setSchedPanelMode("view");
+};
+
+
+const handleSaveSchedule = async () => {
+  if (!selectedScheduleDate || isSavingSchedule) return;
+  if (!editSchedEventName.trim()) { showToast("error", "Event name is required."); return; }
+  const isServiceEvent = ["sunday service", "midweek service"].includes(editSchedEventName.toLowerCase());
+  const isMidweekSvc = editSchedEventName.toLowerCase() === "midweek service";
+  const isSundaySvc = editSchedEventName.toLowerCase() === "sunday service";
+  if (isServiceEvent && !editSchedWorshipLeader) { showToast("error", "Worship Leader is required for service events."); return; }
+  if (isServiceEvent && editSchedMusicians.length === 0) { showToast("error", "At least one Musician is required for service events."); return; }
+  if (isMidweekSvc && !editSchedSongLineup.solemn) { showToast("error", "A Solemn song is required for Midweek Service."); return; }
+  if (isSundaySvc && !editSchedSongLineup.joyful) { showToast("error", "A Joyful song is required for Sunday Service."); return; }
+  if (isSundaySvc && !editSchedSongLineup.solemn) { showToast("error", "A Solemn song is required for Sunday Service."); return; }
+  setIsSavingSchedule(true);
+  const cu = getAuth().currentUser;
+  const actorDisplayName = cu?.displayName || cu?.email?.split("@")[0] || user?.displayName || "Worship Team";
+  const payload: any = {
+    date: selectedScheduleDate,
+    serviceType: editSchedServiceType,
+    eventName: editSchedEventName,
+    worshipLeader: editSchedWorshipLeader,
+    backupSingers: editSchedBackupSingers,
+    musicians: editSchedMusicians,
+    assignments: editSchedAssignments.map(({ role, members }) => ({ role, members })),
+    songLineup: editSchedSongLineup,
+    notes: editSchedNotes,
+    actorName: actorDisplayName,
+    actorPhoto: cu?.photoURL || user?.photoURL || "",
+    actorUserId: cu?.uid || user?.uid || "",
+  };
+  try {
+    let res: Response;
+    if (editingExisting) {
+      res = await fetch(`/api/schedules/${editingExisting.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    } else {
+      res = await fetch("/api/schedules", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    }
+    if (!res.ok) { const err = await res.json(); throw new Error(err.error || "Save failed"); }
+    const saved = await res.json();
+    if (editingExisting) {
+      setAllSchedules(prev => prev.map(s => s.id === editingExisting.id ? { ...s, ...payload, id: editingExisting.id } : s));
+      showToast("success", "Event updated!");
+    } else {
+      const newEv: Schedule = { id: saved.id, ...payload };
+      setAllSchedules(prev => [...prev, newEv]);
+      setSelectedEventId(saved.id);
+      showToast("success", "Event saved!");
+    }
+    setSchedPanelMode("view");
+    writeSchedulesCache(allSchedules);
+  } catch (err: any) {
+    showToast("error", err.message || "Could not save event.");
+  } finally {
+    setIsSavingSchedule(false);
+  }
+};
+
+const handleDeleteSchedule = () => {
+  if (!editingExisting) return;
+  const targetEvent = editingExisting; // capture before state changes
+  showConfirm({
+    title: "Remove Event",
+    message: `Remove "${(targetEvent as any).eventName || "this event"}" from ${targetEvent.date}?`,
+    confirmText: "Remove",
+    confirmClass: "bg-red-500 hover:bg-red-600",
+    onConfirm: () => {
+      // ── Optimistic: dismiss dialog + update UI instantly ──────────────
+      closeConfirm();
+      const remaining = allSchedules.filter(s => s.date === selectedScheduleDate && s.id !== targetEvent.id);
+      setAllSchedules(prev => prev.filter(s => s.id !== targetEvent.id));
+      if (remaining.length === 0) closeScheduleEditor();
+      else if (remaining.length === 1) openEventById(remaining[0].id, selectedScheduleDate!);
+      else { setSelectedEventId(null); setSchedPanelMode("view"); }
+      showToast("success", "Event removed.");
+      // ── Fire DELETE in background — restore on failure ─────────────────
+      fetch(`/api/schedules/${targetEvent.id}`, { method: "DELETE" })
+        .then(res => { if (!res.ok) throw new Error("Server error"); })
+        .catch(() => {
+          setAllSchedules(prev => [...prev, targetEvent]); // restore
+          showToast("error", "Could not remove event. Please try again.");
+        });
+    }
+  });
+};
+
+  // ── Deep-link: open specific event from notification ─────────────────────
+  useEffect(() => {
+    if (!deepLinkEventId || !deepLinkEventDate || !allSchedules.length) return;
+    openEventById(deepLinkEventId, deepLinkEventDate);
+    onDeepLinkHandled?.();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLinkEventId, deepLinkEventDate, allSchedules.length]);
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+  const year = calendarMonth.getFullYear();
+  const month = calendarMonth.getMonth();
+  const firstDow = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const monthSchedules = allSchedules.filter(s => {
+    const d = new Date(s.date + "T00:00:00");
+    return d.getFullYear() === year && d.getMonth() === month;
+  });
+
+  return (
+    <div className="max-w-5xl mx-auto">
+      {/* ── Scheduling Header ── */}
+      <div className="flex flex-col gap-2 mb-4">
+        {/* Row 1: centered month navigation */}
+        <div className="flex items-center justify-center gap-2">
+          <button onClick={() => setCalendarMonth(new Date(year, month - 1, 1))} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-600 dark:text-gray-400"><ChevronLeft size={18} /></button>
+          <h2 className="font-bold text-gray-900 dark:text-white text-lg min-w-[140px] text-center">
+            {calendarMonth.toLocaleDateString("en", { month: "long", year: "numeric" })}
+          </h2>
+          <button onClick={() => setCalendarMonth(new Date(year, month + 1, 1))} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-600 dark:text-gray-400"><ChevronRight size={18} /></button>
+        </div>
+        {/* Row 2: view toggles left | add event right */}
+        <div className="flex items-center justify-between">
+          {/* View toggle — icon-only on <xs, icon+label on sm+ */}
+          <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-xl p-0.5 gap-0.5">
+            <button onClick={() => setScheduleView("month")} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-all ${scheduleView === "month" ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-white"}`}>
+              <Calendar size={14} />
+              <span className="hidden min-[375px]:inline">Month</span>
+            </button>
+            <button onClick={() => setScheduleView("list")} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-all ${scheduleView === "list" ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-white"}`}>
+              <List size={14} />
+              <span className="hidden min-[375px]:inline">List</span>
+            </button>
+          </div>
+          {/* Add Event button — smart context-aware */}
+          {(() => {
+            const isListView = scheduleView === "list";
+            const hasExisting = selectedDateEvents.length > 0;
+            const canBypassPast = false; // no one bypasses past dates
+            const hasDate = !!selectedScheduleDate && selectedScheduleDate >= todayStr;
+            const isPast = !!selectedScheduleDate && selectedScheduleDate < todayStr;
+            const isEditingExistingEvent = schedPanelMode === "edit" && !!selectedEventId;
+            const isFormOpen = schedPanelMode === "edit"; // true for both new & existing event form
+            // Permitted users can always add another event on any date in month view
+            const canAdd = (canWriteSchedule || leaderCanAddOnDate) && !isListView && hasDate && !isFormOpen;
+            const label = hasExisting ? "Add Another Event" : "Add Event";
+            const disabledTitle = isPast && !canBypassPast
+               ? "This date has passed — cannot add events"
+               : (!canWriteSchedule && !isLeader)
+                 ? "You don't have permission to add events"
+                 : isFormOpen
+                   ? "Close the current form before adding a new event"
+                   : isListView
+                     ? "Switch to Month view to add events"
+                     : "Select a date on the calendar first";
+            if (canAdd) {
+              return (
+                <button onClick={() => { setSelectedEventId(null); setSchedPanelMode("edit"); openBlankEventForm(selectedScheduleDate!); }}
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-medium transition-colors">
+                  <Plus size={16} /> {label}
+                </button>
+              );
+            }
+            return (
+              <button disabled title={disabledTitle}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed select-none">
+                <Plus size={16} /> {label}
+              </button>
+            );
+          })()}
+        </div>
+      </div>
+
+      <div className="flex gap-4 relative">
+        <div className="flex-1 min-w-0">
+          {scheduleView === "month" ? (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+              <div className="grid grid-cols-7 border-b border-gray-100 dark:border-gray-700">
+                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(d => (
+                  <div key={d} className="py-2 text-center text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{d}</div>
+                ))}
+              </div>
+              <div className="grid grid-cols-7">
+                {Array.from({ length: firstDow }).map((_, i) => (
+                  <div key={`e${i}`} className="min-h-[70px] border-b border-r border-gray-200 dark:border-gray-700/50" />
+                ))}
+                {Array.from({ length: daysInMonth }).map((_, i) => {
+                  const day = i + 1;
+                  const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                  const schedEvents = dateEventsMap[dateStr] ?? [];
+                  const isToday = dateStr === todayStr;
+                  const isSelected = dateStr === selectedScheduleDate;
+                  const isCellPast = dateStr < todayStr;
+                  const cellHasEvents = schedEvents.length > 0;
+                  return (
+                    <button
+                      key={dateStr}
+                      onClick={() => openScheduleEditor(dateStr)}
+                      title={isCellPast && !cellHasEvents ? "Past date — no new events can be added" : undefined}
+                      className={`group relative min-h-[70px] border-b border-r border-gray-200 dark:border-gray-700/50 p-1.5 text-left transition-colors ${isCellPast && !cellHasEvents ? "opacity-40 cursor-not-allowed" : "hover:bg-indigo-50 dark:hover:bg-indigo-900/20"} ${isSelected ? "bg-indigo-50 dark:bg-indigo-900/30" : ""}`}
+                    >
+                      <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-medium mb-1 ${isToday ? "bg-indigo-600 text-white" : "text-gray-700 dark:text-gray-300"}`}>{day}</span>
+                      {(canWriteSchedule || isLeader) && !isCellPast && (
+                        <span
+                          onClick={e => { e.stopPropagation(); openBlankEventForm(dateStr); }}
+                          className="hidden sm:flex absolute top-1.5 right-1.5 w-5 h-5 items-center justify-center rounded-full bg-indigo-600 text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:bg-indigo-700"
+                          title="Add event on this day"
+                        >+</span>
+                      )}
+                      {schedEvents.length > 0 && (() => {
+                        const palette = [
+                          { dot: "bg-indigo-500", text: "text-indigo-600 dark:text-indigo-400" },
+                          { dot: "bg-amber-500", text: "text-amber-600 dark:text-amber-400" },
+                          { dot: "bg-emerald-500", text: "text-emerald-600 dark:text-emerald-400" },
+                          { dot: "bg-rose-500", text: "text-rose-600 dark:text-rose-400" },
+                          { dot: "bg-violet-500", text: "text-violet-600 dark:text-violet-400" },
+                        ];
+                        if (schedEvents.length >= 3) {
+                          return (
+                            <div className="flex flex-col gap-0.5">
+                              <p className="text-[10px] font-semibold text-fuchsia-600 dark:text-fuchsia-300 leading-tight">● {schedEvents.length} events</p>
+                            </div>
+                          );
+                        }
+                        return (
+                          <div className="flex flex-col gap-0.5">
+                            {schedEvents.map((ev, ei) => {
+                              const nm = (ev as any).eventName || (ev.serviceType === "sunday" ? "Sunday Service" : "Midweek Service");
+                              const clr = palette[ei % palette.length];
+                              return (
+                                <div key={ei} className="flex items-center gap-0.5">
+                                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${clr.dot}`} />
+                                  <p className={`text-[10px] font-medium truncate leading-tight ${clr.text}`}>{nm}</p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+                      {/* Birthday avatars */}
+                      {(() => {
+                        const mmdd = dateStr.slice(5);
+                        const bdays = birthdayMap[mmdd] ?? [];
+                        if (!bdays.length) return null;
+                        const shown = bdays.slice(0, 3);
+                        const extra = bdays.length - shown.length;
+                        const bdc = ["bg-pink-500","bg-rose-500","bg-fuchsia-500","bg-violet-500"];
+                        return (
+                          <div className="flex items-center gap-0.5 mt-0.5 flex-wrap">
+                            {shown.map((bm, mi) => (
+                              <div key={bm.id} title={`🎂 ${bm.name}'s Birthday`} className="relative shrink-0">
+                                {bm.photo
+                                  ? <img src={bm.photo} alt={bm.name} className="w-5 h-5 rounded-full object-cover ring-1 ring-pink-300 dark:ring-pink-700" />
+                                  : <div className={`w-5 h-5 rounded-full ${bdc[mi % bdc.length]} flex items-center justify-center text-white text-[8px] font-bold ring-1 ring-pink-300 dark:ring-pink-700`}>{bm.name[0].toUpperCase()}</div>
+                                }
+                                <span className="absolute -bottom-0.5 -right-0.5 text-[7px] leading-none">🎂</span>
+                              </div>
+                            ))}
+                            {extra > 0 && (
+                              <span className="text-[9px] font-bold text-pink-500 dark:text-pink-400">+{extra}</span>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            /* LIST VIEW */
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+              {monthSchedules.length === 0 ? (
+                <div className="text-center py-16 text-gray-400">
+                  <Calendar size={40} className="mx-auto mb-3 opacity-40" />
+                  <p className="font-semibold">No events this month</p>
+                  <p className="text-sm mt-1">Click a date on the calendar to add one.</p>
+                </div>
+              ) : (
+                <div className={`grid gap-px bg-gray-100 dark:bg-gray-700 ${selectedScheduleDate ? "grid-cols-1 md:grid-cols-1 lg:grid-cols-2" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"}`}>
+                  {monthSchedules.sort((a, b) => a.date.localeCompare(b.date)).map(s => {
+                    const d = new Date(s.date + "T00:00:00");
+                    const isPast = s.date < todayStr;
+                    const evName = (s as any).eventName || (s.serviceType === "sunday" ? "Sunday Service" : "Midweek Service");
+                    return (
+                      <div key={s.id} className={`relative flex items-center gap-4 p-4 cursor-pointer group transition-colors ${selectedEventId === s.id ? "bg-indigo-50 dark:bg-indigo-900/30 border-l-4 border-indigo-500" : "bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50 border-l-4 border-transparent"}`} onClick={() => openEventById(s.id, s.date)}>
+                        {/* Date badge */}
+                        <div className={`shrink-0 rounded-xl px-3 py-2 text-center min-w-[52px] ${isPast ? "bg-gray-100 dark:bg-gray-700" : "bg-indigo-50 dark:bg-indigo-900/30"}`}>
+                          <div className={`text-xs font-semibold uppercase ${isPast ? "text-gray-400" : "text-indigo-500"}`}>{d.toLocaleDateString("en", { month: "short" })}</div>
+                          <div className={`text-xl font-bold leading-none ${isPast ? "text-gray-400 dark:text-gray-500" : "text-indigo-700 dark:text-indigo-300"}`}>{d.getDate()}</div>
+                          <div className={`text-[10px] ${isPast ? "text-gray-400" : "text-indigo-400"}`}>{d.toLocaleDateString("en", { weekday: "short" })}</div>
+                        </div>
+                        {/* Event info */}
+                        <div className="flex-1 min-w-0 pr-7">
+                          <p className="font-semibold text-gray-900 dark:text-white text-sm">{eventEmoji(evName)} {evName}</p>
+                          {s.worshipLeader && <p className="text-xs text-gray-500 mt-0.5">{s.worshipLeader.name}</p>}
+                          {s.notes && <p className="text-xs text-gray-400 truncate mt-0.5">{s.notes}</p>}
+                        </div>
+                        {/* Copy button */}
+                        <button
+                          type="button"
+                          title="Copy event details"
+                          onClick={e => {
+                            e.stopPropagation();
+                            const dateLabel = d.toLocaleDateString("en", { month: "long", day: "numeric", year: "numeric" });
+                            const isServiceEvt = ["sunday service", "midweek service"].includes(evName.toLowerCase());
+                            const lines: string[] = [evName, dateLabel];
+                            if (isServiceEvt) {
+                              if (s.worshipLeader) { lines.push(""); lines.push(`Worship Leader: ${s.worshipLeader.name}`); }
+                              const bs = (s.backupSingers || []);
+                              if (bs.length > 0) { lines.push(""); lines.push(`Backup Singers: ${bs.map((b: any) => b.name).join(", ")}`); }
+                              const mu = (s.musicians || []);
+                              if (mu.length > 0) { lines.push(""); lines.push(`Musicians / Instruments: ${mu.map((m: any) => `${m.name} (${m.role})`).join(", ")}`); }
+                              const jSong = allSongs.find(sg => sg.id === s.songLineup?.joyful);
+                              const sSong = allSongs.find(sg => sg.id === s.songLineup?.solemn);
+                              if (jSong || sSong) {
+                                lines.push(""); lines.push("Song Line-up:");
+                                if (jSong) { lines.push(`Joyful: ${jSong.title}${jSong.artist ? ` - ${jSong.artist}` : ""}`); if (jSong.video_url) lines.push(`Link: ${jSong.video_url}`); }
+                                if (sSong) { lines.push(""); lines.push(`Solemn: ${sSong.title}${sSong.artist ? ` - ${sSong.artist}` : ""}`); if (sSong.video_url) lines.push(`Link: ${sSong.video_url}`); }
+                              }
+                            } else {
+                              (s.assignments || []).forEach((a: any) => { lines.push(""); lines.push(`${a.role}: ${(a.members || []).map((m: any) => m.name).join(", ") || "(none)"}`); });
+                            }
+                            if (s.notes) { lines.push(""); lines.push("*Notes:"); lines.push(s.notes); }
+                            navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", "Copied!"));
+                          }}
+                          className="absolute top-3 right-3 p-1.5 text-gray-400 dark:text-gray-500 hover:text-indigo-500 dark:hover:text-indigo-400 opacity-40 sm:opacity-0 sm:group-hover:opacity-100 transition-all rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
+                        >
+                          <Copy size={14} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* SIDE PANEL */}
+        {selectedScheduleDate && (selectedDateEvents.length > 0 || schedPanelMode === "edit") && (
+          <div className="md:hidden fixed inset-0 bg-black/50 z-40" onClick={closeScheduleEditor} />
+        )}
+        {selectedScheduleDate && (selectedDateEvents.length > 0 || schedPanelMode === "edit") && (() => {
+          const isDatePast = selectedScheduleDate < todayStr;
+          const showDayView = selectedDateEvents.length >= 2 && !selectedEventId && schedPanelMode !== "edit";
+          if (showDayView) {
+            const dateLabel = new Date(selectedScheduleDate + "T00:00:00").toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+            return (
+              <div className="fixed top-1/2 -translate-y-1/2 left-4 right-4 z-50 md:static md:translate-y-0 md:z-auto md:w-80 md:shrink-0 bg-white dark:bg-gray-800 rounded-2xl md:rounded-2xl border border-gray-200 dark:border-gray-700 shadow-2xl p-5 max-h-[85dvh] md:max-h-[calc(100vh-200px)] overflow-y-auto md:self-start md:sticky md:top-0">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="font-bold text-gray-900 dark:text-white text-base">{dateLabel.split(",")[0]}</h3>
+                    <p className="text-xs text-indigo-500 font-medium mt-0.5">{dateLabel}</p>
+                  </div>
+                  <button onClick={closeScheduleEditor} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg"><X size={18} /></button>
+                </div>
+                <div className="space-y-2 mb-4">
+                  {selectedDateEvents.map(ev => {
+                    const evName = (ev as any).eventName || (ev.serviceType === "sunday" ? "Sunday Service" : "Midweek Service");
+                    return (
+                      <button key={ev.id} onClick={() => openEventById(ev.id, selectedScheduleDate!)}
+                        className="w-full flex items-center gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-700/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 border border-gray-100 dark:border-gray-700 hover:border-indigo-300 transition-all text-left">
+                        <span className="text-xl">{eventEmoji(evName)}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{evName}</p>
+                          {ev.worshipLeader && <p className="text-xs text-gray-400 truncate">{ev.worshipLeader.name}</p>}
+                        </div>
+                        <ChevronRight size={16} className="text-gray-400 shrink-0" />
+                      </button>
+                    );
+                  })}
+                </div>
+                {isDatePast ? (
+                  <div className="w-full flex items-center gap-2 py-2.5 px-3 border border-amber-200 dark:border-amber-700/40 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 rounded-xl text-xs font-medium">
+                    <Lock size={13} className="shrink-0" />
+                    This date has passed — view only
+                  </div>
+                ) : (
+                  <button onClick={() => openBlankEventForm(selectedScheduleDate!)}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 border-2 border-dashed border-indigo-300 dark:border-indigo-600 text-indigo-600 dark:text-indigo-400 rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-900/20 text-sm font-medium transition-colors">
+                    <Plus size={16} /> Add Another Event
+                  </button>
+                )}
+              </div>
+            );
+          }
+          // Single event panel
+          const isServiceEvent = ["sunday service", "midweek service"].includes(editSchedEventName.toLowerCase());
+          const dow = selectedScheduleDate ? new Date(selectedScheduleDate + "T00:00:00").getDay() : -1;
+          // Leaders see only the relevant service preset; others see full list
+          const presets = isLeader
+            ? (dow === 0 ? ["Sunday Service"] : ["Midweek Service"])
+            : dow === 0
+              ? ["Sunday Service", "Prayer Night", "Worship Night", "Youth Service", "Revival"]
+              : ["Midweek Service", "Prayer Night", "Worship Night", "Youth Service", "Revival"];
+          const pickerMembers = schedMemberSearch.trim()
+            ? allMembers.filter(m => m.name.toLowerCase().includes(schedMemberSearch.toLowerCase()))
+            : allMembers;
+          return (
+            <div className="fixed top-1/2 -translate-y-1/2 left-4 right-4 z-50 md:static md:translate-y-0 md:z-auto md:w-80 md:shrink-0 bg-white dark:bg-gray-800 rounded-2xl md:rounded-2xl border border-gray-200 dark:border-gray-700 shadow-2xl p-5 max-h-[85dvh] md:max-h-[calc(100vh-200px)] overflow-y-auto md:self-start md:sticky md:top-0">
+              {isDatePast && (
+                <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40 rounded-xl px-3 py-2 mb-3 text-xs text-amber-700 dark:text-amber-400">
+                  <Lock size={13} className="shrink-0" />
+                  <span>This date has passed — view only</span>
+                </div>
+              )}
+
+
+              {selectedDateEvents.length >= 2 && selectedEventId && (
+                <button onClick={() => { setSelectedEventId(null); setSchedPanelMode("view"); }}
+                  className="flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium mb-3 transition-colors">
+                  <ChevronLeft size={14} /> All events this day
+                </button>
+              )}
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="font-bold text-gray-900 dark:text-white text-base">
+                    {schedPanelMode === "view" && editingExisting
+                      ? `${eventEmoji(editSchedEventName)} ${editSchedEventName}`
+                      : editingExisting ? "Edit Event" : "New Event"}
+                  </h3>
+                  <p className="text-xs text-indigo-500 font-medium mt-0.5">
+                    {new Date(selectedScheduleDate + "T00:00:00").toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1">
+                  {schedPanelMode === "view" && editingExisting && !isDatePast && (canWriteSchedule || leaderCanEditEvent) && (
+                    <button onClick={() => setSchedPanelMode("edit")} className="p-1.5 text-gray-400 hover:text-indigo-500 rounded-lg transition-colors"><Pencil size={16} /></button>
+                  )}
+                  {editingExisting && (
+                    <button onClick={() => {
+                      const label = editSchedEventName || "Event";
+                      const dateLabel = new Date(selectedScheduleDate + "T00:00:00").toLocaleDateString("en", { month: "long", day: "numeric", year: "numeric" });
+                      const isServiceEvtCopy = ["sunday service", "midweek service"].includes(label.toLowerCase());
+                      const lines: string[] = [];
+                      lines.push(label);
+                      lines.push(dateLabel);
+                      if (isServiceEvtCopy) {
+                        if (editSchedWorshipLeader) { lines.push(""); lines.push(`Worship Leader: ${editSchedWorshipLeader.name}`); }
+                        if (editSchedBackupSingers.length > 0) { lines.push(""); lines.push(`Backup Singers: ${editSchedBackupSingers.map(b => b.name).join(", ")}`); }
+                        if (editSchedMusicians.length > 0) { lines.push(""); lines.push(`Musicians / Instruments: ${editSchedMusicians.map(m => `${m.name} (${m.role})`).join(", ")}`); }
+                        const jSong = allSongs.find(sg => sg.id === editSchedSongLineup.joyful);
+                        const sSong = allSongs.find(sg => sg.id === editSchedSongLineup.solemn);
+                        if (jSong || sSong) {
+                          lines.push(""); lines.push("Song Line-up:");
+                          if (jSong) { lines.push(`Joyful: ${jSong.title}${jSong.artist ? ` - ${jSong.artist}` : ""}`); if (jSong.video_url) lines.push(`Link: ${jSong.video_url}`); }
+                          if (sSong) { lines.push(""); lines.push(`Solemn: ${sSong.title}${sSong.artist ? ` - ${sSong.artist}` : ""}`); if (sSong.video_url) lines.push(`Link: ${sSong.video_url}`); }
+                        }
+                      } else {
+                        editSchedAssignments.forEach(asgn => { lines.push(""); lines.push(`${asgn.role}: ${asgn.members.map(m => m.name).join(", ") || "(none)"}`); });
+                      }
+                      if (editSchedNotes) { lines.push(""); lines.push("*Notes:"); lines.push(editSchedNotes); }
+                      navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", "Copied to clipboard!"));
+                    }} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg transition-colors"><Copy size={16} /></button>
+                  )}
+                  <button onClick={closeScheduleEditor} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg"><X size={18} /></button>
+                </div>
+              </div>
+
+              {schedPanelMode === "view" && editingExisting ? (
+                /* ── VIEW MODE ── */
+                <div className="space-y-4">
+                  {/* Created by — always shown at top */}
+                  {editingExisting.created_by_name && (() => {
+                    const name = editingExisting.created_by_name!;
+                    const photo = allMembers.find(m => m.name?.toLowerCase().startsWith(name.split(" ")[0].toLowerCase()))?.photo || editingExisting.created_by_photo || "";
+                    const colors = ["bg-indigo-500","bg-violet-500","bg-pink-500","bg-emerald-500","bg-amber-500"];
+                    const bg = colors[name.charCodeAt(0) % colors.length];
+                    const parts = name.trim().split(/\s+/);
+                    const fmtName = parts.length === 1 ? parts[0] : `${parts[0]} ${parts[parts.length - 1][0]}.`;
+                    return (
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-50 dark:bg-gray-700/40 border border-gray-100 dark:border-gray-700">
+                        {photo
+                          ? <img src={photo} className="w-6 h-6 rounded-full object-cover shrink-0" alt={name} />
+                          : <div className={`w-6 h-6 rounded-full ${bg} flex items-center justify-center text-white text-[9px] font-bold shrink-0`}>{name[0].toUpperCase()}</div>
+                        }
+                        <span className="text-xs text-gray-500 dark:text-gray-400">Created by <span className="font-semibold text-gray-700 dark:text-gray-200">{fmtName}</span></span>
+                      </div>
+                    );
+                  })()}
+                  {isServiceEvent && (() => {
+                    // Helper: get live photo from allMembers by memberId
+                    const livePhoto = (memberId: string) => allMembers.find(m => m.id === memberId)?.photo || "";
+                    const Avatar = ({ m, color }: { m: ScheduleMember; color: string }) => {
+                      const photo = livePhoto(m.memberId);
+                      return photo
+                        ? <img src={photo} className="w-9 h-9 rounded-full object-cover shrink-0 ring-2 ring-white dark:ring-gray-800" alt={m.name} />
+                        : <div className="w-9 h-9 rounded-full ${color} flex items-center justify-center text-white text-sm font-bold shrink-0">{m.name[0]}</div>;
+                    };
+                    return (
+                      <>
+                        {editSchedWorshipLeader && (
+                          <div>
+                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Worship Leader</p>
+                            <div className="flex items-center gap-3">
+                              <Avatar m={editSchedWorshipLeader} color="bg-indigo-500" />
+                              <div>
+                                <p className="font-semibold text-sm text-gray-900 dark:text-white">{editSchedWorshipLeader.name}</p>
+                                <p className="text-[11px] text-indigo-400">Worship Leader</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        {editSchedBackupSingers.length > 0 && (
+                          <div>
+                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Backup Singers</p>
+                            <div className="flex flex-col gap-2">
+                              {editSchedBackupSingers.map((m, i) => (
+                                <div key={i} className="flex items-center gap-3">
+                                  <Avatar m={m} color="bg-pink-500" />
+                                  <div>
+                                    <p className="font-semibold text-sm text-gray-900 dark:text-white">{m.name}</p>
+                                    <p className="text-[11px] text-pink-400">Backup Singer</p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {editSchedMusicians.length > 0 && (
+                          <div>
+                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Musicians</p>
+                            <div className="flex flex-col gap-2">
+                              {editSchedMusicians.map((m, i) => (
+                                <div key={i} className="flex items-center gap-3">
+                                  <Avatar m={m} color="bg-indigo-600" />
+                                  <div>
+                                    <p className="font-semibold text-sm text-gray-900 dark:text-white">{m.name}</p>
+                                    <p className="text-[11px] text-teal-400">{m.role}</p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {(editSchedSongLineup.joyful || editSchedSongLineup.solemn) && (
+                          <div>
+                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Song Line-Up</p>
+                            {editSchedSongLineup.joyful && (() => { const s = allSongs.find(sg => sg.id === editSchedSongLineup.joyful); return s ? <p className="text-sm mb-1"><Sun size={12} className="inline-block mr-1" /> <span className="font-semibold text-amber-500 uppercase text-xs">Joyful</span>{" "}{s.video_url ? <a href={s.video_url} target="_blank" rel="noopener noreferrer" className="text-gray-900 dark:text-white hover:text-amber-500 dark:hover:text-amber-400 underline underline-offset-2 decoration-amber-400/60 transition-colors">{s.title} <span className="inline-block text-[10px] text-amber-400 align-middle">↗</span></a> : <span className="text-gray-900 dark:text-white">{s.title}</span>}</p> : null; })()}
+                            {editSchedSongLineup.solemn && (() => { const s = allSongs.find(sg => sg.id === editSchedSongLineup.solemn); return s ? <p className="text-sm"><Music size={12} className="inline-block mr-1" /> <span className="font-semibold text-indigo-400 uppercase text-xs">Solemn</span>{" "}{s.video_url ? <a href={s.video_url} target="_blank" rel="noopener noreferrer" className="text-gray-900 dark:text-white hover:text-indigo-400 dark:hover:text-indigo-300 underline underline-offset-2 decoration-indigo-400/60 transition-colors">{s.title} <span className="inline-block text-[10px] text-indigo-400 align-middle">↗</span></a> : <span className="text-gray-900 dark:text-white">{s.title}</span>}</p> : null; })()}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+
+                  {editSchedNotes && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Notes</p>
+                      <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{editSchedNotes}</p>
+                    </div>
+                  )}
+                  {editSchedAssignments.length > 0 && !isServiceEvent && (
+                    <div className="space-y-3">
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1.5"><Users size={12} /> Lead Facilitators</p>
+                      {editSchedAssignments.map((asgn, gi) => (
+                        <div key={gi} className="bg-gray-50 dark:bg-gray-700/40 rounded-xl p-3 border border-gray-100 dark:border-gray-700">
+                          <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-2">{asgn.role}</p>
+                          <div className="flex flex-col gap-1.5">
+                            {asgn.members.map((m, mi) => (
+                              <div key={mi} className="flex items-center gap-2">
+                                {(() => {
+                                  const p = allMembers.find(mb => mb.id === m.memberId)?.photo || m.photo || ""; return p
+                                    ? <img src={p} className="w-8 h-8 rounded-full object-cover shrink-0 ring-2 ring-white dark:ring-gray-800" alt={m.name} />
+                                    : <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">{m.name[0]}</div>;
+                                })()}
+                                <p className="text-sm text-gray-900 dark:text-white">{m.name}</p>
+                              </div>
+                            ))}
+                            {asgn.members.length === 0 && <p className="text-xs text-gray-400 italic">No members assigned</p>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : schedPanelMode === "edit" ? (
+                /* ── EDIT / NEW MODE ── */
+                <div className="space-y-4">
+                  {/* Event Name */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Event Name</label>
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {(() => {
+                        return presets.map(preset => (
+                          <button key={preset} type="button" onClick={() => setEditSchedEventName(preset)}
+                            className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all border ${editSchedEventName === preset ? "bg-indigo-600 text-white border-indigo-600" : "border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-indigo-400 hover:text-indigo-500"}`}>
+                            {eventEmoji(preset)} {preset}
+                          </button>
+                        ));
+                      })()}
+                    </div>
+                    {/* Custom event name input — hidden for Worship Leaders */}
+                    {!isLeader && (
+                      <input
+                        type="text" value={editSchedEventName} onChange={e => setEditSchedEventName(e.target.value)}
+                        placeholder="Or type a custom event name…"
+                        className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder-gray-400"
+                      />
+                    )}
+                  </div>
+
+                  {/* Grouped Role Assignments — only for NON-service events */}
+                  {editSchedEventName.trim() && !isServiceEvent && (
+                    <div className="space-y-3">
+                      <label className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        <Users size={12} /> Lead Facilitators
+                      </label>
+
+                      {/* Existing role assignment groups */}
+                      {editSchedAssignments.map((asgn, gi) => {
+                        const suggestions = asgn.search.trim()
+                          ? allMembers.filter(m =>
+                            m.name.toLowerCase().includes(asgn.search.toLowerCase()) &&
+                            !asgn.members.some(am => am.memberId === m.id)
+                          )
+                          : [];
+                        return (
+                          <div key={gi} className="bg-gray-50 dark:bg-gray-700/40 rounded-xl p-3 border border-gray-100 dark:border-gray-700">
+                            {/* Role label row */}
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">{asgn.role}</span>
+                              <button onClick={() => setEditSchedAssignments(prev => prev.filter((_, j) => j !== gi))}
+                                className="text-gray-300 dark:text-gray-600 hover:text-red-400 transition-colors"><X size={14} /></button>
+                            </div>
+                            {/* Assigned member chips */}
+                            {asgn.members.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5 mb-2">
+                                {asgn.members.map((m, mi) => (
+                                  <span key={mi} className="flex items-center gap-1 bg-white dark:bg-gray-700 border border-indigo-200 dark:border-indigo-700 text-gray-800 dark:text-gray-200 text-xs px-2 py-1 rounded-full">
+                                    {m.photo
+                                      ? <img src={m.photo} className="w-4 h-4 rounded-full object-cover" alt="" />
+                                      : <span className="w-4 h-4 rounded-full bg-indigo-400 flex items-center justify-center text-white text-[9px] font-bold shrink-0">{m.name[0]}</span>
+                                    }
+                                    {m.name}
+                                    <button onClick={() => setEditSchedAssignments(prev => prev.map((a, j) => j === gi ? { ...a, members: a.members.filter((_, k) => k !== mi) } : a))}
+                                      className="ml-0.5 text-gray-400 hover:text-red-400 transition-colors"><X size={9} /></button>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                            {/* Per-role member search */}
+                            <div className="relative">
+                              <input
+                                type="text"
+                                autoFocus={gi === newGroupFocusIdx}
+                                value={asgn.search}
+                                onChange={e => setEditSchedAssignments(prev => prev.map((a, j) => j === gi ? { ...a, search: e.target.value } : a))}
+                                onFocus={() => { if (gi === newGroupFocusIdx) setNewGroupFocusIdx(null); }}
+                                placeholder="Type a name to add…"
+                                className="w-full px-3 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder-gray-400"
+                              />
+                              {/* Auto-suggest dropdown */}
+                              {suggestions.length > 0 && (
+                                <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg z-50 max-h-36 overflow-y-auto">
+                                  {suggestions.map(m => {
+                                    const memberRole = (m as any).roles?.join(", ") || "Member";
+                                    return (
+                                      <button key={m.id} type="button"
+                                        onMouseDown={e => e.preventDefault()}
+                                        onClick={() => {
+                                          setEditSchedAssignments(prev => prev.map((a, j) => j === gi
+                                            ? { ...a, members: [...a.members, { memberId: m.id, name: m.name, photo: m.photo, role: memberRole }], search: "" }
+                                            : a
+                                          ));
+                                        }}
+                                        className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors text-left">
+                                        {m.photo
+                                          ? <img src={m.photo} className="w-6 h-6 rounded-full object-cover shrink-0" alt="" />
+                                          : <div className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">{m.name[0]}</div>
+                                        }
+                                        <div className="min-w-0">
+                                          <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{m.name}</p>
+                                          <p className="text-[10px] text-gray-400 truncate">{memberRole}</p>
+                                        </div>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {/* Add new role */}
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={newRoleInput}
+                          onChange={e => setNewRoleInput(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === "Enter" && newRoleInput.trim()) {
+                              setEditSchedAssignments(prev => {
+                                const next = [...prev, { role: newRoleInput.trim(), members: [], search: "" }];
+                                setNewGroupFocusIdx(next.length - 1);
+                                return next;
+                              });
+                              setNewRoleInput("");
+                            }
+                          }}
+                          placeholder="Add assignment group (e.g. Food / Beverages)…"
+                          className="flex-1 px-3 py-2 rounded-xl border border-dashed border-indigo-300 dark:border-indigo-600 bg-transparent text-sm text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder-gray-400"
+                        />
+                        <button
+                          type="button"
+                          disabled={!newRoleInput.trim()}
+                          onClick={() => {
+                            if (newRoleInput.trim()) {
+                              setEditSchedAssignments(prev => {
+                                const next = [...prev, { role: newRoleInput.trim(), members: [], search: "" }];
+                                setNewGroupFocusIdx(next.length - 1);
+                                return next;
+                              });
+                              setNewRoleInput("");
+                            }
+                          }}
+                          className="px-3 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1">
+                          <Plus size={14} /> Add
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Service fields — only for Sunday/Midweek */}
+                  {isServiceEvent && (() => {
+                    // Role-based filtering using exact ROLE_CATEGORIES values
+                    const INSTRUMENTALIST_ROLES = ["Drummer", "Bassist", "Rhythm Guitar", "Lead Guitar", "Keys / Pianist"];
+                    const isWLRole = (m: typeof allMembers[0]) => m.roles.includes("Worship Leader");
+                    const isBSRole = (m: typeof allMembers[0]) => m.roles.includes("Backup Singer");
+                    const isMuRole = (m: typeof allMembers[0]) => m.roles.some(r => INSTRUMENTALIST_ROLES.includes(r));
+                    // Exclusions: selected members don't appear in other sections
+                    const wlCandidates = allMembers.filter(m =>
+                      isWLRole(m) &&
+                      m.id !== editSchedWorshipLeader?.memberId &&
+                      !editSchedBackupSingers.some(b => b.memberId === m.id) &&
+                      !editSchedMusicians.some(mu => mu.memberId === m.id)
+                    );
+                    const bsCandidates = allMembers.filter(m =>
+                      isBSRole(m) &&
+                      m.id !== editSchedWorshipLeader?.memberId &&
+                      !editSchedBackupSingers.some(b => b.memberId === m.id) &&
+                      !editSchedMusicians.some(mu => mu.memberId === m.id)
+                    );
+                    const muCandidates = allMembers.filter(m =>
+                      isMuRole(m) &&
+                      m.id !== editSchedWorshipLeader?.memberId &&
+                      !editSchedBackupSingers.some(b => b.memberId === m.id) &&
+                      !editSchedMusicians.some(mu => mu.memberId === m.id)
+                    );
+                    const isMidweek = editSchedEventName.toLowerCase() === "midweek service";
+                    // Filter songs by mood tag, then optionally by search
+                    const joyfulTagged = allSongs.filter(s => s.tags?.some(t => /joyful/i.test(t.name)));
+                    const solemnTagged = allSongs.filter(s => s.tags?.some(t => /solemn/i.test(t.name)));
+                    // Fall back to all songs if no tagged songs found (avoids empty list)
+                    const joyfulBase = joyfulTagged.length > 0 ? joyfulTagged : allSongs;
+                    const solemnBase = solemnTagged.length > 0 ? solemnTagged : allSongs;
+                    const joyfulSongs = joyfulSearch.trim()
+                      ? joyfulBase.filter(s => s.title.toLowerCase().includes(joyfulSearch.toLowerCase()) || s.artist?.toLowerCase().includes(joyfulSearch.toLowerCase()))
+                      : joyfulBase;
+                    const solemnSongs = solemnSearch.trim()
+                      ? solemnBase.filter(s => s.title.toLowerCase().includes(solemnSearch.toLowerCase()) || s.artist?.toLowerCase().includes(solemnSearch.toLowerCase()))
+                      : solemnBase;
+                    return (
+                      <>
+                        {/* ── WORSHIP LEADER ─────────────────────── */}
+                        <div>
+                          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Worship Leader</p>
+                          {editSchedWorshipLeader && (
+                            <div className="flex items-center gap-3 bg-indigo-500/10 dark:bg-indigo-900/30 border border-indigo-300 dark:border-indigo-700 rounded-xl px-3 py-2.5 mb-2">
+                              {editSchedWorshipLeader.photo
+                                ? <img src={editSchedWorshipLeader.photo} className="w-9 h-9 rounded-full object-cover shrink-0" alt="" />
+                                : <div className="w-9 h-9 rounded-full bg-indigo-500 flex items-center justify-center text-white text-sm font-bold shrink-0">{editSchedWorshipLeader.name[0]}</div>
+                              }
+                              <div className="flex-1 min-w-0">
+                                <p className="font-semibold text-sm text-gray-900 dark:text-white truncate">{editSchedWorshipLeader.name}</p>
+                                <p className="text-[11px] text-indigo-500 dark:text-indigo-400">Worship Leader</p>
+                              </div>
+                              <button onClick={() => setEditSchedWorshipLeader(null)} className="text-gray-400 hover:text-red-400 transition-colors shrink-0"><X size={16} /></button>
+                            </div>
+                          )}
+                          <div className="space-y-0.5 max-h-44 overflow-y-auto pr-1">
+                            {wlCandidates.map(m => {
+                              const memberRoles = ((m as any).roles || []).join(", ") || "Member";
+                              return (
+                                <button key={m.id} type="button"
+                                  onClick={() => setEditSchedWorshipLeader({ memberId: m.id, name: m.name, photo: m.photo, role: "Worship Leader" })}
+                                  className="w-full flex items-center gap-3 px-2.5 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700/60 transition-colors">
+                                  {m.photo
+                                    ? <img src={m.photo} className="w-9 h-9 rounded-full object-cover shrink-0" alt="" />
+                                    : <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-sm font-bold shrink-0">{m.name[0]}</div>
+                                  }
+                                  <div className="flex-1 text-left min-w-0">
+                                    <p className="font-semibold text-sm truncate text-gray-900 dark:text-white">{m.name}</p>
+                                    <p className="text-[10px] text-gray-400 truncate">{memberRoles}</p>
+                                  </div>
+                                  <Plus size={18} className="text-gray-400 shrink-0" />
+                                </button>
+                              );
+                            })}
+                            {wlCandidates.length === 0 && !editSchedWorshipLeader && <p className="text-xs text-gray-400 italic px-2">No members with Worship Leader role found</p>}
+                          </div>
+                        </div>
+
+                        {/* ── BACKUP SINGERS ─────────────────────── */}
+                        <div>
+                          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Backup Singers</p>
+                          {editSchedBackupSingers.length > 0 && (
+                            <div className="space-y-1.5 mb-2">
+                              {editSchedBackupSingers.map((bs, i) => (
+                                <div key={i} className="flex items-center gap-3 bg-pink-500/10 dark:bg-pink-900/20 border border-pink-200 dark:border-pink-800 rounded-xl px-3 py-2">
+                                  {bs.photo
+                                    ? <img src={bs.photo} className="w-8 h-8 rounded-full object-cover shrink-0" alt="" />
+                                    : <div className="w-8 h-8 rounded-full bg-pink-500 flex items-center justify-center text-white text-xs font-bold shrink-0">{bs.name[0]}</div>
+                                  }
+                                  <p className="flex-1 font-semibold text-sm text-gray-900 dark:text-white truncate">{bs.name}</p>
+                                  <span className="text-[11px] font-medium text-pink-500 shrink-0">Backup Singer</span>
+                                  <button onClick={() => setEditSchedBackupSingers(prev => prev.filter((_, j) => j !== i))} className="text-gray-300 hover:text-red-400 ml-1 shrink-0"><X size={15} /></button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div className="space-y-0.5 max-h-36 overflow-y-auto pr-1">
+                            {bsCandidates.map(m => {
+                              const memberRoles = ((m as any).roles || []).join(", ") || "Member";
+                              return (
+                                <button key={m.id} type="button"
+                                  onClick={() => setEditSchedBackupSingers(prev => [...prev, { memberId: m.id, name: m.name, photo: m.photo, role: "Backup Singer" }])}
+                                  className="w-full flex items-center gap-3 px-2.5 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700/60 transition-colors">
+                                  {m.photo
+                                    ? <img src={m.photo} className="w-9 h-9 rounded-full object-cover shrink-0" alt="" />
+                                    : <div className="w-9 h-9 rounded-full bg-gradient-to-br from-pink-400 to-rose-500 flex items-center justify-center text-white text-sm font-bold shrink-0">{m.name[0]}</div>
+                                  }
+                                  <div className="flex-1 text-left min-w-0">
+                                    <p className="font-semibold text-sm truncate text-gray-900 dark:text-white">{m.name}</p>
+                                    <p className="text-[10px] text-gray-400 truncate">{memberRoles}</p>
+                                  </div>
+                                  <Plus size={18} className="text-gray-400 shrink-0" />
+                                </button>
+                              );
+                            })}
+                            {bsCandidates.length === 0 && editSchedBackupSingers.length === 0 && <p className="text-xs text-gray-400 italic px-2">No members with Backup Singer role found</p>}
+                          </div>
+                        </div>
+
+                        {/* ── MUSICIANS / INSTRUMENTS ─────────────── */}
+                        <div>
+                          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Musicians / Instruments</p>
+                          {editSchedMusicians.length > 0 && (
+                            <div className="space-y-1.5 mb-2">
+                              {editSchedMusicians.map((mu, i) => (
+                                <div key={i} className="flex items-center gap-3 bg-indigo-600/10 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700 rounded-xl px-3 py-2">
+                                  {mu.photo
+                                    ? <img src={mu.photo} className="w-8 h-8 rounded-full object-cover shrink-0" alt="" />
+                                    : <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-bold shrink-0">{mu.name[0]}</div>
+                                  }
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-semibold text-sm text-gray-900 dark:text-white truncate">{mu.name}</p>
+                                    <p className="text-[11px] text-indigo-500 dark:text-indigo-400 truncate">{mu.role}</p>
+                                  </div>
+                                  <button onClick={() => setEditSchedMusicians(prev => prev.filter((_, j) => j !== i))} className="text-gray-400 hover:text-red-400 shrink-0"><X size={15} /></button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div className="space-y-0.5 max-h-44 overflow-y-auto pr-1">
+                            {muCandidates.map(m => {
+                              const memberRoles: string[] = ((m as any).roles || []).filter((r: string) => r.trim());
+                              const isPending = pendingRolePick?.m.id === m.id;
+                              return (
+                                <div key={m.id}>
+                                  <button type="button"
+                                    onClick={() => {
+                                      if (memberRoles.length <= 1) {
+                                        setEditSchedMusicians(prev => [...prev, { memberId: m.id, name: m.name, photo: m.photo, role: memberRoles[0] || "Musician" }]);
+                                        setPendingRolePick(null);
+                                      } else {
+                                        setPendingRolePick(isPending ? null : { m, roles: memberRoles });
+                                      }
+                                    }}
+                                    className={`w-full flex items-center gap-3 px-2.5 py-2 rounded-xl transition-colors ${isPending ? "bg-indigo-50 dark:bg-indigo-900/30" : "hover:bg-gray-50 dark:hover:bg-gray-700/60"}`}>
+                                    {m.photo
+                                      ? <img src={m.photo} className="w-9 h-9 rounded-full object-cover shrink-0" alt="" />
+                                      : <div className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-400 to-indigo-600 flex items-center justify-center text-white text-sm font-bold shrink-0">{m.name[0]}</div>
+                                    }
+                                    <div className="flex-1 text-left min-w-0">
+                                      <p className="font-semibold text-sm truncate text-gray-900 dark:text-white">{m.name}</p>
+                                      <p className="text-[10px] text-gray-400 truncate">{memberRoles.join(", ") || "Musician"}</p>
+                                    </div>
+                                    {memberRoles.length > 1
+                                      ? <span className="text-[10px] text-indigo-400 shrink-0 font-medium">{isPending ? "▲ pick role" : "▼ pick role"}</span>
+                                      : <Plus size={18} className="text-gray-400 shrink-0" />
+                                    }
+                                  </button>
+                                  {isPending && (
+                                    <div className="px-2.5 pb-2 pt-1 flex flex-wrap gap-1.5">
+                                      {memberRoles.map(role => (
+                                        <button key={role} type="button"
+                                          onClick={() => {
+                                            setEditSchedMusicians(prev => [...prev, { memberId: m.id, name: m.name, photo: m.photo, role }]);
+                                            setPendingRolePick(null);
+                                          }}
+                                          className="px-2.5 py-1 text-[11px] font-medium rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-800 transition-colors border border-indigo-200 dark:border-indigo-700">
+                                          {role}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                            {muCandidates.length === 0 && editSchedMusicians.length === 0 && <p className="text-xs text-gray-400 italic px-2">No members with instrument roles found</p>}
+                          </div>
+                        </div>
+
+                        {/* ── SONG LINE-UP ─────────────────────────── */}
+                        <div>
+                          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Song Line-Up</p>
+                          <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl px-3 py-2.5 mb-3 text-xs text-amber-700 dark:text-amber-400">
+                            <BookOpen size={14} className="shrink-0" />
+                            <span>Add new songs in <strong className="text-amber-800 dark:text-amber-300">Song Management</strong> before building the lineup, especially for new songs.</span>
+                          </div>
+
+                          {/* Joyful — hidden for Midweek Service */}
+                          {!isMidweek && (
+                            <div className="mb-3">
+                              <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 mb-1.5 flex items-center gap-1.5"><Sun size={12} /> JOYFUL <span className="text-gray-400 font-normal normal-case">(pick one)</span></p>
+                              <input type="text" value={joyfulSearch} onChange={e => setJoyfulSearch(e.target.value)}
+                                placeholder="Search joyful songs…"
+                                className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 placeholder-gray-400 mb-2" />
+                              <div className="space-y-0.5 max-h-40 overflow-y-auto pr-1">
+                                {joyfulSongs.map(sg => (
+                                  <button key={sg.id} type="button"
+                                    onClick={() => setEditSchedSongLineup(prev => ({ ...prev, joyful: prev.joyful === sg.id ? undefined : sg.id }))}
+                                    className={`w-full flex items-center gap-3 px-2.5 py-2.5 rounded-xl text-sm transition-colors ${editSchedSongLineup.joyful === sg.id ? "bg-amber-500 text-white" : "hover:bg-gray-50 dark:hover:bg-gray-700/60 text-gray-900 dark:text-white"}`}>
+                                    <div className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${editSchedSongLineup.joyful === sg.id ? "border-white" : "border-gray-300 dark:border-gray-500"}`}>
+                                      {editSchedSongLineup.joyful === sg.id && <div className="w-2 h-2 rounded-full bg-white" />}
+                                    </div>
+                                    <div className="flex-1 text-left min-w-0">
+                                      <p className="font-medium truncate">{sg.title}</p>
+                                      {sg.artist && <p className={`text-[11px] truncate ${editSchedSongLineup.joyful === sg.id ? "text-amber-100" : "text-gray-400"}`}>{sg.artist}</p>}
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Solemn */}
+                          <div>
+                            <p className="text-xs font-semibold text-indigo-500 dark:text-indigo-400 mb-1.5 flex items-center gap-1.5"><Music size={12} /> SOLEMN <span className="text-gray-400 font-normal normal-case">(pick one)</span></p>
+                            <input type="text" value={solemnSearch} onChange={e => setSolemnSearch(e.target.value)}
+                              placeholder="Search solemn songs…"
+                              className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder-gray-400 mb-2" />
+                            <div className="space-y-0.5 max-h-40 overflow-y-auto pr-1">
+                              {solemnSongs.map(sg => (
+                                <button key={sg.id} type="button"
+                                  onClick={() => setEditSchedSongLineup(prev => ({ ...prev, solemn: prev.solemn === sg.id ? undefined : sg.id }))}
+                                  className={`w-full flex items-center gap-3 px-2.5 py-2.5 rounded-xl text-sm transition-colors ${editSchedSongLineup.solemn === sg.id ? "bg-indigo-600 text-white" : "hover:bg-gray-50 dark:hover:bg-gray-700/60 text-gray-900 dark:text-white"}`}>
+                                  <div className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${editSchedSongLineup.solemn === sg.id ? "border-white" : "border-gray-300 dark:border-gray-500"}`}>
+                                    {editSchedSongLineup.solemn === sg.id && <div className="w-2 h-2 rounded-full bg-white" />}
+                                  </div>
+                                  <div className="flex-1 text-left min-w-0">
+                                    <p className="font-medium truncate">{sg.title}</p>
+                                    {sg.artist && <p className={`text-[11px] truncate ${editSchedSongLineup.solemn === sg.id ? "text-indigo-200" : "text-gray-400"}`}>{sg.artist}</p>}
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+
+                  {/* Notes */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Notes / Announcements</label>
+                    <AutoTextarea
+                      value={editSchedNotes}
+                      onChange={e => setEditSchedNotes(e.target.value)}
+                      minRows={2}
+                      placeholder="Add notes, reminders, or announcements…"
+                      className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder-gray-400"
+                    />
+                  </div>
+
+                  {/* Save / Delete */}
+                  {!isDatePast && (
+                    <div className="flex flex-col gap-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+                      <button onClick={handleSaveSchedule} disabled={isSavingSchedule}
+                        className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-60">
+                        {isSavingSchedule ? "Saving…" : editingExisting ? "Update Event" : "Save Event"}
+                      </button>
+                      {editingExisting && (
+                        <button onClick={handleDeleteSchedule} className="w-full py-2 text-red-500 hover:text-red-600 text-sm font-medium rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                          Remove Event
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          );
+        })()}
+      </div>
+    </div>
+  );
+}
