@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useEffect, useCallback } from "react";
 import AdminDashboard from "./AdminDashboard";
+import { Member, ScheduleMember, Schedule } from "./types";
 import {
     Music, Users, Calendar, NotepadText, ChevronRight,
     BookOpen, Clock, Star, TrendingUp, Bug, Lightbulb,
@@ -37,18 +38,10 @@ function RoleBadgeChip({ role }: { role: string }) {
     );
 }
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-interface ScheduleMember { memberId: string; name: string; photo: string; role: string; }
-interface Schedule {
-    id: string; date: string; serviceType?: string; eventName?: string;
-    worshipLeader?: ScheduleMember | null; backupSingers?: ScheduleMember[];
-    musicians?: ScheduleMember[]; songLineup?: { joyful?: string; solemn?: string };
-    assignments?: { role: string; members: ScheduleMember[] }[]; notes?: string;
-}
-interface Song { id: string; title: string; artist: string; created_at?: string; }
-interface Member { id: string; name: string; email: string; photo: string; roles: string[]; status: string; }
+// Member, ScheduleMember, Schedule, Song are imported from ./types
 interface Note { id: string; type: "bug" | "feature" | "general"; content: string; resolved?: boolean; createdAt: string; authorName: string; }
 interface Broadcast { id: string; title: string; message: string; active: boolean; type?: string; }
+interface Song { id: string; title: string; artist: string; created_at?: string; }
 
 interface Props {
     isAdmin: boolean; userRole: string; userName: string; userPhoto: string; userEmail: string; userId: string;

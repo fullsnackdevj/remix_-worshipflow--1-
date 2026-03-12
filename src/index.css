@@ -80,31 +80,84 @@ button.no-scale:active {
   transform: none;
 }
 
-/* Hide scrollbar but keep scroll functionality */
+/* ── Modern Global Scrollbar ─────────────────────────────────────────────────
+   Overrides default white/system scrollbar on ALL scrollable elements.
+   Works in Webkit (Chrome, Safari, Edge) + Firefox.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* Webkit: global */
+*::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.35);
+  border-radius: 99px;
+  transition: background 0.2s;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.65);
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Firefox: global */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(99, 102, 241, 0.35) transparent;
+}
+
+/* Dark mode thumb — slightly more visible against dark bg */
+.dark *::-webkit-scrollbar-thumb {
+  background: rgba(129, 140, 248, 0.4);
+}
+.dark *::-webkit-scrollbar-thumb:hover {
+  background: rgba(129, 140, 248, 0.7);
+}
+.dark * {
+  scrollbar-color: rgba(129, 140, 248, 0.4) transparent;
+}
+
+/* ── Hide scrollbar but keep scroll functionality ─────────────────────────── */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
-
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
 
-/* Thin, dark-themed scrollbar */
+/* ── pretty-scrollbar — opt-in, slightly more prominent ─────────────────── */
 .pretty-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: rgba(99, 102, 241, 0.5) transparent;
+  scrollbar-color: rgba(99, 102, 241, 0.55) transparent;
 }
 .pretty-scrollbar::-webkit-scrollbar {
-  width: 4px;
+  width: 5px;
 }
 .pretty-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
 .pretty-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(99, 102, 241, 0.5);
+  background: rgba(99, 102, 241, 0.55);
   border-radius: 99px;
 }
 .pretty-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(99, 102, 241, 0.8);
+  background: rgba(99, 102, 241, 0.85);
+}
+.dark .pretty-scrollbar,
+.dark.pretty-scrollbar {
+  scrollbar-color: rgba(129, 140, 248, 0.55) transparent;
+}
+.dark .pretty-scrollbar::-webkit-scrollbar-thumb,
+.dark.pretty-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(129, 140, 248, 0.55);
+}
+.dark .pretty-scrollbar::-webkit-scrollbar-thumb:hover,
+.dark.pretty-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(129, 140, 248, 0.85);
 }

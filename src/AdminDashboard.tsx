@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { db } from "./firebase";
+import { Member, ScheduleMember, Schedule } from "./types";
 import VerseOfTheDay from "./VerseOfTheDay";
 import {
     Music, Users, Calendar, NotepadText, ChevronRight, Clock,
@@ -8,16 +9,8 @@ import {
     TrendingUp, ArrowUpRight, Star, Mic2, BookOpen, Radio,
 } from "lucide-react";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-interface ScheduleMember { memberId: string; name: string; photo: string; role: string; }
-interface Schedule {
-    id: string; date: string; serviceType?: string; eventName?: string;
-    worshipLeader?: ScheduleMember | null; backupSingers?: ScheduleMember[];
-    musicians?: ScheduleMember[]; songLineup?: { joyful?: string; solemn?: string };
-    assignments?: { role: string; members: ScheduleMember[] }[]; notes?: string;
-}
+// Member, ScheduleMember, Schedule are imported from ./types
 interface Song { id: string; title: string; artist: string; created_at?: string; }
-interface Member { id: string; name: string; email: string; photo: string; roles: string[]; status: string; }
 interface Note { id: string; type: "bug" | "feature" | "general"; content: string; resolved?: boolean; createdAt: string; authorName: string; reactions?: Record<string, string[]>; }
 
 

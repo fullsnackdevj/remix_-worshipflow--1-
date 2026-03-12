@@ -449,7 +449,7 @@ export default function App() {
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [isEditingMember, setIsEditingMember] = useState(false);
   const [memberSearchQuery, setMemberSearchQuery] = useState("");
-  const [memberFormErrors, setMemberFormErrors] = useState<{ firstName?: string; lastName?: string; phone?: string; email?: string }>({});
+  const [memberFormErrors, setMemberFormErrors] = useState<{ firstName?: string; lastName?: string; phone?: string; email?: string; birthdate?: string }>({}); 
 
   // Member form fields
   const [editMemberFirstName, setEditMemberFirstName] = useState("");
@@ -460,6 +460,7 @@ export default function App() {
   const [editMemberPhoto, setEditMemberPhoto] = useState("");
   const [editMemberRoles, setEditMemberRoles] = useState<string[]>([]);
   const [editMemberStatus, setEditMemberStatus] = useState<"active" | "on-leave" | "inactive">("active");
+  const [editMemberBirthdate, setEditMemberBirthdate] = useState("");
   const [editMemberNotes, setEditMemberNotes] = useState("");
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [isSavingMember, setIsSavingMember] = useState(false);
@@ -740,6 +741,18 @@ export default function App() {
     acc[s.date].push(s);
     return acc;
   }, {}), [allSchedules]);
+
+  /** Map of "MM-DD" -> Member[] for birthday lookups — zero extra network calls */
+  const birthdayMap = useMemo(() => {
+    const map: Record<string, Member[]> = {};
+    allMembers.forEach(m => {
+      if (!m.birthdate) return;
+      const mmdd = m.birthdate.slice(5); // "MM-DD"
+      if (!map[mmdd]) map[mmdd] = [];
+      map[mmdd].push(m);
+    });
+    return map;
+  }, [allMembers]);
 
   const selectedDateEvents: Schedule[] = useMemo(
     () => selectedScheduleDate ? (dateEventsMap[selectedScheduleDate] ?? []) : [],
@@ -1187,6 +1200,7 @@ export default function App() {
       setEditMemberPhoto(member.photo || "");
       setEditMemberRoles(member.roles || []);
       setEditMemberStatus(member.status || "active");
+      setEditMemberBirthdate(member.birthdate || "");
       setEditMemberNotes(member.notes || "");
     } else {
       setSelectedMember(null);
@@ -1198,6 +1212,7 @@ export default function App() {
       setEditMemberPhoto("");
       setEditMemberRoles([]);
       setEditMemberStatus("active");
+      setEditMemberBirthdate("");
       setEditMemberNotes("");
     }
     setMemberFormErrors({});
@@ -1206,12 +1221,13 @@ export default function App() {
 
   const handleSaveMember = async () => {
     if (isSavingMember) return; // guard against double-click
-    const errors: { firstName?: string; lastName?: string; phone?: string; email?: string } = {};
+    const errors: { firstName?: string; lastName?: string; phone?: string; email?: string; birthdate?: string } = {};
     if (!editMemberFirstName.trim()) errors.firstName = "First name is required.";
     if (!editMemberLastName.trim()) errors.lastName = "Last name is required.";
     if (!editMemberPhone.trim()) errors.phone = "Phone number is required.";
     if (!editMemberEmail.trim()) errors.email = "Email address is required.";
     else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(editMemberEmail.trim())) errors.email = "Please enter a valid email address.";
+    if (!editMemberBirthdate) errors.birthdate = "Birthdate is required.";
     if (Object.keys(errors).length > 0) { setMemberFormErrors(errors); return; }
     setMemberFormErrors({});
 
@@ -1251,6 +1267,7 @@ export default function App() {
       photo: editMemberPhoto,
       roles: editMemberRoles,
       status: editMemberStatus,
+      birthdate: editMemberBirthdate || undefined,
       notes: editMemberNotes,
     };
 
@@ -2201,6 +2218,31 @@ export default function App() {
                                         </div>
                                       );
                                     })()}
+                                    {/* Birthday avatars */}
+                                    {(() => {
+                                      const mmdd = dateStr.slice(5);
+                                      const bdays = birthdayMap[mmdd] ?? [];
+                                      if (!bdays.length) return null;
+                                      const shown = bdays.slice(0, 3);
+                                      const extra = bdays.length - shown.length;
+                                      const bdc = ["bg-pink-500","bg-rose-500","bg-fuchsia-500","bg-violet-500"];
+                                      return (
+                                        <div className="flex items-center gap-0.5 mt-0.5 flex-wrap">
+                                          {shown.map((bm, mi) => (
+                                            <div key={bm.id} title={`🎂 ${bm.name}'s Birthday`} className="relative shrink-0">
+                                              {bm.photo
+                                                ? <img src={bm.photo} alt={bm.name} className="w-5 h-5 rounded-full object-cover ring-1 ring-pink-300 dark:ring-pink-700" />
+                                                : <div className={`w-5 h-5 rounded-full ${bdc[mi % bdc.length]} flex items-center justify-center text-white text-[8px] font-bold ring-1 ring-pink-300 dark:ring-pink-700`}>{bm.name[0].toUpperCase()}</div>
+                                              }
+                                              <span className="absolute -bottom-0.5 -right-0.5 text-[7px] leading-none">🎂</span>
+                                            </div>
+                                          ))}
+                                          {extra > 0 && (
+                                            <span className="text-[9px] font-bold text-pink-500 dark:text-pink-400">+{extra}</span>
+                                          )}
+                                        </div>
+                                      );
+                                    })()}
                                   </button>
                                 );
                               })}
@@ -3134,6 +3176,24 @@ export default function App() {
                               <span>Make sure this is the same email address this person will use to <strong>sign in to the app</strong>. This is how their access is linked to their profile.</span>
                             </p>
                           }
+                        </div>
+
+                        {/* Birthdate */}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Birthdate <span className="text-red-500">*</span>
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-base select-none pointer-events-none">🎂</span>
+                            <input
+                              type="date"
+                              value={editMemberBirthdate}
+                              max={new Date().toISOString().split("T")[0]}
+                              onChange={e => { setEditMemberBirthdate(e.target.value); if (memberFormErrors.birthdate) setMemberFormErrors(p => ({ ...p, birthdate: undefined })); }}
+                              className={`w-full pl-9 pr-4 py-2 border ${memberFormErrors.birthdate ? "border-red-400 focus:border-red-400 focus:ring-red-200" : "border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-indigo-200"} bg-white dark:bg-gray-700 rounded-xl focus:ring-2 outline-none text-gray-900 dark:text-gray-100`}
+                            />
+                          </div>
+                          {memberFormErrors.birthdate && <p className="mt-1 text-xs text-red-500">{memberFormErrors.birthdate}</p>}
                         </div>
 
                         {/* Status */}
