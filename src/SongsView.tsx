@@ -316,7 +316,13 @@ export default function SongsView({
 
   // ── Fetch songs on mount ─────────────────────────────────────────────────
   useEffect(() => {
-    fetchSongs();
+    // If App.tsx already seeded songs from cache, do a silent background refresh
+    // rather than showing the loading spinner again
+    if (allSongs.length > 0) {
+      fetchSongs({ background: true });
+    } else {
+      fetchSongs();
+    }
   }, []);
 
   const fetchTags = fetchSongs; // aliases — tags are always loaded together

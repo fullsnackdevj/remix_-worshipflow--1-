@@ -123,7 +123,12 @@ export default function MembersView({
 
   // ── Fetch members on mount ─────────────────────────────────────────
   useEffect(() => {
-    fetchMembers();
+    // If App.tsx already seeded members from cache, do a silent refresh
+    if (allMembers.length > 0) {
+      fetchMembers({ background: true });
+    } else {
+      fetchMembers();
+    }
   }, []);
 
   const filteredMembers = useMemo(() => {

@@ -371,15 +371,49 @@ export default function App() {
   const [pendingDeepLinkEventDate, setPendingDeepLinkEventDate] = React.useState<string | null>(null);
 
 
-  // ── Songs shared state (kept here for ScheduleView song lineup) ────────────
-  const [allSongs, setAllSongs] = useState<Song[]>([]);
-  const [isLoadingSongs, setIsLoadingSongs] = useState(true);
-  const [tags, setTags] = useState<Tag[]>([]);
-  // ── Members shared state (passed to MembersView + ScheduleView) ──────────
-  const [allMembers, setAllMembers] = useState<Member[]>([]);
+  // ── Songs shared state — seed from cache immediately for instant dashboard counts ──
+  const [allSongs, setAllSongs] = useState<Song[]>(() => {
+    try {
+      const raw = localStorage.getItem("wf_songs_cache");
+      if (!raw) return [];
+      const { songs, ts } = JSON.parse(raw);
+      // Use cache if it's less than 10 minutes old
+      if (Date.now() - ts < 10 * 60 * 1000 && Array.isArray(songs)) return songs;
+    } catch { /* noop */ }
+    return [];
+  });
+  const [isLoadingSongs, setIsLoadingSongs] = useState(() => {
+    try {
+      const raw = localStorage.getItem("wf_songs_cache");
+      if (!raw) return true;
+      const { ts } = JSON.parse(raw);
+      return Date.now() - ts > 10 * 60 * 1000; // only show spinner if cache stale
+    } catch { return true; }
+  });
+  const [tags, setTags] = useState<Tag[]>(() => {
+    try {
+      const raw = localStorage.getItem("wf_songs_cache");
+      if (!raw) return [];
+      const { tags, ts } = JSON.parse(raw);
+      if (Date.now() - ts < 10 * 60 * 1000 && Array.isArray(tags)) return tags;
+    } catch { /* noop */ }
+    return [];
+  });
+
+  // ── Members shared state — seed from cache immediately for instant dashboard counts ──
+  const [allMembers, setAllMembers] = useState<Member[]>(() => {
+    try {
+      const raw = localStorage.getItem("wf_members_cache");
+      if (!raw) return [];
+      const { members, ts } = JSON.parse(raw);
+      if (Date.now() - ts < 10 * 60 * 1000 && Array.isArray(members)) return members;
+    } catch { /* noop */ }
+    return [];
+  });
   const [isLoadingMembers, setIsLoadingMembers] = useState(false);
 
   const [pendingNavSongId, setPendingNavSongId] = useState<string | null>(null);
+
 
 
 
@@ -425,11 +459,50 @@ export default function App() {
 
 
   useEffect(() => {
-    // Members are fetched inside MembersView on mount.
-    // No pre-fetch needed here.
+    // ── Boot prefetch: fan out both API calls in parallel immediately ─────────────
+    // Songs + tags
+    const fetchSongs = async () => {
+      try {
+        const [songsRes, tagsRes] = await Promise.all([
+          fetch("/api/songs"),
+          fetch("/api/tags"),
+        ]);
+        const [songsData, tagsData] = await Promise.all([
+          songsRes.json(),
+          tagsRes.json(),
+        ]);
+        const songs = Array.isArray(songsData) ? songsData : [];
+        const tags  = Array.isArray(tagsData)  ? tagsData  : [];
+        setAllSongs(songs);
+        setTags(tags);
+        // Write back to cache so next boot is instant too
+        try { localStorage.setItem("wf_songs_cache", JSON.stringify({ songs, tags, ts: Date.now() })); } catch { /* noop */ }
+      } catch (e) {
+        console.warn("Boot song fetch failed:", e);
+      } finally {
+        setIsLoadingSongs(false);
+      }
+    };
+    // Members
+    const fetchMembers = async () => {
+      try {
+        const res = await fetch("/api/members");
+        const data = await res.json();
+        const members = Array.isArray(data) ? data : [];
+        setAllMembers(members);
+        try { localStorage.setItem("wf_members_cache", JSON.stringify({ members, ts: Date.now() })); } catch { /* noop */ }
+      } catch (e) {
+        console.warn("Boot members fetch failed:", e);
+      }
+    };
+    // Fire both in true parallel — no await between them
+    fetchSongs();
+    fetchMembers();
   }, []);
 
-  // NOTE: Member fetching on view switch is handled by MembersView itself.
+  // NOTE: View-specific fetch functions in SongsView/MembersView serve as
+  // background refresh on mount (stale-while-revalidate pattern).
+
 
   /** The currently signed-in user's Member document (matched by email), if any */
   const myMemberProfile = useMemo(() => {
