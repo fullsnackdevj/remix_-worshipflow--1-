@@ -9,18 +9,42 @@ interface Session {
   type: string;
   time: string;
   timeVal: string;
-  day: number; // 0–6 (Sun–Sat index within the week)
+  day: number;
   color: keyof typeof COLOR_MAP;
 }
 
-// ── Color palette ─────────────────────────────────────────────────────────────
+// ── Color palette (light + dark) ──────────────────────────────────────────────
 const COLOR_MAP = {
-  green:  { bg: "bg-emerald-50",  border: "border-l-emerald-500", label: "text-emerald-600" },
-  purple: { bg: "bg-purple-50",   border: "border-l-purple-400",  label: "text-purple-600"  },
-  orange: { bg: "bg-orange-50",   border: "border-l-orange-400",  label: "text-orange-500"  },
-  pink:   { bg: "bg-pink-50",     border: "border-l-pink-500",    label: "text-pink-500"    },
-  teal:   { bg: "bg-cyan-50",     border: "border-l-cyan-500",    label: "text-cyan-600"    },
-  indigo: { bg: "bg-violet-50",   border: "border-l-violet-500",  label: "text-violet-700"  },
+  green:  {
+    bg:     "bg-emerald-50 dark:bg-emerald-900/20",
+    border: "border-l-emerald-500 dark:border-l-emerald-400",
+    label:  "text-emerald-600 dark:text-emerald-400",
+  },
+  purple: {
+    bg:     "bg-purple-50 dark:bg-purple-900/20",
+    border: "border-l-purple-400 dark:border-l-purple-400",
+    label:  "text-purple-600 dark:text-purple-400",
+  },
+  orange: {
+    bg:     "bg-orange-50 dark:bg-orange-900/20",
+    border: "border-l-orange-400 dark:border-l-orange-400",
+    label:  "text-orange-500 dark:text-orange-400",
+  },
+  pink:   {
+    bg:     "bg-pink-50 dark:bg-pink-900/20",
+    border: "border-l-pink-500 dark:border-l-pink-400",
+    label:  "text-pink-500 dark:text-pink-400",
+  },
+  teal:   {
+    bg:     "bg-cyan-50 dark:bg-cyan-900/20",
+    border: "border-l-cyan-500 dark:border-l-cyan-400",
+    label:  "text-cyan-600 dark:text-cyan-400",
+  },
+  indigo: {
+    bg:     "bg-violet-50 dark:bg-violet-900/20",
+    border: "border-l-violet-500 dark:border-l-violet-400",
+    label:  "text-violet-700 dark:text-violet-400",
+  },
 };
 
 // ── Static data ───────────────────────────────────────────────────────────────
@@ -49,137 +73,104 @@ export default function Playground() {
     SESSIONS.find(s => s.time === time && s.day === dayIdx) ?? null;
 
   return (
-    // Force light-mode styles regardless of app dark mode
     <div
-      className="min-h-full p-1 select-none"
-      style={{ background: "#f7f7fb", fontFamily: "Inter, sans-serif" }}
+      className="min-h-full p-1 select-none bg-gray-50 dark:bg-gray-900 transition-colors"
       onClick={() => setSelectedId(null)}
     >
       {/* ── Page Header ─────────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: "#111827" }}>Sessions</h1>
-          <p className="text-sm mt-1" style={{ color: "#6b7280" }}>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Sessions</h1>
+          <p className="text-sm mt-1 text-gray-500 dark:text-gray-400">
             Here are the latest updates from the past 7 days.
           </p>
         </div>
         <div className="flex items-center gap-3">
           {/* Week dropdown */}
-          <button
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium shadow-sm border"
-            style={{ background: "#fff", borderColor: "#e5e7eb", color: "#374151" }}
-          >
-            Week <ChevronDown size={15} style={{ color: "#9ca3af" }} />
+          <button className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium shadow-sm border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 transition-colors">
+            Week <ChevronDown size={15} className="text-gray-400 dark:text-gray-500" />
           </button>
           {/* Add Sessions */}
-          <button
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold shadow-sm text-white"
-            style={{ background: "#7c3aed" }}
-          >
+          <button className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold shadow-sm text-white bg-violet-600 hover:bg-violet-700 transition-colors">
             <Plus size={15} /> Add Sessions
           </button>
         </div>
       </div>
 
       {/* ── Calendar Card ──────────────────────────────────────────────────── */}
-      <div
-        className="rounded-2xl border overflow-hidden shadow-sm"
-        style={{ background: "#ffffff", borderColor: "#e5e7eb" }}
-      >
+      <div className="rounded-2xl border overflow-hidden shadow-sm bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 transition-colors">
+
         {/* Sub-header */}
-        <div
-          className="flex items-center justify-between px-5 py-3.5 border-b"
-          style={{ borderColor: "#f3f4f6" }}
-        >
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-gray-700">
           <div className="flex items-center gap-2">
-            <Calendar size={16} style={{ color: "#6b7280" }} />
-            <span className="text-sm font-semibold" style={{ color: "#1f2937" }}>
+            <Calendar size={16} className="text-gray-500 dark:text-gray-400" />
+            <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">
               Calendar View
             </span>
           </div>
           <div className="flex items-center gap-3">
             {/* Filter */}
-            <button
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors"
-              style={{ borderColor: "#e5e7eb", color: "#6b7280" }}
-            >
+            <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
               <Filter size={13} /> Filter
             </button>
-            {/* Day / Week / Month */}
-            <div
-              className="flex items-center rounded-lg overflow-hidden border text-sm"
-              style={{ borderColor: "#e5e7eb" }}
-            >
-              <button
-                className="px-3 py-1.5 transition-colors"
-                style={{ color: "#6b7280" }}
-              >
+            {/* Day / Week / Month toggle */}
+            <div className="flex items-center rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600 text-sm">
+              <button className="px-3 py-1.5 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                 Day
               </button>
-              <button
-                className="px-3 py-1.5 font-semibold text-white"
-                style={{ background: "#7c3aed" }}
-              >
+              <button className="px-3 py-1.5 font-semibold text-white bg-violet-600">
                 Week
               </button>
-              <button
-                className="px-3 py-1.5 transition-colors"
-                style={{ color: "#6b7280" }}
-              >
+              <button className="px-3 py-1.5 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                 Month
               </button>
             </div>
           </div>
         </div>
 
-        {/* ── Calendar Grid ─────────────────────────────────────────────────── */}
+        {/* ── Grid ────────────────────────────────────────────────────────── */}
         <div className="overflow-x-auto">
           <div style={{ minWidth: "740px" }}>
 
             {/* Column headers */}
             <div
-              className="border-b"
-              style={{
-                display: "grid",
-                gridTemplateColumns: "76px repeat(7, 1fr)",
-                borderColor: "#f3f4f6",
-              }}
+              className="border-b border-gray-100 dark:border-gray-700"
+              style={{ display: "grid", gridTemplateColumns: "76px repeat(7, 1fr)" }}
             >
-              <div
-                className="px-3 py-3 text-xs font-semibold uppercase tracking-wide border-r"
-                style={{ color: "#9ca3af", borderColor: "#f3f4f6" }}
-              >
+              <div className="px-3 py-3 text-xs font-semibold uppercase tracking-wide border-r border-gray-100 dark:border-gray-700 text-gray-400 dark:text-gray-500">
                 Time
               </div>
               {DAYS.map((day, i) => (
                 <div
                   key={day}
-                  className="px-3 py-3 text-sm font-semibold text-center"
-                  style={{
-                    color: "#374151",
-                    borderRight: i < DAYS.length - 1 ? "1px solid #f3f4f6" : "none",
-                  }}
+                  className="px-3 py-3 text-sm font-semibold text-center text-gray-600 dark:text-gray-300"
+                  style={{ borderRight: i < DAYS.length - 1 ? undefined : "none" }}
                 >
-                  {day}
+                  <span
+                    className="block"
+                    style={{ borderRight: i < DAYS.length - 1 ? "" : undefined }}
+                  >
+                    {day}
+                  </span>
                 </div>
               ))}
             </div>
+
+            {/* Day header borders via wrapper trick */}
+            <div
+              className="border-b border-gray-100 dark:border-gray-700 -mt-px hidden"
+              style={{ display: "grid", gridTemplateColumns: "76px repeat(7, 1fr)" }}
+            />
 
             {/* Time rows */}
             {TIME_SLOTS.map((slot, ti) => (
               <div
                 key={slot}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "76px repeat(7, 1fr)",
-                  borderBottom: ti < TIME_SLOTS.length - 1 ? "1px solid #f3f4f6" : "none",
-                }}
+                className={ti < TIME_SLOTS.length - 1 ? "border-b border-gray-100 dark:border-gray-700" : ""}
+                style={{ display: "grid", gridTemplateColumns: "76px repeat(7, 1fr)" }}
               >
                 {/* Time label */}
-                <div
-                  className="px-3 pt-3 text-xs font-medium border-r flex items-start"
-                  style={{ color: "#9ca3af", borderColor: "#f3f4f6", minHeight: "88px" }}
-                >
+                <div className="px-3 pt-3 text-xs font-medium border-r border-gray-100 dark:border-gray-700 flex items-start text-gray-400 dark:text-gray-500" style={{ minHeight: "88px" }}>
                   {slot}
                 </div>
 
@@ -193,51 +184,42 @@ export default function Playground() {
                   return (
                     <div
                       key={di}
-                      className="p-2 relative"
-                      style={{
-                        minHeight: "88px",
-                        borderRight: !isLast ? "1px solid #f3f4f6" : "none",
-                      }}
+                      className={`p-2 relative ${!isLast ? "border-r border-gray-100 dark:border-gray-700" : ""}`}
+                      style={{ minHeight: "88px" }}
                     >
                       {session && c && (
                         <div
-                          onClick={(e) => {
+                          onClick={e => {
                             e.stopPropagation();
                             setSelectedId(isSelected ? null : session.id);
                           }}
-                          className={`cursor-pointer rounded-lg p-2.5 border-l-4 transition-shadow ${c.bg} ${c.border} ${isSelected ? "shadow-md ring-1 ring-gray-200" : "hover:shadow-md"}`}
+                          className={`cursor-pointer rounded-lg p-2.5 border-l-4 transition-shadow ${c.bg} ${c.border} ${isSelected ? "shadow-lg ring-1 ring-gray-200 dark:ring-gray-600" : "hover:shadow-md"}`}
                         >
                           {/* Coach label */}
                           <p className={`text-[10px] font-semibold leading-tight ${c.label}`}>
                             {session.coach}
                           </p>
                           {/* Trainee name */}
-                          <p className="text-sm font-bold leading-snug mt-0.5" style={{ color: "#111827" }}>
+                          <p className="text-sm font-bold leading-snug mt-0.5 text-gray-900 dark:text-white">
                             {session.trainee}
                           </p>
-                          {/* Type */}
+                          {/* Session type */}
                           {session.type && (
-                            <p className="text-[11px] mt-0.5" style={{ color: "#6b7280" }}>
+                            <p className="text-[11px] mt-0.5 text-gray-500 dark:text-gray-400">
                               {session.type}
                             </p>
                           )}
                           {/* Time */}
-                          <p className="text-[11px] mt-0.5" style={{ color: "#9ca3af" }}>
+                          <p className="text-[11px] mt-0.5 text-gray-400 dark:text-gray-500">
                             {session.time}
                           </p>
 
-                          {/* ── Detail popup ──────────────────────────────── */}
+                          {/* ── Detail popup ─────────────────────────────── */}
                           {isSelected && (
                             <div
-                              className="absolute z-50 rounded-xl border shadow-xl"
-                              style={{
-                                top: "calc(100% + 6px)",
-                                left: 0,
-                                width: "252px",
-                                background: "#ffffff",
-                                borderColor: "#e5e7eb",
-                              }}
-                              onClick={(e) => e.stopPropagation()}
+                              className="absolute z-50 rounded-xl border shadow-xl bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 transition-colors"
+                              style={{ top: "calc(100% + 6px)", left: 0, width: "252px" }}
+                              onClick={e => e.stopPropagation()}
                             >
                               <div className="p-4">
                                 {/* Popup header */}
@@ -246,20 +228,10 @@ export default function Playground() {
                                     {session.coach}
                                   </p>
                                   <div className="flex items-center gap-1">
-                                    <button
-                                      className="p-1.5 rounded-lg transition-colors"
-                                      style={{ color: "#6b7280" }}
-                                      onMouseEnter={e => (e.currentTarget.style.background = "#f3f4f6")}
-                                      onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-                                    >
+                                    <button className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors">
                                       <Pencil size={13} />
                                     </button>
-                                    <button
-                                      className="p-1.5 rounded-lg transition-colors"
-                                      style={{ color: "#6b7280" }}
-                                      onMouseEnter={e => (e.currentTarget.style.background = "#f3f4f6")}
-                                      onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-                                    >
+                                    <button className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors">
                                       <Trash2 size={13} />
                                     </button>
                                   </div>
@@ -272,14 +244,11 @@ export default function Playground() {
                                     { label: "Type:",         value: session.type || "—" },
                                     { label: "Time:",         value: session.timeVal },
                                   ].map(row => (
-                                    <div key={row.label} className="flex items-center gap-3">
-                                      <span
-                                        className="text-xs shrink-0"
-                                        style={{ color: "#9ca3af", width: "100px" }}
-                                      >
+                                    <div key={row.label} className="flex items-start gap-3">
+                                      <span className="text-xs shrink-0 text-gray-400 dark:text-gray-500" style={{ width: "100px" }}>
                                         {row.label}
                                       </span>
-                                      <span className="text-sm font-medium" style={{ color: "#111827" }}>
+                                      <span className="text-sm font-medium text-gray-900 dark:text-white">
                                         {row.value}
                                       </span>
                                     </div>
