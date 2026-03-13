@@ -134,6 +134,21 @@ function transposeChords(text: string, steps: number): string {
 }
 
 // ── UserMenu ─────────────────────────────────────────────────────────────────
+// ── YouTube embed URL helper (global — used by floating mini player) ──────────
+function getYoutubeEmbed(url: string, loop = false): string {
+  try {
+    const u = new URL(url);
+    let id = "";
+    if (u.hostname === "youtu.be") id = u.pathname.slice(1);
+    else if (u.hostname.includes("youtube.com")) id = u.searchParams.get("v") ?? u.pathname.split("/").pop() ?? "";
+    if (id) {
+      const loopParams = loop ? `&loop=1&playlist=${id}` : "";
+      return `https://www.youtube.com/embed/${id}?autoplay=1&rel=0${loopParams}`;
+    }
+  } catch { /* noop */ }
+  return url;
+}
+
 const ROLE_BADGE: Record<string, { label: string; className: string }> = {
   admin: { label: "Admin", className: "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400" },
   leader: { label: "Worship Leader", className: "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-400" },
@@ -246,6 +261,13 @@ export default function App() {
   const isQA = userRole === "qa_specialist";
   const isAdminUser = isAdmin || userRole === "admin"; // early check before effectiveRole exists
   const canSimulateRoles = isQA; // only QA Specialist can simulate roles
+  // ── Global video player ───────────────────────────────────────────────────
+  const [videoModal, setVideoModal] = useState<string | null>(null);
+  const [loopVideo, setLoopVideo] = useState(false);
+  const [miniPlayer, setMiniPlayer] = useState(false);
+  const openVideo = (url: string) => { setVideoModal(url); setLoopVideo(false); setMiniPlayer(false); };
+  const closeVideo = () => { setVideoModal(null); setLoopVideo(false); setMiniPlayer(false); };
+
   const [simulatedRole, setSimulatedRole] = useState<string>(() => {
     try { return localStorage.getItem(`wf_qa_role_${user?.uid}`) || "qa_specialist"; } catch { return "qa_specialist"; }
   });
@@ -1060,6 +1082,7 @@ export default function App() {
                   closeConfirm={closeConfirm}
                   pendingNavSongId={pendingNavSongId}
                   onPendingNavHandled={() => setPendingNavSongId(null)}
+                  onOpenVideo={openVideo}
                 />
               ) : null}
               </Suspense>
@@ -1142,6 +1165,108 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Global Floating Video Player ────────────────────────────────────
+           Lives in App so it persists across ALL module navigations.
+           The iframe is always-mounted while a video is open — toggling
+           between full-modal and mini-player never restarts playback.
+      ──────────────────────────────────────────────────────────────────── */}
+      {videoModal && (
+        <>
+          {/* Backdrop — only in full-modal mode */}
+          {!miniPlayer && (
+            <div
+              className="fixed inset-0 z-[9998] bg-black/80 backdrop-blur-sm"
+              onClick={closeVideo}
+            />
+          )}
+
+          {/* Player card */}
+          <div
+            className={`fixed z-[9999] bg-black shadow-2xl transition-all duration-300 ease-in-out ${
+              miniPlayer
+                ? "bottom-4 right-4 w-72 rounded-2xl"
+                : "rounded-2xl"
+            }`}
+            style={miniPlayer
+              ? {}
+              : { top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: "min(90vw, 896px)" }
+            }
+          >
+            {/* Header */}
+            <div className={`flex items-center justify-between bg-gray-900 ${miniPlayer ? "px-3 py-2 rounded-t-2xl" : "px-4 py-2.5 rounded-t-2xl"}`}>
+              <span className={`font-medium text-white/70 truncate mr-2 ${miniPlayer ? "text-xs" : "text-sm font-semibold text-white/80"}`}>
+                Now Playing
+              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                {/* Loop toggle — full mode only */}
+                {!miniPlayer && (
+                  <button
+                    onClick={() => setLoopVideo(v => !v)}
+                    title={loopVideo ? "Loop ON — click to turn off" : "Loop OFF — click to turn on"}
+                    className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border transition-all ${
+                      loopVideo
+                        ? "bg-indigo-600 border-indigo-500 text-white"
+                        : "border-white/20 text-white/50 hover:text-white/80 hover:border-white/40"
+                    }`}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3 shrink-0">
+                      <polyline points="17 1 21 5 17 9" />
+                      <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+                      <polyline points="7 23 3 19 7 15" />
+                      <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+                    </svg>
+                    {loopVideo ? "Loop ON" : "Loop"}
+                  </button>
+                )}
+                {/* Open in YouTube — full mode only */}
+                {!miniPlayer && (
+                  <a href={videoModal} target="_blank" rel="noopener noreferrer"
+                    className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
+                    Open in YouTube ↗
+                  </a>
+                )}
+                {/* Minimize / Maximize */}
+                <button
+                  onClick={() => setMiniPlayer(v => !v)}
+                  title={miniPlayer ? "Expand" : "Minimize — keep playing while you browse"}
+                  className="p-1 rounded-full hover:bg-white/10 transition-colors text-white/60 hover:text-white"
+                >
+                  {miniPlayer ? (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                      <polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" />
+                      <line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                      <polyline points="4 14 10 14 10 20" /><polyline points="20 10 14 10 14 4" />
+                      <line x1="10" y1="14" x2="3" y2="21" /><line x1="21" y1="3" x2="14" y2="10" />
+                    </svg>
+                  )}
+                </button>
+                {/* Close */}
+                <button
+                  onClick={closeVideo}
+                  className="p-1 rounded-full hover:bg-white/10 transition-colors text-white/60 hover:text-white"
+                  aria-label="Close video"
+                >
+                  <X size={miniPlayer ? 14 : 18} />
+                </button>
+              </div>
+            </div>
+            {/* 16:9 iframe — always mounted, video never restarts */}
+            <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
+              <iframe
+                src={getYoutubeEmbed(videoModal, loopVideo)}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                className="absolute inset-0 w-full h-full border-0 rounded-b-2xl"
+                title="Now Playing"
+              />
+            </div>
+          </div>
+        </>
       )}
 
     </div >

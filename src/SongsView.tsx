@@ -23,20 +23,6 @@ const CustomVideoBtnIcon = ({ size = 20, className = "" }: { size?: number, clas
   </svg>
 );
 
-// ── YouTube embed URL helper (± loop) ────────────────────────────────────
-function getYoutubeEmbed(url: string, loop = false): string {
-  try {
-    const u = new URL(url);
-    let id = "";
-    if (u.hostname === "youtu.be") id = u.pathname.slice(1);
-    else if (u.hostname.includes("youtube.com")) id = u.searchParams.get("v") ?? u.pathname.split("/").pop() ?? "";
-    if (id) {
-      const loopParams = loop ? `&loop=1&playlist=${id}` : "";
-      return `https://www.youtube.com/embed/${id}?autoplay=1&rel=0${loopParams}`;
-    }
-  } catch { /* noop */ }
-  return url;
-}
 
 // ── Chord Transposer ──────────────────────────────────────────────────────────
 const CHROMATIC = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -80,6 +66,7 @@ export interface SongsViewProps {
   closeConfirm: () => void;
   pendingNavSongId?: string | null;
   onPendingNavHandled?: () => void;
+  onOpenVideo?: (url: string) => void;
 }
 
 export default function SongsView({
@@ -101,6 +88,7 @@ export default function SongsView({
   closeConfirm,
   pendingNavSongId,
   onPendingNavHandled,
+  onOpenVideo,
 }: SongsViewProps) {
 
   // ── Songs search & filter ─────────────────────────────────────────────────
@@ -117,9 +105,6 @@ export default function SongsView({
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedSongIds, setSelectedSongIds] = useState<string[]>([]);
-  const [videoModal, setVideoModal] = useState<string | null>(null);
-  const [loopVideo, setLoopVideo] = useState(false);
-  const [miniPlayer, setMiniPlayer] = useState(false);
   const [isOcrLoading, setIsOcrLoading] = useState<"lyrics" | "chords" | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editArtist, setEditArtist] = useState("");
@@ -1459,7 +1444,7 @@ export default function SongsView({
                       <div className="flex items-center gap-1 shrink-0">
                         {song.video_url && (
                           <button
-                            onClick={(e) => { e.stopPropagation(); setVideoModal(song.video_url!); }}
+                            onClick={(e) => { e.stopPropagation(); onOpenVideo?.(song.video_url!); }}
                             title="Watch Video"
                             className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors relative group/tooltip"
                           >
@@ -1561,7 +1546,7 @@ export default function SongsView({
                   <div className="w-6 flex items-center justify-end">
                     {song.video_url && !isSelectionMode && (
                       <button
-                        onClick={(e) => { e.stopPropagation(); setVideoModal(song.video_url!); }}
+                        onClick={(e) => { e.stopPropagation(); onOpenVideo?.(song.video_url!); }}
                         title="Watch Video"
                         className="opacity-0 group-hover:opacity-100 transition-opacity"
                       >
@@ -1585,109 +1570,6 @@ export default function SongsView({
         </div>
       )}
 
-      {/* ── YouTube Video Player (full modal OR floating mini) ─────────────── */}
-      {videoModal && (
-        <>
-          {/* ── Full-screen backdrop (only when NOT minimized) */}
-          {!miniPlayer && (
-            <div
-              className="fixed inset-0 z-[9998] bg-black/80 backdrop-blur-sm"
-              onClick={() => { setVideoModal(null); setLoopVideo(false); setMiniPlayer(false); }}
-              onKeyDown={(e) => e.key === "Escape" && setVideoModal(null)}
-              role="presentation"
-            />
-          )}
-
-          {/* ── Player card — changes position/size based on miniPlayer */}
-          <div
-            className={`fixed z-[9999] bg-black shadow-2xl transition-all duration-300 ease-in-out ${
-              miniPlayer
-                ? "bottom-4 right-4 w-72 rounded-2xl"
-                : "inset-0 m-auto w-full max-w-3xl h-fit rounded-2xl"
-            }`}
-            style={miniPlayer ? {} : { top: "50%", left: "50%", transform: "translate(-50%, -50%)" }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header bar */}
-            <div className={`flex items-center justify-between bg-gray-900 ${miniPlayer ? "px-3 py-2 rounded-t-2xl" : "px-4 py-2.5"}`}>
-              {miniPlayer ? (
-                <span className="text-xs font-medium text-white/60 truncate mr-2">Now Playing</span>
-              ) : (
-                <span className="text-sm font-semibold text-white/80">Now Playing</span>
-              )}
-              <div className="flex items-center gap-2 shrink-0">
-                {/* Loop toggle (full mode only) */}
-                {!miniPlayer && (
-                  <button
-                    onClick={() => setLoopVideo(v => !v)}
-                    title={loopVideo ? "Loop ON — click to turn off" : "Loop OFF — click to turn on"}
-                    className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border transition-all ${
-                      loopVideo
-                        ? "bg-indigo-600 border-indigo-500 text-white"
-                        : "border-white/20 text-white/50 hover:text-white/80 hover:border-white/40"
-                    }`}
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3 shrink-0">
-                      <polyline points="17 1 21 5 17 9" />
-                      <path d="M3 11V9a4 4 0 0 1 4-4h14" />
-                      <polyline points="7 23 3 19 7 15" />
-                      <path d="M21 13v2a4 4 0 0 1-4 4H3" />
-                    </svg>
-                    {loopVideo ? "Loop ON" : "Loop"}
-                  </button>
-                )}
-                {/* Open in YouTube */}
-                {!miniPlayer && (
-                  <a href={videoModal} target="_blank" rel="noopener noreferrer"
-                    className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
-                    Open in YouTube ↗
-                  </a>
-                )}
-                {/* Minimize / Maximize */}
-                <button
-                  onClick={() => setMiniPlayer(v => !v)}
-                  title={miniPlayer ? "Expand" : "Minimize — keep playing while you browse"}
-                  className="p-1 rounded-full hover:bg-white/10 transition-colors text-white/60 hover:text-white"
-                  aria-label={miniPlayer ? "Expand video" : "Minimize video"}
-                >
-                  {miniPlayer ? (
-                    /* Expand icon */
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                      <polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" />
-                      <line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" />
-                    </svg>
-                  ) : (
-                    /* Minimize icon */
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                      <polyline points="4 14 10 14 10 20" /><polyline points="20 10 14 10 14 4" />
-                      <line x1="10" y1="14" x2="3" y2="21" /><line x1="21" y1="3" x2="14" y2="10" />
-                    </svg>
-                  )}
-                </button>
-                {/* Close */}
-                <button
-                  onClick={() => { setVideoModal(null); setLoopVideo(false); setMiniPlayer(false); }}
-                  className="p-1 rounded-full hover:bg-white/10 transition-colors text-white/60 hover:text-white"
-                  aria-label="Close video"
-                >
-                  <X size={miniPlayer ? 14 : 18} />
-                </button>
-              </div>
-            </div>
-
-            {/* 16:9 iframe — always mounted so video keeps playing */}
-            <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
-              <iframe
-                src={getYoutubeEmbed(videoModal, loopVideo)}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-                className="absolute inset-0 w-full h-full border-0 rounded-b-2xl"
-                title="Now Playing"
-              />
-            </div>
-          </div>
-        </>
-      )}
     </div>
   );
 }
