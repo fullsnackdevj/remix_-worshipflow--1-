@@ -813,7 +813,7 @@ export default function App() {
             {/* Help & Knowledge Base */}
             <HelpPanel isAdmin={isAdmin} />
 
-            {/* 🎨 Theme Toggle */}
+            {/* 🎨 Theme Toggle — hidden for now, uncomment to re-enable
             <button
               onClick={toggleUiTheme}
               title={uiTheme === "one-monokai" ? "Switch to Default theme" : "Switch to One Monokai theme"}
@@ -823,6 +823,7 @@ export default function App() {
                 {uiTheme === "one-monokai" ? "■■" : "□□"}
               </span>
             </button>
+            */}
 
             {/* Notification Bell */}
             <div ref={notifRef} className="relative">
