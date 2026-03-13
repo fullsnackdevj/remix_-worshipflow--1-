@@ -342,27 +342,28 @@ export default function App() {
   // All flags use effectiveRole so QA Specialist simulation works correctly
   const isLeader = effectiveRole === "leader";
   const isPlanningLead = effectiveRole === "planning_lead";
+  const isRoleAdmin = isAdmin || effectiveRole === "admin"; // covers both owner email AND Firestore-assigned admin role
 
   // Songs
   const canAddSong = isAdmin || ["musician", "audio_tech", "leader", "planning_lead", "qa_specialist"].includes(effectiveRole);
   const canEditSong = isAdmin || ["musician", "audio_tech", "leader", "planning_lead", "qa_specialist"].includes(effectiveRole);
-  const canDeleteSong = isAdmin; // only admin can delete songs
-  const canSelectSongs = isAdmin; // selection mode leads to bulk delete
+  const canDeleteSong = isRoleAdmin; // only admin can delete songs
+  const canSelectSongs = isRoleAdmin; // selection mode leads to bulk delete
 
   // Members — own-profile restriction via email matching
   const isMyProfile = (member: any) =>
     !!user?.email && !!member?.email &&
     member.email.trim().toLowerCase() === user.email.trim().toLowerCase();
-  const canAddMember = isAdmin || isLeader;
-  const canEditMember = (member: any) => isAdmin || isMyProfile(member); // leader can only edit their own profile
-  const canDeleteMember = isAdmin; // only admin can delete members
+  const canAddMember = isRoleAdmin || isLeader || effectiveRole === "qa_specialist";
+  const canEditMember = (member: any) => isRoleAdmin || isMyProfile(member); // admin can edit all, others only own profile
+  const canDeleteMember = isRoleAdmin; // only admin can delete members
 
   // Schedule helpers
   // Returns true if dateStr falls on a Sunday (0) or Wednesday (3)
   const isServiceDay = (d: string) => { const dow = new Date(d + "T00:00:00").getDay(); return dow === 0 || dow === 3; };
 
   // Full schedule write — admin & Planning Lead have identical full access
-  const canWriteSchedule = isAdmin || isPlanningLead;
+  const canWriteSchedule = isRoleAdmin || isPlanningLead;
 
   // ── Scheduling state (kept in App for shared access + notification deep-link) ─
   // ── Schedules shared state — seed from cache for instant dashboard cards ──────────
@@ -568,7 +569,7 @@ export default function App() {
     }
   }, [currentView]);
 
-  const canWriteMembers = isAdmin || isLeader;
+  const canWriteMembers = isRoleAdmin || isLeader;
 
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-900 font-sans text-gray-900 dark:text-gray-100 overflow-hidden">
