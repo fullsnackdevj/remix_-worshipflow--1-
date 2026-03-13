@@ -13,7 +13,6 @@ import AutoTextarea from "./AutoTextarea";
 import DatePicker from "./DatePicker";
 import BirthdatePromptModal from "./BirthdatePromptModal";
 import Playground from "./Playground";
-import EventManagerView from "./EventManagerView";
 import ScheduleView, { ScheduleViewProps } from "./ScheduleView";
 import SongsView from "./SongsView";
 import MembersView from "./MembersView";
@@ -227,7 +226,7 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
-  const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "playground" | "admin" | "event-manager">("dashboard");
+  const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "playground" | "admin">("dashboard");
   const { isAdmin, userRole, user, status: authStatus } = useAuth();
 
   // Dashboard is the default landing for all roles — no redirect needed.
@@ -710,22 +709,6 @@ export default function App() {
             )}
           </button>
 
-          {/* Event Manager — admin only */}
-          {isAdmin && (
-            <button
-              onClick={() => { setCurrentView("event-manager"); setIsMobileMenuOpen(false); }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${
-                currentView === "event-manager"
-                  ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
-                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
-              } ${isSidebarCollapsed ? "justify-center" : ""}`}
-              title="Event Manager"
-            >
-              <LayoutGrid size={20} className="shrink-0" />
-              {!isSidebarCollapsed && <span>Event Manager</span>}
-            </button>
-          )}
-
           {/* Playground — admin only */}
           {isAdmin && (
             <button
@@ -803,7 +786,7 @@ export default function App() {
 
           <div className="flex-1 flex items-center">
             <h1 className="text-base sm:text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap">
-              {currentView === "dashboard" ? "Dashboard" : currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : currentView === "playground" ? "Playground" : currentView === "event-manager" ? "Event Manager" : "Song Management"}
+              {currentView === "dashboard" ? "Dashboard" : currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : currentView === "playground" ? "Playground" : "Song Management"}
             </h1>
           </div>
           <div className="flex items-center gap-2">
@@ -986,14 +969,7 @@ export default function App() {
               {/* ══════════════════════════════════════════════════════════════
                    ADMIN PANEL VIEW
               ══════════════════════════════════════════════════════════════ */}
-              {currentView === "event-manager" ? (
-                isAdmin ? (
-                  <EventManagerView
-                    allMembers={allMembers}
-                    onToast={showToast}
-                  />
-                ) : null
-              ) : currentView === "playground" ? (
+              {currentView === "playground" ? (
                 /* ══════════════════════════════════════════════════
                      PLAYGROUND — admin only sandbox
                 ══════════════════════════════════════════════════ */
