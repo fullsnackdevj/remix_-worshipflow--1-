@@ -5,6 +5,7 @@ import './index.css';
 // import './themes/one-monokai.css'; // reserved
 // import './themes/nord.css';         // reserved
 import './themes/nordvpn.css';
+import './themes/glass.css';
 import { ThemeProvider } from './ThemeContext.tsx';
 import { AuthProvider, useAuth } from './AuthContext.tsx';
 import LoginPage from './LoginPage.tsx';

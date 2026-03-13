@@ -801,17 +801,19 @@ export default function App() {
             </h1>
           </div>
           <div className="flex items-center gap-2">
-            {/* 🎨 Theme Toggle: Default ⇄ NordVPN */}
+            {/* 🎨 Theme Toggle: Default → NordVPN → Glass */}
             {(() => {
-              const isNord = uiTheme === "nordvpn";
+              const dots:   Record<string, string> = { default: "#6366f1", nordvpn: "#FF6B7A", glass: "#a78bfa" };
+              const labels: Record<string, string> = { default: "Def", nordvpn: "Nord", glass: "Glass" };
+              const next:   Record<string, string> = { default: "nordvpn", nordvpn: "glass", glass: "default" };
               return (
                 <button
                   onClick={cycleUiTheme}
-                  title={isNord ? "NordVPN theme — click for Default" : "Default theme — click for NordVPN"}
+                  title={`${labels[uiTheme]} theme → click for ${labels[next[uiTheme]]}`}
                   className="relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700/50 transition-colors text-[10px] font-bold tracking-wide uppercase"
                 >
-                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: isNord ? "#FF6B7A" : "#6366f1" }} />
-                  {isNord ? "Nord" : "Def"}
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: dots[uiTheme] }} />
+                  {labels[uiTheme]}
                 </button>
               );
             })()}

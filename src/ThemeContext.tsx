@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
 
-export type AppTheme = "default" | "nordvpn";
+export type AppTheme = "default" | "nordvpn" | "glass";
 
-const THEMES: AppTheme[] = ["default", "nordvpn"];
+const THEMES: AppTheme[] = ["default", "nordvpn", "glass"];
 
 interface ThemeContextValue {
   theme: AppTheme;
