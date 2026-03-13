@@ -40,7 +40,7 @@ export default function AutoTextarea({ minRows = 2, style, onChange, ...props }:
             ref={ref}
             rows={minRows}
             {...props}
-            style={{ ...style, minHeight, resize: "none", overflow: "hidden" }}
+            style={{ minHeight, resize: "none", overflow: "hidden", ...style }}
             onChange={(e) => {
                 resize();
                 onChange?.(e);
