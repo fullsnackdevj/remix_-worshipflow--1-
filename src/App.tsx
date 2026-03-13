@@ -1,22 +1,28 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from "react";
 
 import { useAuth } from "./AuthContext";
 import { getAuth } from "firebase/auth";
 import { usePushNotifications } from "./usePushNotifications";
+
+// ── Lightweight always-loaded components ────────────────────────────────────
 import BroadcastOverlay from "./BroadcastOverlay";
 import WelcomeToast from "./WelcomeToast";
-import AdminPanel from "./AdminPanel";
-import HelpPanel from "./HelpPanel";
-import NotesPanel from "./NotesPanel";
-import Dashboard from "./Dashboard";
-import AutoTextarea from "./AutoTextarea";
-import DatePicker from "./DatePicker";
+import SplashScreen from "./SplashScreen";
 import BirthdatePromptModal from "./BirthdatePromptModal";
-import Playground from "./Playground";
-import ScheduleView, { ScheduleViewProps } from "./ScheduleView";
-import SongsView from "./SongsView";
-import MembersView from "./MembersView";
-import DashboardView from "./DashboardView";
+
+// ── Heavy views — lazy-loaded on first visit (code splitting) ────────────────
+const AdminPanel    = lazy(() => import("./AdminPanel"));
+const HelpPanel     = lazy(() => import("./HelpPanel"));
+const NotesPanel    = lazy(() => import("./NotesPanel"));
+const Dashboard     = lazy(() => import("./Dashboard"));
+const DashboardView = lazy(() => import("./DashboardView"));
+const Playground    = lazy(() => import("./Playground"));
+const ScheduleView  = lazy(() => import("./ScheduleView"));
+const SongsView     = lazy(() => import("./SongsView"));
+const MembersView   = lazy(() => import("./MembersView"));
+const AutoTextarea  = lazy(() => import("./AutoTextarea"));
+const DatePicker    = lazy(() => import("./DatePicker"));
+
 import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, LayoutGrid, List, BookOpen, Mic2, Copy, Pencil, Shield, Mail, Bell, Guitar, Sliders, Palette, Lock, AlertTriangle, CheckCircle, BookMarked, HandMetal, Headphones, HelpCircle, Undo2, Redo2, FlaskConical } from "lucide-react";
 import { Song, Tag, Member, ScheduleMember, Schedule } from "./types";
 
@@ -438,31 +444,23 @@ export default function App() {
   interface ToastItem { id: number; type: ToastType; message: string; }
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
-  const showToast = (type: ToastType, message: string) => {
+  const showToast = useCallback((type: ToastType, message: string) => {
     const id = Date.now();
     setToasts(prev => [...prev, { id, type, message }]);
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3500);
-  };
-  // Keep the ref always pointing to the latest showToast so handleRoleSwitch can call it
-  useEffect(() => { showToastRef.current = showToast; });
+  }, []);
 
-
-  const dismissToast = (id: number) =>
-    setToasts(prev => prev.filter(t => t.id !== id));
+  const dismissToast = useCallback((id: number) =>
+    setToasts(prev => prev.filter(t => t.id !== id)), []);
 
   // ── Confirm dialog ─────────────────────────────────────────────────
   interface ConfirmConfig {
-    title: string;
-    message: string;
-    detail?: string;
-    confirmText: string;
-    confirmClass?: string;
-    onConfirm: () => void;
+    title: string; message: string; detail?: string;
+    confirmText: string; confirmClass?: string; onConfirm: () => void;
   }
   const [confirmConfig, setConfirmConfig] = useState<ConfirmConfig | null>(null);
-
-  const showConfirm = (config: ConfirmConfig) => setConfirmConfig(config);
-  const closeConfirm = () => setConfirmConfig(null);
+  const showConfirm = useCallback((config: ConfirmConfig) => setConfirmConfig(config), []);
+  const closeConfirm = useCallback(() => setConfirmConfig(null), []);
 
 
   useEffect(() => {
@@ -564,14 +562,28 @@ export default function App() {
     return map;
   }, [allMembers]);
 
-  // ── Dashboard notes ──────────────────────────────────────────────────────
-  const [dashboardNotes, setDashboardNotes] = useState<any[]>([]);
+  // ── Dashboard notes — TTL cache: only re-fetch after 2 minutes ──────────
+  const [dashboardNotes, setDashboardNotes] = useState<any[]>(() => {
+    try {
+      const raw = localStorage.getItem("wf_notes_cache");
+      if (raw) { const { data, ts } = JSON.parse(raw); if (Date.now() - ts < 2 * 60 * 1000) return data; }
+    } catch { /* noop */ } return [];
+  });
   useEffect(() => {
-    if (currentView === "dashboard") {
-      fetch("/api/notes").then(r => r.json()).then(data => {
-        if (Array.isArray(data)) setDashboardNotes(data);
-      }).catch(() => {});
+    if (currentView !== "dashboard") return;
+    const raw = localStorage.getItem("wf_notes_cache");
+    if (raw) {
+      try {
+        const { ts } = JSON.parse(raw);
+        if (Date.now() - ts < 2 * 60 * 1000) return; // cache fresh — skip fetch
+      } catch { /* noop */ }
     }
+    fetch("/api/notes").then(r => r.json()).then(data => {
+      if (Array.isArray(data)) {
+        setDashboardNotes(data);
+        try { localStorage.setItem("wf_notes_cache", JSON.stringify({ data, ts: Date.now() })); } catch { /* noop */ }
+      }
+    }).catch(() => {});
   }, [currentView]);
 
   const canWriteMembers = isRoleAdmin || isQARole; // Worship Leader removed; QA Specialist added
@@ -920,7 +932,15 @@ export default function App() {
         {/* Content Area */}
         <main className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-900">
           <div className="flex flex-col h-full">
-            <div className="flex-1 p-4 sm:p-6 overflow-auto">
+            <div key={currentView} className="view-enter flex-1 p-4 sm:p-6 overflow-auto">
+              <Suspense fallback={
+                <div className="flex items-center justify-center h-64">
+                  <div className="flex items-center gap-3 text-gray-400">
+                    <Loader2 size={20} className="animate-spin" />
+                    <span className="text-sm">Loading…</span>
+                  </div>
+                </div>
+              }>
 
 
               {/* ══════════════════════════════════════════════════════════════
@@ -1030,6 +1050,7 @@ export default function App() {
                   onPendingNavHandled={() => setPendingNavSongId(null)}
                 />
               ) : null}
+              </Suspense>
             </div>
           </div>
         </main>

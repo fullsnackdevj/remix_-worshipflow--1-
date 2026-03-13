@@ -11,6 +11,16 @@ body {
   @apply antialiased text-gray-900 bg-gray-50 dark:text-gray-100 dark:bg-gray-900;
 }
 
+/* ── View transition — triggered by key={currentView} in App.tsx ─────────── */
+@keyframes viewFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.view-enter {
+  animation: viewFadeIn 0.18s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+  will-change: opacity, transform;
+}
+
 @keyframes slideInRight {
   from {
     opacity: 0;

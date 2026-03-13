@@ -21,6 +21,9 @@ export default defineConfig(({mode}) => {
       hmr: process.env.DISABLE_HMR !== 'true',
     },
     build: {
+      target: 'es2020',           // modern target = smaller output, better tree-shaking
+      cssCodeSplit: true,         // split CSS per-chunk so lazy views only load their styles
+      chunkSizeWarningLimit: 600, // warn if any chunk exceeds 600KB
       rollupOptions: {
         output: {
           manualChunks: {
