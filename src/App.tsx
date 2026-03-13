@@ -146,7 +146,7 @@ const QA_SWITCH_ROLES = [
 ];
 
 function UserMenu({ simulatedRole, onRoleSwitch }: { simulatedRole: string; onRoleSwitch: (r: string) => void }) {
-  const { user, logOut, userRole } = useAuth();
+  const { user, logOut, userRole, isAdmin } = useAuth();
   const [open, setOpen] = React.useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -157,7 +157,9 @@ function UserMenu({ simulatedRole, onRoleSwitch }: { simulatedRole: string; onRo
   if (!user) return null;
 
   const isQA = userRole === "qa_specialist";
-  const effectiveDisplay = isQA && simulatedRole !== "qa_specialist" ? simulatedRole : userRole;
+  const isAdminUserMenu = userRole === "admin" || isAdmin;
+  const canSimulate = isQA || isAdminUserMenu; // both QA and Admin can simulate roles
+  const effectiveDisplay = canSimulate && simulatedRole !== "qa_specialist" && simulatedRole !== userRole ? simulatedRole : userRole;
   const badge = ROLE_BADGE[effectiveDisplay] ?? ROLE_BADGE.member;
   const qaBadge = ROLE_BADGE.qa_specialist;
 
@@ -183,13 +185,13 @@ function UserMenu({ simulatedRole, onRoleSwitch }: { simulatedRole: string; onRo
                 </span>
               )}
               <span className={`inline-block text-[10px] px-2 py-0.5 rounded-full font-semibold ${badge.className}`}>
-                {isQA && simulatedRole !== "qa_specialist" ? `Testing: ${badge.label}` : badge.label}
+                {canSimulate && effectiveDisplay !== userRole ? `Testing: ${badge.label}` : badge.label}
               </span>
             </div>
           </div>
 
-          {/* QA Role Switcher */}
-          {isQA && (
+          {/* Role Switcher — for QA Specialist & Admin */}
+          {canSimulate && (
             <div className="px-3 py-2.5 border-b border-gray-100 dark:border-gray-700">
               <p className="text-[10px] font-bold text-fuchsia-500 uppercase tracking-wider mb-1.5">Test as role</p>
               <select
@@ -201,12 +203,12 @@ function UserMenu({ simulatedRole, onRoleSwitch }: { simulatedRole: string; onRo
                   <option key={r.value} value={r.value}>{r.label}</option>
                 ))}
               </select>
-              {simulatedRole !== "qa_specialist" && (
+              {simulatedRole !== "qa_specialist" && simulatedRole !== userRole && (
                 <button
-                  onClick={() => { onRoleSwitch("qa_specialist"); setOpen(false); }}
+                  onClick={() => { onRoleSwitch(userRole); setOpen(false); }}
                   className="mt-1.5 w-full text-[10px] text-fuchsia-500 hover:text-fuchsia-400 font-medium transition-colors"
                 >
-                  Reset to QA Specialist
+                  Reset to {ROLE_BADGE[userRole]?.label ?? userRole}
                 </button>
               )}
             </div>
@@ -233,6 +235,8 @@ export default function App() {
 
   // ── QA Specialist simulated role ──────────────────────────────────────────
   const isQA = userRole === "qa_specialist";
+  const isAdminUser = isAdmin || userRole === "admin"; // early check before effectiveRole exists
+  const canSimulateRoles = isQA || isAdminUser;        // Admin & QA Specialist can both simulate roles
   const [simulatedRole, setSimulatedRole] = useState<string>(() => {
     try { return localStorage.getItem(`wf_qa_role_${user?.uid}`) || "qa_specialist"; } catch { return "qa_specialist"; }
   });
@@ -247,7 +251,7 @@ export default function App() {
     showToastRef.current?.("info", label);
   };
   // The role used for ALL permission checks
-  const effectiveRole = isQA ? simulatedRole : userRole;
+  const effectiveRole = canSimulateRoles ? simulatedRole : userRole;
 
   // 🔔 Push notifications — iOS-safe: user must tap "Enable" button
   const { showPrompt: showPushPrompt, requestPushPermission, dismissPrompt: dismissPushPrompt } =
@@ -342,28 +346,29 @@ export default function App() {
   // All flags use effectiveRole so QA Specialist simulation works correctly
   const isLeader = effectiveRole === "leader";
   const isPlanningLead = effectiveRole === "planning_lead";
-  const isRoleAdmin = isAdmin || effectiveRole === "admin"; // covers both owner email AND Firestore-assigned admin role
+  const isRoleAdmin = isAdmin || effectiveRole === "admin"; // covers owner email AND Firestore-assigned admin
+  const isQARole = effectiveRole === "qa_specialist"; // effective QA (includes simulated)
 
   // Songs
-  const canAddSong = isAdmin || ["musician", "audio_tech", "leader", "planning_lead", "qa_specialist"].includes(effectiveRole);
-  const canEditSong = isAdmin || ["musician", "audio_tech", "leader", "planning_lead", "qa_specialist"].includes(effectiveRole);
-  const canDeleteSong = isRoleAdmin; // only admin can delete songs
-  const canSelectSongs = isRoleAdmin; // selection mode leads to bulk delete
+  const canAddSong = isRoleAdmin || ["musician", "audio_tech", "leader", "planning_lead", "qa_specialist"].includes(effectiveRole);
+  const canEditSong = isRoleAdmin || ["musician", "audio_tech", "leader", "planning_lead", "qa_specialist"].includes(effectiveRole);
+  const canDeleteSong = isRoleAdmin || isQARole;    // Admin + QA Specialist only
+  const canSelectSongs = isRoleAdmin || isQARole;   // Admin + QA Specialist only
 
   // Members — own-profile restriction via email matching
   const isMyProfile = (member: any) =>
     !!user?.email && !!member?.email &&
     member.email.trim().toLowerCase() === user.email.trim().toLowerCase();
-  const canAddMember = isRoleAdmin || isLeader || effectiveRole === "qa_specialist";
-  const canEditMember = (member: any) => isRoleAdmin || isMyProfile(member); // admin can edit all, others only own profile
-  const canDeleteMember = isRoleAdmin; // only admin can delete members
+  const canAddMember = isRoleAdmin || isQARole;                          // Admin + QA Specialist (Worship Leader removed)
+  const canEditMember = (member: any) => isRoleAdmin || isQARole || isMyProfile(member); // Admin & QA edit all; others own only
+  const canDeleteMember = isRoleAdmin || isQARole;                       // Admin + QA Specialist
 
   // Schedule helpers
   // Returns true if dateStr falls on a Sunday (0) or Wednesday (3)
   const isServiceDay = (d: string) => { const dow = new Date(d + "T00:00:00").getDay(); return dow === 0 || dow === 3; };
 
-  // Full schedule write — admin & Planning Lead have identical full access
-  const canWriteSchedule = isRoleAdmin || isPlanningLead;
+  // Schedule write — Admin, Worship Leader, Planning Lead, QA Specialist
+  const canWriteSchedule = isRoleAdmin || isLeader || isPlanningLead || isQARole;
 
   // ── Scheduling state (kept in App for shared access + notification deep-link) ─
   // ── Schedules shared state — seed from cache for instant dashboard cards ──────────
@@ -569,7 +574,7 @@ export default function App() {
     }
   }, [currentView]);
 
-  const canWriteMembers = isRoleAdmin || isLeader;
+  const canWriteMembers = isRoleAdmin || isQARole; // Worship Leader removed; QA Specialist added
 
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-900 font-sans text-gray-900 dark:text-gray-100 overflow-hidden">
