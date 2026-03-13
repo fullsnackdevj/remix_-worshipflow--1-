@@ -801,8 +801,8 @@ export default function App() {
             </h1>
           </div>
           <div className="flex items-center gap-2">
-            {/* 🎨 Theme Toggle: Default → NordVPN → Glass */}
-            {(() => {
+            {/* 🎨 Theme Toggle — admin only */}
+            {isAdmin && (() => {
               const dots:   Record<string, string> = { default: "#6366f1", nordvpn: "#FF6B7A", glass: "#a78bfa" };
               const labels: Record<string, string> = { default: "Def", nordvpn: "Nord", glass: "Glass" };
               const next:   Record<string, string> = { default: "nordvpn", nordvpn: "glass", glass: "default" };
