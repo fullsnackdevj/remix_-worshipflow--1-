@@ -1343,8 +1343,8 @@ Rules:
     }
     // Lists
     const _pgBL = rawPath.match(/^\/playground\/boards\/([^/]+)\/lists$/);
-    if (_pgBL && method === "GET") { const bid = _pgBL[1]; try { const s = await firestore.collection("pg_lists").where("boardId","==",bid).where("archived","==",false).orderBy("pos").get(); return json(200, s.docs.map(d=>({id:d.id,...d.data()}))); } catch { return json(500, { error: "Failed" }); } }
-    if (_pgBL && method === "POST") { const bid = _pgBL[1]; const { title } = body; if (!title?.trim()) return json(400, { error: "Title required" }); try { const ex = await firestore.collection("pg_lists").where("boardId","==",bid).orderBy("pos","desc").limit(1).get(); const pos = (ex.docs[0]?.data().pos ?? 0) + 16384; const r = await firestore.collection("pg_lists").add({ boardId: bid, title: title.trim(), pos, archived: false, createdAt: admin.firestore.FieldValue.serverTimestamp() }); return json(201, { id: r.id }); } catch { return json(500, { error: "Failed" }); } }
+    if (_pgBL && method === "GET") { const bid = _pgBL[1]; try { const s = await firestore.collection("pg_lists").where("boardId","==",bid).get(); const docs = s.docs.map(d=>({id:d.id,...d.data()} as any)).filter((d:any)=>!d.archived).sort((a:any,b:any)=>a.pos-b.pos); return json(200, docs); } catch { return json(500, { error: "Failed" }); } }
+    if (_pgBL && method === "POST") { const bid = _pgBL[1]; const { title } = body; if (!title?.trim()) return json(400, { error: "Title required" }); try { const ex = await firestore.collection("pg_lists").where("boardId","==",bid).get(); const maxPos = ex.docs.reduce((m,d)=>Math.max(m,(d.data().pos??0)),0); const pos = maxPos + 16384; const r = await firestore.collection("pg_lists").add({ boardId: bid, title: title.trim(), pos, archived: false, createdAt: admin.firestore.FieldValue.serverTimestamp() }); return json(201, { id: r.id }); } catch { return json(500, { error: "Failed" }); } }
     const _pgLM = rawPath.match(/^\/playground\/lists\/([^/]+)$/);
     if (_pgLM) {
         const lid = _pgLM[1];
@@ -1353,11 +1353,11 @@ Rules:
     }
     // Cards
     const _pgBC = rawPath.match(/^\/playground\/boards\/([^/]+)\/cards$/);
-    if (_pgBC && method === "GET") { const bid = _pgBC[1]; try { const s = await firestore.collection("pg_cards").where("boardId","==",bid).where("archived","==",false).orderBy("pos").get(); return json(200, s.docs.map(d=>({id:d.id,...d.data(), createdAt: d.data().createdAt?.toDate?.()?.toISOString()??null}))); } catch { return json(500, { error: "Failed" }); } }
+    if (_pgBC && method === "GET") { const bid = _pgBC[1]; try { const s = await firestore.collection("pg_cards").where("boardId","==",bid).get(); const docs = s.docs.map(d=>({id:d.id,...d.data(), createdAt:(d.data().createdAt?.toDate?.()?.toISOString()??null)} as any)).filter((d:any)=>!d.archived).sort((a:any,b:any)=>a.pos-b.pos); return json(200, docs); } catch { return json(500, { error: "Failed" }); } }
     if (rawPath === "/playground/cards" && method === "POST") {
         const { boardId, listId, title } = body;
         if (!boardId || !listId || !title?.trim()) return json(400, { error: "boardId, listId, title required" });
-        try { const ex = await firestore.collection("pg_cards").where("listId","==",listId).where("archived","==",false).orderBy("pos","desc").limit(1).get(); const pos = (ex.docs[0]?.data().pos ?? 0) + 16384; const r = await firestore.collection("pg_cards").add({ boardId, listId, title: title.trim(), description: "", pos, members: [], labels: [], dueDate: null, checklists: [], customFields: {}, archived: false, createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() }); return json(201, { id: r.id }); }
+        try { const ex = await firestore.collection("pg_cards").where("listId","==",listId).get(); const maxPos = ex.docs.reduce((m,d)=>Math.max(m,(d.data().pos??0)),0); const pos = maxPos + 16384; const r = await firestore.collection("pg_cards").add({ boardId, listId, title: title.trim(), description: "", pos, members: [], labels: [], dueDate: null, checklists: [], customFields: {}, archived: false, createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() }); return json(201, { id: r.id }); }
         catch { return json(500, { error: "Failed" }); }
     }
     const _pgCM = rawPath.match(/^\/playground\/cards\/([^/]+)$/);
@@ -1373,8 +1373,8 @@ Rules:
         const cid = _pgMV[1];
         const { boardId, listId, position } = body;
         try {
-            const s = await firestore.collection("pg_cards").where("listId","==",listId).where("archived","==",false).orderBy("pos").get();
-            const cards = s.docs.filter(d => d.id !== cid);
+            const s = await firestore.collection("pg_cards").where("listId","==",listId).get();
+            const cards = s.docs.filter(d => d.id !== cid && !d.data().archived).sort((a,b)=>a.data().pos-b.data().pos);
             let newPos: number;
             if (position === "top" || cards.length === 0) { newPos = (cards[0]?.data().pos ?? 16384) / 2; }
             else if (position === "bottom") { newPos = (cards[cards.length-1]?.data().pos ?? 0) + 16384; }
