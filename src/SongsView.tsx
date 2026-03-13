@@ -23,6 +23,18 @@ const CustomVideoBtnIcon = ({ size = 20, className = "" }: { size?: number, clas
   </svg>
 );
 
+// ── YouTube embed URL helper ────────────────────────────────────────────────
+function getYoutubeEmbed(url: string): string {
+  try {
+    const u = new URL(url);
+    let id = "";
+    if (u.hostname === "youtu.be") id = u.pathname.slice(1);
+    else if (u.hostname.includes("youtube.com")) id = u.searchParams.get("v") ?? u.pathname.split("/").pop() ?? "";
+    if (id) return `https://www.youtube.com/embed/${id}?autoplay=1&rel=0`;
+  } catch { /* noop */ }
+  return url;
+}
+
 // ── Chord Transposer ──────────────────────────────────────────────────────────
 const CHROMATIC = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const ENHARMONIC: Record<string, string> = {
@@ -102,6 +114,7 @@ export default function SongsView({
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedSongIds, setSelectedSongIds] = useState<string[]>([]);
+  const [videoModal, setVideoModal] = useState<string | null>(null);
   const [isOcrLoading, setIsOcrLoading] = useState<"lyrics" | "chords" | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editArtist, setEditArtist] = useState("");
@@ -1440,10 +1453,14 @@ export default function SongsView({
                     {!isSelectionMode && (
                       <div className="flex items-center gap-1 shrink-0">
                         {song.video_url && (
-                          <a href={song.video_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors relative group/tooltip">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setVideoModal(song.video_url!); }}
+                            title="Watch Video"
+                            className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors relative group/tooltip"
+                          >
                             <CustomYoutubeIcon size={24} />
                             <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover/tooltip:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">Watch Video</span>
-                          </a>
+                          </button>
                         )}
                       </div>
                     )}
@@ -1538,9 +1555,13 @@ export default function SongsView({
                   {/* Video icon */}
                   <div className="w-6 flex items-center justify-end">
                     {song.video_url && !isSelectionMode && (
-                      <a href={song.video_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setVideoModal(song.video_url!); }}
+                        title="Watch Video"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
                         <CustomYoutubeIcon size={18} />
-                      </a>
+                      </button>
                     )}
                   </div>
                 </div>
@@ -1556,6 +1577,54 @@ export default function SongsView({
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── YouTube Video Popup Modal ─────────────────────────────────────── */}
+      {videoModal && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          onClick={() => setVideoModal(null)}
+          onKeyDown={(e) => e.key === "Escape" && setVideoModal(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="relative w-full max-w-3xl rounded-2xl overflow-hidden shadow-2xl bg-black"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-2.5 bg-gray-900">
+              <span className="text-sm font-semibold text-white/80">Now Playing</span>
+              <div className="flex items-center gap-3">
+                <a
+                  href={videoModal}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+                >
+                  Open in YouTube ↗
+                </a>
+                <button
+                  onClick={() => setVideoModal(null)}
+                  className="p-1 rounded-full hover:bg-white/10 transition-colors text-white/60 hover:text-white"
+                  aria-label="Close video"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+            {/* 16:9 embed */}
+            <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
+              <iframe
+                src={getYoutubeEmbed(videoModal)}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                className="absolute inset-0 w-full h-full border-0"
+                title="Now Playing"
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>
