@@ -711,7 +711,7 @@ export default function App() {
           </button>
 
           {/* Playground — admin only */}
-          {isAdmin && (
+          {isRoleAdmin && (
             <button
               onClick={() => { setCurrentView("playground"); setIsMobileMenuOpen(false); }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${
@@ -727,7 +727,7 @@ export default function App() {
           )}
 
           {/* Admin Panel — admin only, always hidden for QA Specialist */}
-          {isAdmin && !isQA && (
+          {isRoleAdmin && !isQA && (
             <button
               onClick={() => { setCurrentView("admin"); setIsMobileMenuOpen(false); }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "admin"
@@ -974,7 +974,7 @@ export default function App() {
                 /* ══════════════════════════════════════════════════
                      PLAYGROUND — admin only sandbox
                 ══════════════════════════════════════════════════ */
-                isAdmin ? <Playground allMembers={allMembers} onToast={showToast} /> : null
+                isRoleAdmin ? <Playground allMembers={allMembers} onToast={showToast} /> : null
               ) : currentView === "admin" ? (
                 <AdminPanel
                   onToast={showToast}
