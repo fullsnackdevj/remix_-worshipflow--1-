@@ -973,7 +973,7 @@ export default function App() {
                 /* ══════════════════════════════════════════════════
                      PLAYGROUND — admin only sandbox
                 ══════════════════════════════════════════════════ */
-                isAdmin ? <Playground /> : null
+                isAdmin ? <Playground allMembers={allMembers} onToast={showToast} /> : null
               ) : currentView === "admin" ? (
                 <AdminPanel
                   onToast={showToast}

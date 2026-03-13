@@ -1323,6 +1323,68 @@ Rules:
         } catch { return json(500, { error: "Failed to delete reply" }); }
     }
 
+    // ─── PLAYGROUND TRELLO ─────────────────────────────────────────────────────
+    // Boards
+    if (rawPath === "/playground/boards" && method === "GET") {
+        try { const s = await firestore.collection("pg_boards").orderBy("createdAt","desc").get(); return json(200, s.docs.map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? null }))); }
+        catch { return json(500, { error: "Failed" }); }
+    }
+    if (rawPath === "/playground/boards" && method === "POST") {
+        const { title, color="#6366f1", description="" } = body;
+        if (!title?.trim()) return json(400, { error: "Title required" });
+        try { const r = await firestore.collection("pg_boards").add({ title: title.trim(), color, description, archived: false, customFieldDefs: [], createdAt: admin.firestore.FieldValue.serverTimestamp() }); return json(201, { id: r.id }); }
+        catch { return json(500, { error: "Failed" }); }
+    }
+    const _pgBM = rawPath.match(/^\/playground\/boards\/([^/]+)$/);
+    if (_pgBM) {
+        const bid = _pgBM[1];
+        if (method === "PUT") { try { const { title, color, description, archived, customFieldDefs } = body; await firestore.collection("pg_boards").doc(bid).update({ ...(title!==undefined && {title}), ...(color!==undefined && {color}), ...(description!==undefined && {description}), ...(archived!==undefined && {archived}), ...(customFieldDefs!==undefined && {customFieldDefs}) }); return json(200, { success: true }); } catch { return json(500, { error: "Failed" }); } }
+        if (method === "DELETE") { try { const ls = await firestore.collection("pg_lists").where("boardId","==",bid).get(); const cs = await firestore.collection("pg_cards").where("boardId","==",bid).get(); const b = firestore.batch(); ls.docs.forEach(d=>b.delete(d.ref)); cs.docs.forEach(d=>b.delete(d.ref)); b.delete(firestore.collection("pg_boards").doc(bid)); await b.commit(); return json(200, { success: true }); } catch { return json(500, { error: "Failed" }); } }
+    }
+    // Lists
+    const _pgBL = rawPath.match(/^\/playground\/boards\/([^/]+)\/lists$/);
+    if (_pgBL && method === "GET") { const bid = _pgBL[1]; try { const s = await firestore.collection("pg_lists").where("boardId","==",bid).where("archived","==",false).orderBy("pos").get(); return json(200, s.docs.map(d=>({id:d.id,...d.data()}))); } catch { return json(500, { error: "Failed" }); } }
+    if (_pgBL && method === "POST") { const bid = _pgBL[1]; const { title } = body; if (!title?.trim()) return json(400, { error: "Title required" }); try { const ex = await firestore.collection("pg_lists").where("boardId","==",bid).orderBy("pos","desc").limit(1).get(); const pos = (ex.docs[0]?.data().pos ?? 0) + 16384; const r = await firestore.collection("pg_lists").add({ boardId: bid, title: title.trim(), pos, archived: false, createdAt: admin.firestore.FieldValue.serverTimestamp() }); return json(201, { id: r.id }); } catch { return json(500, { error: "Failed" }); } }
+    const _pgLM = rawPath.match(/^\/playground\/lists\/([^/]+)$/);
+    if (_pgLM) {
+        const lid = _pgLM[1];
+        if (method === "PUT") { try { const { title, archived, pos } = body; await firestore.collection("pg_lists").doc(lid).update({ ...(title!==undefined && {title}), ...(archived!==undefined && {archived}), ...(pos!==undefined && {pos}) }); return json(200, { success: true }); } catch { return json(500, { error: "Failed" }); } }
+        if (method === "DELETE") { try { const cs = await firestore.collection("pg_cards").where("listId","==",lid).get(); const b = firestore.batch(); cs.docs.forEach(d=>b.delete(d.ref)); b.delete(firestore.collection("pg_lists").doc(lid)); await b.commit(); return json(200, { success: true }); } catch { return json(500, { error: "Failed" }); } }
+    }
+    // Cards
+    const _pgBC = rawPath.match(/^\/playground\/boards\/([^/]+)\/cards$/);
+    if (_pgBC && method === "GET") { const bid = _pgBC[1]; try { const s = await firestore.collection("pg_cards").where("boardId","==",bid).where("archived","==",false).orderBy("pos").get(); return json(200, s.docs.map(d=>({id:d.id,...d.data(), createdAt: d.data().createdAt?.toDate?.()?.toISOString()??null}))); } catch { return json(500, { error: "Failed" }); } }
+    if (rawPath === "/playground/cards" && method === "POST") {
+        const { boardId, listId, title } = body;
+        if (!boardId || !listId || !title?.trim()) return json(400, { error: "boardId, listId, title required" });
+        try { const ex = await firestore.collection("pg_cards").where("listId","==",listId).where("archived","==",false).orderBy("pos","desc").limit(1).get(); const pos = (ex.docs[0]?.data().pos ?? 0) + 16384; const r = await firestore.collection("pg_cards").add({ boardId, listId, title: title.trim(), description: "", pos, members: [], labels: [], dueDate: null, checklists: [], customFields: {}, archived: false, createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() }); return json(201, { id: r.id }); }
+        catch { return json(500, { error: "Failed" }); }
+    }
+    const _pgCM = rawPath.match(/^\/playground\/cards\/([^/]+)$/);
+    if (_pgCM) {
+        const cid = _pgCM[1];
+        if (method === "GET") { try { const d = await firestore.collection("pg_cards").doc(cid).get(); return d.exists ? json(200, { id: d.id, ...d.data() }) : json(404, { error: "Not found" }); } catch { return json(500, { error: "Failed" }); } }
+        if (method === "PUT") { try { const { title, description, members, labels, dueDate, checklists, customFields, archived, listId, pos } = body; await firestore.collection("pg_cards").doc(cid).update({ ...(title!==undefined&&{title}), ...(description!==undefined&&{description}), ...(members!==undefined&&{members}), ...(labels!==undefined&&{labels}), ...(dueDate!==undefined&&{dueDate}), ...(checklists!==undefined&&{checklists}), ...(customFields!==undefined&&{customFields}), ...(archived!==undefined&&{archived}), ...(listId!==undefined&&{listId}), ...(pos!==undefined&&{pos}), updatedAt: admin.firestore.FieldValue.serverTimestamp() }); return json(200, { success: true }); } catch { return json(500, { error: "Failed" }); } }
+        if (method === "DELETE") { try { await firestore.collection("pg_cards").doc(cid).delete(); return json(200, { success: true }); } catch { return json(500, { error: "Failed" }); } }
+    }
+    // Move card (fractional indexing)
+    const _pgMV = rawPath.match(/^\/playground\/cards\/([^/]+)\/move$/);
+    if (_pgMV && method === "PATCH") {
+        const cid = _pgMV[1];
+        const { boardId, listId, position } = body;
+        try {
+            const s = await firestore.collection("pg_cards").where("listId","==",listId).where("archived","==",false).orderBy("pos").get();
+            const cards = s.docs.filter(d => d.id !== cid);
+            let newPos: number;
+            if (position === "top" || cards.length === 0) { newPos = (cards[0]?.data().pos ?? 16384) / 2; }
+            else if (position === "bottom") { newPos = (cards[cards.length-1]?.data().pos ?? 0) + 16384; }
+            else { const idx = Math.max(0, Math.min(Number(position)-1, cards.length)); if (idx === 0) newPos = (cards[0]?.data().pos ?? 16384) / 2; else if (idx >= cards.length) newPos = (cards[cards.length-1]?.data().pos ?? 0) + 16384; else newPos = (cards[idx-1].data().pos + cards[idx].data().pos) / 2; }
+            await firestore.collection("pg_cards").doc(cid).update({ listId, boardId, pos: newPos, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+            return json(200, { success: true, pos: newPos });
+        } catch { return json(500, { error: "Failed to move" }); }
+    }
+
     return json(404, { error: "Not found" });
 };
 
+// ─── PLAYGROUND TRELLO (appended below closing brace intentionally via script) ─
