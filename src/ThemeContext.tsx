@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
 
-export type AppTheme = "default" | "one-monokai" | "nord";
+export type AppTheme = "default" | "nordvpn";
 
-const THEMES: AppTheme[] = ["default", "one-monokai", "nord"];
+const THEMES: AppTheme[] = ["default", "nordvpn"];
 
 interface ThemeContextValue {
   theme: AppTheme;
@@ -33,7 +33,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     return THEMES.includes(saved as AppTheme) ? (saved as AppTheme) : "default";
   });
 
-  // Apply on mount
   useEffect(() => {
     applyToDOM(theme);
   // eslint-disable-next-line react-hooks/exhaustive-deps

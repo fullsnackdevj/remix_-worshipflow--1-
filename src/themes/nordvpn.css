@@ -1,0 +1,203 @@
+/**
+ * NordVPN App UI Theme — "Void Dark"
+ * Extracted from the actual NordVPN macOS app screenshots.
+ * Pure black-toned surfaces, coral notification accents, cool blue CTA.
+ * Activated by: document.documentElement.setAttribute('data-theme', 'nordvpn')
+ */
+
+html[data-theme="nordvpn"] {
+  /* ── Core backgrounds ─────────────────────────────────────────────────────── */
+  --nv-bg-main:       #18181C;   /* Near-black main workspace */
+  --nv-bg-panel:      #111114;   /* Sidebar / deepest surfaces */
+  --nv-bg-card:       #242428;   /* Cards, panels, elevated surfaces */
+  --nv-bg-hover:      #2E2E35;   /* Hover state on list items */
+  --nv-bg-selection:  #35353D;   /* Active / selected state */
+  --nv-bg-input:      #1E1E22;   /* Input fields */
+  --nv-bg-icon:       #2A2A34;   /* Rounded-square icon containers */
+
+  /* ── Borders ─────────────────────────────────────────────────────────────── */
+  --nv-border:        #2C2C32;   /* Subtle card borders */
+  --nv-border-strong: #3A3A44;   /* Visible separator lines */
+
+  /* ── Text ─────────────────────────────────────────────────────────────────── */
+  --nv-text-primary:  #F0F0F5;   /* Main white-ish body text */
+  --nv-text-secondary:#888892;   /* Muted subtitles + metadata */
+  --nv-text-muted:    #5A5A68;   /* Very muted labels, placeholders */
+  --nv-text-bright:   #FFFFFF;   /* Headers, bold content */
+
+  /* ── Accent — NordVPN brand blue ─────────────────────────────────────────── */
+  --nv-accent:        #4B6BF5;   /* Primary CTA (Get dedicated IP, Add email…) */
+  --nv-accent-hover:  #6B87F8;
+  --nv-accent-muted:  rgba(75, 107, 245, 0.18);
+
+  /* ── Functional status tokens ────────────────────────────────────────────── */
+  --nv-green:         #4CAF68;   /* "On" / Protected / Success */
+  --nv-green-bg:      #1A3D28;   /* Dark green card background */
+  --nv-green-muted:   rgba(76, 175, 104, 0.18);
+  --nv-salmon:        #FF6B7A;   /* Notification badge dot — coral/salmon */
+  --nv-red:           #D24A4A;   /* Danger / error states */
+  --nv-red-muted:     rgba(210, 74, 74, 0.18);
+  --nv-yellow:        #F0B429;   /* Warning */
+  --nv-yellow-muted:  rgba(240, 180, 41, 0.18);
+  --nv-purple:        #7B6CF5;   /* Info / secondary accent */
+
+  /* ── Typography ──────────────────────────────────────────────────────────── */
+  --nv-font-ui:       "Inter", ui-sans-serif, system-ui, sans-serif;
+  --nv-font-mono:     "JetBrains Mono", ui-monospace, monospace;
+
+  /* ── Geometry ─────────────────────────────────────────────────────────────── */
+  --nv-radius-sm:     6px;
+  --nv-radius-md:     10px;
+  --nv-radius-lg:     14px;
+  --nv-radius-xl:     16px;
+  --nv-radius-pill:   999px;
+
+  /* ── Shadows — minimal, depth via color only ─────────────────────────────── */
+  --nv-shadow-sm:  0 1px 2px rgba(0,0,0,0.6);
+  --nv-shadow-md:  0 2px 8px  rgba(0,0,0,0.7);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   GLOBAL OVERRIDES — Applied when NordVPN theme is active
+───────────────────────────────────────────────────────────────────────────── */
+
+html[data-theme="nordvpn"] body {
+  background-color: var(--nv-bg-main) !important;
+  color: var(--nv-text-primary) !important;
+  font-family: var(--nv-font-ui);
+}
+
+/* ── Surfaces ─────────────────────────────────────────────────────────────── */
+html[data-theme="nordvpn"] .dark\:bg-gray-900,
+html[data-theme="nordvpn"] .bg-gray-900 { background-color: var(--nv-bg-main) !important; }
+html[data-theme="nordvpn"] .dark\:bg-gray-800,
+html[data-theme="nordvpn"] .bg-gray-800 { background-color: var(--nv-bg-card) !important; }
+html[data-theme="nordvpn"] .dark\:bg-gray-700,
+html[data-theme="nordvpn"] .bg-gray-700 { background-color: var(--nv-bg-hover) !important; }
+html[data-theme="nordvpn"] .dark\:bg-gray-800\/50 { background-color: rgba(36,36,40,0.8) !important; }
+
+/* ── Sidebar / nav ────────────────────────────────────────────────────────── */
+html[data-theme="nordvpn"] nav,
+html[data-theme="nordvpn"] aside,
+html[data-theme="nordvpn"] header {
+  background-color: var(--nv-bg-panel) !important;
+  border-color: var(--nv-border) !important;
+}
+
+/* ── Cards / white surfaces ───────────────────────────────────────────────── */
+html[data-theme="nordvpn"] .bg-white.dark\:bg-gray-800,
+html[data-theme="nordvpn"] .bg-white {
+  background-color: var(--nv-bg-card) !important;
+  border-color: var(--nv-border) !important;
+}
+
+/* ── Borders ──────────────────────────────────────────────────────────────── */
+html[data-theme="nordvpn"] .dark\:border-gray-700,
+html[data-theme="nordvpn"] .border-gray-700,
+html[data-theme="nordvpn"] .dark\:border-gray-600,
+html[data-theme="nordvpn"] .border-gray-200 { border-color: var(--nv-border) !important; }
+html[data-theme="nordvpn"] .dark\:divide-gray-700 > * + *,
+html[data-theme="nordvpn"] .divide-gray-200 > * + * { border-color: var(--nv-border-strong) !important; }
+
+/* ── Text ─────────────────────────────────────────────────────────────────── */
+html[data-theme="nordvpn"] .dark\:text-white,
+html[data-theme="nordvpn"] .text-gray-900 { color: var(--nv-text-bright) !important; }
+html[data-theme="nordvpn"] .dark\:text-gray-100,
+html[data-theme="nordvpn"] .dark\:text-gray-200,
+html[data-theme="nordvpn"] .text-gray-600 { color: var(--nv-text-primary) !important; }
+html[data-theme="nordvpn"] .dark\:text-gray-400,
+html[data-theme="nordvpn"] .text-gray-500 { color: var(--nv-text-secondary) !important; }
+
+/* ── Accent — indigo → NordVPN blue ──────────────────────────────────────── */
+html[data-theme="nordvpn"] .bg-indigo-600,
+html[data-theme="nordvpn"] .dark\:bg-indigo-600 { background-color: var(--nv-accent) !important; }
+html[data-theme="nordvpn"] .text-indigo-600,
+html[data-theme="nordvpn"] .dark\:text-indigo-400,
+html[data-theme="nordvpn"] .text-indigo-400 { color: var(--nv-accent) !important; }
+html[data-theme="nordvpn"] .border-indigo-500,
+html[data-theme="nordvpn"] .border-indigo-600 { border-color: var(--nv-accent) !important; }
+html[data-theme="nordvpn"] .hover\:bg-indigo-50:hover,
+html[data-theme="nordvpn"] .dark\:hover\:bg-indigo-900\/20:hover { background-color: var(--nv-accent-muted) !important; }
+html[data-theme="nordvpn"] .bg-indigo-50,
+html[data-theme="nordvpn"] .bg-indigo-100 { background-color: var(--nv-accent-muted) !important; }
+
+/* ring / focus */
+html[data-theme="nordvpn"] .focus\:ring-indigo-500:focus { --tw-ring-color: var(--nv-accent) !important; }
+
+/* ── Success / green ─────────────────────────────────────────────────────── */
+html[data-theme="nordvpn"] .text-green-500,
+html[data-theme="nordvpn"] .text-green-600,
+html[data-theme="nordvpn"] .dark\:text-green-400 { color: var(--nv-green) !important; }
+html[data-theme="nordvpn"] .bg-green-500,
+html[data-theme="nordvpn"] .bg-green-600 { background-color: var(--nv-green) !important; }
+
+/* ── Danger / red ────────────────────────────────────────────────────────── */
+html[data-theme="nordvpn"] .text-red-500,
+html[data-theme="nordvpn"] .text-red-600,
+html[data-theme="nordvpn"] .dark\:text-red-400 { color: var(--nv-red) !important; }
+html[data-theme="nordvpn"] .bg-red-500 { background-color: var(--nv-salmon) !important; } /* notification badge → coral */
+html[data-theme="nordvpn"] .bg-red-600 { background-color: var(--nv-red) !important; }
+
+/* ── Warning / yellow ────────────────────────────────────────────────────── */
+html[data-theme="nordvpn"] .text-yellow-500,
+html[data-theme="nordvpn"] .text-amber-500,
+html[data-theme="nordvpn"] .dark\:text-yellow-400 { color: var(--nv-yellow) !important; }
+
+/* ── Purple / metric ─────────────────────────────────────────────────────── */
+html[data-theme="nordvpn"] .text-purple-500,
+html[data-theme="nordvpn"] .dark\:text-purple-400 { color: var(--nv-purple) !important; }
+
+/* ── Inputs ──────────────────────────────────────────────────────────────── */
+html[data-theme="nordvpn"] input,
+html[data-theme="nordvpn"] textarea,
+html[data-theme="nordvpn"] select {
+  background-color: var(--nv-bg-input) !important;
+  border-color: var(--nv-border-strong) !important;
+  color: var(--nv-text-primary) !important;
+  font-family: var(--nv-font-ui);
+  border-radius: var(--nv-radius-md) !important;
+}
+html[data-theme="nordvpn"] input:focus,
+html[data-theme="nordvpn"] textarea:focus,
+html[data-theme="nordvpn"] select:focus {
+  border-color: var(--nv-accent) !important;
+  outline-color: var(--nv-accent) !important;
+}
+html[data-theme="nordvpn"] input::placeholder,
+html[data-theme="nordvpn"] textarea::placeholder { color: var(--nv-text-muted) !important; }
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+html[data-theme="nordvpn"] button { border-radius: var(--nv-radius-md) !important; }
+
+/* ── Rounded overrides ───────────────────────────────────────────────────── */
+html[data-theme="nordvpn"] .rounded-xl   { border-radius: var(--nv-radius-xl) !important; }
+html[data-theme="nordvpn"] .rounded-2xl  { border-radius: var(--nv-radius-xl) !important; }
+html[data-theme="nordvpn"] .rounded-3xl  { border-radius: var(--nv-radius-xl) !important; }
+html[data-theme="nordvpn"] .rounded-full { border-radius: var(--nv-radius-pill) !important; }
+html[data-theme="nordvpn"] .rounded-lg   { border-radius: var(--nv-radius-lg) !important; }
+html[data-theme="nordvpn"] .rounded-md   { border-radius: var(--nv-radius-md) !important; }
+
+/* ── Hover states ─────────────────────────────────────────────────────────── */
+html[data-theme="nordvpn"] .dark\:hover\:bg-gray-700:hover { background-color: var(--nv-bg-hover) !important; }
+html[data-theme="nordvpn"] .dark\:hover\:bg-gray-800:hover { background-color: var(--nv-bg-selection) !important; }
+
+/* ── Scrollbar ───────────────────────────────────────────────────────────── */
+html[data-theme="nordvpn"] ::-webkit-scrollbar { width: 5px; height: 5px; }
+html[data-theme="nordvpn"] ::-webkit-scrollbar-track { background: var(--nv-bg-panel); }
+html[data-theme="nordvpn"] ::-webkit-scrollbar-thumb { background: var(--nv-border-strong); border-radius: var(--nv-radius-pill); }
+html[data-theme="nordvpn"] ::-webkit-scrollbar-thumb:hover { background: var(--nv-text-muted); }
+
+/* ── Active nav ───────────────────────────────────────────────────────────── */
+html[data-theme="nordvpn"] [data-active="true"] {
+  border-left: 2px solid var(--nv-accent);
+  background-color: var(--nv-accent-muted) !important;
+  color: var(--nv-accent) !important;
+}
+
+/* ── Pretty-scrollbar override ───────────────────────────────────────────── */
+html[data-theme="nordvpn"] .pretty-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--nv-accent-muted);
+}
+html[data-theme="nordvpn"] .pretty-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--nv-accent);
+}

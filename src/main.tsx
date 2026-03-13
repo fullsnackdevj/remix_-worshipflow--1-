@@ -2,8 +2,9 @@ import { StrictMode, useState, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
-// import './themes/one-monokai.css'; // reserved for future use
-// import './themes/nord.css';         // reserved for future use
+// import './themes/one-monokai.css'; // reserved
+// import './themes/nord.css';         // reserved
+import './themes/nordvpn.css';
 import { ThemeProvider } from './ThemeContext.tsx';
 import { AuthProvider, useAuth } from './AuthContext.tsx';
 import LoginPage from './LoginPage.tsx';

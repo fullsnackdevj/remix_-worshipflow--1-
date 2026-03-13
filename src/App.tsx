@@ -801,6 +801,22 @@ export default function App() {
             </h1>
           </div>
           <div className="flex items-center gap-2">
+            {/* 🎨 Theme Toggle: Default ⇄ NordVPN */}
+            {(() => {
+              const isNord = uiTheme === "nordvpn";
+              return (
+                <button
+                  onClick={cycleUiTheme}
+                  title={isNord ? "NordVPN theme — click for Default" : "Default theme — click for NordVPN"}
+                  className="relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700/50 transition-colors text-[10px] font-bold tracking-wide uppercase"
+                >
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: isNord ? "#FF6B7A" : "#6366f1" }} />
+                  {isNord ? "Nord" : "Def"}
+                </button>
+              );
+            })()}
+
+            {/* Notification Bell */}
             {/* Team Notes */}
             <NotesPanel
               userId={user?.uid ?? ""}
@@ -813,23 +829,6 @@ export default function App() {
             {/* Help & Knowledge Base */}
             <HelpPanel isAdmin={isAdmin} />
 
-            {/* 🎨 Theme Cycler — hidden until a custom theme is ready
-            {(() => {
-              const label = uiTheme === "one-monokai" ? "MK" : uiTheme === "nord" ? "ND" : "DF";
-              const dot   = uiTheme === "one-monokai" ? "#e06c75" : uiTheme === "nord" ? "#88C0D0" : "#6366f1";
-              const tip   = uiTheme === "one-monokai" ? "One Monokai → Nord" : uiTheme === "nord" ? "Nord → Default" : "Default → One Monokai";
-              return (
-                <button
-                  onClick={cycleUiTheme}
-                  title={tip}
-                  className="relative flex items-center gap-1 px-2 py-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700/50 dark:hover:bg-gray-700/50 transition-colors text-[10px] font-bold tracking-wide"
-                >
-                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: dot }} />
-                  {label}
-                </button>
-              );
-            })()}
-            */}
 
 
             <div ref={notifRef} className="relative">
