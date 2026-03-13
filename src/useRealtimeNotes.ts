@@ -6,13 +6,16 @@ import type { TeamNote } from "./NotesPanel";
  *
  * Polling: 30s background always, 5s fast when panel is open.
  *
- * Stale-fetch guard (fixes oscillation bug):
- *  - markPending(id, field) stamps a timestamp when optimistic update is made.
- *  - fetchNotes captures fetchStartTime = Date.now() before the fetch begins.
- *  - If fetchStartTime < pendingTimestamp for a note, that fetch response pre-dates
- *    the optimistic update → discard server data for that note entirely.
- *  - If fetchStartTime >= pendingTimestamp, use normal pending-field merge.
- *  - clearPending() lifts the lock after the server confirms the change.
+ * Oscillation fix — why snapshots are required:
+ *   pendingRef is a mutable Ref. setNotes accepts a callback that React may
+ *   schedule and run asynchronously. If clearPending() is called between when
+ *   fetchNotes() resolves and when React runs the setNotes updater, the ref
+ *   will already be empty inside the updater — the pending guard silently
+ *   fails and stale poll data overwrites optimistic state.
+ *
+ *   Solution: snapshot pendingRef + pendingTsRef SYNCHRONOUSLY right after the
+ *   fetch completes (before calling setNotes). The updater closes over these
+ *   immutable snapshots — clearPending cannot corrupt them mid-flight.
  */
 export function useRealtimeNotes(userId: string | null | undefined) {
   const [notes, setNotes] = useState<TeamNote[]>(() => {
@@ -35,7 +38,7 @@ export function useRealtimeNotes(userId: string | null | undefined) {
   // Per-note, per-field optimistic lock
   const pendingRef = useRef<Record<string, Set<string>>>({});
 
-  // Timestamp when each note's pending was last marked — used to discard stale fetches
+  // Timestamp when each note's pending was last marked
   const pendingTsRef = useRef<Record<string, number>>({});
 
   const fastIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -45,7 +48,7 @@ export function useRealtimeNotes(userId: string | null | undefined) {
   const markPending = useCallback((id: string, field: string) => {
     if (!pendingRef.current[id]) pendingRef.current[id] = new Set();
     pendingRef.current[id].add(field);
-    pendingTsRef.current[id] = Date.now(); // stamp when this optimistic update was made
+    pendingTsRef.current[id] = Date.now();
   }, []);
 
   const clearPending = useCallback((id: string, field: string) => {
@@ -56,11 +59,10 @@ export function useRealtimeNotes(userId: string | null | undefined) {
     }
   }, []);
 
-  // ── Smart fetch with stale-response guard ─────────────────────────────────
+  // ── Smart fetch with snapshot-based stale guard ───────────────────────────
   const fetchNotes = useCallback(async (silent = true) => {
     if (!silent) setLoading(true);
 
-    // Record when this fetch STARTS — used to detect stale responses
     const fetchStartTime = Date.now();
 
     try {
@@ -69,27 +71,40 @@ export function useRealtimeNotes(userId: string | null | undefined) {
       const data = await res.json();
       if (!Array.isArray(data)) return;
 
+      // ── SNAPSHOT refs SYNCHRONOUSLY here, before setNotes is called ───────
+      // React may schedule the setNotes updater asynchronously. If clearPending()
+      // runs between now and when React executes the updater, reading the refs
+      // inside the updater would see the already-cleared state and fail to protect
+      // in-flight optimistic updates. Snapshots are immutable closures — safe.
+      const pendingSnapshot: Record<string, Set<string>> = {};
+      const pendingTsSnapshot: Record<string, number> = {};
+      for (const id of Object.keys(pendingRef.current)) {
+        pendingSnapshot[id] = new Set<string>(pendingRef.current[id]);
+      }
+      Object.assign(pendingTsSnapshot, pendingTsRef.current);
+      const deletedSnapshot = new Set(deletedIdsRef.current);
+      // ─────────────────────────────────────────────────────────────────────
+
       setNotes(prev => {
         const prevMap = Object.fromEntries(prev.map(n => [n.id, n]));
 
         const filtered = data
-          .filter((n: TeamNote) => !deletedIdsRef.current.has(n.id))
+          .filter((n: TeamNote) => !deletedSnapshot.has(n.id))
           .map((serverNote: TeamNote): TeamNote => {
             const local = prevMap[serverNote.id];
-            if (!local) return serverNote; // new note from server — accept as-is
+            if (!local) return serverNote;
 
-            const pendingTs = pendingTsRef.current[serverNote.id];
-            const pending   = pendingRef.current[serverNote.id];
+            const pendingTs = pendingTsSnapshot[serverNote.id];
+            const pending   = pendingSnapshot[serverNote.id];
 
-            // ── Stale-fetch guard ──────────────────────────────────────────
-            // This fetch started BEFORE the optimistic update was made, so
-            // the server response reflects pre-click data. Keep local entirely.
+            // Stale-fetch guard: this fetch started before the optimistic update
+            // was made — discard the server data for this note entirely.
             if (pendingTs && fetchStartTime < pendingTs) {
               return local;
             }
 
-            // ── Normal pending-field merge ─────────────────────────────────
-            // Fetch started after the optimistic update — merge selectively.
+            // Normal pending merge: fetch started after optimistic update,
+            // selectively preserve in-flight fields.
             if (pending && pending.size > 0) {
               return {
                 ...serverNote,
@@ -99,7 +114,6 @@ export function useRealtimeNotes(userId: string | null | undefined) {
               };
             }
 
-            // No pending — accept server data fully
             return serverNote;
           });
 
