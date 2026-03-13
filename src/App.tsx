@@ -813,7 +813,7 @@ export default function App() {
             {/* Help & Knowledge Base */}
             <HelpPanel isAdmin={isAdmin} />
 
-            {/* 🎨 Theme Cycler: Default → One Monokai → Nord → … */}
+            {/* 🎨 Theme Cycler — hidden until a custom theme is ready
             {(() => {
               const label = uiTheme === "one-monokai" ? "MK" : uiTheme === "nord" ? "ND" : "DF";
               const dot   = uiTheme === "one-monokai" ? "#e06c75" : uiTheme === "nord" ? "#88C0D0" : "#6366f1";
@@ -829,8 +829,9 @@ export default function App() {
                 </button>
               );
             })()}
+            */}
 
-            {/* Notification Bell */}
+
             <div ref={notifRef} className="relative">
               <button
                 id="notif-bell-btn"
