@@ -286,7 +286,7 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
     const [open, setOpen] = useState(false);
     // ── Notes via smart HTTP polling: 5s when open, paused when closed ──────────────
     // (Firestore client SDK is blocked by security rules on team_notes collection)
-    const { notes, setNotes, loading, deletedIdsRef, onOpen, onClose } = useRealtimeNotes(userId);
+    const { notes, setNotes, loading, deletedIdsRef, markPending, clearPending, onOpen, onClose, refetch } = useRealtimeNotes(userId);
     const [showForm, setShowForm] = useState(false);
     const [editing, setEditing] = useState<TeamNote | null>(null);
     const [saving, setSaving] = useState(false);
@@ -553,9 +553,9 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
         });
     };
 
-    // ── Optimistic react ────────────────────────────────────────────────────────
+    // ── Optimistic react — pending-safe: poll won't overwrite until confirmed ──
     const reactToNote = (id: string, emoji: string) => {
-        // Update instantly
+        markPending(id, "reactions");
         setNotes(prev => prev.map(n => {
             if (n.id !== id) return n;
             const reactions = { ...(n.reactions || {}) };
@@ -563,30 +563,56 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
             reactions[emoji] = users.includes(userId) ? users.filter(u => u !== userId) : [...users, userId];
             return { ...n, reactions };
         }));
-        // Sync in background
         fetch(`/api/notes/${id}/react`, {
             method: "PATCH", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ userId, emoji }),
-        });
+        }).then(async r => {
+            if (r.ok) {
+                // Server confirmed — update with authoritative reaction state
+                const { reactions } = await r.json().catch(() => ({}));
+                if (reactions) {
+                    setNotes(prev => prev.map(n => n.id === id ? { ...n, reactions } : n));
+                }
+            }
+        }).finally(() => clearPending(id, "reactions"));
     };
 
-    // ── Optimistic resolve ───────────────────────────────────────────────────────
+    // ── Optimistic resolve — pending-safe ─────────────────────────────────────
     const resolveNote = (id: string, resolved: boolean) => {
-        setNotes(prev => prev.map(n => n.id === id ? { ...n, resolved } : n));
+        markPending(id, "resolved");
+        setNotes(prev => prev.map(n => n.id === id ? { ...n, resolved, resolvedBy: resolved ? userId : null } : n));
         fetch(`/api/notes/${id}/resolve`, {
             method: "PATCH", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ userId, resolved }),
-        });
+        }).then(r => {
+            if (!r.ok) {
+                // Revert on failure
+                setNotes(prev => prev.map(n => n.id === id ? { ...n, resolved: !resolved } : n));
+                onToast?.("error", "Failed to update resolve status.");
+            }
+        }).catch(() => {
+            setNotes(prev => prev.map(n => n.id === id ? { ...n, resolved: !resolved } : n));
+            onToast?.("error", "Failed to update resolve status.");
+        }).finally(() => clearPending(id, "resolved"));
     };
 
-    // ── Admin: reclassify note type ──────────────────────────────────────────────
+    // ── Admin: reclassify note type — pending-safe ────────────────────────────
     const retypeNote = (id: string, newType: string) => {
+        const prev_type = notes.find(n => n.id === id)?.type;
+        markPending(id, "type");
         setNotes(prev => prev.map(n => n.id === id ? { ...n, type: newType as TeamNote["type"] } : n));
         fetch(`/api/notes/${id}/retype`, {
             method: "PATCH", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ userId, userRole, newType }),
-        }).then(r => { if (!r.ok) { setNotes(prev => prev.map(n => n.id === id ? { ...n, type: (prev.find(x => x.id === id)?.type ?? newType) as TeamNote["type"] } : n)); onToast?.("error", "Failed to reclassify note."); } })
-          .catch(() => onToast?.("error", "Failed to reclassify note."));
+        }).then(r => {
+            if (!r.ok) {
+                setNotes(prev => prev.map(n => n.id === id ? { ...n, type: (prev_type ?? newType) as TeamNote["type"] } : n));
+                onToast?.("error", "Failed to reclassify note.");
+            }
+        }).catch(() => {
+            setNotes(prev => prev.map(n => n.id === id ? { ...n, type: (prev_type ?? newType) as TeamNote["type"] } : n));
+            onToast?.("error", "Failed to reclassify note.");
+        }).finally(() => clearPending(id, "type"));
     };
 
     // Filter + sort

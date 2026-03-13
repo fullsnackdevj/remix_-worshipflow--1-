@@ -1256,7 +1256,7 @@ app.patch("/api/notes/:id/resolve", async (req, res) => {
     const doc = await ref.get();
     if (!doc.exists) return res.status(404).json({ error: "Note not found" });
     // Allow author or admin-role users (role check is frontend-enforced for now)
-    await ref.update({ resolved: !!resolved, resolvedBy: resolved ? userId : null, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    await ref.update({ resolved: !!resolved, resolvedBy: resolved ? userId : null });
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: "Failed to resolve" }); }
 });

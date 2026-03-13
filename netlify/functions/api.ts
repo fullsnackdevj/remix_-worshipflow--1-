@@ -1179,7 +1179,7 @@ Rules:
             const ref = firestore?.collection("team_notes").doc(nid);
             const doc = await ref?.get();
             if (!doc?.exists) return json(404, { error: "Note not found" });
-            await ref?.update({ resolved: !!resolved, resolvedBy: resolved ? userId : null, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+            await ref?.update({ resolved: !!resolved, resolvedBy: resolved ? userId : null });
             return json(200, { success: true });
         } catch (e) { return json(500, { error: "Failed to resolve" }); }
     }
@@ -1196,7 +1196,7 @@ Rules:
             const ref = firestore?.collection("team_notes").doc(nid);
             const doc = await ref?.get();
             if (!doc?.exists) return json(404, { error: "Note not found" });
-            await ref?.update({ type: newType, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+            await ref?.update({ type: newType });
             return json(200, { success: true });
         } catch (e) { return json(500, { error: "Failed to reclassify note" }); }
     }
