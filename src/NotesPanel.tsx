@@ -775,15 +775,18 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
                                 ))}
                             </div>
 
-                            {/* Text */}
-                            <AutoTextarea
-                                ref={textRef as any}
-                                value={fContent}
-                                onChange={e => setFContent(e.target.value)}
-                                placeholder="Describe the bug, feature idea, or general note… (paste images here)"
-                                minRows={5}
-                                className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            />
+                            {/* Text — capped height with custom scrollbar */}
+                            <div className="relative max-h-48 overflow-y-auto rounded-xl pretty-scrollbar">
+                                <AutoTextarea
+                                    ref={textRef as any}
+                                    value={fContent}
+                                    onChange={e => setFContent(e.target.value)}
+                                    placeholder="Describe the bug, feature idea, or general note… (paste images here)"
+                                    minRows={5}
+                                    className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                                    style={{ minHeight: '80px' }}
+                                />
+                            </div>
 
                             {/* Attachments preview row */}
                             <div className="flex flex-wrap gap-2">
