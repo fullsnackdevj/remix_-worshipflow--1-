@@ -4,6 +4,7 @@ import { useAuth } from "./AuthContext";
 import { getAuth } from "firebase/auth";
 import { usePushNotifications } from "./usePushNotifications";
 import { useRealtimeNotifications } from "./useRealtimeNotifications";
+import { useTheme } from "./ThemeContext";
 
 // ── Lightweight always-loaded components ────────────────────────────────────
 import BroadcastOverlay from "./BroadcastOverlay";
@@ -237,6 +238,7 @@ export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "playground" | "admin">("dashboard");
   const { isAdmin, userRole, user, status: authStatus } = useAuth();
+  const { theme: uiTheme, toggleTheme: toggleUiTheme } = useTheme();
 
   // Dashboard is the default landing for all roles — no redirect needed.
 
@@ -810,6 +812,17 @@ export default function App() {
 
             {/* Help & Knowledge Base */}
             <HelpPanel isAdmin={isAdmin} />
+
+            {/* 🎨 Theme Toggle */}
+            <button
+              onClick={toggleUiTheme}
+              title={uiTheme === "one-monokai" ? "Switch to Default theme" : "Switch to One Monokai theme"}
+              className="relative p-2 rounded-xl text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
+            >
+              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', fontWeight: 700, lineHeight: 1 }}>
+                {uiTheme === "one-monokai" ? "■■" : "□□"}
+              </span>
+            </button>
 
             {/* Notification Bell */}
             <div ref={notifRef} className="relative">

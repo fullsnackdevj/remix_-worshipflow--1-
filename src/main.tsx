@@ -2,6 +2,8 @@ import { StrictMode, useState, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
+import './themes/one-monokai.css';
+import { ThemeProvider } from './ThemeContext.tsx';
 import { AuthProvider, useAuth } from './AuthContext.tsx';
 import LoginPage from './LoginPage.tsx';
 import AccessDenied from './AccessDenied.tsx';
@@ -56,8 +58,10 @@ function Root() {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <AuthProvider>
-      <Root />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <Root />
+      </AuthProvider>
+    </ThemeProvider>
   </StrictMode>,
 );
