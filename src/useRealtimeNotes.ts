@@ -1,82 +1,79 @@
-import { useState, useEffect } from "react";
-import {
-  collection,
-  query,
-  orderBy,
-  onSnapshot,
-  Timestamp,
-} from "firebase/firestore";
-import { db } from "./firebase";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { TeamNote } from "./NotesPanel";
 
 /**
- * useRealtimeNotes
+ * useRealtimeNotes — HTTP smart-polling strategy
  *
- * Replaces the 60-second poll + fetch-on-open pattern in NotesPanel
- * with a Firestore onSnapshot listener. Any note change from ANY team
- * member propagates to all connected clients within ~200ms.
+ * WHY NOT Firestore onSnapshot?
+ *   Firestore security rules restrict client SDK reads on `team_notes`.
+ *   The server uses admin SDK (bypasses rules) via /api/notes — always works.
  *
- * Only streams non-deleted notes (deletedAt == null).
- * Optimistic UI (instant local add/edit/delete) is fully preserved —
- * just keep calling setNotes directly for those operations.
+ * STRATEGY:
+ *   • On mount: fetch once immediately (seeds from wf_notes_cache if fresh)
+ *   • When panel is open: poll every 5s for near-live updates
+ *   • When panel closes: stop polling (saves bandwidth)
+ *   • Optimistic UI: setNotes is returned and still works instantly
  */
 export function useRealtimeNotes(userId: string | null | undefined) {
-  const [notes, setNotes] = useState<TeamNote[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    // Query: all notes without a deletedAt, newest first
-    // Note: Firestore requires a composite index for (deletedAt == null, orderBy createdAt)
-    // As a fallback we filter in JS — `where("deletedAt","==",null)` would need an index.
-    // Instead we fetch all and filter client-side so no index setup is required.
-    const q = query(
-      collection(db, "team_notes"),
-      orderBy("createdAt", "desc")
-    );
-
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const all: TeamNote[] = snap.docs
-          .map((d) => {
-            const data = d.data();
-            // Normalize Firestore Timestamps → ISO strings
-            const normalize = (v: unknown) =>
-              v instanceof Timestamp
-                ? v.toDate().toISOString()
-                : (v as string | null | undefined) ?? null;
-
-            return {
-              id: d.id,
-              authorId: data.authorId ?? "",
-              authorName: data.authorName ?? "",
-              authorPhoto: data.authorPhoto ?? "",
-              type: data.type ?? "general",
-              content: data.content ?? "",
-              imageData: data.imageData ?? null,
-              videoData: data.videoData ?? null,
-              createdAt: normalize(data.createdAt) ?? new Date().toISOString(),
-              updatedAt: normalize(data.updatedAt),
-              deletedAt: normalize(data.deletedAt),
-              resolved: data.resolved ?? false,
-              resolvedBy: data.resolvedBy ?? null,
-              reactions: data.reactions ?? {},
-            } as TeamNote;
-          })
-          // Filter out soft-deleted notes (deletedAt != null)
-          .filter((n) => !n.deletedAt);
-
-        setNotes(all);
-        setLoading(false);
-      },
-      (err) => {
-        console.warn("[useRealtimeNotes] onSnapshot error:", err);
-        setLoading(false);
+  const [notes, setNotes] = useState<TeamNote[]>(() => {
+    // Seed from cache on first render to avoid blank flash
+    try {
+      const raw = localStorage.getItem("wf_notes_cache");
+      if (raw) {
+        const { data, ts } = JSON.parse(raw);
+        if (Date.now() - ts < 2 * 60 * 1000) return Array.isArray(data) ? data : [];
       }
-    );
+    } catch { /* noop */ }
+    return [];
+  });
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+  const deletedIdsRef = useRef<Set<string>>(new Set());
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-    return () => unsub();
-  }, []); // userId not in deps — notes are team-wide
+  const fetchNotes = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    try {
+      const res = await fetch("/api/notes");
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        const filtered = data.filter((n: TeamNote) => !deletedIdsRef.current.has(n.id));
+        setNotes(filtered);
+        try {
+          localStorage.setItem("wf_notes_cache", JSON.stringify({ data: filtered, ts: Date.now() }));
+        } catch { /* noop */ }
+      }
+    } catch { /* keep existing notes on network error */ }
+    finally { if (!silent) setLoading(false); }
+  }, []);
 
-  return { notes, setNotes, loading };
+  // Initial fetch on mount (silent if we already have cached data)
+  useEffect(() => {
+    fetchNotes(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Smart polling: 5s when Notes panel is open, stopped when closed
+  useEffect(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    if (open) {
+      fetchNotes(true); // immediate refresh on open
+      intervalRef.current = setInterval(() => fetchNotes(true), 5_000);
+    }
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [open, fetchNotes]);
+
+  return {
+    notes,
+    setNotes,
+    loading,
+    deletedIdsRef,
+    onOpen: () => setOpen(true),
+    onClose: () => setOpen(false),
+  };
 }

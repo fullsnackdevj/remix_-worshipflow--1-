@@ -284,9 +284,9 @@ function NoteCard({ note, userId, userRole, onEdit, onDelete, onReact, onResolve
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function NotesPanel({ userId, userName, userPhoto, userRole, onToast }: NotesPanelProps) {
     const [open, setOpen] = useState(false);
-    // ── Real-time notes via Firestore onSnapshot ──────────────────────────────────────
-    // Fires within ~200ms of any team member write — no polling needed
-    const { notes, setNotes, loading } = useRealtimeNotes(userId);
+    // ── Notes via smart HTTP polling: 5s when open, paused when closed ──────────────
+    // (Firestore client SDK is blocked by security rules on team_notes collection)
+    const { notes, setNotes, loading, deletedIdsRef, onOpen, onClose } = useRealtimeNotes(userId);
     const [showForm, setShowForm] = useState(false);
     const [editing, setEditing] = useState<TeamNote | null>(null);
     const [saving, setSaving] = useState(false);
@@ -318,14 +318,20 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
     const videoRef = useRef<HTMLInputElement>(null);
     const panelRef = useRef<HTMLDivElement>(null);
     const textRef = useRef<HTMLTextAreaElement>(null);
-    // Tracks IDs removed optimistically — prevents re-fetch from restoring them
-    const deletedIdsRef = useRef<Set<string>>(new Set());
+    // Tracks IDs removed optimistically — deletedIdsRef comes from the hook
 
 
-    // Close on outside click
+    // Toggle open/close + notify hook to start/stop smart polling
+    const handleToggle = () => {
+        setOpen(v => {
+            const next = !v;
+            if (next) { onOpen(); } else { closeForm(); onClose(); }
+            return next;
+        });
+    };
     useEffect(() => {
         const handler = (e: MouseEvent) => {
-            if (open && panelRef.current && !panelRef.current.contains(e.target as Node)) { setOpen(false); closeForm(); }
+            if (open && panelRef.current && !panelRef.current.contains(e.target as Node)) { setOpen(false); onClose(); closeForm(); }
         };
         document.addEventListener("mousedown", handler);
         return () => document.removeEventListener("mousedown", handler);
@@ -630,7 +636,7 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
         <div ref={panelRef} className="relative">
             {/* Trigger */}
             <button
-                onClick={() => { setOpen(v => { if (v) closeForm(); return !v; }); }}
+                onClick={handleToggle}
                 title="Team Notes"
                 className={`relative p-2 rounded-xl transition-all active:scale-90 ${open ? "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400" : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
             >
