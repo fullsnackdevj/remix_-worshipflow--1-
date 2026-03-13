@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Plus, X, ChevronLeft, MoreHorizontal, Check,
   Trash2, Archive, AlignLeft, CheckSquare, Settings,
@@ -55,36 +55,25 @@ function CardModal({ card, lists, boards, allMembers, customFieldDefs, onClose, 
   { card: Card; lists: PgList[]; boards: Board[]; allMembers: any[]; customFieldDefs: CustomFieldDef[]; onClose: () => void; onSave: (c: Card) => void; onDelete: (id: string) => void; onArchive: (id: string) => void; onMove: () => void; onToast: Props["onToast"]; }) {
   const [c, setC] = useState<Card>({ ...card });
   const [saving, setSaving] = useState(false);
-  const [tab, setTab] = useState<"details" | "checklists" | "custom">("details");
+  const [panel, setPanel] = useState<"main"|"dates"|"checklist"|"members"|"labels">("main");
   const [newChecklistTitle, setNewChecklistTitle] = useState("");
   const [newItems, setNewItems] = useState<Record<string, string>>({});
-  const [showLabelPicker, setShowLabelPicker] = useState(false);
-  const [showMemberPicker, setShowMemberPicker] = useState(false);
-  const [memberSearch, setMemberSearch] = useState("");
+  const [labelSearch, setLabelSearch] = useState("");
   const [newLabelName, setNewLabelName] = useState("");
   const [newLabelColor, setNewLabelColor] = useState(LABEL_COLORS[0].hex);
+  const [creatingLabel, setCreatingLabel] = useState(false);
+  const [memberSearch, setMemberSearch] = useState("");
+  const [comment, setComment] = useState("");
 
   const save = async (partial: Partial<Card>) => {
-    const updated = { ...c, ...partial };
-    setC(updated);
-    setSaving(true);
-    try {
-      await apiFetch(`/playground/cards/${card.id}`, { method: "PUT", body: JSON.stringify(partial) });
-      onSave(updated);
-    } catch { onToast("error", "Failed to save"); }
-    finally { setSaving(false); }
+    const updated = { ...c, ...partial }; setC(updated); setSaving(true);
+    try { await apiFetch(`/playground/cards/${card.id}`, { method: "PUT", body: JSON.stringify(partial) }); onSave(updated); }
+    catch { onToast("error", "Failed to save"); } finally { setSaving(false); }
   };
 
-  const totalItems = c.checklists.reduce((s, cl) => s + cl.items.length, 0);
-  const doneItems = c.checklists.reduce((s, cl) => s + cl.items.filter(i => i.done).length, 0);
-  const pct = totalItems ? Math.round((doneItems / totalItems) * 100) : 0;
+  const listName = lists.find(l => l.id === c.listId)?.title ?? "";
   const isOverdue = c.dueDate && new Date(c.dueDate) < new Date();
 
-  const addChecklist = () => {
-    if (!newChecklistTitle.trim()) return;
-    const updated = [...c.checklists, { id: uid(), title: newChecklistTitle.trim(), items: [] }];
-    setNewChecklistTitle(""); save({ checklists: updated });
-  };
   const toggleItem = (clId: string, itemId: string) => save({ checklists: c.checklists.map(cl => cl.id === clId ? { ...cl, items: cl.items.map(i => i.id === itemId ? { ...i, done: !i.done } : i) } : cl) });
   const addItem = (clId: string) => {
     const text = newItems[clId]?.trim(); if (!text) return;
@@ -93,131 +82,229 @@ function CardModal({ card, lists, boards, allMembers, customFieldDefs, onClose, 
   };
   const deleteChecklist = (clId: string) => save({ checklists: c.checklists.filter(cl => cl.id !== clId) });
   const deleteItem = (clId: string, itemId: string) => save({ checklists: c.checklists.map(cl => cl.id === clId ? { ...cl, items: cl.items.filter(i => i.id !== itemId) } : cl) });
-  const addLabel = () => {
+  const addChecklist = () => {
+    if (!newChecklistTitle.trim()) return;
+    save({ checklists: [...c.checklists, { id: uid(), title: newChecklistTitle.trim(), items: [] }] });
+    setNewChecklistTitle(""); setPanel("main");
+  };
+  const addNewLabel = () => {
     if (!newLabelName.trim()) return;
     save({ labels: [...c.labels, { id: uid(), name: newLabelName.trim(), color: newLabelColor }] });
-    setNewLabelName("");
+    setNewLabelName(""); setCreatingLabel(false);
   };
-  const addMember = (name: string) => { if (!c.members.includes(name)) { save({ members: [...c.members, name] }); } setMemberSearch(""); };
+  const removeLabel = (id: string) => save({ labels: c.labels.filter(x => x.id !== id) });
+  const addMember = (name: string) => { if (!c.members.includes(name)) save({ members: [...c.members, name] }); setMemberSearch(""); };
+  const removeMember = (name: string) => save({ members: c.members.filter(x => x !== name) });
   const setCustomField = (defId: string, val: any) => save({ customFields: { ...c.customFields, [defId]: val } });
-  const filteredMembers = allMembers.filter(m => !c.members.includes(m.name) && (!memberSearch || m.name?.toLowerCase().includes(memberSearch.toLowerCase()))).slice(0, 6);
+  const filteredMembers = allMembers.filter(m => !memberSearch || m.name?.toLowerCase().includes(memberSearch.toLowerCase()));
+  const filteredLabels = c.labels.filter(l => !labelSearch || l.name.toLowerCase().includes(labelSearch.toLowerCase()));
+
+  const Btn = ({ icon, label, act, onCl }: { icon: React.ReactNode; label: string; act?: boolean; onCl: () => void }) => (
+    <button onClick={onCl} className={`flex items-center gap-1.5 px-3 py-1.5 rounded border text-xs font-medium transition-colors ${act ? "bg-[#1c3a5e] border-blue-500/50 text-blue-300" : "border-white/10 text-gray-300 hover:bg-white/10 bg-[#22272b]"}`}>{icon}{label}</button>
+  );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 pt-10 overflow-y-auto" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="bg-[#22272b] rounded-2xl w-full max-w-2xl shadow-2xl border border-white/5 flex flex-col" onClick={e => e.stopPropagation()}>
-        {/* Label strips at top */}
-        {c.labels.length > 0 && <div className="flex flex-wrap gap-1.5 px-5 pt-4">{c.labels.map(l => <span key={l.id} style={{ backgroundColor: l.color }} className="h-2 w-12 rounded-full" />)}</div>}
-        {/* Header */}
-        <div className="flex items-start gap-3 px-5 pt-4 pb-2">
-          <AlignLeft size={17} className="text-gray-400 mt-1 shrink-0" />
-          <div className="flex-1">
-            <input className="w-full bg-transparent text-white font-bold text-lg focus:outline-none focus:bg-black/20 rounded px-1 -ml-1"
-              value={c.title} onChange={e => setC(p => ({ ...p, title: e.target.value }))} onBlur={() => save({ title: c.title })} />
-            <p className="text-xs text-gray-500 mt-0.5">in list <span className="text-gray-400 font-medium">{lists.find(l => l.id === c.listId)?.title}</span></p>
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/75 overflow-y-auto p-4" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="bg-[#1d2125] rounded-2xl w-full max-w-4xl my-6 shadow-2xl border border-white/5 overflow-hidden" onClick={e => e.stopPropagation()}>
+        {/* Top bar */}
+        <div className="flex items-center justify-between px-5 py-3 border-b border-white/5">
+          <div className="flex items-center gap-2 text-xs font-bold text-white bg-white/10 px-3 py-1.5 rounded">
+            {listName} <ChevronLeft size={11} className="rotate-180 opacity-60 ml-0.5" />
           </div>
-          <div className="flex items-center gap-1">{saving && <span className="text-xs text-gray-500">Saving…</span>}<button onClick={onClose} className="p-1.5 text-gray-400 hover:text-white rounded-lg"><X size={16} /></button></div>
+          <div className="flex items-center gap-1">
+            {saving && <span className="text-xs text-gray-500 mr-1">Saving…</span>}
+            <button onClick={onMove} title="Move" className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded"><ArrowRight size={15} /></button>
+            <button onClick={() => onArchive(card.id)} title="Archive" className="p-1.5 text-gray-400 hover:text-amber-400 hover:bg-white/10 rounded"><Archive size={15} /></button>
+            {card.archived && <button onClick={() => onDelete(card.id)} title="Delete" className="p-1.5 text-red-400 hover:bg-red-500/10 rounded"><Trash2 size={15} /></button>}
+            <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded ml-1"><X size={16} /></button>
+          </div>
         </div>
-        {/* Tabs */}
-        <div className="flex gap-1 px-5 pb-1 border-b border-white/5">
-          {(["details", "checklists", "custom"] as const).map(t => (
-            <button key={t} onClick={() => setTab(t)} className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg capitalize transition-colors ${tab === t ? "text-white border-b-2 border-blue-500" : "text-gray-400 hover:text-white"}`}>
-              {t === "custom" ? "Custom Fields" : t}{t === "checklists" && totalItems > 0 ? ` ${pct}%` : ""}
-            </button>
-          ))}
-        </div>
-        <div className="flex gap-4 p-5 overflow-y-auto max-h-[65vh]">
-          <div className="flex-1 space-y-5">
-            {tab === "details" && <>
-              <div>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Description</p>
-                <textarea value={c.description} onChange={e => setC(p => ({ ...p, description: e.target.value }))} onBlur={() => save({ description: c.description })}
-                  rows={4} placeholder="Add a description…"
-                  className="w-full bg-[#1d2125] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-none" />
-              </div>
-              <div>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Due Date</p>
-                <input type="date" value={c.dueDate ?? ""} onChange={e => save({ dueDate: e.target.value || null })}
-                  className={`bg-[#1d2125] border rounded-xl px-3 py-2 text-sm focus:outline-none ${isOverdue ? "border-red-500/60 text-red-400" : "border-white/10 text-gray-200"}`} />
-                {isOverdue && <p className="text-xs text-red-400 mt-1 flex items-center gap-1"><AlertTriangle size={10} /> Overdue</p>}
-              </div>
-              <div>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Labels</p>
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {c.labels.map(l => <span key={l.id} style={{ backgroundColor: l.color }} className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold text-white">{l.name}<button onClick={() => save({ labels: c.labels.filter(x => x.id !== l.id) })}><X size={9} /></button></span>)}
-                </div>
-                <button onClick={() => setShowLabelPicker(p => !p)} className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"><Plus size={12} /> Add label</button>
-                {showLabelPicker && (
-                  <div className="mt-2 bg-[#1d2125] border border-white/10 rounded-xl p-3 space-y-2">
-                    <input value={newLabelName} onChange={e => setNewLabelName(e.target.value)} placeholder="Label name…" className="w-full bg-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none" />
-                    <div className="flex flex-wrap gap-1.5">{LABEL_COLORS.map(lc => <button key={lc.hex} onClick={() => setNewLabelColor(lc.hex)} style={{ backgroundColor: lc.hex }} className={`w-8 h-6 rounded ${newLabelColor === lc.hex ? "ring-2 ring-white" : ""}`} />)}</div>
-                    <button onClick={addLabel} className="w-full py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg font-semibold">Add</button>
-                  </div>
-                )}
-              </div>
-              <div>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Members</p>
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {c.members.map(m => {
-                    const mem = allMembers.find(x => x.name === m);
-                    return <span key={m} className="flex items-center gap-1.5 bg-white/10 text-gray-200 text-xs px-2 py-1 rounded-full">
-                      <Avatar name={m} photo={mem?.photo} size={18} />{m}<button onClick={() => save({ members: c.members.filter(x => x !== m) })}><X size={9} /></button>
-                    </span>;
-                  })}
-                </div>
-                <button onClick={() => setShowMemberPicker(p => !p)} className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"><Plus size={12} /> Add member</button>
-                {showMemberPicker && (
-                  <div className="mt-2 bg-[#1d2125] border border-white/10 rounded-xl overflow-hidden">
-                    <div className="relative p-2"><Search size={12} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" /><input value={memberSearch} onChange={e => setMemberSearch(e.target.value)} placeholder="Search…" className="w-full pl-7 pr-3 py-1.5 bg-white/10 rounded-lg text-xs text-white placeholder-gray-500 focus:outline-none" /></div>
-                    <div className="max-h-36 overflow-y-auto">
-                      {filteredMembers.map(m => <button key={m.id} onClick={() => addMember(m.name)} className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white/5 text-left"><Avatar name={m.name} photo={m.photo} size={22} /><span className="text-xs text-gray-300">{m.name}</span></button>)}
-                      {memberSearch && !allMembers.find(m => m.name?.toLowerCase() === memberSearch.toLowerCase()) && <button onClick={() => addMember(memberSearch)} className="w-full px-3 py-2 text-xs text-blue-400 hover:bg-white/5 text-left">+ Add "{memberSearch}" as free text</button>}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </>}
-            {tab === "checklists" && (
-              <div className="space-y-4">
-                {totalItems > 0 && <div><div className="flex justify-between text-xs text-gray-400 mb-1"><span>{pct}%</span><span>{doneItems}/{totalItems}</span></div><div className="h-2 bg-white/10 rounded-full overflow-hidden"><div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${pct}%` }} /></div></div>}
-                {c.checklists.map(cl => (
-                  <div key={cl.id} className="bg-[#1d2125] border border-white/10 rounded-xl p-3">
-                    <div className="flex items-center justify-between mb-2"><p className="text-sm font-bold text-white">{cl.title}</p><button onClick={() => deleteChecklist(cl.id)} className="text-gray-500 hover:text-red-400"><Trash2 size={12} /></button></div>
-                    <div className="space-y-1.5 mb-2">
-                      {cl.items.map(item => (
-                        <div key={item.id} className="flex items-center gap-2 group">
-                          <button onClick={() => toggleItem(cl.id, item.id)} className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all ${item.done ? "bg-blue-500 border-blue-500" : "border-gray-500 hover:border-blue-400"}`}>{item.done && <Check size={9} className="text-white" />}</button>
-                          <span className={`text-xs flex-1 ${item.done ? "line-through text-gray-500" : "text-gray-300"}`}>{item.text}</span>
-                          <button onClick={() => deleteItem(cl.id, item.id)} className="text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100"><X size={10} /></button>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex gap-2"><input value={newItems[cl.id] ?? ""} onChange={e => setNewItems(p => ({ ...p, [cl.id]: e.target.value }))} onKeyDown={e => e.key === "Enter" && addItem(cl.id)} placeholder="Add item…" className="flex-1 bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500" /><button onClick={() => addItem(cl.id)} className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs">Add</button></div>
-                  </div>
-                ))}
-                <div className="flex gap-2"><input value={newChecklistTitle} onChange={e => setNewChecklistTitle(e.target.value)} onKeyDown={e => e.key === "Enter" && addChecklist()} placeholder="New checklist name…" className="flex-1 bg-[#1d2125] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500" /><button onClick={addChecklist} className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold">Add</button></div>
+        {/* Two-panel body */}
+        <div className="flex flex-col lg:flex-row">
+          {/* LEFT */}
+          <div className="flex-1 min-w-0 p-6 space-y-5 overflow-y-auto" style={{ maxHeight: "82vh" }}>
+            {/* Title */}
+            <div className="flex items-start gap-3">
+              <div className="w-5 h-5 mt-1.5 rounded-full border-2 border-gray-500 shrink-0" />
+              <textarea value={c.title} onChange={e => setC(p => ({ ...p, title: e.target.value }))} onBlur={() => save({ title: c.title })} rows={2}
+                className="flex-1 bg-transparent text-white font-bold text-xl leading-snug focus:outline-none resize-none placeholder-gray-600" />
+            </div>
+            {/* Action buttons */}
+            <div className="flex flex-wrap gap-2 ml-8">
+              <Btn icon={<Plus size={11} />} label="Add" onCl={() => {}} />
+              <Btn icon={<Calendar size={11} />} label="Dates" act={panel === "dates"} onCl={() => setPanel(panel === "dates" ? "main" : "dates")} />
+              <Btn icon={<CheckSquare size={11} />} label="Checklist" act={panel === "checklist"} onCl={() => setPanel(panel === "checklist" ? "main" : "checklist")} />
+              <Btn icon={<Users size={11} />} label="Members" act={panel === "members"} onCl={() => setPanel(panel === "members" ? "main" : "members")} />
+              <Btn icon={<Paperclip size={11} />} label="Attachment" onCl={() => {}} />
+            </div>
+            {/* Action sub-panels */}
+            {panel === "dates" && (
+              <div className="ml-8 bg-[#22272b] border border-white/10 rounded-xl p-4 space-y-2">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Due Date</p>
+                <input type="date" value={c.dueDate ?? ""} onChange={e => { save({ dueDate: e.target.value || null }); setPanel("main"); }}
+                  className={`bg-[#1d2125] border rounded-lg px-3 py-2 text-sm focus:outline-none w-auto ${isOverdue ? "border-red-500/60 text-red-400" : "border-white/10 text-white"}`} />
+                {c.dueDate && <button onClick={() => { save({ dueDate: null }); setPanel("main"); }} className="text-xs text-red-400 hover:text-red-300 block">Remove date</button>}
               </div>
             )}
-            {tab === "custom" && (
-              <div className="space-y-4">
-                {customFieldDefs.length === 0 && <p className="text-xs text-gray-500 text-center py-4">No custom fields. Add in Board Settings (⚙).</p>}
+            {panel === "checklist" && (
+              <div className="ml-8 bg-[#22272b] border border-white/10 rounded-xl p-4 space-y-2">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Add Checklist</p>
+                <input value={newChecklistTitle} onChange={e => setNewChecklistTitle(e.target.value)} onKeyDown={e => e.key === "Enter" && addChecklist()} autoFocus placeholder="Checklist title…"
+                  className="w-full bg-[#1d2125] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500" />
+                <div className="flex gap-2"><button onClick={addChecklist} className="px-4 py-1.5 bg-[#579dff] hover:bg-[#4c8ee6] text-[#1d2125] text-xs font-bold rounded">Add</button><button onClick={() => setPanel("main")} className="px-3 py-1.5 text-gray-400 hover:text-white text-xs">Cancel</button></div>
+              </div>
+            )}
+            {panel === "members" && (
+              <div className="ml-8 bg-[#22272b] border border-white/10 rounded-xl overflow-hidden">
+                <div className="relative p-3 border-b border-white/5">
+                  <Search size={12} className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-500" />
+                  <input value={memberSearch} onChange={e => setMemberSearch(e.target.value)} autoFocus placeholder="Search members…"
+                    className="w-full pl-7 pr-3 py-1.5 bg-[#1d2125] rounded-lg text-xs text-white placeholder-gray-500 focus:outline-none" />
+                </div>
+                <div className="max-h-44 overflow-y-auto">
+                  {filteredMembers.map((m: any) => (
+                    <button key={m.id} onClick={() => addMember(m.name)} className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-white/5 text-left">
+                      <Avatar name={m.name} photo={m.photo} size={26} /><span className="text-sm text-gray-300 flex-1">{m.name}</span>
+                      {c.members.includes(m.name) && <Check size={12} className="text-blue-400" />}
+                    </button>
+                  ))}
+                  {memberSearch && !allMembers.find((m: any) => m.name?.toLowerCase() === memberSearch.toLowerCase()) && (
+                    <button onClick={() => addMember(memberSearch)} className="w-full px-3 py-2 text-xs text-blue-400 hover:bg-white/5 text-left">+ Add "{memberSearch}"</button>
+                  )}
+                </div>
+              </div>
+            )}
+            {/* Labels shown */}
+            {c.labels.length > 0 && (
+              <div className="ml-8">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Labels</p>
+                <div className="flex flex-wrap gap-1.5 items-center">
+                  {c.labels.map(l => (
+                    <span key={l.id} style={{ backgroundColor: l.color }} onClick={() => removeLabel(l.id)}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded text-xs font-bold text-white cursor-pointer hover:brightness-90">{l.name}</span>
+                  ))}
+                  <button onClick={() => setPanel(panel === "labels" ? "main" : "labels")} className="w-7 h-7 rounded bg-white/10 hover:bg-white/20 flex items-center justify-center text-gray-300"><Plus size={13} /></button>
+                </div>
+              </div>
+            )}
+            {/* Label picker */}
+            {panel === "labels" && (
+              <div className="ml-8 bg-[#22272b] border border-white/10 rounded-xl overflow-hidden w-72">
+                <div className="flex items-center justify-between px-3 py-2 border-b border-white/5">
+                  <p className="text-xs font-semibold text-gray-300">Labels</p>
+                  <button onClick={() => { setPanel("main"); setCreatingLabel(false); }} className="text-gray-500 hover:text-white"><X size={13} /></button>
+                </div>
+                {!creatingLabel ? (<>
+                  <div className="p-2"><input value={labelSearch} onChange={e => setLabelSearch(e.target.value)} autoFocus placeholder="Search labels…" className="w-full bg-[#1d2125] border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none" /></div>
+                  <p className="px-3 pb-1 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Labels</p>
+                  <div className="max-h-52 overflow-y-auto px-2 pb-2 space-y-1">
+                    {filteredLabels.map(l => (
+                      <div key={l.id} className="flex items-center gap-2">
+                        <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 bg-blue-500 border-blue-500`}><Check size={9} className="text-white" /></div>
+                        <button style={{ backgroundColor: l.color }} onClick={() => removeLabel(l.id)} className="flex-1 text-left px-3 py-1.5 rounded text-xs font-bold text-white hover:brightness-90">{l.name}</button>
+                        <button className="p-1 text-gray-500 hover:text-gray-300"><AlignLeft size={11} /></button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="border-t border-white/5 p-2"><button onClick={() => setCreatingLabel(true)} className="w-full py-2 bg-white/5 hover:bg-white/10 text-gray-300 text-xs rounded-lg font-medium">Create a new label</button></div>
+                </>) : (
+                  <div className="p-3 space-y-3">
+                    <p className="text-xs font-semibold text-gray-300">Create label</p>
+                    <input value={newLabelName} onChange={e => setNewLabelName(e.target.value)} placeholder="Label name…" className="w-full bg-[#1d2125] border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none" />
+                    <div className="flex flex-wrap gap-1.5">{LABEL_COLORS.map(lc => <button key={lc.hex} onClick={() => setNewLabelColor(lc.hex)} style={{ backgroundColor: lc.hex }} className={`w-9 h-7 rounded ${newLabelColor === lc.hex ? "ring-2 ring-white" : ""}`} />)}</div>
+                    <div className="flex gap-2"><button onClick={addNewLabel} className="flex-1 py-1.5 bg-[#579dff] hover:bg-[#4c8ee6] text-[#1d2125] text-xs font-bold rounded">Create</button><button onClick={() => setCreatingLabel(false)} className="flex-1 py-1.5 bg-white/10 text-gray-300 text-xs rounded hover:bg-white/20">Back</button></div>
+                  </div>
+                )}
+              </div>
+            )}
+            {/* Members shown */}
+            {c.members.length > 0 && (
+              <div className="ml-8">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Members</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {c.members.map(m => { const mem = allMembers.find((x: any) => x.name === m); return (
+                    <div key={m} className="flex items-center gap-1.5 bg-white/10 text-xs text-gray-200 px-2 py-1 rounded-full">
+                      <Avatar name={m} photo={mem?.photo} size={18} />{m}<button onClick={() => removeMember(m)} className="text-gray-500 hover:text-white ml-0.5"><X size={9} /></button>
+                    </div>
+                  ); })}
+                </div>
+              </div>
+            )}
+            {/* Due date badge */}
+            {c.dueDate && panel !== "dates" && (
+              <div className="ml-8">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Due date</p>
+                <button onClick={() => setPanel("dates")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${isOverdue ? "bg-red-500 text-white" : "bg-white/10 text-gray-200 hover:bg-white/20"}`}>
+                  <Calendar size={11} />{new Date(c.dueDate + "T00:00:00").toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}{isOverdue && " · Overdue"}
+                </button>
+              </div>
+            )}
+            {/* Description */}
+            <div className="ml-8">
+              <div className="flex items-center gap-2 mb-2"><AlignLeft size={14} className="text-gray-400" /><p className="text-sm font-bold text-white">Description</p></div>
+              <textarea value={c.description} onChange={e => setC(p => ({ ...p, description: e.target.value }))} onBlur={() => save({ description: c.description })}
+                rows={4} placeholder="Add a more detailed description…"
+                className="w-full bg-[#22272b] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-gray-300 placeholder-gray-500 focus:outline-none focus:border-blue-500/50 resize-none" />
+            </div>
+            {/* Checklists */}
+            {c.checklists.map(cl => {
+              const clDone = cl.items.filter(i => i.done).length; const clTotal = cl.items.length;
+              const clPct = clTotal ? Math.round((clDone / clTotal) * 100) : 0;
+              return (
+                <div key={cl.id} className="ml-8 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2"><CheckSquare size={14} className="text-gray-400" /><p className="text-sm font-bold text-white uppercase tracking-wide">{cl.title}</p></div>
+                    <button onClick={() => deleteChecklist(cl.id)} className="px-3 py-1 bg-white/10 hover:bg-white/20 text-gray-300 text-xs rounded font-medium">Delete</button>
+                  </div>
+                  <p className="text-xs text-gray-500">{clPct}%</p>
+                  <div className="h-1.5 bg-white/10 rounded-full overflow-hidden"><div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${clPct}%` }} /></div>
+                  <div className="space-y-1 pb-1">
+                    {cl.items.map(item => (
+                      <div key={item.id} className="flex items-center gap-3 group py-0.5">
+                        <button onClick={() => toggleItem(cl.id, item.id)} className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all ${item.done ? "bg-blue-500 border-blue-500" : "border-gray-500 hover:border-blue-400"}`}>{item.done && <Check size={9} className="text-white" />}</button>
+                        <span className={`text-sm flex-1 ${item.done ? "line-through text-gray-500" : "text-gray-200"}`}>{item.text}</span>
+                        <button onClick={() => deleteItem(cl.id, item.id)} className="text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100"><X size={11} /></button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <input value={newItems[cl.id] ?? ""} onChange={e => setNewItems(p => ({ ...p, [cl.id]: e.target.value }))} onKeyDown={e => e.key === "Enter" && addItem(cl.id)} placeholder="Add an item…"
+                      className="flex-1 bg-[#22272b] border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50" />
+                    <button onClick={() => addItem(cl.id)} className="px-3 py-1.5 bg-[#579dff] hover:bg-[#4c8ee6] text-[#1d2125] text-xs font-bold rounded-lg">Add</button>
+                  </div>
+                </div>
+              );
+            })}
+            {/* Custom Fields */}
+            {customFieldDefs.length > 0 && (
+              <div className="ml-8 space-y-3">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Custom Fields</p>
                 {customFieldDefs.map(def => (
                   <div key={def.id}>
-                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">{def.name}</label>
-                    {def.type === "text" && <input value={c.customFields[def.id] ?? ""} onChange={e => setCustomField(def.id, e.target.value)} className="w-full bg-[#1d2125] border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500" />}
-                    {def.type === "number" && <input type="number" value={c.customFields[def.id] ?? ""} onChange={e => setCustomField(def.id, e.target.value)} className="w-full bg-[#1d2125] border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500" />}
-                    {def.type === "checkbox" && <button onClick={() => setCustomField(def.id, !c.customFields[def.id])} className={`flex items-center gap-2 text-sm ${c.customFields[def.id] ? "text-blue-400" : "text-gray-400"}`}><ToggleLeft size={20} />{c.customFields[def.id] ? "Yes" : "No"}</button>}
-                    {def.type === "dropdown" && <select value={c.customFields[def.id] ?? ""} onChange={e => setCustomField(def.id, e.target.value)} className="w-full bg-[#1d2125] border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"><option value="">— Select —</option>{def.options?.map(o => <option key={o} value={o}>{o}</option>)}</select>}
+                    <label className="text-xs text-gray-400 mb-1 block">{def.name}</label>
+                    {def.type === "text" && <input value={c.customFields[def.id] ?? ""} onChange={e => setCustomField(def.id, e.target.value)} className="w-full bg-[#22272b] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none" />}
+                    {def.type === "number" && <input type="number" value={c.customFields[def.id] ?? ""} onChange={e => setCustomField(def.id, e.target.value)} className="w-full bg-[#22272b] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none" />}
+                    {def.type === "checkbox" && <button onClick={() => setCustomField(def.id, !c.customFields[def.id])} className="flex items-center gap-2 text-sm"><div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${c.customFields[def.id] ? "bg-blue-500 border-blue-500" : "border-gray-500"}`}>{c.customFields[def.id] && <Check size={9} className="text-white" />}</div><span className={c.customFields[def.id] ? "text-blue-400" : "text-gray-500"}>{c.customFields[def.id] ? "Yes" : "No"}</span></button>}
+                    {def.type === "dropdown" && <select value={c.customFields[def.id] ?? ""} onChange={e => setCustomField(def.id, e.target.value)} className="w-full bg-[#22272b] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"><option value="">— Select —</option>{def.options?.map(o => <option key={o} value={o}>{o}</option>)}</select>}
                   </div>
                 ))}
               </div>
             )}
           </div>
-          {/* Sidebar */}
-          <div className="w-36 space-y-1.5 shrink-0">
-            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">Actions</p>
-            <button onClick={onMove} className="w-full flex items-center gap-2 px-3 py-2 bg-white/5 hover:bg-white/10 text-gray-300 text-xs rounded-lg transition-colors"><ArrowRight size={12} /> Move</button>
-            <button onClick={() => onArchive(card.id)} className="w-full flex items-center gap-2 px-3 py-2 bg-white/5 hover:bg-amber-500/20 text-gray-300 hover:text-amber-400 text-xs rounded-lg transition-colors"><Archive size={12} /> Archive</button>
-            {card.archived && <button onClick={() => onDelete(card.id)} className="w-full flex items-center gap-2 px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs rounded-lg transition-colors"><Trash2 size={12} /> Delete</button>}
+          {/* RIGHT — Comments & activity */}
+          <div className="w-full lg:w-80 border-t lg:border-t-0 lg:border-l border-white/5 flex flex-col shrink-0">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
+              <div className="flex items-center gap-2 text-sm font-semibold text-white"><MessageSquare size={14} className="text-gray-400" />Comments and activity</div>
+              <button onClick={() => setPanel(panel === "labels" ? "main" : "labels")} className="px-2.5 py-1 bg-white/10 hover:bg-white/15 text-gray-300 text-xs rounded font-medium">Show details</button>
+            </div>
+            <div className="p-3 border-b border-white/5">
+              <textarea value={comment} onChange={e => setComment(e.target.value)} placeholder="Write a comment…" rows={2}
+                className="w-full bg-[#22272b] border border-white/10 rounded-xl px-3 py-2 text-sm text-gray-300 placeholder-gray-500 focus:outline-none focus:border-blue-500/50 resize-none" />
+              {comment.trim() && <button onClick={() => setComment("")} className="mt-1.5 px-3 py-1.5 bg-[#579dff] hover:bg-[#4c8ee6] text-[#1d2125] text-xs font-bold rounded-lg">Save</button>}
+            </div>
+            <div className="flex-1 p-4 overflow-y-auto" style={{ maxHeight: "360px" }}>
+              <p className="text-center text-xs text-gray-600 py-6">Activity will appear here</p>
+            </div>
           </div>
         </div>
       </div>
