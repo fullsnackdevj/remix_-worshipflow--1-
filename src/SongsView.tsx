@@ -23,14 +23,17 @@ const CustomVideoBtnIcon = ({ size = 20, className = "" }: { size?: number, clas
   </svg>
 );
 
-// ── YouTube embed URL helper ────────────────────────────────────────────────
-function getYoutubeEmbed(url: string): string {
+// ── YouTube embed URL helper (± loop) ────────────────────────────────────
+function getYoutubeEmbed(url: string, loop = false): string {
   try {
     const u = new URL(url);
     let id = "";
     if (u.hostname === "youtu.be") id = u.pathname.slice(1);
     else if (u.hostname.includes("youtube.com")) id = u.searchParams.get("v") ?? u.pathname.split("/").pop() ?? "";
-    if (id) return `https://www.youtube.com/embed/${id}?autoplay=1&rel=0`;
+    if (id) {
+      const loopParams = loop ? `&loop=1&playlist=${id}` : "";
+      return `https://www.youtube.com/embed/${id}?autoplay=1&rel=0${loopParams}`;
+    }
   } catch { /* noop */ }
   return url;
 }
@@ -115,6 +118,7 @@ export default function SongsView({
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedSongIds, setSelectedSongIds] = useState<string[]>([]);
   const [videoModal, setVideoModal] = useState<string | null>(null);
+  const [loopVideo, setLoopVideo] = useState(false);
   const [isOcrLoading, setIsOcrLoading] = useState<"lyrics" | "chords" | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editArtist, setEditArtist] = useState("");
@@ -1584,7 +1588,7 @@ export default function SongsView({
       {videoModal && (
         <div
           className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
-          onClick={() => setVideoModal(null)}
+          onClick={() => { setVideoModal(null); setLoopVideo(false); }}
           onKeyDown={(e) => e.key === "Escape" && setVideoModal(null)}
           role="dialog"
           aria-modal="true"
@@ -1597,6 +1601,24 @@ export default function SongsView({
             <div className="flex items-center justify-between px-4 py-2.5 bg-gray-900">
               <span className="text-sm font-semibold text-white/80">Now Playing</span>
               <div className="flex items-center gap-3">
+                {/* Loop toggle */}
+                <button
+                  onClick={() => setLoopVideo(v => !v)}
+                  title={loopVideo ? "Loop ON — click to turn off" : "Loop OFF — click to turn on"}
+                  className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border transition-all ${
+                    loopVideo
+                      ? "bg-indigo-600 border-indigo-500 text-white"
+                      : "border-white/20 text-white/50 hover:text-white/80 hover:border-white/40"
+                  }`}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3 shrink-0">
+                    <polyline points="17 1 21 5 17 9" />
+                    <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+                    <polyline points="7 23 3 19 7 15" />
+                    <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+                  </svg>
+                  {loopVideo ? "Loop ON" : "Loop"}
+                </button>
                 <a
                   href={videoModal}
                   target="_blank"
@@ -1617,7 +1639,7 @@ export default function SongsView({
             {/* 16:9 embed */}
             <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
               <iframe
-                src={getYoutubeEmbed(videoModal)}
+                src={getYoutubeEmbed(videoModal, loopVideo)}
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
                 className="absolute inset-0 w-full h-full border-0"
