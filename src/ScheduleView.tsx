@@ -381,7 +381,7 @@ const handleDeleteSchedule = () => {
             const isEditingExistingEvent = schedPanelMode === "edit" && !!selectedEventId;
             const isFormOpen = schedPanelMode === "edit"; // true for both new & existing event form
             // Permitted users can always add another event on any date in month view
-            const canAdd = (canWriteSchedule || leaderCanAddOnDate) && !isListView && hasDate && !isFormOpen;
+            const canAdd = (canWriteSchedule || leaderCanAddOnDate) && !isListView && hasDate && !isFormOpen && selectedDateEvents.length === 0;
             const label = hasExisting ? "Add Another Event" : "Add Event";
             const disabledTitle = isPast && !canBypassPast
                ? "This date has passed — cannot add events"
@@ -582,7 +582,7 @@ const handleDeleteSchedule = () => {
         )}
         {selectedScheduleDate && (selectedDateEvents.length > 0 || schedPanelMode === "edit") && (() => {
           const isDatePast = selectedScheduleDate < todayStr;
-          const showDayView = selectedDateEvents.length >= 2 && !selectedEventId && schedPanelMode !== "edit";
+          const showDayView = selectedDateEvents.length >= 1 && !selectedEventId && schedPanelMode !== "edit";
           if (showDayView) {
             const dateLabel = new Date(selectedScheduleDate + "T00:00:00").toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
             return (
@@ -646,7 +646,7 @@ const handleDeleteSchedule = () => {
               )}
 
 
-              {selectedDateEvents.length >= 2 && selectedEventId && (
+              {selectedDateEvents.length >= 1 && selectedEventId && (
                 <button onClick={() => { setSelectedEventId(null); setSchedPanelMode("view"); }}
                   className="flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium mb-3 transition-colors">
                   <ChevronLeft size={14} /> All events this day
