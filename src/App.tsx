@@ -264,12 +264,13 @@ export default function App() {
   const { showPrompt: showPushPrompt, requestPushPermission, dismissPrompt: dismissPushPrompt } =
     usePushNotifications(user?.uid ?? null, userRole ?? null);
 
-  // ── Real-time notifications via Firestore onSnapshot ────────────────────
-  // Replaces 60s polling — fires within ~200ms of any Firestore write
+  // ── Real-time notifications ──────────────────────────────────────────────────
+  // 10s poll + window focus/visibility — max 10s latency, instant on tab switch
   const {
     notifications,
     setNotifications,
     hasNewArrival,
+    refetch: refetchNotifications,
   } = useRealtimeNotifications(user?.uid, effectiveRole);
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
@@ -286,6 +287,7 @@ export default function App() {
     if (!user) return;
     setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
     await fetch("/api/notifications/read", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: user.uid }) });
+    setTimeout(() => refetchNotifications(), 500); // re-verify from server
   };
 
   const markOneRead = async (notifId: string, type: string, resourceId?: string, resourceDate?: string) => {
