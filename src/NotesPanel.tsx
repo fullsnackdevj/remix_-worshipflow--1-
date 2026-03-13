@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { X, NotepadText, Trash2, ImagePlus, Loader2, Bug, Lightbulb, MessageSquare, Pencil, Check, CheckCircle2, ChevronDown, Film, RotateCcw, Archive, Eye, Search, Code2, Wrench, XCircle, ThumbsUp } from "lucide-react";
 import AutoTextarea from "./AutoTextarea";
+import { useRealtimeNotes } from "./useRealtimeNotes";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 export interface TeamNote {
@@ -283,8 +284,9 @@ function NoteCard({ note, userId, userRole, onEdit, onDelete, onReact, onResolve
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function NotesPanel({ userId, userName, userPhoto, userRole, onToast }: NotesPanelProps) {
     const [open, setOpen] = useState(false);
-    const [notes, setNotes] = useState<TeamNote[]>([]);
-    const [loading, setLoading] = useState(false);
+    // ── Real-time notes via Firestore onSnapshot ──────────────────────────────────────
+    // Fires within ~200ms of any team member write — no polling needed
+    const { notes, setNotes, loading } = useRealtimeNotes(userId);
     const [showForm, setShowForm] = useState(false);
     const [editing, setEditing] = useState<TeamNote | null>(null);
     const [saving, setSaving] = useState(false);
@@ -329,28 +331,20 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
         return () => document.removeEventListener("mousedown", handler);
     }, [open]);
 
+    // (fetchNotes is kept for trash-restore refresh — notes list itself is real-time)
     const fetchNotes = useCallback(async (silent = false) => {
-        if (!silent) setLoading(true);
+        if (!silent) { /* loading handled by hook */ }
         try {
             const res = await fetch("/api/notes");
             const data = await res.json();
             if (Array.isArray(data))
-                setNotes(data.filter((n: TeamNote) => !deletedIdsRef.current.has(n.id)));
+                setNotes(prev => data.filter((n: TeamNote) => !deletedIdsRef.current.has(n.id))
+                    .map(n => ({ ...n, reactions: prev.find(p => p.id === n.id)?.reactions ?? n.reactions })));
         } catch { /* keep existing notes on error */ }
-        finally { if (!silent) setLoading(false); }
-    }, []);
+    }, [setNotes]);
 
-    useEffect(() => {
-        if (!open) return;
-        if (notes.length === 0) {
-            // First open ever — show spinner
-            fetchNotes(false);
-        } else {
-            // Already have data — show instantly, refresh silently in background
-            fetchNotes(true);
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open]);
+    // No fetch-on-open needed — Firestore onSnapshot keeps notes live
+    // No 60s poll needed — onSnapshot fires on every change
 
     const fetchTrash = useCallback(async () => {
         setTrashLoading(true);
@@ -627,11 +621,7 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
         }
     }, [open]);
 
-    // Background poll every 60s to keep count fresh
-    useEffect(() => {
-        const id = setInterval(() => fetchNotes(true), 60_000);
-        return () => clearInterval(id);
-    }, [fetchNotes]);
+    // (60s poll removed — Firestore onSnapshot handles real-time updates)
 
 
     const SORT_LABELS: Record<SortMode, string> = { newest: "Newest", oldest: "Oldest", most_reacted: "Most Reacted" };

@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspens
 import { useAuth } from "./AuthContext";
 import { getAuth } from "firebase/auth";
 import { usePushNotifications } from "./usePushNotifications";
+import { useRealtimeNotifications } from "./useRealtimeNotifications";
 
 // ── Lightweight always-loaded components ────────────────────────────────────
 import BroadcastOverlay from "./BroadcastOverlay";
@@ -263,27 +264,15 @@ export default function App() {
   const { showPrompt: showPushPrompt, requestPushPermission, dismissPrompt: dismissPushPrompt } =
     usePushNotifications(user?.uid ?? null, userRole ?? null);
 
-  // ── Notification state ───────────────────────────────────────────
-  const [notifications, setNotifications] = useState<any[]>([]);
+  // ── Real-time notifications via Firestore onSnapshot ────────────────────
+  // Replaces 60s polling — fires within ~200ms of any Firestore write
+  const {
+    notifications,
+    setNotifications,
+    hasNewArrival,
+  } = useRealtimeNotifications(user?.uid, effectiveRole);
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
-
-  const fetchNotifications = async () => {
-    if (!user) return;
-    try {
-      const res = await fetch(`/api/notifications?role=${userRole}&userId=${user.uid}`);
-      if (res.ok) setNotifications(await res.json());
-    } catch { /* silent */ }
-  };
-
-  useEffect(() => {
-    fetchNotifications();
-    const interval = setInterval(fetchNotifications, 60_000); // poll every 60s
-    const onFocus = () => fetchNotifications();
-    window.addEventListener("focus", onFocus);
-    return () => { clearInterval(interval); window.removeEventListener("focus", onFocus); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, userRole]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => { if (notifRef.current && !notifRef.current.contains(e.target as Node)) setNotifOpen(false); };
@@ -828,7 +817,7 @@ export default function App() {
                 className="relative p-2 rounded-xl text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
                 title="Notifications"
               >
-                <Bell size={20} />
+                <Bell size={20} className={hasNewArrival ? "bell-ring" : ""} />
                 {unreadCount > 0 && (
                   <span className="absolute -top-0.5 -right-0.5 min-w-[17px] h-[17px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-0.5 shadow-md animate-pulse">
                     {unreadCount > 9 ? "9+" : unreadCount}
