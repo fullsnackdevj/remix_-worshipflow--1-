@@ -166,7 +166,7 @@ function UserMenu({ simulatedRole, onRoleSwitch }: { simulatedRole: string; onRo
 
   const isQA = userRole === "qa_specialist";
   const isAdminUserMenu = userRole === "admin" || isAdmin;
-  const canSimulate = isQA || isAdminUserMenu; // both QA and Admin can simulate roles
+  const canSimulate = isQA; // only QA Specialist can simulate roles (not Admin)
   const effectiveDisplay = canSimulate && simulatedRole !== "qa_specialist" && simulatedRole !== userRole ? simulatedRole : userRole;
   const badge = ROLE_BADGE[effectiveDisplay] ?? ROLE_BADGE.member;
   const qaBadge = ROLE_BADGE.qa_specialist;
@@ -245,7 +245,7 @@ export default function App() {
   // ── QA Specialist simulated role ──────────────────────────────────────────
   const isQA = userRole === "qa_specialist";
   const isAdminUser = isAdmin || userRole === "admin"; // early check before effectiveRole exists
-  const canSimulateRoles = isQA || isAdminUser;        // Admin & QA Specialist can both simulate roles
+  const canSimulateRoles = isQA; // only QA Specialist can simulate roles
   const [simulatedRole, setSimulatedRole] = useState<string>(() => {
     try { return localStorage.getItem(`wf_qa_role_${user?.uid}`) || "qa_specialist"; } catch { return "qa_specialist"; }
   });
