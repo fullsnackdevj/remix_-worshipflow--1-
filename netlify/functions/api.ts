@@ -1037,10 +1037,27 @@ Rules:
                 type: type || "general", content: content.trim(),
                 imageData: imageData || null,
                 videoData: videoData || null,
+                reactions: {},
+                resolved: false,
                 deletedAt: null,
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                // updatedAt NOT set on create — only set on actual edits
+                updatedAt: null,
             });
+
+            // Notify all team members
+            const typeLabel = type === "bug" ? "🐞 Bug" : type === "feature" ? "💡 Feature" : "📝 Note";
+            if (firestore) {
+                writeNotif(firestore, {
+                    type: "new_song",
+                    message: `${authorName || "Someone"} posted a ${typeLabel}`,
+                    subMessage: content.trim().slice(0, 80) + (content.trim().length > 80 ? "…" : ""),
+                    actorName: authorName || "Unknown",
+                    actorPhoto: authorPhoto || "",
+                    actorUserId: authorId,
+                    targetAudience: "all",
+                });
+            }
             return json(201, { id: ref?.id });
         } catch (e) { return json(500, { error: "Failed to create note" }); }
     }

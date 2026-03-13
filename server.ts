@@ -1158,19 +1158,39 @@ app.get("/api/notes", async (_req, res) => {
 app.post("/api/notes", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(503).json({ error: "DB unavailable" });
-  const { authorId, authorName, authorPhoto, type, content, imageData } = req.body;
+  const { authorId, authorName, authorPhoto, type, content, imageData, videoData } = req.body;
   if (!authorId || !content?.trim()) return res.status(400).json({ error: "Missing required fields" });
   try {
     const ref = await firestore.collection("team_notes").add({
       authorId, authorName: authorName || "Unknown", authorPhoto: authorPhoto || "",
       type: type || "general", content: content.trim(),
       imageData: imageData || null,
+      videoData: videoData || null,
+      reactions: {},
+      resolved: false,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      // updatedAt intentionally NOT set on create — only set on actual edits
+      // so the NoteCard '(edited)' label is accurate
+      updatedAt: null,
+      deletedAt: null,
     });
+
+    // Notify all team members that a new note was posted
+    const typeLabel = type === "bug" ? "🐞 Bug" : type === "feature" ? "💡 Feature" : "📝 Note";
+    writeNotification(firestore, {
+      type: "new_song", // reuse new_song type for notification routing
+      message: `${authorName || "Someone"} posted a ${typeLabel}`,
+      subMessage: content.trim().slice(0, 80) + (content.trim().length > 80 ? "…" : ""),
+      actorName: authorName || "Unknown",
+      actorPhoto: authorPhoto || "",
+      actorUserId: authorId,
+      targetAudience: "all",
+    });
+
     res.status(201).json({ id: ref.id });
   } catch (e) { res.status(500).json({ error: "Failed to create note" }); }
 });
+
 
 // PUT /api/notes/:id — edit note (author only)
 app.put("/api/notes/:id", async (req, res) => {

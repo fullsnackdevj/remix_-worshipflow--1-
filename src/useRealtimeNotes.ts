@@ -2,26 +2,21 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import type { TeamNote } from "./NotesPanel";
 
 /**
- * useRealtimeNotes — HTTP smart-polling strategy
+ * useRealtimeNotes — smart HTTP polling
  *
- * WHY NOT Firestore onSnapshot?
- *   Firestore security rules restrict client SDK reads on `team_notes`.
- *   The server uses admin SDK (bypasses rules) via /api/notes — always works.
- *
- * STRATEGY:
- *   • On mount: fetch once immediately (seeds from wf_notes_cache if fresh)
- *   • When panel is open: poll every 5s for near-live updates
- *   • When panel closes: stop polling (saves bandwidth)
- *   • Optimistic UI: setNotes is returned and still works instantly
+ * Strategy:
+ *  • Instant seed from localStorage cache (no blank flash)
+ *  • Background 30s poll always running (keeps unread badge fresh)
+ *  • 5s fast poll when panel is OPEN (near-live note feed)
+ *  • Optimistic UI preserved: setNotes() still works for instant updates
  */
 export function useRealtimeNotes(userId: string | null | undefined) {
   const [notes, setNotes] = useState<TeamNote[]>(() => {
-    // Seed from cache on first render to avoid blank flash
     try {
       const raw = localStorage.getItem("wf_notes_cache");
       if (raw) {
         const { data, ts } = JSON.parse(raw);
-        if (Date.now() - ts < 2 * 60 * 1000) return Array.isArray(data) ? data : [];
+        if (Date.now() - ts < 5 * 60 * 1000) return Array.isArray(data) ? data : [];
       }
     } catch { /* noop */ }
     return [];
@@ -29,12 +24,14 @@ export function useRealtimeNotes(userId: string | null | undefined) {
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const deletedIdsRef = useRef<Set<string>>(new Set());
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const fastIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const slowIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const fetchNotes = useCallback(async (silent = false) => {
+  const fetchNotes = useCallback(async (silent = true) => {
     if (!silent) setLoading(true);
     try {
       const res = await fetch("/api/notes");
+      if (!res.ok) return;
       const data = await res.json();
       if (Array.isArray(data)) {
         const filtered = data.filter((n: TeamNote) => !deletedIdsRef.current.has(n.id));
@@ -47,24 +44,32 @@ export function useRealtimeNotes(userId: string | null | undefined) {
     finally { if (!silent) setLoading(false); }
   }, []);
 
-  // Initial fetch on mount (silent if we already have cached data)
+  // ── Initial fetch on mount ──────────────────────────────────────────────
   useEffect(() => {
-    fetchNotes(false);
+    fetchNotes(notes.length > 0);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Smart polling: 5s when Notes panel is open, stopped when closed
+  // ── Background 30s poll — always on, keeps unread badge count fresh ────
   useEffect(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
+    slowIntervalRef.current = setInterval(() => fetchNotes(true), 30_000);
+    return () => {
+      if (slowIntervalRef.current) clearInterval(slowIntervalRef.current);
+    };
+  }, [fetchNotes]);
+
+  // ── Fast 5s poll — only when panel is open ─────────────────────────────
+  useEffect(() => {
+    if (fastIntervalRef.current) {
+      clearInterval(fastIntervalRef.current);
+      fastIntervalRef.current = null;
     }
     if (open) {
       fetchNotes(true); // immediate refresh on open
-      intervalRef.current = setInterval(() => fetchNotes(true), 5_000);
+      fastIntervalRef.current = setInterval(() => fetchNotes(true), 5_000);
     }
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (fastIntervalRef.current) clearInterval(fastIntervalRef.current);
     };
   }, [open, fetchNotes]);
 

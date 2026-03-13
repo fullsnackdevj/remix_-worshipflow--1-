@@ -166,7 +166,7 @@ function NoteCard({ note, userId, userRole, onEdit, onDelete, onReact, onResolve
                     <div className="min-w-0">
                         <p className="text-xs font-semibold text-gray-900 dark:text-white truncate">{note.authorName}</p>
                         <p className="text-[10px] text-gray-400">
-                            {relativeTime(note.createdAt)}{note.updatedAt ? " (edited)" : ""}
+                            {relativeTime(note.createdAt)}{note.updatedAt && (new Date(note.updatedAt).getTime() - new Date(note.createdAt).getTime() > 2000) ? " (edited)" : ""}
                         </p>
                     </div>
                 </div>
