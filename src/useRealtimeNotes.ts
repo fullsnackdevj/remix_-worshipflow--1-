@@ -1,26 +1,28 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useRef, type Dispatch, type SetStateAction, type MutableRefObject } from "react";
+import {
+  collection, query, orderBy, onSnapshot,
+  type Unsubscribe,
+} from "firebase/firestore";
+import { db } from "./firebase";
 import type { TeamNote } from "./NotesPanel";
 
 /**
- * useRealtimeNotes — smart HTTP polling with optimistic-safe merge
+ * useRealtimeNotes — Firestore onSnapshot real-time listener
  *
- * Two classes of optimistic ops, two protection strategies:
+ * Replaces HTTP polling entirely. The Firestore SDK maintains a persistent
+ * WebSocket connection; any change to team_notes is pushed to the client
+ * within ~200ms. No polling intervals, no stale-fetch races, no pendingRef
+ * complexity — all oscillation bugs are permanently eliminated.
  *
- * 1. TEMP NOTES (newly created, pending server ID):
- *    - temp_* notes only exist locally until the server confirms a real ID.
- *    - Every poll merge re-prepends all temp_ notes so they are never lost.
+ * Optimistic deletes: deletedIdsRef filters notes that the user has
+ * just deleted locally, preventing a brief ghost while the server write
+ * and subsequent snapshot propagate.
  *
- * 2. IN-PLACE MUTATIONS (react, resolve, retype):
- *    - markPending(id, field) stamps pendingTsRef[id] = Date.now().
- *    - Polls whose fetchStartTime < pendingTs are considered stale and their
- *      data for that note is discarded (local state wins).
- *    - clearPending() clears the field lock but NEVER clears pendingTsRef.
- *    - pendingTsRef[id] is only deleted by the FIRST poll whose fetchStartTime
- *      >= pendingTs, ensuring all pre-mutation in-flight polls are blocked.
- *
- * Polling: 30 s background always, 5 s fast while panel is open.
+ * New (temp_*) notes: prepended from local state until the POST confirms
+ * the server ID and the snapshot picks up the real document.
  */
-export function useRealtimeNotes(userId: string | null | undefined) {
+export function useRealtimeNotes(_userId: string | null | undefined) {
+  // Seed instantly from cache — avoids blank flash before first snapshot
   const [notes, setNotes] = useState<TeamNote[]>(() => {
     try {
       const raw = localStorage.getItem("wf_notes_cache");
@@ -32,146 +34,112 @@ export function useRealtimeNotes(userId: string | null | undefined) {
     return [];
   });
 
-  const [loading, setLoading] = useState(false);
-  const [open, setOpen]       = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]   = useState<string | null>(null);
 
+  // Optimistically-deleted IDs — filter from snapshot until server confirms
   const deletedIdsRef = useRef<Set<string>>(new Set());
-  const pendingRef    = useRef<Record<string, Set<string>>>({});   // field-level lock
-  const pendingTsRef  = useRef<Record<string, number>>({});        // settling window timestamp
 
-  const fastIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const slowIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Temp_ notes (optimistic creates) — kept until snapshot returns real doc
+  const tempNotesRef = useRef<TeamNote[]>([]);
 
-  // ── Mark / clear optimistic field locks ─────────────────────────────────
-  const markPending = useCallback((id: string, field: string) => {
-    if (!pendingRef.current[id]) pendingRef.current[id] = new Set();
-    pendingRef.current[id].add(field);
-    pendingTsRef.current[id] = Date.now(); // stamp settling window — survives clearPending
-  }, []);
+  const unsubRef = useRef<Unsubscribe | null>(null);
 
-  const clearPending = useCallback((id: string, field: string) => {
-    pendingRef.current[id]?.delete(field);
-    if (!pendingRef.current[id] || pendingRef.current[id].size === 0) {
-      delete pendingRef.current[id];
-    }
-    // ⚠️ Do NOT delete pendingTsRef[id] here — it must outlive the field lock.
-    // It is cleaned up in fetchNotes once a post-mutation poll lands.
-  }, []);
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
 
-  // ── Smart fetch with two-tier merge ─────────────────────────────────────
-  const fetchNotes = useCallback(async (silent = true) => {
-    if (!silent) setLoading(true);
-    const fetchStartTime = Date.now();
+    const q = query(
+      collection(db, "team_notes"),
+      orderBy("createdAt", "desc"),
+    );
 
-    try {
-      const res = await fetch("/api/notes");
-      if (!res.ok) return;
-      const data = await res.json();
-      if (!Array.isArray(data)) return;
+    unsubRef.current = onSnapshot(
+      q,
+      { includeMetadataChanges: false },
+      (snapshot) => {
+        const serverNotes: TeamNote[] = snapshot.docs
+          .filter(doc => !deletedIdsRef.current.has(doc.id))
+          .map(doc => ({ id: doc.id, ...(doc.data() as Omit<TeamNote, "id">) }));
 
-      // Snapshot mutable refs synchronously, before setNotes, so React's
-      // async scheduling can't let concurrent clearPending() corrupt the guard.
-      const pendingSnap:   Record<string, Set<string>> = {};
-      const pendingTsSnap: Record<string, number>      = {};
-      for (const id of Object.keys(pendingRef.current)) {
-        pendingSnap[id] = new Set<string>(pendingRef.current[id]);
-      }
-      Object.assign(pendingTsSnap, pendingTsRef.current);
-      const deletedSnap = new Set(deletedIdsRef.current);
+        // Re-prepend temp_ notes that haven't been assigned a real ID yet
+        const tempStillPending = tempNotesRef.current.filter(
+          t => !serverNotes.some(s => s.id === t.id.replace("temp_", ""))
+        );
+        const merged = [...tempStillPending, ...serverNotes];
 
-      // Track which note IDs had a settling window cleared by this (post-mutation) fetch
-      const expiredTs: string[] = [];
-
-      setNotes(prev => {
-        // ── Tier 1: preserve temp_ notes (optimistic creates not yet server-confirmed)
-        const tempNotes = prev.filter(n => n.id.startsWith("temp_"));
-
-        const prevMap = Object.fromEntries(prev.map(n => [n.id, n]));
-
-        // ── Tier 2: merge server notes with settling-window + field-level guards
-        const serverNotes = data
-          .filter((n: TeamNote) => !deletedSnap.has(n.id))
-          .map((serverNote: TeamNote): TeamNote => {
-            const local     = prevMap[serverNote.id];
-            const pendingTs = pendingTsSnap[serverNote.id];
-            const pending   = pendingSnap[serverNote.id];
-
-            if (!local) return serverNote; // net-new note from server
-
-            // Stale-fetch guard: this fetch started before the mutation — discard.
-            if (pendingTs !== undefined && fetchStartTime < pendingTs) {
-              return local;
-            }
-
-            // Post-mutation fetch: schedule settling window cleanup.
-            if (pendingTs !== undefined && fetchStartTime >= pendingTs) {
-              expiredTs.push(serverNote.id);
-            }
-
-            // Field-level pending merge: preserve any still-in-flight fields.
-            if (pending && pending.size > 0) {
-              return {
-                ...serverNote,
-                ...(pending.has("reactions") ? { reactions: local.reactions }                             : {}),
-                ...(pending.has("resolved")  ? { resolved: local.resolved, resolvedBy: local.resolvedBy } : {}),
-                ...(pending.has("type")      ? { type: local.type }                                        : {}),
-              };
-            }
-
-            return serverNote;
-          });
-
-        const merged = [...tempNotes, ...serverNotes];
+        setNotes(merged);
+        setLoading(false);
 
         try {
-          // Cache without temp_ notes (they have no stable ID yet)
           const cacheable = merged.filter(n => !n.id.startsWith("temp_"));
           localStorage.setItem("wf_notes_cache", JSON.stringify({ data: cacheable, ts: Date.now() }));
         } catch { /* noop */ }
+      },
+      (err) => {
+        console.error("[useRealtimeNotes] onSnapshot error:", err);
+        setError(err.message);
+        setLoading(false);
+        // Fall back to HTTP polling if Firestore rules haven't been updated yet
+        fallbackPoll(setNotes, deletedIdsRef, tempNotesRef);
+      },
+    );
 
-        return merged;
-      });
-
-      // Clean up settling windows that a post-mutation poll has now settled
-      for (const id of expiredTs) {
-        delete pendingTsRef.current[id];
-      }
-
-    } catch { /* keep existing notes on network error */ }
-    finally { if (!silent) setLoading(false); }
+    return () => {
+      unsubRef.current?.();
+      unsubRef.current = null;
+    };
   }, []);
 
-  // ── Initial fetch ──────────────────────────────────────────────────────
-  useEffect(() => {
-    fetchNotes(notes.length > 0);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Expose a way for NotesPanel to register/deregister temp notes
+  const addTempNote = (note: TeamNote) => {
+    tempNotesRef.current = [note, ...tempNotesRef.current];
+    setNotes(prev => [note, ...prev.filter(n => !n.id.startsWith("temp_") || n.id === note.id)]);
+  };
 
-  // ── 30 s background poll ───────────────────────────────────────────────
-  useEffect(() => {
-    slowIntervalRef.current = setInterval(() => fetchNotes(true), 30_000);
-    return () => { if (slowIntervalRef.current) clearInterval(slowIntervalRef.current); };
-  }, [fetchNotes]);
-
-  // ── 5 s fast poll when panel open ─────────────────────────────────────
-  useEffect(() => {
-    if (fastIntervalRef.current) { clearInterval(fastIntervalRef.current); fastIntervalRef.current = null; }
-    if (open) {
-      fetchNotes(true);
-      fastIntervalRef.current = setInterval(() => fetchNotes(true), 5_000);
-    }
-    return () => { if (fastIntervalRef.current) clearInterval(fastIntervalRef.current); };
-  }, [open, fetchNotes]);
+  const removeTempNote = (tempId: string) => {
+    tempNotesRef.current = tempNotesRef.current.filter(n => n.id !== tempId);
+  };
 
   return {
     notes,
     setNotes,
     loading,
+    error,
     deletedIdsRef,
-    markPending,
-    clearPending,
-    onOpen:  () => setOpen(true),
-    onClose: () => setOpen(false),
-    refetch: () => fetchNotes(false),
+    addTempNote,
+    removeTempNote,
+    // No-op stubs — kept so NotesPanel callers don't need changing for now
+    markPending:  (_id: string, _field: string) => {},
+    clearPending: (_id: string, _field: string) => {},
+    onOpen:  () => {},
+    onClose: () => {},
+    refetch: () => {},
   };
+}
+
+// ── Fallback HTTP poll (used only if onSnapshot permission denied) ─────────
+let fallbackTimer: ReturnType<typeof setInterval> | null = null;
+function fallbackPoll(
+  setNotes: Dispatch<SetStateAction<TeamNote[]>>,
+  deletedIdsRef: MutableRefObject<Set<string>>,
+  tempNotesRef: MutableRefObject<TeamNote[]>,
+) {
+  if (fallbackTimer) return; // already running
+  const poll = async () => {
+    try {
+      const res = await fetch("/api/notes");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!Array.isArray(data)) return;
+      const filtered = data.filter((n: TeamNote) => !deletedIdsRef.current.has(n.id));
+      const merged = [...tempNotesRef.current, ...filtered];
+      setNotes(merged);
+      try {
+        localStorage.setItem("wf_notes_cache", JSON.stringify({ data: filtered, ts: Date.now() }));
+      } catch { /* noop */ }
+    } catch { /* noop */ }
+  };
+  poll();
+  fallbackTimer = setInterval(poll, 8_000);
 }

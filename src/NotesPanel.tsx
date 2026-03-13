@@ -284,9 +284,8 @@ function NoteCard({ note, userId, userRole, onEdit, onDelete, onReact, onResolve
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function NotesPanel({ userId, userName, userPhoto, userRole, onToast }: NotesPanelProps) {
     const [open, setOpen] = useState(false);
-    // ── Notes via smart HTTP polling: 5s when open, paused when closed ──────────────
-    // (Firestore client SDK is blocked by security rules on team_notes collection)
-    const { notes, setNotes, loading, deletedIdsRef, markPending, clearPending, onOpen, onClose, refetch } = useRealtimeNotes(userId);
+    // ── Notes via Firestore onSnapshot real-time listener ────────────────────────────
+    const { notes, setNotes, loading, deletedIdsRef, addTempNote, removeTempNote } = useRealtimeNotes(userId);
     const [showForm, setShowForm] = useState(false);
     const [editing, setEditing] = useState<TeamNote | null>(null);
     const [saving, setSaving] = useState(false);
@@ -321,17 +320,17 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
     // Tracks IDs removed optimistically — deletedIdsRef comes from the hook
 
 
-    // Toggle open/close + notify hook to start/stop smart polling
+    // Toggle open/close
     const handleToggle = () => {
         setOpen(v => {
             const next = !v;
-            if (next) { onOpen(); } else { closeForm(); onClose(); }
+            if (!next) { closeForm(); }
             return next;
         });
     };
     useEffect(() => {
         const handler = (e: MouseEvent) => {
-            if (open && panelRef.current && !panelRef.current.contains(e.target as Node)) { setOpen(false); onClose(); closeForm(); }
+            if (open && panelRef.current && !panelRef.current.contains(e.target as Node)) { setOpen(false); closeForm(); }
         };
         document.addEventListener("mousedown", handler);
         return () => document.removeEventListener("mousedown", handler);
@@ -519,15 +518,16 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
                 type: fType, content: fContent, imageData: fImage, videoData: fVideoData,
                 createdAt: new Date().toISOString(), reactions: {}, resolved: false,
             };
-            setNotes(prev => [tempNote, ...prev]);
+            addTempNote(tempNote);
             closeForm();
             fetch("/api/notes", {
                 method: "POST", headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ authorId: userId, authorName: userName, authorPhoto: userPhoto, type: fType, content: fContent, imageData: fImage, videoData: fVideoData }),
             }).then(r => r.json()).then(({ id }) => {
-                if (id) setNotes(prev => prev.map(n => n.id === tempId ? { ...n, id } : n));
+                // Remove temp — onSnapshot will arrive with the real document
+                if (id) removeTempNote(tempId);
             }).catch(() => {
-                setNotes(prev => prev.filter(n => n.id !== tempId));
+                removeTempNote(tempId);
                 onToast?.("error", "Failed to save note. Try again.");
             });
         }
@@ -553,9 +553,8 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
         });
     };
 
-    // ── Optimistic react — pending-safe: poll won't overwrite until confirmed ──
+    // ── Optimistic react — onSnapshot will confirm server state instantly ────────
     const reactToNote = (id: string, emoji: string) => {
-        markPending(id, "reactions");
         setNotes(prev => prev.map(n => {
             if (n.id !== id) return n;
             const reactions = { ...(n.reactions || {}) };
@@ -566,40 +565,29 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
         fetch(`/api/notes/${id}/react`, {
             method: "PATCH", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ userId, emoji }),
-        }).then(async r => {
-            if (r.ok) {
-                // Server confirmed — update with authoritative reaction state
-                const { reactions } = await r.json().catch(() => ({}));
-                if (reactions) {
-                    setNotes(prev => prev.map(n => n.id === id ? { ...n, reactions } : n));
-                }
-            }
-        }).finally(() => clearPending(id, "reactions"));
+        });
     };
 
-    // ── Optimistic resolve — pending-safe ─────────────────────────────────────
+    // ── Optimistic resolve — onSnapshot confirms instantly ───────────────────
     const resolveNote = (id: string, resolved: boolean) => {
-        markPending(id, "resolved");
         setNotes(prev => prev.map(n => n.id === id ? { ...n, resolved, resolvedBy: resolved ? userId : null } : n));
         fetch(`/api/notes/${id}/resolve`, {
             method: "PATCH", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ userId, resolved }),
         }).then(r => {
             if (!r.ok) {
-                // Revert on failure
                 setNotes(prev => prev.map(n => n.id === id ? { ...n, resolved: !resolved } : n));
                 onToast?.("error", "Failed to update resolve status.");
             }
         }).catch(() => {
             setNotes(prev => prev.map(n => n.id === id ? { ...n, resolved: !resolved } : n));
             onToast?.("error", "Failed to update resolve status.");
-        }).finally(() => clearPending(id, "resolved"));
+        });
     };
 
-    // ── Admin: reclassify note type — pending-safe ────────────────────────────
+    // ── Admin: reclassify note type — onSnapshot confirms instantly ──────────
     const retypeNote = (id: string, newType: string) => {
         const prev_type = notes.find(n => n.id === id)?.type;
-        markPending(id, "type");
         setNotes(prev => prev.map(n => n.id === id ? { ...n, type: newType as TeamNote["type"] } : n));
         fetch(`/api/notes/${id}/retype`, {
             method: "PATCH", headers: { "Content-Type": "application/json" },
@@ -612,7 +600,7 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
         }).catch(() => {
             setNotes(prev => prev.map(n => n.id === id ? { ...n, type: (prev_type ?? newType) as TeamNote["type"] } : n));
             onToast?.("error", "Failed to reclassify note.");
-        }).finally(() => clearPending(id, "type"));
+        });
     };
 
     // Filter + sort
