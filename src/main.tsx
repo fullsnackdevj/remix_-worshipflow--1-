@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 import './themes/one-monokai.css';
+import './themes/nord.css';
 import { ThemeProvider } from './ThemeContext.tsx';
 import { AuthProvider, useAuth } from './AuthContext.tsx';
 import LoginPage from './LoginPage.tsx';

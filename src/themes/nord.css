@@ -1,0 +1,191 @@
+/**
+ * Nord Design System Theme
+ * Arctic "north-bluish" palette — trust, clarity, minimal ocular fatigue.
+ * Activated by: document.documentElement.setAttribute('data-theme', 'nord')
+ */
+
+html[data-theme="nord"] {
+  /* ── Core backgrounds ────────────────────────────────────────────────────── */
+  --nd-bg-main:       #2E3440;   /* Polar Night — signature Nord dark */
+  --nd-bg-panel:      #2A2B32;   /* Shark — deeper panels / sidebar */
+  --nd-bg-activity:   #3B4252;   /* Nord 1 — cards, inputs, activity bar */
+  --nd-bg-hover:      #434C5E;   /* Nord 2 — hover state */
+  --nd-bg-selection:  #4C566A;   /* Nord 3 — selected / active states */
+
+  /* ── Borders & dividers ──────────────────────────────────────────────────── */
+  --nd-border:        #4C566A;
+  --nd-border-subtle: #3B4252;
+
+  /* ── Text ─────────────────────────────────────────────────────────────────── */
+  --nd-text-primary:  #D8DEE9;   /* Snow Storm 1 — body text */
+  --nd-text-secondary:#8A95A5;   /* Muted metadata / labels */
+  --nd-text-bright:   #ECEFF4;   /* Snow Storm 3 — headers */
+  --nd-text-inverse:  #2E3440;   /* Text on light/accent backgrounds */
+
+  /* ── Accent (brand primary) ──────────────────────────────────────────────── */
+  --nd-accent:        #3E5FFF;   /* Dodger Blue — primary action */
+  --nd-accent-hover:  #5C78FF;
+  --nd-accent-muted:  rgba(62, 95, 255, 0.15);
+  --nd-accent-info:   #3E63DD;   /* Softer blue for metadata/alerts */
+
+  /* ── Functional tokens ───────────────────────────────────────────────────── */
+  --nd-green:         #1D8633;   /* Protected / success */
+  --nd-green-muted:   rgba(29, 134, 51, 0.15);
+  --nd-red:           #D24023;   /* Danger / unprotected */
+  --nd-red-muted:     rgba(210, 64, 35, 0.15);
+  --nd-yellow:        #F6CD5A;   /* Warning */
+  --nd-yellow-muted:  rgba(246, 205, 90, 0.15);
+  --nd-purple:        #81A1C1;   /* Nord 9 — frost / info accent */
+  --nd-cyan:          #88C0D0;   /* Nord 8 — frost / links */
+  --nd-teal:          #8FBCBB;   /* Nord 7 — frost secondary */
+
+  /* ── Typography ──────────────────────────────────────────────────────────── */
+  --nd-font-ui:       "Inter", ui-sans-serif, system-ui, sans-serif;
+  --nd-font-mono:     "JetBrains Mono", ui-monospace, monospace;
+
+  /* ── Geometry — rounded, friendly ───────────────────────────────────────── */
+  --nd-radius-sm:     4px;
+  --nd-radius-md:     6px;
+  --nd-radius-lg:     10px;
+  --nd-radius-xl:     14px;
+  --nd-radius-pill:   999px;
+
+  /* ── Shadows — subtle depth via color shift ──────────────────────────────── */
+  --nd-shadow-sm:  0 1px 3px rgba(0,0,0,0.35);
+  --nd-shadow-md:  0 2px 10px rgba(0,0,0,0.45);
+  --nd-shadow-lg:  0 4px 28px rgba(0,0,0,0.55);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   GLOBAL OVERRIDES — Applied when Nord is active
+───────────────────────────────────────────────────────────────────────────── */
+
+html[data-theme="nord"] body {
+  background-color: var(--nd-bg-main) !important;
+  color: var(--nd-text-primary) !important;
+  font-family: var(--nd-font-ui);
+}
+
+/* Surfaces */
+html[data-theme="nord"] .dark\:bg-gray-900,
+html[data-theme="nord"] .bg-gray-900 { background-color: var(--nd-bg-main) !important; }
+html[data-theme="nord"] .dark\:bg-gray-800,
+html[data-theme="nord"] .bg-gray-800 { background-color: var(--nd-bg-activity) !important; }
+html[data-theme="nord"] .dark\:bg-gray-700,
+html[data-theme="nord"] .bg-gray-700 { background-color: var(--nd-bg-hover) !important; }
+
+/* Sidebar & panels */
+html[data-theme="nord"] nav,
+html[data-theme="nord"] aside,
+html[data-theme="nord"] header {
+  background-color: var(--nd-bg-panel) !important;
+  border-color: var(--nd-border) !important;
+}
+
+/* Cards */
+html[data-theme="nord"] .dark\:bg-gray-800\/50,
+html[data-theme="nord"] .bg-white.dark\:bg-gray-800,
+html[data-theme="nord"] .bg-white {
+  background-color: var(--nd-bg-activity) !important;
+  border-color: var(--nd-border) !important;
+}
+
+/* Borders */
+html[data-theme="nord"] .dark\:border-gray-700,
+html[data-theme="nord"] .border-gray-700,
+html[data-theme="nord"] .dark\:border-gray-600,
+html[data-theme="nord"] .border-gray-200 { border-color: var(--nd-border) !important; }
+
+/* Text */
+html[data-theme="nord"] .dark\:text-white,
+html[data-theme="nord"] .text-gray-900 { color: var(--nd-text-bright) !important; }
+html[data-theme="nord"] .dark\:text-gray-100,
+html[data-theme="nord"] .dark\:text-gray-200,
+html[data-theme="nord"] .text-gray-600 { color: var(--nd-text-primary) !important; }
+html[data-theme="nord"] .dark\:text-gray-400,
+html[data-theme="nord"] .text-gray-500 { color: var(--nd-text-secondary) !important; }
+
+/* Accent — indigo → Nord Dodger Blue */
+html[data-theme="nord"] .bg-indigo-600,
+html[data-theme="nord"] .dark\:bg-indigo-600 { background-color: var(--nd-accent) !important; }
+html[data-theme="nord"] .text-indigo-600,
+html[data-theme="nord"] .dark\:text-indigo-400,
+html[data-theme="nord"] .text-indigo-400 { color: var(--nd-accent) !important; }
+html[data-theme="nord"] .border-indigo-500,
+html[data-theme="nord"] .border-indigo-600 { border-color: var(--nd-accent) !important; }
+html[data-theme="nord"] .hover\:bg-indigo-50:hover,
+html[data-theme="nord"] .dark\:hover\:bg-indigo-900\/20:hover { background-color: var(--nd-accent-muted) !important; }
+html[data-theme="nord"] .bg-indigo-50,
+html[data-theme="nord"] .bg-indigo-100 { background-color: var(--nd-accent-muted) !important; }
+
+/* Success */
+html[data-theme="nord"] .text-green-500,
+html[data-theme="nord"] .text-green-600,
+html[data-theme="nord"] .dark\:text-green-400 { color: var(--nd-green) !important; }
+html[data-theme="nord"] .bg-green-500,
+html[data-theme="nord"] .bg-green-600 { background-color: var(--nd-green) !important; }
+
+/* Danger */
+html[data-theme="nord"] .text-red-500,
+html[data-theme="nord"] .text-red-600,
+html[data-theme="nord"] .dark\:text-red-400 { color: var(--nd-red) !important; }
+html[data-theme="nord"] .bg-red-500,
+html[data-theme="nord"] .bg-red-600 { background-color: var(--nd-red) !important; }
+
+/* Warning */
+html[data-theme="nord"] .text-yellow-500,
+html[data-theme="nord"] .text-amber-500,
+html[data-theme="nord"] .dark\:text-yellow-400 { color: var(--nd-yellow) !important; }
+
+/* Frost / info accent (replaces purple) */
+html[data-theme="nord"] .text-purple-500,
+html[data-theme="nord"] .text-violet-500,
+html[data-theme="nord"] .dark\:text-purple-400 { color: var(--nd-purple) !important; }
+
+/* Inputs */
+html[data-theme="nord"] input,
+html[data-theme="nord"] textarea,
+html[data-theme="nord"] select {
+  background-color: var(--nd-bg-panel) !important;
+  border-color: var(--nd-border) !important;
+  color: var(--nd-text-primary) !important;
+  font-family: var(--nd-font-ui);
+  border-radius: var(--nd-radius-md) !important;
+}
+html[data-theme="nord"] input:focus,
+html[data-theme="nord"] textarea:focus,
+html[data-theme="nord"] select:focus {
+  border-color: var(--nd-accent) !important;
+  outline-color: var(--nd-accent) !important;
+}
+
+/* Buttons — friendly rounded */
+html[data-theme="nord"] button {
+  border-radius: var(--nd-radius-md) !important;
+}
+
+/* Rounded overrides — slightly friendlier than One Monokai */
+html[data-theme="nord"] .rounded-xl   { border-radius: var(--nd-radius-xl) !important; }
+html[data-theme="nord"] .rounded-2xl  { border-radius: var(--nd-radius-xl) !important; }
+html[data-theme="nord"] .rounded-3xl  { border-radius: var(--nd-radius-pill) !important; }
+html[data-theme="nord"] .rounded-full { border-radius: var(--nd-radius-pill) !important; }
+html[data-theme="nord"] .rounded-lg   { border-radius: var(--nd-radius-lg) !important; }
+html[data-theme="nord"] .rounded-md   { border-radius: var(--nd-radius-md) !important; }
+
+/* Hover states */
+html[data-theme="nord"] .dark\:hover\:bg-gray-700:hover { background-color: var(--nd-bg-hover) !important; }
+html[data-theme="nord"] .dark\:hover\:bg-gray-800:hover { background-color: var(--nd-bg-selection) !important; }
+
+/* Scrollbar */
+html[data-theme="nord"] ::-webkit-scrollbar { width: 6px; height: 6px; }
+html[data-theme="nord"] ::-webkit-scrollbar-track { background: var(--nd-bg-panel); }
+html[data-theme="nord"] ::-webkit-scrollbar-thumb { background: var(--nd-border); border-radius: var(--nd-radius-pill); }
+html[data-theme="nord"] ::-webkit-scrollbar-thumb:hover { background: var(--nd-text-secondary); }
+
+/* Active nav indicator */
+html[data-theme="nord"] [data-active="true"],
+html[data-theme="nord"] .active-nav {
+  border-left: 2px solid var(--nd-accent);
+  background-color: var(--nd-accent-muted) !important;
+  color: var(--nd-accent) !important;
+}

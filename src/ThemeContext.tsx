@@ -1,55 +1,57 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
 
-export type AppTheme = "default" | "one-monokai";
+export type AppTheme = "default" | "one-monokai" | "nord";
+
+const THEMES: AppTheme[] = ["default", "one-monokai", "nord"];
 
 interface ThemeContextValue {
   theme: AppTheme;
-  toggleTheme: () => void;
+  cycleTheme: () => void;
   setTheme: (t: AppTheme) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
   theme: "default",
-  toggleTheme: () => {},
+  cycleTheme: () => {},
   setTheme: () => {},
 });
 
 const STORAGE_KEY = "wf_ui_theme";
 
+function applyToDOM(t: AppTheme) {
+  const html = document.documentElement;
+  if (t === "default") {
+    html.removeAttribute("data-theme");
+  } else {
+    html.setAttribute("data-theme", t);
+  }
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<AppTheme>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    return (saved === "one-monokai" ? "one-monokai" : "default") as AppTheme;
+    const saved = localStorage.getItem(STORAGE_KEY) as AppTheme | null;
+    return THEMES.includes(saved as AppTheme) ? (saved as AppTheme) : "default";
   });
 
-  // Sync data-theme on <html> + persist to localStorage
-  const applyTheme = useCallback((t: AppTheme) => {
-    const html = document.documentElement;
-    if (t === "one-monokai") {
-      html.setAttribute("data-theme", "one-monokai");
-    } else {
-      html.removeAttribute("data-theme");
-    }
+  // Apply on mount
+  useEffect(() => {
+    applyToDOM(theme);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const setTheme = useCallback((t: AppTheme) => {
+    applyToDOM(t);
     localStorage.setItem(STORAGE_KEY, t);
     setThemeState(t);
   }, []);
 
-  // Apply on mount
-  useEffect(() => {
-    applyTheme(theme);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const toggleTheme = useCallback(() => {
-    applyTheme(theme === "default" ? "one-monokai" : "default");
-  }, [theme, applyTheme]);
-
-  const setTheme = useCallback((t: AppTheme) => {
-    applyTheme(t);
-  }, [applyTheme]);
+  const cycleTheme = useCallback(() => {
+    const idx = THEMES.indexOf(theme);
+    setTheme(THEMES[(idx + 1) % THEMES.length]);
+  }, [theme, setTheme]);
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, setTheme }}>
+    <ThemeContext.Provider value={{ theme, cycleTheme, setTheme }}>
       {children}
     </ThemeContext.Provider>
   );

@@ -238,7 +238,7 @@ export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "playground" | "admin">("dashboard");
   const { isAdmin, userRole, user, status: authStatus } = useAuth();
-  const { theme: uiTheme, toggleTheme: toggleUiTheme } = useTheme();
+  const { theme: uiTheme, cycleTheme: cycleUiTheme } = useTheme();
 
   // Dashboard is the default landing for all roles — no redirect needed.
 
@@ -813,17 +813,22 @@ export default function App() {
             {/* Help & Knowledge Base */}
             <HelpPanel isAdmin={isAdmin} />
 
-            {/* 🎨 Theme Toggle — hidden for now, uncomment to re-enable
-            <button
-              onClick={toggleUiTheme}
-              title={uiTheme === "one-monokai" ? "Switch to Default theme" : "Switch to One Monokai theme"}
-              className="relative p-2 rounded-xl text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
-            >
-              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', fontWeight: 700, lineHeight: 1 }}>
-                {uiTheme === "one-monokai" ? "■■" : "□□"}
-              </span>
-            </button>
-            */}
+            {/* 🎨 Theme Cycler: Default → One Monokai → Nord → … */}
+            {(() => {
+              const label = uiTheme === "one-monokai" ? "MK" : uiTheme === "nord" ? "ND" : "DF";
+              const dot   = uiTheme === "one-monokai" ? "#e06c75" : uiTheme === "nord" ? "#88C0D0" : "#6366f1";
+              const tip   = uiTheme === "one-monokai" ? "One Monokai → Nord" : uiTheme === "nord" ? "Nord → Default" : "Default → One Monokai";
+              return (
+                <button
+                  onClick={cycleUiTheme}
+                  title={tip}
+                  className="relative flex items-center gap-1 px-2 py-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700/50 dark:hover:bg-gray-700/50 transition-colors text-[10px] font-bold tracking-wide"
+                >
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: dot }} />
+                  {label}
+                </button>
+              );
+            })()}
 
             {/* Notification Bell */}
             <div ref={notifRef} className="relative">
