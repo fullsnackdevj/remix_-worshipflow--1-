@@ -1323,6 +1323,59 @@ Rules:
         } catch { return json(500, { error: "Failed to delete reply" }); }
     }
 
+    // ─── EVENT MANAGER ────────────────────────────────────────────────────────
+    // GET /event-manager
+    if (rawPath === "/event-manager" && method === "GET") {
+        try {
+            const snap = await firestore.collection("event_manager").orderBy("createdAt", "desc").get();
+            const events = snap.docs.map(d => {
+                const data = d.data() as Record<string, any>;
+                return { id: d.id, ...data, createdAt: data.createdAt?.toDate?.()?.toISOString() ?? null, updatedAt: data.updatedAt?.toDate?.()?.toISOString() ?? null };
+            });
+            return json(200, events);
+        } catch (e) { console.error(e); return json(500, { error: "Failed to fetch events" }); }
+    }
+
+    // POST /event-manager
+    if (rawPath === "/event-manager" && method === "POST") {
+        const { title, eventType, date, status = "planning", notes = "", assignedMembers = [], tasks = [] } = body;
+        if (!title?.trim() || !date) return json(400, { error: "title and date are required" });
+        try {
+            const ref = await firestore.collection("event_manager").add({
+                title: title.trim(), eventType: eventType?.trim() || "", date, status,
+                notes, assignedMembers, tasks,
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            return json(201, { id: ref.id });
+        } catch (e) { return json(500, { error: "Failed to create event" }); }
+    }
+
+    // PUT /event-manager/:id  — full event update (including tasks array)
+    const evtMatch = rawPath.match(/^\/event-manager\/([^/]+)$/);
+    if (evtMatch) {
+        const evtId = evtMatch[1];
+        if (method === "PUT") {
+            const { title, eventType, date, status, notes, assignedMembers, tasks } = body;
+            if (!title?.trim() || !date) return json(400, { error: "title and date are required" });
+            try {
+                await firestore.collection("event_manager").doc(evtId).update({
+                    title: title.trim(), eventType: eventType?.trim() || "", date,
+                    status: status || "planning", notes: notes || "",
+                    assignedMembers: assignedMembers || [], tasks: tasks || [],
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                });
+                return json(200, { success: true });
+            } catch (e) { return json(500, { error: "Failed to update event" }); }
+        }
+        if (method === "DELETE") {
+            try {
+                await firestore.collection("event_manager").doc(evtId).delete();
+                return json(200, { success: true });
+            } catch (e) { return json(500, { error: "Failed to delete event" }); }
+        }
+    }
+
     return json(404, { error: "Not found" });
 };
 
