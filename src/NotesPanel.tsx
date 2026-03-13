@@ -69,12 +69,12 @@ Browser: (e.g. Chrome, Safari, Firefox)
 (Use the video upload button below ↓)`;
 
 const STATUS_REACTIONS = [
-    { key: "seen",          label: "Seen",          icon: "👀", activeColor: "bg-sky-100 dark:bg-sky-900/40 border-sky-300 dark:border-sky-700 text-sky-700 dark:text-sky-300" },
-    { key: "investigating", label: "Investigating",  icon: "🔍", activeColor: "bg-amber-100 dark:bg-amber-900/40 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300" },
-    { key: "coding",        label: "Coding",         icon: "💻", activeColor: "bg-violet-100 dark:bg-violet-900/40 border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300" },
-    { key: "fixing",        label: "Fixing",         icon: "🔧", activeColor: "bg-orange-100 dark:bg-orange-900/40 border-orange-300 dark:border-orange-700 text-orange-700 dark:text-orange-300" },
-    { key: "on_it",         label: "On it",          icon: "👍", activeColor: "bg-green-100 dark:bg-green-900/40 border-green-300 dark:border-green-700 text-green-700 dark:text-green-300" },
-    { key: "nevermind",     label: "Dismiss",        icon: "🚫", activeColor: "bg-red-100 dark:bg-red-900/40 border-red-300 dark:border-red-700 text-red-700 dark:text-red-300" },
+    { key: "seen", label: "Seen", icon: <Eye size={13} />, activeColor: "bg-sky-100 dark:bg-sky-900/40 border-sky-300 dark:border-sky-700 text-sky-700 dark:text-sky-300" },
+    { key: "investigating", label: "Investigating", icon: <Search size={13} />, activeColor: "bg-amber-100 dark:bg-amber-900/40 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300" },
+    { key: "coding", label: "Coding", icon: <Code2 size={13} />, activeColor: "bg-violet-100 dark:bg-violet-900/40 border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300" },
+    { key: "fixing", label: "Fixing", icon: <Wrench size={13} />, activeColor: "bg-orange-100 dark:bg-orange-900/40 border-orange-300 dark:border-orange-700 text-orange-700 dark:text-orange-300" },
+    { key: "on_it", label: "On it", icon: <ThumbsUp size={13} />, activeColor: "bg-green-100 dark:bg-green-900/40 border-green-300 dark:border-green-700 text-green-700 dark:text-green-300" },
+    { key: "nevermind", label: "Dismiss", icon: <XCircle size={13} />, activeColor: "bg-red-100 dark:bg-red-900/40 border-red-300 dark:border-red-700 text-red-700 dark:text-red-300" },
 ] as const;
 const MAX_IMAGE_BYTES = 300 * 1024;
 const MAX_VIDEO_BYTES = 5 * 1024 * 1024; // 5MB
@@ -220,13 +220,13 @@ function NoteCard({ note, userId, userRole, onEdit, onDelete, onReact, onResolve
                             onClick={() => onReact(note.id, key)}
                             title={tooltip}
                             aria-label={tooltip}
-                            className={`group relative flex items-center gap-1 text-sm px-2.5 py-0.5 rounded-full border transition-all select-none active:scale-95 ${reacted
+                            className={`group relative flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border transition-all select-none active:scale-95 ${reacted
                                 ? `${activeColor} scale-105 shadow-sm`
-                                : "bg-white/5 dark:bg-gray-700/40 border-white/10 dark:border-gray-600 text-gray-200 dark:text-gray-300 hover:bg-white/10 dark:hover:bg-gray-700"
+                                : "bg-gray-100 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
                                 }`}
                         >
-                            <span className="text-[15px] leading-none">{icon}</span>
-                            {users.length > 0 && <span className="text-xs font-bold tabular-nums">{users.length}</span>}
+                            {icon}
+                            {users.length > 0 && <span className="font-semibold tabular-nums">{users.length}</span>}
                             {/* Tooltip */}
                             <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-[10px] px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-10 shadow-lg">
                                 {label}
