@@ -308,7 +308,12 @@ export default function AdminDashboard({
                 <div className="flex items-center gap-4">
                     <div className="w-1.5 h-14 rounded-full bg-indigo-500 dark:bg-indigo-400 shrink-0" />
                     <div>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">{greeting()},</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                            {greeting()},{" "}
+                            <span className={`font-semibold ${(ROLE_STYLE[userRole] ?? ROLE_STYLE.admin).text}`}>
+                                {(ROLE_STYLE[userRole] ?? ROLE_STYLE.admin).label}
+                            </span>
+                        </p>
                         <h1 className="text-3xl font-bold text-gray-900 dark:text-white leading-tight">{first} 👋</h1>
                         <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{new Date().toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</p>
                     </div>
@@ -330,12 +335,7 @@ export default function AdminDashboard({
                             {lineupTrackCount > 0 ? `Listen to Lineup (${lineupTrackCount})` : "Listen to Lineup"}
                         </button>
                     )}
-                    {(() => { const rs = ROLE_STYLE[userRole] ?? ROLE_STYLE.admin; return (
-                        <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${rs.bg} border ${rs.border} ${rs.text}`}
-                            style={{ boxShadow: rs.glow !== "none" ? `0 0 8px 2px ${rs.glow}` : undefined }}>
-                            <Shield size={12} /> {rs.label}
-                        </div>
-                    ); })()}
+
                     {!loadingExtra && pendingUsers.length > 0 && (
                         <button onClick={() => onNavigate("admin")}
                             className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 text-amber-700 dark:text-amber-400 text-xs font-semibold hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors">

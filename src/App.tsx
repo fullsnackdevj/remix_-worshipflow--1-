@@ -1058,6 +1058,7 @@ export default function App() {
                     setPendingDeepLinkEventId(null);
                     setPendingDeepLinkEventDate(null);
                   }}
+                   onOpenVideo={openVideo}
                 />
               ) : null}
 

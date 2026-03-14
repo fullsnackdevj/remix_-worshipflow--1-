@@ -48,6 +48,8 @@ export interface ScheduleViewProps {
   deepLinkEventId?: string | null;
   deepLinkEventDate?: string | null;
   onDeepLinkHandled?: () => void;
+  /** Open a YouTube video in the persistent mini player */
+  onOpenVideo?: (url: string) => void;
 }
 
 export default function ScheduleView({
@@ -67,6 +69,7 @@ export default function ScheduleView({
   deepLinkEventId,
   deepLinkEventDate,
   onDeepLinkHandled,
+  onOpenVideo,
 }: ScheduleViewProps) {
 
   // ── Local scheduling state ────────────────────────────────────────────────
@@ -777,8 +780,8 @@ const handleDeleteSchedule = () => {
                         {(editSchedSongLineup.joyful || editSchedSongLineup.solemn) && (
                           <div>
                             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Song Line-Up</p>
-                            {editSchedSongLineup.joyful && (() => { const s = allSongs.find(sg => sg.id === editSchedSongLineup.joyful); return s ? <p className="text-sm mb-1"><Sun size={12} className="inline-block mr-1" /> <span className="font-semibold text-amber-500 uppercase text-xs">Joyful</span>{" "}{s.video_url ? <a href={s.video_url} target="_blank" rel="noopener noreferrer" className="text-gray-900 dark:text-white hover:text-amber-500 dark:hover:text-amber-400 underline underline-offset-2 decoration-amber-400/60 transition-colors">{s.title} <span className="inline-block text-[10px] text-amber-400 align-middle">↗</span></a> : <span className="text-gray-900 dark:text-white">{s.title}</span>}</p> : null; })()}
-                            {editSchedSongLineup.solemn && (() => { const s = allSongs.find(sg => sg.id === editSchedSongLineup.solemn); return s ? <p className="text-sm"><Music size={12} className="inline-block mr-1" /> <span className="font-semibold text-indigo-400 uppercase text-xs">Solemn</span>{" "}{s.video_url ? <a href={s.video_url} target="_blank" rel="noopener noreferrer" className="text-gray-900 dark:text-white hover:text-indigo-400 dark:hover:text-indigo-300 underline underline-offset-2 decoration-indigo-400/60 transition-colors">{s.title} <span className="inline-block text-[10px] text-indigo-400 align-middle">↗</span></a> : <span className="text-gray-900 dark:text-white">{s.title}</span>}</p> : null; })()}
+                            {editSchedSongLineup.joyful && (() => { const s = allSongs.find(sg => sg.id === editSchedSongLineup.joyful); return s ? <p className="text-sm mb-1"><Sun size={12} className="inline-block mr-1" /> <span className="font-semibold text-amber-500 uppercase text-xs">Joyful</span>{" "}{s.video_url ? <button onClick={() => onOpenVideo?.(s.video_url!)} className="text-gray-900 dark:text-white hover:text-amber-500 dark:hover:text-amber-400 underline underline-offset-2 decoration-amber-400/60 transition-colors">{s.title} <span className="inline-block text-[10px] text-amber-400 align-middle">▶</span></button> : <span className="text-gray-900 dark:text-white">{s.title}</span>}</p> : null; })()}
+                            {editSchedSongLineup.solemn && (() => { const s = allSongs.find(sg => sg.id === editSchedSongLineup.solemn); return s ? <p className="text-sm"><Music size={12} className="inline-block mr-1" /> <span className="font-semibold text-indigo-400 uppercase text-xs">Solemn</span>{" "}{s.video_url ? <button onClick={() => onOpenVideo?.(s.video_url!)} className="text-gray-900 dark:text-white hover:text-indigo-400 dark:hover:text-indigo-300 underline underline-offset-2 decoration-indigo-400/60 transition-colors">{s.title} <span className="inline-block text-[10px] text-indigo-400 align-middle">▶</span></button> : <span className="text-gray-900 dark:text-white">{s.title}</span>}</p> : null; })()}
                           </div>
                         )}
                       </>

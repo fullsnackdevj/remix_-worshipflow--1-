@@ -1035,15 +1035,13 @@ export default function SongsView({
                 );
               })()}
               {selectedSong.video_url && (
-                <a
-                  href={selectedSong.video_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  onClick={() => onOpenVideo?.(selectedSong.video_url!)}
                   className="inline-flex items-center gap-1.5 text-sm font-semibold text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 transition-colors pt-1"
                 >
                   Watch Reference Video
                   <ExternalLink size={14} />
-                </a>
+                </button>
               )}
             </div>
           </div>
