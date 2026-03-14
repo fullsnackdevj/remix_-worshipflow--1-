@@ -106,10 +106,16 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
   // YouTube IFrame API player ref — this is what gives us onStateChange
   const playerRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  // Ref so the YT closure (created once) can always read the current track index
+  const currentIdxRef = useRef(0);
+  // Ref so the YT closure can always call the latest autoMarkListened
+  const autoMarkListenedRef = useRef<(track: LineupTrack | undefined) => void>(() => {});
   // Use a stable unique ID for the player div
   const playerDivId = useRef("lineup-yt-" + Math.random().toString(36).slice(2)).current;
 
   const current = tracks[currentIdx];
+  // Keep ref in sync for YT closure
+  currentIdxRef.current = currentIdx;
   const hasPrev = currentIdx > 0;
   const hasNext = currentIdx < tracks.length - 1;
 
@@ -133,8 +139,10 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
         events: {
           onReady: () => setPlayerReady(true),
           onStateChange: (event: { data: number }) => {
-            // 0 = ENDED — auto-advance and loop back to start
+            // 0 = ENDED — auto-mark listened, then advance and loop back to start
             if (event.data === 0) {
+              // Auto-mark the just-finished track as listened
+              autoMarkListenedRef.current(tracks[currentIdxRef.current]);
               setCurrentIdx(prev => {
                 const next = prev < tracks.length - 1 ? prev + 1 : 0;
                 return next;
