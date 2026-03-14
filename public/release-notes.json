@@ -1,51 +1,47 @@
 {
-    "title": "🎵 Mini Player & Lineup Updates",
+    "title": "Mini Player & Lineup Updates",
     "message": "Big quality-of-life updates dropped today — here's what's new:",
     "updatedAt": "03-14-26 | 10:15 AM",
     "releases": [
         {
             "version": "March 14, 2026",
             "highlights": [
-                "🎵 Listen to Lineup — A new 'Listen to Lineup' button on the dashboard lets you listen to your worship team's song lineup for upcoming Sunday and Midweek services. Pulls songs scheduled within the next 7 days that have YouTube links.",
-                "📺 Persistent Mini Player — The lineup player minimizes to a floating corner player so you can keep listening while browsing the rest of the app. Expand it anytime to go back to full view.",
-                "🔁 Auto-Advance & Loop — The playlist automatically plays the next song when one finishes, and loops back to the start after the last track — hands-free worship prep.",
-                "✅ I've Listened — Each song in the lineup has an 'I've Listened' button. Mark songs you've prepared and see who else on the team has listened. Auto-marked when you finish a song naturally.",
+                "Listen to Lineup — A new 'Listen to Lineup' button on the dashboard lets you listen to your worship team's song lineup for upcoming Sunday and Midweek services. Pulls songs scheduled within the next 7 days that have YouTube links.",
+                "Persistent Mini Player — The lineup player minimizes to a floating corner player so you can keep listening while browsing the rest of the app. Expand it anytime to go back to full view.",
+                "Auto-Advance & Loop — The playlist automatically plays the next song when one finishes, and loops back to the start after the last track — hands-free worship prep.",
+                "I've Listened — Each song in the lineup has an 'I've Listened' button. Mark songs you've prepared and see who else on the team has listened. Auto-marked when you finish a song naturally.",
                 "▶ Videos Stay Playing on Minimize — Clicking outside any video modal now minimizes it to a floating mini player instead of closing it. The video keeps playing while you browse.",
-                "🎬 Watch Video from Song Detail & Lineup — 'Watch Reference Video' in Song Management and song links in the Scheduling panel now open the persistent mini player instead of a new tab.",
-                "👋 Greeting Now Shows Your Role — The dashboard greeting now reads 'Good morning, Admin' with your role name shown in its assigned color. The separate role badge has been removed for a cleaner look."
-            ]
+                "Watch Video from Song Detail & Lineup — 'Watch Reference Video' in Song Management and song links in the Scheduling panel now open the persistent mini player instead of a new tab.",
+                "Greeting Now Shows Your Role — The dashboard greeting now reads 'Good morning, Admin' with your role name shown in its assigned color. The separate role badge has been removed for a cleaner look."]
         },
         {
             "version": "March 13, 2026",
             "highlights": [
-                "⚡ Blazing Fast Load Times — The app's core code has been split into smaller, dedicated modules. Songs, Members, Dashboard, and Scheduling each now load independently, making everything snappier and more responsive.",
-                "🧩 Modular Architecture — App.tsx has been reduced by 75%. Songs, Members, and Dashboard now live in their own components, resulting in a cleaner and more maintainable codebase under the hood.",
-                "🎨 Shared Design Tokens — Role styles, status badges, and category colors are now centralized in a single constants file — ensuring visual consistency across every screen.",
-                "🛡️ Smarter Permission Logic — Member management permissions (Add, Edit, Delete) are now more granular and consistent: Leaders can add members, only Admins can delete, and everyone can edit their own profile.",
-                "🔄 Instant Member Updates — Member data now syncs with a smarter cache system built directly into the Members screen, so your list always reflects the latest data without full-page refreshes.",
-                "🖨️ Print-Ready Song Sheets — Print any song with clean, formatted lyrics and chords via the print button in the Song Detail view.",
-                "🐛 Deep-Link Fixes — Tapping a push notification for a new song now reliably opens the correct song, even if the app hadn't loaded yet."
-            ]
+                "Blazing Fast Load Times — The app's core code has been split into smaller, dedicated modules. Songs, Members, Dashboard, and Scheduling each now load independently, making everything snappier and more responsive.",
+                "Modular Architecture — App.tsx has been reduced by 75%. Songs, Members, and Dashboard now live in their own components, resulting in a cleaner and more maintainable codebase under the hood.",
+                "Shared Design Tokens — Role styles, status badges, and category colors are now centralized in a single constants file — ensuring visual consistency across every screen.",
+                "️ Smarter Permission Logic — Member management permissions (Add, Edit, Delete) are now more granular and consistent: Leaders can add members, only Admins can delete, and everyone can edit their own profile.",
+                "Instant Member Updates — Member data now syncs with a smarter cache system built directly into the Members screen, so your list always reflects the latest data without full-page refreshes.",
+                "️ Print-Ready Song Sheets — Print any song with clean, formatted lyrics and chords via the print button in the Song Detail view.",
+                "Deep-Link Fixes — Tapping a push notification for a new song now reliably opens the correct song, even if the app hadn't loaded yet."]
         },
         {
             "version": "March 12, 2026",
             "highlights": [
-                "📊 Dashboard for All Roles — Every team member can now access the dashboard with full card visibility.",
-                "🗂️ Dismissed Tab in Notes — Tag a note with 'Dismiss' to move it to its own tab, keeping Active clean.",
-                "🔀 Admin Note Reclassification — Admins can now move notes between Bug, Feature, and General with one tap.",
-                "✅ Song Form Validation — Missing required fields now show an error toast and auto-focus the first empty field.",
-                "🔔 Role-Switch Toast — Switching roles as QA Specialist now shows a toast instead of a floating pill.",
-                "🔒 Smarter Duplicate Detection — Songs with copied lyrics (even with added verses) are now correctly flagged.",
-                "⚡ Reaction Counts Fixed — Fast-clicking multiple reactions no longer resets counts."
-            ]
+                "Dashboard for All Roles — Every team member can now access the dashboard with full card visibility.",
+                "️ Dismissed Tab in Notes — Tag a note with 'Dismiss' to move it to its own tab, keeping Active clean.",
+                "Admin Note Reclassification — Admins can now move notes between Bug, Feature, and General with one tap.",
+                "Song Form Validation — Missing required fields now show an error toast and auto-focus the first empty field.",
+                "Role-Switch Toast — Switching roles as QA Specialist now shows a toast instead of a floating pill.",
+                "Smarter Duplicate Detection — Songs with copied lyrics (even with added verses) are now correctly flagged.",
+                "Reaction Counts Fixed — Fast-clicking multiple reactions no longer resets counts."]
         },
         {
             "version": "March 10–11, 2026",
             "highlights": [
-                "🙏 Verse of the Day — A fresh NLT Bible verse now greets every team member at the top of the dashboard each day, with a heartfelt insight and cross-references. React with emojis (Praying, Love, Fire, Touched, Blessed, Worship) — your reactions are saved and visible to the whole team.",
-                "📊 Bento Dashboard for Everyone — All team members now see the same beautiful card-based dashboard layout, each tailored to their role. Leaders, Musicians, Audio/Tech, and Members each see what matters to them — cleanly and without clutter.",
-                "👋 Personalized Greeting — Your name and the time of day now appear above the Verse at the top of your dashboard. A small touch that makes the app feel more personal."
-            ]
+                "Verse of the Day — A fresh NLT Bible verse now greets every team member at the top of the dashboard each day, with a heartfelt insight and cross-references. React with emojis (Praying, Love, Fire, Touched, Blessed, Worship) — your reactions are saved and visible to the whole team.",
+                "Bento Dashboard for Everyone — All team members now see the same beautiful card-based dashboard layout, each tailored to their role. Leaders, Musicians, Audio/Tech, and Members each see what matters to them — cleanly and without clutter.",
+                "Personalized Greeting — Your name and the time of day now appear above the Verse at the top of your dashboard. A small touch that makes the app feel more personal."]
         }
     ]
 }
