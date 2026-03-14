@@ -112,17 +112,15 @@ async function sendScheduleEmail(
 </body>
 </html>`;
 
-        // Send individually to each recipient — avoids group-email spam filtering
+        // Use Resend batch API — all in ONE call, avoids Netlify 30s timeout
         const subject = `${emoji} ${actionLabel}: ${opts.eventName || "Worship Service"} — ${dateLabel}`;
-        await Promise.all(
-            emails.map(email =>
-                resend.emails.send({
-                    from: "WorshipFlow <no-reply@worshipflow.dev>",
-                    to: [email],
-                    subject,
-                    html: htmlBody,
-                })
-            )
+        await resend.batch.send(
+            emails.map(email => ({
+                from: "WorshipFlow <no-reply@worshipflow.dev>",
+                to: [email],
+                subject,
+                html: htmlBody,
+            }))
         );
     } catch (err) {
         console.error("[Resend] Failed to send schedule email:", err);
