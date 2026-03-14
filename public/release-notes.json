@@ -1,8 +1,20 @@
 {
-    "title": "⚡ Major Performance & Code Overhaul",
-    "message": "Big updates just dropped — here's what's new:",
-    "updatedAt": "03-13-26 | 5:26 AM",
+    "title": "🎵 Mini Player & Lineup Updates",
+    "message": "Big quality-of-life updates dropped today — here's what's new:",
+    "updatedAt": "03-14-26 | 10:15 AM",
     "releases": [
+        {
+            "version": "March 14, 2026",
+            "highlights": [
+                "🎵 Listen to Lineup — A new 'Listen to Lineup' button on the dashboard lets you listen to your worship team's song lineup for upcoming Sunday and Midweek services. Pulls songs scheduled within the next 7 days that have YouTube links.",
+                "📺 Persistent Mini Player — The lineup player minimizes to a floating corner player so you can keep listening while browsing the rest of the app. Expand it anytime to go back to full view.",
+                "🔁 Auto-Advance & Loop — The playlist automatically plays the next song when one finishes, and loops back to the start after the last track — hands-free worship prep.",
+                "✅ I've Listened — Each song in the lineup has an 'I've Listened' button. Mark songs you've prepared and see who else on the team has listened. Auto-marked when you finish a song naturally.",
+                "▶ Videos Stay Playing on Minimize — Clicking outside any video modal now minimizes it to a floating mini player instead of closing it. The video keeps playing while you browse.",
+                "🎬 Watch Video from Song Detail & Lineup — 'Watch Reference Video' in Song Management and song links in the Scheduling panel now open the persistent mini player instead of a new tab.",
+                "👋 Greeting Now Shows Your Role — The dashboard greeting now reads 'Good morning, Admin' with your role name shown in its assigned color. The separate role badge has been removed for a cleaner look."
+            ]
+        },
         {
             "version": "March 13, 2026",
             "highlights": [
