@@ -6,6 +6,9 @@
 [functions]
   node_bundler = "esbuild"
 
+[build.environment]
+  RESEND_API_KEY = ""
+
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/api/:splat"

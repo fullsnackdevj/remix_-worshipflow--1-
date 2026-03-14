@@ -1,6 +1,7 @@
 import type { Handler, HandlerEvent, HandlerContext } from "@netlify/functions";
 import admin from "firebase-admin";
 import { GoogleGenAI } from "@google/genai";
+import { Resend } from "resend";
 
 // Firebase init
 function getDb(): FirebaseFirestore.Firestore | null {
@@ -16,6 +17,110 @@ function getDb(): FirebaseFirestore.Firestore | null {
         });
     }
     return admin.firestore();
+}
+
+// ── Email Notifications via Resend ────────────────────────────────────────────
+async function sendScheduleEmail(
+    firestore: FirebaseFirestore.Firestore,
+    opts: {
+        action: "created" | "updated";
+        eventName: string;
+        date: string;
+        serviceType: string;
+        worshipLeader?: { name: string } | null;
+        actorName: string;
+        scheduleId: string;
+    }
+) {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) return; // silently skip if not configured
+
+    try {
+        const resend = new Resend(apiKey);
+        // Fetch all approved members with emails
+        const snap = await firestore.collection("approved_users").get();
+        const emails: string[] = [];
+        snap.forEach(doc => {
+            const email = doc.data().email as string | undefined;
+            if (email && email.includes("@")) emails.push(email);
+        });
+        if (emails.length === 0) return;
+
+        const dateLabel = new Date(opts.date + "T00:00:00").toLocaleDateString("en", {
+            weekday: "long", year: "numeric", month: "long", day: "numeric"
+        });
+        const serviceLabel = opts.serviceType === "sunday" ? "Sunday Service" :
+            opts.serviceType === "special" ? "Special Event" :
+            opts.serviceType === "midweek" ? "Mid-Week Service" :
+            opts.serviceType.charAt(0).toUpperCase() + opts.serviceType.slice(1);
+        const actionLabel = opts.action === "created" ? "New Event Scheduled" : "Event Updated";
+        const emoji = opts.action === "created" ? "🎉" : "📝";
+
+        const htmlBody = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#0f172a;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a;padding:32px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#1e293b;border-radius:16px;overflow:hidden;">
+        <!-- Header -->
+        <tr>
+          <td style="background:linear-gradient(135deg,#6d28d9,#4f46e5);padding:32px;text-align:center;">
+            <div style="font-size:40px;margin-bottom:8px;">🎵</div>
+            <h1 style="color:#fff;margin:0;font-size:24px;font-weight:700;">WorshipFlow</h1>
+            <p style="color:#c4b5fd;margin:8px 0 0;font-size:14px;">Team Schedule Update</p>
+          </td>
+        </tr>
+        <!-- Body -->
+        <tr>
+          <td style="padding:32px;">
+            <p style="color:#94a3b8;margin:0 0 24px;font-size:15px;">${emoji} <strong style="color:#e2e8f0;">${opts.actorName}</strong> ${opts.action === "created" ? "has created a new event" : "has updated an event"}.</p>
+            <!-- Event Card -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a;border-radius:12px;border:1px solid #334155;">
+              <tr><td style="padding:24px;">
+                <p style="margin:0 0 4px;font-size:12px;color:#6366f1;font-weight:700;text-transform:uppercase;letter-spacing:1px;">${serviceLabel}</p>
+                <h2 style="margin:0 0 16px;color:#f1f5f9;font-size:20px;">${opts.eventName || "Worship Service"}</h2>
+                <table width="100%" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td style="padding:8px 0;border-top:1px solid #1e293b;">
+                      <span style="color:#64748b;font-size:13px;">📅 Date</span>
+                      <p style="margin:2px 0 0;color:#e2e8f0;font-size:14px;">${dateLabel}</p>
+                    </td>
+                  </tr>
+                  ${opts.worshipLeader ? `<tr><td style="padding:8px 0;border-top:1px solid #1e293b;"><span style="color:#64748b;font-size:13px;">🎤 Worship Leader</span><p style="margin:2px 0 0;color:#e2e8f0;font-size:14px;">${opts.worshipLeader.name}</p></td></tr>` : ""}
+                </table>
+              </td></tr>
+            </table>
+            <!-- CTA -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:24px;">
+              <tr><td align="center">
+                <a href="https://worshipflow.dev" style="display:inline-block;background:linear-gradient(135deg,#6d28d9,#4f46e5);color:#fff;text-decoration:none;padding:12px 32px;border-radius:8px;font-size:14px;font-weight:600;">View Schedule →</a>
+              </td></tr>
+            </table>
+          </td>
+        </tr>
+        <!-- Footer -->
+        <tr>
+          <td style="padding:16px 32px;border-top:1px solid #334155;text-align:center;">
+            <p style="color:#475569;font-size:12px;margin:0;">WorshipFlow · worshipflow.dev · You're receiving this because you're part of the worship team.</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+        await resend.emails.send({
+            from: "WorshipFlow <no-reply@worshipflow.dev>",
+            to: emails,
+            subject: `${emoji} ${actionLabel}: ${opts.eventName || "Worship Service"} — ${dateLabel}`,
+            html: htmlBody,
+        });
+    } catch (err) {
+        console.error("[Resend] Failed to send schedule email:", err);
+    }
 }
 
 function json(statusCode: number, body: unknown) {
@@ -983,6 +1088,8 @@ Rules:
                 updated_at: admin.firestore.FieldValue.serverTimestamp(),
             });
             writeNotif(firestore, { type: "new_event", message: `${aN1} created a new event`, subMessage: `📅 ${eventName || "Event"} — ${dl1}`, actorName: aN1, actorPhoto: aP1, actorUserId: aU1, targetAudience: "all", resourceId: docRef.id, resourceType: "event", resourceDate: date });
+            // Send email notification to all team members
+            sendScheduleEmail(firestore, { action: "created", eventName: eventName || "", date, serviceType: serviceType || "sunday", worshipLeader, actorName: aN1, scheduleId: docRef.id });
             return json(201, { id: docRef.id });
         } catch (err) {
             console.error(err);
@@ -1015,6 +1122,8 @@ Rules:
                 const { actorName: aN2 = "Someone", actorPhoto: aP2 = "", actorUserId: aU2 = "" } = body;
                 const dl2 = new Date(date + "T00:00:00").toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
                 writeNotif(firestore, { type: "updated_event", message: `${aN2} updated an event`, subMessage: `📅 ${eventName || "Event"} — ${dl2}`, actorName: aN2, actorPhoto: aP2, actorUserId: aU2, targetAudience: "all", resourceId: id, resourceType: "event", resourceDate: date });
+                // Send email notification to all team members
+                sendScheduleEmail(firestore, { action: "updated", eventName: eventName || "", date, serviceType: serviceType || "sunday", worshipLeader, actorName: aN2, scheduleId: id });
                 return json(200, { success: true });
             } catch (err) {
                 console.error(err);
