@@ -112,12 +112,18 @@ async function sendScheduleEmail(
 </body>
 </html>`;
 
-        await resend.emails.send({
-            from: "WorshipFlow <no-reply@worshipflow.dev>",
-            to: emails,
-            subject: `${emoji} ${actionLabel}: ${opts.eventName || "Worship Service"} — ${dateLabel}`,
-            html: htmlBody,
-        });
+        // Send individually to each recipient — avoids group-email spam filtering
+        const subject = `${emoji} ${actionLabel}: ${opts.eventName || "Worship Service"} — ${dateLabel}`;
+        await Promise.all(
+            emails.map(email =>
+                resend.emails.send({
+                    from: "WorshipFlow <no-reply@worshipflow.dev>",
+                    to: [email],
+                    subject,
+                    html: htmlBody,
+                })
+            )
+        );
     } catch (err) {
         console.error("[Resend] Failed to send schedule email:", err);
     }
