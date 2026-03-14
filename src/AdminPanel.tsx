@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "./AuthContext";
-import { UserPlus, Trash2, Shield, Users, Loader2, Check, X, Clock, UserCheck, Pencil, ShieldCheck, ShieldAlert, Megaphone, Plus, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, Eye, Sparkles, User, Guitar, Mic2, ClipboardList, Sliders, Wrench, ThumbsUp, FlaskConical } from "lucide-react";
+import { UserPlus, Trash2, Shield, Users, Loader2, Check, X, Clock, UserCheck, Pencil, ShieldCheck, ShieldAlert, Megaphone, Plus, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, Eye, Sparkles, User, Guitar, Mic2, ClipboardList, Sliders, Wrench, ThumbsUp, FlaskConical, Mail } from "lucide-react";
 import AutoTextarea from "./AutoTextarea";
 
 interface ApprovedUser {
@@ -134,6 +134,7 @@ export default function AdminPanel({
     const [newRole, setNewRole] = useState("member");
     const [adding, setAdding] = useState(false);
     const [approvingEmail, setApprovingEmail] = useState<string | null>(null);
+    const [isSendingBlast, setIsSendingBlast] = useState(false);
 
     // ── Role-edit state ──────────────────────────────────────────────────────
     const [editingRoleFor, setEditingRoleFor] = useState<string | null>(null);
@@ -351,6 +352,21 @@ export default function AdminPanel({
             onToast?.("error", "Failed to update role. Try again.");
         } finally {
             setSavingRole(false);
+        }
+    };
+
+    const handleWelcomeBlast = async () => {
+        if (isSendingBlast) return;
+        setIsSendingBlast(true);
+        try {
+            const res = await fetch("/api/welcome-blast", { method: "POST" });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed");
+            onToast?.("success", `🎉 Welcome email sent to ${data.sent} members!`);
+        } catch (err: any) {
+            onToast?.("error", err.message || "Failed to send welcome blast.");
+        } finally {
+            setIsSendingBlast(false);
         }
     };
 
@@ -652,9 +668,23 @@ export default function AdminPanel({
                         <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
                             <Users size={15} /> Approved Members
                         </h3>
-                        <span className="text-xs text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full">
-                            {users.length} member{users.length !== 1 ? "s" : ""}
-                        </span>
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full">
+                                {users.length} member{users.length !== 1 ? "s" : ""}
+                            </span>
+                            <button
+                                onClick={() => onConfirm
+                                    ? onConfirm("Send welcome email to ALL approved members?", handleWelcomeBlast)
+                                    : handleWelcomeBlast()}
+                                disabled={isSendingBlast || users.length === 0}
+                                title="Send welcome email to all members"
+                                className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-all"
+                            >
+                                {isSendingBlast
+                                    ? <><Loader2 size={12} className="animate-spin" />Sending…</>
+                                    : <><Mail size={12} />Welcome All</>}
+                            </button>
+                        </div>
                     </div>
 
                     {loading ? (

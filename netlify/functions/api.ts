@@ -129,6 +129,83 @@ async function sendScheduleEmail(
     }
 }
 
+// ── Welcome Email ─────────────────────────────────────────────────────────────
+async function sendWelcomeEmail(
+    email: string,
+    firstName: string,
+) {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) return;
+    try {
+        const resend = new Resend(apiKey);
+        const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#0f172a;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a;padding:32px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#1e293b;border-radius:16px;overflow:hidden;">
+        <!-- Header -->
+        <tr>
+          <td style="background:linear-gradient(135deg,#6d28d9,#4f46e5);padding:32px;text-align:center;">
+            <h1 style="color:#fff;margin:0;font-size:26px;font-weight:700;">🎵 WorshipFlow</h1>
+            <p style="color:#c4b5fd;margin:8px 0 0;font-size:14px;font-style:normal;">Glorify God In Every Flow</p>
+          </td>
+        </tr>
+        <!-- Body -->
+        <tr>
+          <td style="padding:32px;">
+            <p style="color:#f1f5f9;font-size:20px;font-weight:700;margin:0 0 4px;">Hi ${firstName}! 👋</p>
+            <p style="color:#94a3b8;font-size:14px;margin:0 0 24px;">Great news — your access to <strong style="color:#e2e8f0;">WorshipFlow</strong> has been approved!</p>
+
+            <p style="color:#64748b;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 12px;">Here's what you can do inside the app:</p>
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a;border-radius:12px;border:1px solid #334155;">
+              <tr><td style="padding:20px 24px;">
+                <p style="margin:0 0 10px;color:#e2e8f0;font-size:14px;">👤 See who's leading worship each service</p>
+                <p style="margin:0 0 10px;color:#e2e8f0;font-size:14px;">🎸 Check musician assignments and instruments</p>
+                <p style="margin:0 0 10px;color:#e2e8f0;font-size:14px;">🎵 View the song lineup for every service</p>
+                <p style="margin:0 0 10px;color:#e2e8f0;font-size:14px;">📝 Read special notes from the team</p>
+                <p style="margin:0;color:#e2e8f0;font-size:14px;">🔥 Stay updated on upcoming events</p>
+              </td></tr>
+            </table>
+
+            <p style="color:#94a3b8;font-size:14px;margin:24px 0 8px;">Whenever a new schedule is posted, you'll receive a notification email — so you'll always know what's coming up <strong style="color:#e2e8f0;">before Sunday arrives</strong>.</p>
+            <p style="color:#94a3b8;font-size:14px;margin:0 0 24px;">No more chasing updates in group chats! 🙌</p>
+
+            <!-- CTA -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+              <tr><td align="center">
+                <a href="https://worshipflow.dev" style="display:inline-block;background:linear-gradient(135deg,#6d28d9,#4f46e5);color:#fff;text-decoration:none;padding:12px 32px;border-radius:8px;font-size:14px;font-weight:600;">Open WorshipFlow →</a>
+              </td></tr>
+            </table>
+
+            <!-- Closing -->
+            <p style="color:#e2e8f0;font-size:14px;text-align:center;margin:0;">Blessings, The WorshipFlow Team 🎵</p>
+          </td>
+        </tr>
+        <!-- Footer -->
+        <tr>
+          <td style="padding:16px 32px;border-top:1px solid #334155;text-align:center;">
+            <p style="color:#475569;font-size:12px;margin:0;">WorshipFlow · worshipflow.dev · You're receiving this because you joined the worship team.</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+        await resend.emails.send({
+            from: "WorshipFlow <no-reply@worshipflow.dev>",
+            to: [email],
+            subject: "🎵 Welcome to WorshipFlow — You're In!",
+            html,
+        });
+    } catch (err) {
+        console.error("[Resend] Failed to send welcome email:", err);
+    }
+}
+
 function json(statusCode: number, body: unknown) {
     return {
         statusCode,
@@ -314,7 +391,30 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
         await firestore?.collection("approved_users").doc(email).set({ email, role, approvedAt: new Date().toISOString() });
         // Remove from pending once approved
         await firestore?.collection("pending_users").doc(email).delete().catch(() => { });
+        // Send auto-welcome email to the newly approved member
+        if (firestore) {
+            const pendingDoc = await firestore.collection("pending_users").doc(email).get().catch(() => null);
+            const pendingName = (pendingDoc?.data()?.name as string) || "";
+            const firstName = pendingName.split(" ")[0] || email.split("@")[0];
+            sendWelcomeEmail(email, firstName); // fire-and-forget
+        }
         return json(200, { success: true });
+    }
+
+    if (rawPath === "/welcome-blast" && method === "POST") {
+        if (!firestore) return json(500, { error: "DB unavailable" });
+        const snap = await firestore.collection("approved_users").get();
+        const sends: Promise<any>[] = [];
+        snap.forEach(doc => {
+            const em = doc.data().email as string | undefined;
+            const nm = doc.data().name as string | undefined;
+            if (em && em.includes("@")) {
+                const firstName = nm ? nm.split(" ")[0] : em.split("@")[0];
+                sends.push(sendWelcomeEmail(em, firstName));
+            }
+        });
+        await Promise.all(sends);
+        return json(200, { success: true, sent: sends.length });
     }
 
     if (rawPath === "/auth/request" && method === "POST") {
