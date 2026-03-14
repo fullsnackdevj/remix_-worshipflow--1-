@@ -921,13 +921,7 @@ Rules:
                 created_at: admin.firestore.FieldValue.serverTimestamp(),
                 updated_at: admin.firestore.FieldValue.serverTimestamp(),
             });
-            writeNotif(firestore, {
-                type: "new_song",
-                message: `${actorName} added a new song`,
-                subMessage: `🎵 "${toTitleCase(title)}" by ${toTitleCase(artist)}`,
-                actorName, actorPhoto, actorUserId, targetAudience: "non_member",
-                resourceId: docRef.id, resourceType: "song",
-            });
+// Bell notification skipped for new_song — not critical enough for team-wide alert
             return json(201, { id: docRef.id });
         } catch (err) {
             console.error(err);
@@ -1386,19 +1380,7 @@ Rules:
                 updatedAt: null,
             });
 
-            // Notify all team members
-            const typeLabel = type === "bug" ? "🐞 Bug" : type === "feature" ? "💡 Feature" : "📝 Note";
-            if (firestore) {
-                writeNotif(firestore, {
-                    type: "new_song",
-                    message: `${authorName || "Someone"} posted a ${typeLabel}`,
-                    subMessage: content.trim().slice(0, 80) + (content.trim().length > 80 ? "…" : ""),
-                    actorName: authorName || "Unknown",
-                    actorPhoto: authorPhoto || "",
-                    actorUserId: authorId,
-                    targetAudience: "all",
-                });
-            }
+// Bell notification skipped for team notes — not critical enough for team-wide alert
             return json(201, { id: ref?.id });
         } catch (e) { return json(500, { error: "Failed to create note" }); }
     }
