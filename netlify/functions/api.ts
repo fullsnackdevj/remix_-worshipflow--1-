@@ -1088,8 +1088,6 @@ Rules:
                 updated_at: admin.firestore.FieldValue.serverTimestamp(),
             });
             writeNotif(firestore, { type: "new_event", message: `${aN1} created a new event`, subMessage: `📅 ${eventName || "Event"} — ${dl1}`, actorName: aN1, actorPhoto: aP1, actorUserId: aU1, targetAudience: "all", resourceId: docRef.id, resourceType: "event", resourceDate: date });
-            // Send email notification to all team members
-            sendScheduleEmail(firestore, { action: "created", eventName: eventName || "", date, serviceType: serviceType || "sunday", worshipLeader, actorName: aN1, scheduleId: docRef.id });
             return json(201, { id: docRef.id });
         } catch (err) {
             console.error(err);
@@ -1122,8 +1120,6 @@ Rules:
                 const { actorName: aN2 = "Someone", actorPhoto: aP2 = "", actorUserId: aU2 = "" } = body;
                 const dl2 = new Date(date + "T00:00:00").toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
                 writeNotif(firestore, { type: "updated_event", message: `${aN2} updated an event`, subMessage: `📅 ${eventName || "Event"} — ${dl2}`, actorName: aN2, actorPhoto: aP2, actorUserId: aU2, targetAudience: "all", resourceId: id, resourceType: "event", resourceDate: date });
-                // Send email notification to all team members
-                sendScheduleEmail(firestore, { action: "updated", eventName: eventName || "", date, serviceType: serviceType || "sunday", worshipLeader, actorName: aN2, scheduleId: id });
                 return json(200, { success: true });
             } catch (err) {
                 console.error(err);
@@ -1141,6 +1137,49 @@ Rules:
             }
         }
     }
+
+    // ── POST /schedules/:id/notify — manual "Notify Team" email ──────────────
+    const notifyMatch = rawPath.match(/^\/schedules\/([^/]+)\/notify$/);
+    if (notifyMatch && method === "POST") {
+        const id = notifyMatch[1];
+        try {
+            const docSnap = await firestore.collection("schedules").doc(id).get();
+            if (!docSnap.exists) return json(404, { error: "Schedule not found" });
+            const ev = docSnap.data() as any;
+
+            // 24-hour cooldown guard
+            const lastNotified = ev.lastNotifiedAt?.toDate?.() as Date | undefined;
+            if (lastNotified) {
+                const hoursSince = (Date.now() - lastNotified.getTime()) / 3_600_000;
+                if (hoursSince < 24) {
+                    const at = lastNotified.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", hour12: true });
+                    return json(429, { error: `Team was already notified today at ${at}. Please wait 24 hours before notifying again.` });
+                }
+            }
+
+            const { actorName = "Someone" } = body;
+            await sendScheduleEmail(firestore, {
+                action: "created",
+                eventName: ev.eventName || "",
+                date: ev.date,
+                serviceType: ev.serviceType || "sunday",
+                worshipLeader: ev.worshipLeader ?? null,
+                actorName,
+                scheduleId: id,
+            });
+
+            // Record timestamp to enforce cooldown
+            await firestore.collection("schedules").doc(id).update({
+                lastNotifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+
+            return json(200, { success: true });
+        } catch (err) {
+            console.error("[notify]", err);
+            return json(500, { error: "Failed to send notification" });
+        }
+    }
+
     // ── TEAM NOTES ────────────────────────────────────────────────────────────
 
     // GET /notes

@@ -4,7 +4,7 @@ import AutoTextarea from "./AutoTextarea";
 import { Member, ScheduleMember, Schedule, Song, Tag } from "./types";
 import {
   ChevronLeft, ChevronRight, Plus, Calendar, List, X,
-  Copy, Pencil, Lock, Users, Sun, Music, BookOpen,
+  Copy, Pencil, Lock, Users, Sun, Music, BookOpen, Bell,
 } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -79,6 +79,7 @@ const [selectedScheduleDate, setSelectedScheduleDate] = useState<string | null>(
 const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
 const [schedPanelMode, setSchedPanelMode] = useState<"view" | "edit">("view");
 const [isSavingSchedule, setIsSavingSchedule] = useState(false);
+const [isNotifying, setIsNotifying] = useState(false);
 const [scheduleView, setScheduleView] = useState<"month" | "list">("month");
 const [calendarMonth, setCalendarMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
 // Edit form fields
@@ -317,6 +318,31 @@ const handleDeleteSchedule = () => {
         });
     }
   });
+};
+
+const handleNotifyTeam = async () => {
+  if (!editingExisting || isNotifying) return;
+  setIsNotifying(true);
+  try {
+    const cu = getAuth().currentUser;
+    const actorName = cu?.displayName || cu?.email?.split("@")[0] || user?.displayName || "Team Admin";
+    const res = await fetch(`/api/schedules/${editingExisting.id}/notify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ actorName }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to notify");
+    // Update local state so cooldown shows immediately
+    setAllSchedules(prev => prev.map(s =>
+      s.id === editingExisting.id ? { ...s, lastNotifiedAt: new Date().toISOString() } as any : s
+    ));
+    showToast("success", "📢 Team notified via email!");
+  } catch (err: any) {
+    showToast("error", err.message || "Could not send notification.");
+  } finally {
+    setIsNotifying(false);
+  }
 };
 
   // ── Fetch schedules on mount ──────────────────────────────────────────────
@@ -818,6 +844,37 @@ const handleDeleteSchedule = () => {
                     </div>
                   )}
                 </div>
+                {/* ── Notify Team button — Admin/Leader only, future events ── */}
+                {(isAdmin || isLeader) && !isDatePast && editingExisting && schedPanelMode === "view" && (() => {
+                  const lastNotifiedAt = (editingExisting as any).lastNotifiedAt;
+                  const lastDate = lastNotifiedAt ? new Date(lastNotifiedAt) : null;
+                  const hoursSince = lastDate ? (Date.now() - lastDate.getTime()) / 3_600_000 : 999;
+                  const onCooldown = hoursSince < 24;
+                  const lastLabel = lastDate
+                    ? lastDate.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", hour12: true })
+                    : null;
+                  return (
+                    <div className="mt-4 space-y-1.5">
+                      <button
+                        onClick={handleNotifyTeam}
+                        disabled={isNotifying || onCooldown}
+                        title={onCooldown ? `Already notified today at ${lastLabel} — wait 24h` : "Send schedule email to all team members"}
+                        className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                          onCooldown
+                            ? "bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed"
+                            : "bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white shadow-sm"
+                        }`}
+                      >
+                        {isNotifying
+                          ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Sending…</>
+                          : <><Bell size={15} />{onCooldown ? `Notified at ${lastLabel}` : "📢 Notify Team"}</>}
+                      </button>
+                      {onCooldown && (
+                        <p className="text-center text-[11px] text-gray-400">Next notification available in {Math.ceil(24 - hoursSince)}h</p>
+                      )}
+                    </div>
+                  );
+                })()}
                 {/* ── Add Another Event (view mode only, future dates) ── */}
                 {!isDatePast && (canWriteSchedule || leaderCanAddOnDate) && (
                   <button
