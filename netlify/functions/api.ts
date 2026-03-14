@@ -396,6 +396,42 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
         } catch (e) { return json(500, { error: "Could not load release notes" }); }
     }
 
+
+    // ── GET /api/lineup-listens?key=...&key=... — fetch listen data for track keys
+    if (rawPath === "/lineup-listens" && method === "GET") {
+        const keys = event.multiValueQueryStringParameters?.key ?? event.queryStringParameters?.key?.split(",") ?? [];
+        if (!keys.length) return json(200, {});
+        try {
+            const result: Record<string, any[]> = {};
+            await Promise.all(keys.map(async (k: string) => {
+                const snap = await firestore?.collection("lineupListens").doc(k).get();
+                result[k] = Array.isArray(snap?.data()?.listens) ? snap!.data()!.listens : [];
+            }));
+            return json(200, result);
+        } catch (e) { return json(500, { error: "Failed to fetch listens" }); }
+    }
+
+    // ── POST /api/lineup-listens — add or remove a listen entry
+    if (rawPath === "/lineup-listens" && method === "POST") {
+        const { key, action, entry, songId, songTitle, mood, eventName, eventDate } = body;
+        if (!key || !action || !entry?.userId) return json(400, { error: "Missing fields" });
+        try {
+            const ref = firestore?.collection("lineupListens").doc(key);
+            const snap = await ref?.get();
+            const current: any[] = Array.isArray(snap?.data()?.listens) ? snap!.data()!.listens : [];
+            let updated: any[];
+            if (action === "add") {
+                // Remove any existing entry for this user first, then add fresh
+                updated = [...current.filter((e: any) => e.userId !== entry.userId), entry];
+            } else {
+                // remove
+                updated = current.filter((e: any) => e.userId !== entry.userId);
+            }
+            await ref?.set({ songId, songTitle, mood, eventName, eventDate, listens: updated }, { merge: true });
+            return json(200, { success: true, count: updated.length });
+        } catch (e) { return json(500, { error: "Failed to update listen" }); }
+    }
+
     if (rawPath === "/broadcasts" && method === "POST") {
         const { type, title, message, bulletPoints, targetEmails } = body;
         if (!type || !title || !targetEmails) return json(400, { error: "Missing fields" });
