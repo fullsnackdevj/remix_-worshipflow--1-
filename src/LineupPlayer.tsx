@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { X, ChevronLeft, ChevronRight, Music, Sun, ListMusic, Check } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, Music, Sun, ListMusic, Check, RefreshCw } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface LineupTrack {
@@ -26,22 +26,26 @@ interface ListenEntry {
   listenedAt: string;
 }
 
-interface ListensMap {
-  [trackKey: string]: ListenEntry[];
+// Extend window for YT API
+declare global {
+  interface Window {
+    YT: any;
+    onYouTubeIframeAPIReady?: () => void;
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function trackKey(t: LineupTrack) { return `${t.eventDate}_${t.songId}_${t.mood}`; }
 
-function getEmbed(url: string): string {
+function extractVideoId(url: string): string {
   try {
     const u = new URL(url);
-    let id = "";
-    if (u.hostname === "youtu.be") id = u.pathname.slice(1);
-    else if (u.hostname.includes("youtube.com")) id = u.searchParams.get("v") ?? u.pathname.split("/").pop() ?? "";
-    if (id) return `https://www.youtube.com/embed/${id}?autoplay=1&rel=0&playsinline=1`;
+    if (u.hostname === "youtu.be") return u.pathname.slice(1).split("?")[0];
+    if (u.hostname.includes("youtube.com")) {
+      return u.searchParams.get("v") ?? u.pathname.split("/").filter(Boolean).pop() ?? "";
+    }
   } catch { /* noop */ }
-  return url;
+  return "";
 }
 
 function fmtDate(d: string) {
@@ -49,14 +53,12 @@ function fmtDate(d: string) {
   catch { return d; }
 }
 
-// ── Mood pill ─────────────────────────────────────────────────────────────────
 function MoodPill({ mood }: { mood: "joyful" | "solemn" }) {
   return mood === "joyful"
     ? <span className="flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400"><Sun size={8} />Joyful</span>
     : <span className="flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400"><Music size={8} />Solemn</span>;
 }
 
-// ── Avatar ────────────────────────────────────────────────────────────────────
 function Avatar({ name, photo, size = 18 }: { name: string; photo: string; size?: number }) {
   const [err, setErr] = useState(false);
   const init = (name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
@@ -68,7 +70,6 @@ function Avatar({ name, photo, size = 18 }: { name: string; photo: string; size?
         className="rounded-full bg-indigo-600 border-2 border-gray-800 flex items-center justify-center text-[8px] font-bold text-white shrink-0">{init}</div>;
 }
 
-// ── Listened-by summary ───────────────────────────────────────────────────────
 function ListenedBy({ entries, currentUserId }: { entries: ListenEntry[]; currentUserId: string }) {
   if (!entries.length) return null;
   const names = entries.map(e => e.userId === currentUserId ? "You" : e.name.split(" ")[0]);
@@ -98,39 +99,98 @@ interface Props {
 export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
   const [currentIdx, setCurrentIdx] = useState(0);
   const [mini, setMini] = useState(false);
-  const [listens, setListens] = useState<ListensMap>({});
+  const [listens, setListens] = useState<Record<string, ListenEntry[]>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
+  const [playerReady, setPlayerReady] = useState(false);
 
-  // KEY FIX: iframe ref — we NEVER remount the iframe. 
-  // We change its src imperatively to avoid any video restart.
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  // YouTube IFrame API player ref — this is what gives us onStateChange
+  const playerRef = useRef<any>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  // Use a stable unique ID for the player div
+  const playerDivId = useRef("lineup-yt-" + Math.random().toString(36).slice(2)).current;
 
   const current = tracks[currentIdx];
   const hasPrev = currentIdx > 0;
   const hasNext = currentIdx < tracks.length - 1;
 
-  // Update iframe src imperatively when track changes (never remount!)
+  // ── Create YT Player (once) ────────────────────────────────────────────────
   useEffect(() => {
-    if (iframeRef.current && current) {
-      iframeRef.current.src = getEmbed(current.videoUrl);
-    }
-  }, [currentIdx]); // Only idx change — NOT mini toggle
+    let pollInterval: ReturnType<typeof setInterval>;
 
-  // ── Fetch listens from API ─────────────────────────────────────────────────
+    const createPlayer = () => {
+      if (playerRef.current) return; // Already created
+      const videoId = extractVideoId(tracks[0]?.videoUrl ?? "");
+      if (!videoId || !document.getElementById(playerDivId)) return;
+
+      playerRef.current = new window.YT.Player(playerDivId, {
+        videoId,
+        playerVars: {
+          autoplay: 1,
+          playsinline: 1, // Stay inline on iOS (no forced fullscreen)
+          rel:  0,
+          modestbranding: 1,
+        },
+        events: {
+          onReady: () => setPlayerReady(true),
+          onStateChange: (event: { data: number }) => {
+            // 0 = ENDED — auto-advance and loop back to start
+            if (event.data === 0) {
+              setCurrentIdx(prev => {
+                const next = prev < tracks.length - 1 ? prev + 1 : 0;
+                return next;
+              });
+            }
+          },
+        },
+      });
+    };
+
+    // Inject the YT script if not already present
+    if (!document.querySelector('script[src*="youtube.com/iframe_api"]')) {
+      const script = document.createElement("script");
+      script.src = "https://www.youtube.com/iframe_api";
+      document.head.appendChild(script);
+    }
+
+    // Poll until window.YT.Player is ready (handles async script load)
+    if (window.YT?.Player) {
+      createPlayer();
+    } else {
+      pollInterval = setInterval(() => {
+        if (window.YT?.Player) {
+          clearInterval(pollInterval);
+          createPlayer();
+        }
+      }, 200);
+    }
+
+    return () => {
+      clearInterval(pollInterval);
+      playerRef.current?.destroy();
+      playerRef.current = null;
+    };
+  }, []); // Runs once on mount
+
+  // ── Load new video when currentIdx changes ────────────────────────────────
+  useEffect(() => {
+    if (!playerRef.current || !playerReady) return;
+    const videoId = extractVideoId(current?.videoUrl ?? "");
+    if (!videoId) return;
+    // loadVideoById auto-plays on desktop and mobile
+    playerRef.current.loadVideoById(videoId);
+  }, [currentIdx, playerReady]);
+
+  // ── Fetch listens ─────────────────────────────────────────────────────────
   const fetchListens = useCallback(async () => {
     const keys = tracks.map(trackKey);
     try {
       const res = await fetch("/api/lineup-listens?" + keys.map(k => `key=${encodeURIComponent(k)}`).join("&"));
-      if (res.ok) {
-        const data: Record<string, ListenEntry[]> = await res.json();
-        setListens(data);
-      }
+      if (res.ok) setListens(await res.json());
     } catch { /* noop */ }
   }, [tracks]);
 
   useEffect(() => {
     fetchListens();
-    // Poll every 15s for real-time feel without Firestore subscription complexity
     const timer = setInterval(fetchListens, 15000);
     return () => clearInterval(timer);
   }, [fetchListens]);
@@ -153,33 +213,17 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
       photo: currentUser.photo || "",
       listenedAt: new Date().toISOString(),
     };
-
-    // Optimistic update
     setSaving(prev => ({ ...prev, [key]: true }));
-    const optimistic = iListened
-      ? existing.filter(e => e.userId !== currentUser.uid)
-      : [...existing, entry];
+    const optimistic = iListened ? existing.filter(e => e.userId !== currentUser.uid) : [...existing, entry];
     setListens(prev => ({ ...prev, [key]: optimistic }));
-
     try {
       await fetch("/api/lineup-listens", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          key,
-          action: iListened ? "remove" : "add",
-          entry,
-          songId: track.songId,
-          songTitle: track.title,
-          mood: track.mood,
-          eventName: track.eventName,
-          eventDate: track.eventDate,
-        }),
+        body: JSON.stringify({ key, action: iListened ? "remove" : "add", entry, songId: track.songId, songTitle: track.title, mood: track.mood, eventName: track.eventName, eventDate: track.eventDate }),
       });
-      // Refresh from server to confirm
       await fetchListens();
     } catch {
-      // Revert on failure
       setListens(prev => ({ ...prev, [key]: existing }));
     } finally {
       setSaving(prev => ({ ...prev, [key]: false }));
@@ -190,7 +234,6 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
   const currentKey = trackKey(current);
   const currentEntries = listens[currentKey] ?? [];
 
-  // ── Listen button ─────────────────────────────────────────────────────────
   const ListenBtn = ({ track, compact = false }: { track: LineupTrack; compact?: boolean }) => {
     const key = trackKey(track);
     const iListened = (listens[key] ?? []).some(e => e.userId === currentUser.uid);
@@ -199,8 +242,7 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
       <button onClick={e => { e.stopPropagation(); toggleListened(track); }} disabled={busy}
         className={`flex items-center gap-1 rounded-full font-semibold shrink-0 transition-all
           ${compact ? "text-[10px] px-2 py-0.5" : "text-xs px-2.5 py-1"}
-          ${iListened
-            ? "bg-emerald-600/30 border border-emerald-500/50 text-emerald-400"
+          ${iListened ? "bg-emerald-600/30 border border-emerald-500/50 text-emerald-400"
             : "bg-white/8 border border-white/15 text-gray-400 hover:text-white hover:border-white/30"}
           ${busy ? "opacity-60 cursor-wait" : ""}`}>
         <Check size={compact ? 9 : 11} />
@@ -211,21 +253,18 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
 
   return (
     <>
-      {/* Backdrop — only in full mode. Click → minimize (keeps video playing!) */}
+      {/* Backdrop — full mode only, click to minimize */}
       {!mini && (
         <div className="fixed inset-0 z-[9998] bg-black/80 backdrop-blur-sm" onClick={() => setMini(true)} />
       )}
 
-      {/* ── Player shell — CSS transitions between mini and full ──────────────
-          The iframe NEVER leaves the DOM, so video keeps playing on minimize. */}
+      {/* ── Player shell — CSS only switch between mini/full ─────────────────
+          The YT player div NEVER unmounts so video keeps playing through mode switch */}
       <div
         className={`fixed z-[9999] bg-gray-900 shadow-2xl rounded-2xl overflow-hidden flex flex-col transition-all duration-300 ease-in-out ${
           mini ? "bottom-4 right-4 w-72" : ""
         }`}
-        style={mini
-          ? {}
-          : { top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: "min(95vw, 960px)", maxHeight: "90vh" }
-        }
+        style={mini ? {} : { top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: "min(95vw, 960px)", maxHeight: "90vh" }}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-2.5 bg-gray-950/80 border-b border-white/10 shrink-0">
@@ -235,9 +274,12 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
               {mini ? `${currentIdx + 1}/${tracks.length} · ${current.title}` : "Lineup Playlist"}
             </span>
             {!mini && <span className="text-xs text-white/40 shrink-0">· {tracks.length} song{tracks.length !== 1 ? "s" : ""}</span>}
+            {/* Loop indicator */}
+            <span className="flex items-center gap-0.5 text-[9px] text-indigo-400/70 font-semibold shrink-0">
+              <RefreshCw size={9} />loop
+            </span>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
-            {/* Minimize / Expand */}
             <button onClick={() => setMini(v => !v)}
               title={mini ? "Expand" : "Minimize — video keeps playing!"}
               className="p-1.5 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-colors">
@@ -260,24 +302,17 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
         </div>
 
         {/* Body */}
-        <div className={`flex min-h-0 ${mini ? "flex-col" : "flex-col md:flex-row"}`}
+        <div ref={containerRef} className={`flex min-h-0 ${mini ? "flex-col" : "flex-col md:flex-row"}`}
           style={mini ? {} : { maxHeight: "calc(90vh - 53px)" }}>
 
-          {/* ── Video column ─────────────────────────────────── */}
+          {/* Video column */}
           <div className="flex flex-col flex-shrink-0" style={mini ? {} : { flex: "1 1 0" }}>
-            {/* 16:9 iframe — NEVER remounts; src updated imperatively */}
+            {/* YT Player container — ALWAYS rendered, never unmounts */}
             <div className="relative w-full bg-black" style={{ paddingBottom: "56.25%" }}>
-              <iframe
-                ref={iframeRef}
-                src={getEmbed(current.videoUrl)}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-                className="absolute inset-0 w-full h-full border-0"
-                title={current.title}
-              />
+              <div id={playerDivId} className="absolute inset-0 w-full h-full" />
             </div>
 
-            {/* Controls bar */}
+            {/* Controls */}
             <div className="px-4 py-2.5 bg-gray-900 border-t border-white/10 shrink-0 space-y-2">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -300,8 +335,7 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
                   </button>
                 </div>
               </div>
-
-              {/* I've Listened row */}
+              {/* I've Listened */}
               <div className="flex items-center gap-3 pt-1.5 border-t border-white/8">
                 <ListenBtn track={current} compact={mini} />
                 <ListenedBy entries={currentEntries} currentUserId={currentUser.uid} />
@@ -309,7 +343,7 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
             </div>
           </div>
 
-          {/* ── Track list (hidden in mini) ──────────────────── */}
+          {/* Track list — hidden in mini */}
           {!mini && (
             <div className="w-full md:w-64 lg:w-72 shrink-0 flex flex-col border-t md:border-t-0 md:border-l border-white/10 overflow-y-auto">
               <div className="px-4 py-2.5 border-b border-white/10 bg-gray-950/40 shrink-0">
@@ -343,8 +377,7 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
                           <MoodPill mood={t.mood} />
                           <span role="button" onClick={e => { e.stopPropagation(); toggleListened(t); }}
                             className={`text-[9px] px-1.5 py-0.5 rounded-full border font-bold transition-all ${
-                              iListened
-                                ? "bg-emerald-600/25 border-emerald-500/40 text-emerald-400"
+                              iListened ? "bg-emerald-600/25 border-emerald-500/40 text-emerald-400"
                                 : "border-white/10 text-gray-500 hover:border-white/25 hover:text-gray-300"
                             }`}>
                             {iListened ? "✓" : "+"}
