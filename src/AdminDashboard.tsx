@@ -319,7 +319,7 @@ export default function AdminDashboard({
                     </div>
                 </div>
                 <div className="flex flex-col items-end gap-2 shrink-0">
-                    {/* ── Listen to Lineup button (admin only, shown only when tracks exist) */}
+                    {/* ── Listen to Lineup button — visible to all roles when lineup tracks exist */}
                     {onOpenLineup && (
                         <button
                             onClick={onOpenLineup}
