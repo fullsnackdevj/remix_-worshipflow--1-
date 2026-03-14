@@ -1214,7 +1214,7 @@ export default function App() {
           {!miniPlayer && (
             <div
               className="fixed inset-0 z-[9998] bg-black/80 backdrop-blur-sm"
-              onClick={closeVideo}
+              onClick={() => setMiniPlayer(true)}
             />
           )}
 
