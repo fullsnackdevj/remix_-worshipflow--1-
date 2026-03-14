@@ -27,7 +27,7 @@ const DatePicker    = lazy(() => import("./DatePicker"));
 
 import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, LayoutGrid, List, BookOpen, Mic2, Copy, Pencil, Shield, Mail, Bell, Guitar, Sliders, Palette, Lock, AlertTriangle, CheckCircle, BookMarked, HandMetal, Headphones, HelpCircle, Undo2, Redo2, FlaskConical } from "lucide-react";
 import { Song, Tag, Member, ScheduleMember, Schedule } from "./types";
-import LineupPlayer, { LineupTrack } from "./LineupPlayer";
+import LineupPlayer, { LineupTrack, CurrentUser } from "./LineupPlayer";
 
 
 // ── Member Role Constants ────────────────────────────────────────────────────
@@ -1310,6 +1310,7 @@ export default function App() {
       {lineupOpen && lineupTracks.length > 0 && (
         <LineupPlayer
           tracks={lineupTracks}
+          currentUser={{ uid: user?.uid ?? "", name: user?.displayName ?? user?.email ?? "Team Member", photo: user?.photoURL ?? "" } as CurrentUser}
           onClose={() => setLineupOpen(false)}
         />
       )}
