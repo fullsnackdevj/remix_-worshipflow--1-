@@ -27,6 +27,7 @@ const DatePicker    = lazy(() => import("./DatePicker"));
 
 import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, LayoutGrid, List, BookOpen, Mic2, Copy, Pencil, Shield, Mail, Bell, Guitar, Sliders, Palette, Lock, AlertTriangle, CheckCircle, BookMarked, HandMetal, Headphones, HelpCircle, Undo2, Redo2, FlaskConical } from "lucide-react";
 import { Song, Tag, Member, ScheduleMember, Schedule } from "./types";
+import LineupPlayer, { LineupTrack } from "./LineupPlayer";
 
 
 // ── Member Role Constants ────────────────────────────────────────────────────
@@ -436,6 +437,38 @@ export default function App() {
     } catch { /* noop */ }
     return [];
   });
+
+  // ── Lineup playlist player ────────────────────────────────────────────────
+  const [lineupOpen, setLineupOpen] = useState(false);
+
+  const lineupTracks = React.useMemo((): LineupTrack[] => {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const in7 = new Date(today); in7.setDate(today.getDate() + 7);
+    const relevant = allSchedules.filter(s => {
+      const sType = (s.serviceType ?? "").toLowerCase();
+      const eName = (s.eventName ?? "").toLowerCase();
+      if (!sType.includes("sunday") && !sType.includes("midweek") && !eName.includes("sunday") && !eName.includes("midweek")) return false;
+      try {
+        const d = new Date(s.date + "T00:00:00");
+        return d >= today && d <= in7;
+      } catch { return false; }
+    }).sort((a, b) => a.date.localeCompare(b.date));
+
+    const tracks: LineupTrack[] = [];
+    relevant.forEach(ev => {
+      if (ev.songLineup?.joyful) {
+        const song = allSongs.find(s => s.id === ev.songLineup!.joyful);
+        if (song?.video_url) tracks.push({ songId: song.id, title: song.title, artist: song.artist ?? "", videoUrl: song.video_url, mood: "joyful", eventName: ev.eventName ?? "Service", eventDate: ev.date, serviceType: ev.serviceType });
+      }
+      if (ev.songLineup?.solemn) {
+        const song = allSongs.find(s => s.id === ev.songLineup!.solemn);
+        if (song?.video_url) tracks.push({ songId: song.id, title: song.title, artist: song.artist ?? "", videoUrl: song.video_url, mood: "solemn", eventName: ev.eventName ?? "Service", eventDate: ev.date, serviceType: ev.serviceType });
+      }
+    });
+    return tracks;
+  }, [allSchedules, allSongs]);
+
+
 
   // ── Members shared state — seed from cache immediately for instant dashboard counts ──
   const [allMembers, setAllMembers] = useState<Member[]>(() => {
@@ -1083,6 +1116,8 @@ export default function App() {
                   pendingNavSongId={pendingNavSongId}
                   onPendingNavHandled={() => setPendingNavSongId(null)}
                   onOpenVideo={openVideo}
+                  onOpenLineup={() => setLineupOpen(true)}
+                  lineupTrackCount={lineupTracks.length}
                 />
               ) : null}
               </Suspense>
@@ -1267,6 +1302,16 @@ export default function App() {
             </div>
           </div>
         </>
+      )}
+
+      {/* ── Lineup Playlist Player ──────────────────────────────────────────
+           Lives at App root so it persists across ALL module navigations.
+      ─────────────────────────────────────────────────────────────────────── */}
+      {lineupOpen && lineupTracks.length > 0 && (
+        <LineupPlayer
+          tracks={lineupTracks}
+          onClose={() => setLineupOpen(false)}
+        />
       )}
 
     </div >

@@ -48,6 +48,8 @@ interface Props {
     songs: Song[]; members: Member[]; schedules: Schedule[]; notes: Note[];
     onNavigate: (view: "songs" | "members" | "schedule" | "admin") => void;
     canAddSong?: boolean; canWriteSchedule?: boolean; canAddMember?: boolean;
+  onOpenLineup?: () => void;
+  lineupTrackCount?: number;
 }
 
 // ── Role config — matches App.tsx ROLE_BADGE exactly ──────────────────────────
@@ -325,6 +327,7 @@ function BroadcastsCard({ broadcasts, loading, isAdmin, onNavigate }: {
 export default function Dashboard({
     isAdmin, userRole, userName, userPhoto, userEmail, userId, songs, members, schedules, notes, onNavigate,
     canAddSong = false, canWriteSchedule = false, canAddMember = false,
+    onOpenLineup, lineupTrackCount = 0,
 }: Props) {
     const [broadcasts, setBroadcasts] = useState<any[]>([]);
     const [pendingUsers, setPendingUsers] = useState<any[]>([]);
@@ -348,6 +351,7 @@ export default function Dashboard({
             onNavigate={onNavigate}
             broadcasts={broadcasts} pendingUsers={pendingUsers} loadingExtra={loadingExtra}
             canAddSong={canAddSong} canWriteSchedule={canWriteSchedule} canAddMember={canAddMember}
+            onOpenLineup={onOpenLineup} lineupTrackCount={lineupTrackCount}
         />
     );
 }

@@ -16,6 +16,8 @@ export interface DashboardViewProps {
   user: any;
   showToast: (type: string, msg: string) => void;
   setCurrentView: (view: string) => void;
+  onOpenLineup?: () => void;
+  lineupTrackCount?: number;
 }
 
 export default function DashboardView({
@@ -32,6 +34,8 @@ export default function DashboardView({
   user,
   showToast,
   setCurrentView,
+  onOpenLineup,
+  lineupTrackCount = 0,
 }: DashboardViewProps) {
   return authStatus === "loading" ? (
     /* Auth resolving — show a gentle skeleton so screen isn't blank */
@@ -68,6 +72,8 @@ export default function DashboardView({
       canAddSong={canAddSong}
       canWriteSchedule={canWriteSchedule}
       canAddMember={canAddMember}
+      onOpenLineup={onOpenLineup}
+      lineupTrackCount={lineupTrackCount}
     />
   );
 }

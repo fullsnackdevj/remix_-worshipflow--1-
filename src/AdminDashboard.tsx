@@ -6,7 +6,7 @@ import {
     Music, Users, Calendar, NotepadText, ChevronRight, Clock,
     Bug, Lightbulb, CheckCircle2, AlertCircle, Shield, Bell, UserCheck,
     AlertTriangle, CheckCheck, Megaphone, Plus, UserPlus, Zap, BarChart3,
-    TrendingUp, ArrowUpRight, Star, Mic2, BookOpen, Radio,
+    TrendingUp, ArrowUpRight, Star, Mic2, BookOpen, Radio, ListMusic,
 } from "lucide-react";
 
 // Member, ScheduleMember, Schedule are imported from ./types
@@ -20,6 +20,8 @@ interface Props {
     onNavigate: (view: "songs" | "members" | "schedule" | "admin") => void;
     broadcasts?: any[]; pendingUsers?: any[]; loadingExtra?: boolean;
     canAddSong?: boolean; canWriteSchedule?: boolean; canAddMember?: boolean;
+    onOpenLineup?: () => void;
+    lineupTrackCount?: number;
 }
 
 const ROLE_STYLE: Record<string, { label: string; bg: string; text: string; border: string; glow: string }> = {
@@ -254,6 +256,7 @@ export default function AdminDashboard({
     userName, userEmail, userId = "", songs, members, schedules, notes, onNavigate,
     broadcasts: broadcastsProp, pendingUsers: pendingUsersProp, loadingExtra = false,
     canAddSong, canWriteSchedule, canAddMember, userRole = "admin",
+    onOpenLineup, lineupTrackCount = 0,
 }: Props) {
     const broadcasts = broadcastsProp ?? [];
     const pendingUsers = pendingUsersProp ?? [];
@@ -311,6 +314,22 @@ export default function AdminDashboard({
                     </div>
                 </div>
                 <div className="flex flex-col items-end gap-2 shrink-0">
+                    {/* ── Listen to Lineup button (admin only, shown only when tracks exist) */}
+                    {onOpenLineup && (
+                        <button
+                            onClick={onOpenLineup}
+                            disabled={lineupTrackCount === 0}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+                                lineupTrackCount > 0
+                                    ? "bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40"
+                                    : "bg-gray-100 dark:bg-gray-700/60 text-gray-400 dark:text-gray-500 cursor-not-allowed"
+                            }`}
+                            title={lineupTrackCount === 0 ? "No upcoming service with a song lineup this week" : `Play ${lineupTrackCount} song${lineupTrackCount !== 1 ? "s" : ""} from this week's lineup`}
+                        >
+                            <ListMusic size={15} className={lineupTrackCount > 0 ? "text-white" : ""} />
+                            {lineupTrackCount > 0 ? `Listen to Lineup (${lineupTrackCount})` : "Listen to Lineup"}
+                        </button>
+                    )}
                     {(() => { const rs = ROLE_STYLE[userRole] ?? ROLE_STYLE.admin; return (
                         <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${rs.bg} border ${rs.border} ${rs.text}`}
                             style={{ boxShadow: rs.glow !== "none" ? `0 0 8px 2px ${rs.glow}` : undefined }}>
