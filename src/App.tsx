@@ -1028,6 +1028,8 @@ export default function App() {
                   user={user}
                   showToast={showToast}
                   setCurrentView={setCurrentView}
+                  onOpenLineup={() => setLineupOpen(true)}
+                  lineupTrackCount={lineupTracks.length}
                 />
               ) : null}
 
@@ -1116,8 +1118,6 @@ export default function App() {
                   pendingNavSongId={pendingNavSongId}
                   onPendingNavHandled={() => setPendingNavSongId(null)}
                   onOpenVideo={openVideo}
-                  onOpenLineup={() => setLineupOpen(true)}
-                  lineupTrackCount={lineupTracks.length}
                 />
               ) : null}
               </Suspense>
