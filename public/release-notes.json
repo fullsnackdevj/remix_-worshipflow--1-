@@ -1,8 +1,17 @@
 {
-    "title": "Mini Player & Lineup Updates",
-    "message": "Big quality-of-life updates dropped today — here's what's new:",
-    "updatedAt": "03-14-26 | 10:15 AM",
+    "title": "Email Notifications Are Live 🎉",
+    "message": "New this week — your team stays in the loop automatically:",
+    "updatedAt": "03-15-26 | 03:43 AM",
     "releases": [
+        {
+            "version": "March 15, 2026",
+            "highlights": [
+                "Welcome Email — Every new member now receives a personalized welcome email the moment their access is approved. No more manual announcements — it happens automatically.",
+                "📢 Notify Team Button — Admins and Leaders can now send a schedule notification email to the entire team directly from any event panel. A 24-hour cooldown prevents duplicate sends.",
+                "⚡ Instant Delivery — All emails now use batch sending, ensuring every member receives their email simultaneously with no delays or dropped messages.",
+                "▶ Mini Player Persistence — Videos minimized to the floating mini player now continue playing seamlessly as you navigate the app. Previously, switching tabs would interrupt playback."
+            ]
+        },
         {
             "version": "March 14, 2026",
             "highlights": [
