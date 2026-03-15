@@ -37,19 +37,35 @@ export default function VerseOfTheDay({ userId }: Props) {
     const [showInsight, setShowInsight] = useState(true);
     const [copyState, setCopyState] = useState<"idle" | "loading" | "done">("idle");
 
-    // ── Fetch a cross-reference verse text ──────────────────────────────────
-    // 1. Try our local VERSES array first (free, instant)
-    // 2. Fall back to bible-api.com (NLT not available there, uses KJV)
+    // ── Fetch a cross-reference verse text (NLT) ────────────────────────────
+    // 1. Try our local VERSES array first — already NLT, instant, free
+    // 2. Fall back to Gemini (GEMINI_API_KEY already configured in the app)
+    //    Ask specifically for NLT so the translation is always consistent
     const fetchCrossRefText = useCallback(async (ref: string): Promise<string> => {
-        const local = VERSES.find(v => v.ref === ref || ref.startsWith(v.ref));
+        const local = VERSES.find(v => v.ref === ref || v.ref.startsWith(ref) || ref.startsWith(v.ref));
         if (local) return local.text;
         try {
-            // bible-api.com uses URL-encoded ref, returns KJV by default
-            const encoded = encodeURIComponent(ref);
-            const res = await fetch(`https://bible-api.com/${encoded}?translation=web`);
+            const apiKey = (typeof process !== "undefined" && process.env?.GEMINI_API_KEY) || "";
+            if (!apiKey) return "";
+            const res = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        contents: [{
+                            parts: [{
+                                text: `Quote ONLY the exact NLT (New Living Translation) text of ${ref}. No commentary, no labels, no quotation marks — just the verse text itself.`,
+                            }],
+                        }],
+                        generationConfig: { temperature: 0, maxOutputTokens: 300 },
+                    }),
+                }
+            );
             if (!res.ok) return "";
             const data = await res.json();
-            return (data.text as string || "").replace(/\n/g, " ").trim();
+            const text: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+            return text.replace(/\n/g, " ").trim();
         } catch {
             return "";
         }
