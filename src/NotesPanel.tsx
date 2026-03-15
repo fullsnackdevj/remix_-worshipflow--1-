@@ -718,12 +718,9 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
             {/* Panel — centered, responsive */}
             {open && (
                 <div
-                    className={`fixed inset-x-0 top-[64px] bottom-0 sm:inset-x-auto sm:bottom-auto sm:absolute sm:top-full sm:mt-2 sm:left-auto sm:right-0 z-[200] bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700/60 sm:border sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden`}
-                    style={{
-                        // sm+ caps width and height; on mobile inset-x-0/bottom-0 wins over these
-                        width: showForm ? "min(680px, calc(100vw - 20px))" : "min(520px, calc(100vw - 20px))",
-                        maxHeight: showForm ? "min(760px, calc(100dvh - 80px))" : "min(600px, calc(100dvh - 90px))",
-                    }}
+                    className={`fixed inset-x-0 top-[64px] bottom-0 sm:bottom-auto sm:inset-x-auto sm:absolute sm:top-full sm:mt-2 sm:left-auto sm:right-0 z-[200] bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700/60 sm:border sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden ${
+                        showForm ? "sm:w-[680px] sm:max-h-[760px]" : "sm:w-[520px] sm:max-h-[600px]"
+                    }`}
                 >
                     {/* ── Header ── */}
                     <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/60 shrink-0">

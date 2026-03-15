@@ -911,8 +911,7 @@ export default function App() {
                   {/* Mobile backdrop */}
                   <div className="fixed inset-0 z-[199] sm:hidden" onClick={() => setNotifOpen(false)} />
                   <div
-                    className="fixed inset-x-0 top-[64px] bottom-0 sm:inset-x-auto sm:bottom-auto sm:absolute sm:top-full sm:mt-2 sm:left-auto sm:right-0 z-[200] bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 sm:border sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col"
-                    style={{ width: "min(370px, calc(100vw - 20px))" }}
+                    className="fixed inset-x-0 top-[64px] bottom-0 sm:bottom-auto sm:inset-x-auto sm:absolute sm:top-full sm:mt-2 sm:left-auto sm:right-0 z-[200] sm:w-[370px] bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 sm:border sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col"
                   >
                     {/* Header */}
                     <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700 shrink-0">
