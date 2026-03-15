@@ -224,7 +224,7 @@ export default function HelpPanel({ isAdmin }: HelpPanelProps) {
             {/* Panel */}
             {open && (
                 <div
-                    className="fixed top-[72px] left-1/2 -translate-x-1/2 sm:absolute sm:top-full sm:mt-2 sm:left-auto sm:translate-x-0 sm:right-0 z-[200] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700/60 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+                    className="fixed inset-x-0 top-[64px] bottom-0 sm:inset-x-auto sm:bottom-auto sm:absolute sm:top-full sm:mt-2 sm:left-auto sm:right-0 z-[200] bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700/60 sm:border sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col"
                     style={{
                         width: "min(460px, calc(100vw - 20px))",
                         maxHeight: "min(520px, calc(100dvh - 90px))",

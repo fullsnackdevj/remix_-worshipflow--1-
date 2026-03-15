@@ -718,8 +718,9 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
             {/* Panel — centered, responsive */}
             {open && (
                 <div
-                    className="fixed top-[72px] left-1/2 -translate-x-1/2 sm:absolute sm:top-full sm:mt-2 sm:left-auto sm:translate-x-0 sm:right-0 z-[200] bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700/60 rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+                    className={`fixed inset-x-0 top-[64px] bottom-0 sm:inset-x-auto sm:bottom-auto sm:absolute sm:top-full sm:mt-2 sm:left-auto sm:right-0 z-[200] bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700/60 sm:border sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden`}
                     style={{
+                        // sm+ caps width and height; on mobile inset-x-0/bottom-0 wins over these
                         width: showForm ? "min(680px, calc(100vw - 20px))" : "min(520px, calc(100vw - 20px))",
                         maxHeight: showForm ? "min(760px, calc(100dvh - 80px))" : "min(600px, calc(100dvh - 90px))",
                     }}
