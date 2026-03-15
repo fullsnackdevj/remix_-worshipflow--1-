@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { BookOpen, Heart, ChevronDown, ChevronUp } from "lucide-react";
+import React, { useState, useEffect, useCallback } from "react";
+import { BookOpen, Heart, ChevronDown, ChevronUp, Copy, Check, Loader2 } from "lucide-react";
 import { VERSES } from "./verseData";
 
 interface Props { userId: string; userName: string; userPhoto: string; }
@@ -35,6 +35,63 @@ export default function VerseOfTheDay({ userId }: Props) {
 
     const [reactions, setReactions] = useState<Record<string, string[]>>({});
     const [showInsight, setShowInsight] = useState(true);
+    const [copyState, setCopyState] = useState<"idle" | "loading" | "done">("idle");
+
+    // ── Fetch a cross-reference verse text ──────────────────────────────────
+    // 1. Try our local VERSES array first (free, instant)
+    // 2. Fall back to bible-api.com (NLT not available there, uses KJV)
+    const fetchCrossRefText = useCallback(async (ref: string): Promise<string> => {
+        const local = VERSES.find(v => v.ref === ref || ref.startsWith(v.ref));
+        if (local) return local.text;
+        try {
+            // bible-api.com uses URL-encoded ref, returns KJV by default
+            const encoded = encodeURIComponent(ref);
+            const res = await fetch(`https://bible-api.com/${encoded}?translation=web`);
+            if (!res.ok) return "";
+            const data = await res.json();
+            return (data.text as string || "").replace(/\n/g, " ").trim();
+        } catch {
+            return "";
+        }
+    }, []);
+
+    const copyVerse = useCallback(async () => {
+        if (copyState !== "idle") return;
+        setCopyState("loading");
+        try {
+            // Fetch all cross-ref texts in parallel
+            const crossTexts = await Promise.all(
+                verse.cross.map(async ref => ({ ref, text: await fetchCrossRefText(ref) }))
+            );
+
+            const dateStr = phNow().toLocaleDateString("en-PH", {
+                weekday: "long", year: "numeric", month: "long", day: "numeric",
+            });
+
+            const crossSection = crossTexts.length > 0
+                ? `CROSS REFERENCES:\n${crossTexts.map(({ ref, text }) =>
+                    text ? `${ref}\n${text}` : ref
+                ).join("\n\n")}`
+                : "";
+
+            const block = [
+                "VERSE OF THE DAY",
+                dateStr,
+                "",
+                `"${verse.text}"`,
+                `— ${verse.ref} (NLT)`,
+                "",
+                verse.insight ? `Insight:\n${verse.insight}` : "",
+                crossSection ? `\n${crossSection}` : "",
+            ].filter(Boolean).join("\n");
+
+            await navigator.clipboard.writeText(block.trim());
+            setCopyState("done");
+            setTimeout(() => setCopyState("idle"), 2500);
+        } catch {
+            setCopyState("idle");
+        }
+    }, [verse, copyState, fetchCrossRefText]);
 
     // Auto-refresh at PH midnight: check every 30s if the date has ticked over
     useEffect(() => {
@@ -89,9 +146,30 @@ export default function VerseOfTheDay({ userId }: Props) {
                     </div>
                     <span className="text-xs font-bold uppercase tracking-widest text-indigo-300">Verse of the Day</span>
                 </div>
-                <span className="text-[11px] text-indigo-400/70 font-medium">
-                    {new Date().toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric" })}
-                </span>
+                <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-indigo-400/70 font-medium">
+                        {new Date().toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric" })}
+                    </span>
+                    {/* Copy button */}
+                    <button
+                        onClick={copyVerse}
+                        disabled={copyState === "loading"}
+                        title={copyState === "done" ? "Copied!" : "Copy verse"}
+                        className={`flex items-center justify-center w-7 h-7 rounded-lg transition-all ${
+                            copyState === "done"
+                                ? "bg-green-500/20 text-green-400"
+                                : "bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 hover:text-indigo-200"
+                        } disabled:opacity-60`}
+                    >
+                        {copyState === "loading" ? (
+                            <Loader2 size={13} className="animate-spin" />
+                        ) : copyState === "done" ? (
+                            <Check size={13} />
+                        ) : (
+                            <Copy size={13} />
+                        )}
+                    </button>
+                </div>
             </div>
 
             {/* Verse */}
