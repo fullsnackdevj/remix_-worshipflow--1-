@@ -24,19 +24,23 @@
   <!-- Favicon -->
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
   <link rel="icon" type="image/png" sizes="192x192" href="/icon-192x192.png" />
+
+  <!-- DNS prefetch — resolves Firebase/Google hostnames before first API call -->
+  <link rel="dns-prefetch" href="https://firestore.googleapis.com" />
+  <link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com" />
+  <link rel="dns-prefetch" href="https://securetoken.googleapis.com" />
+  <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
 </head>
 
 <body>
   <div id="root"></div>
   <script type="module" src="/src/main.tsx"></script>
 
-  <!-- Register Service Worker -->
+  <!-- Register Service Worker (silent — no console noise in prod) -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
-          .then(reg => console.log('SW registered:', reg.scope))
-          .catch(err => console.error('SW error:', err));
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
       });
     }
   </script>

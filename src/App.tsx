@@ -22,8 +22,9 @@ const Playground    = lazy(() => import("./Playground"));
 const ScheduleView  = lazy(() => import("./ScheduleView"));
 const SongsView     = lazy(() => import("./SongsView"));
 const MembersView   = lazy(() => import("./MembersView"));
-const AutoTextarea  = lazy(() => import("./AutoTextarea"));
-const DatePicker    = lazy(() => import("./DatePicker"));
+// AutoTextarea & DatePicker are tiny UI primitives — import statically to avoid extra chunk round-trips
+import AutoTextarea from "./AutoTextarea";
+import DatePicker from "./DatePicker";
 
 import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, LayoutGrid, List, BookOpen, Mic2, Copy, Pencil, Shield, Mail, Bell, Guitar, Sliders, Palette, Lock, AlertTriangle, CheckCircle, BookMarked, HandMetal, Headphones, HelpCircle, Undo2, Redo2, FlaskConical } from "lucide-react";
 import { Song, Tag, Member, ScheduleMember, Schedule } from "./types";

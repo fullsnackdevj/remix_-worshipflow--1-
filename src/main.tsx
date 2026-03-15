@@ -12,7 +12,10 @@ import LoginPage from './LoginPage.tsx';
 import AccessDenied from './AccessDenied.tsx';
 import SplashScreen from './SplashScreen.tsx';
 
-const MIN_SPLASH_MS = 2000; // 2 seconds — enough for brand impression without feeling slow
+// Returning users skip the full splash — first visit gets brand impression, repeat visits feel instant
+const isReturning = (() => { try { return !!sessionStorage.getItem('wf_visited'); } catch { return false; } })();
+const MIN_SPLASH_MS = isReturning ? 400 : 1600;
+try { sessionStorage.setItem('wf_visited', '1'); } catch { /* noop */ }
 
 
 function Root() {
