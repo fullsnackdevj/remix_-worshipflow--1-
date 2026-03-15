@@ -96,7 +96,7 @@ export default function VerseOfTheDay({ userId }: Props) {
 
             {/* Verse */}
             <div className="px-5 pb-4">
-                <blockquote className="text-white text-sm sm:text-base font-medium leading-relaxed italic mb-2">
+                <blockquote className="text-white text-sm sm:text-base font-medium leading-relaxed mb-2">
                     "{verse.text}"
                 </blockquote>
                 <p className="text-indigo-300 text-xs font-bold tracking-wide">— {verse.ref} (NLT)</p>
