@@ -68,24 +68,35 @@ export default function VerseOfTheDay({ userId }: Props) {
                 weekday: "long", year: "numeric", month: "long", day: "numeric",
             });
 
-            const crossSection = crossTexts.length > 0
-                ? `CROSS REFERENCES:\n${crossTexts.map(({ ref, text }) =>
-                    text ? `${ref}\n${text}` : ref
-                ).join("\n\n")}`
-                : "";
+            // Build the copy text line-by-line so blank lines between sections are preserved
+            const lines: string[] = [];
 
-            const block = [
-                "VERSE OF THE DAY",
-                dateStr,
-                "",
-                `"${verse.text}"`,
-                `— ${verse.ref} (NLT)`,
-                "",
-                verse.insight ? `Insight:\n${verse.insight}` : "",
-                crossSection ? `\n${crossSection}` : "",
-            ].filter(Boolean).join("\n");
+            lines.push("VERSE OF THE DAY");
+            lines.push(dateStr);
+            lines.push(""); // blank line before verse
 
-            await navigator.clipboard.writeText(block.trim());
+            lines.push(`"${verse.text}"`);
+            lines.push(`— ${verse.ref} (NLT)`);
+
+            if (verse.insight) {
+                lines.push(""); // blank line before insight
+                lines.push("Insight:");
+                lines.push(verse.insight);
+            }
+
+            if (crossTexts.length > 0) {
+                lines.push(""); // blank line before cross refs header
+                lines.push("CROSS REFERENCES:");
+                crossTexts.forEach(({ ref, text }) => {
+                    lines.push(""); // blank line before each cross ref
+                    lines.push(ref);
+                    if (text) lines.push(text);
+                });
+            }
+
+            const block = lines.join("\n");
+
+            await navigator.clipboard.writeText(block);
             setCopyState("done");
             setTimeout(() => setCopyState("idle"), 2500);
         } catch {
