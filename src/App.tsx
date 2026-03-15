@@ -1080,7 +1080,7 @@ export default function App() {
                     message: msg,
                     confirmText: "Confirm",
                     confirmClass: "bg-red-600 hover:bg-red-700 text-white",
-                    onConfirm: onOk,
+                    onConfirm: () => { closeConfirm(); onOk(); },
                   })}
                 />
               ) : currentView === "members" ? (

@@ -138,18 +138,39 @@ interface NoteCardProps {
     userRole?: string;
     onEdit: (note: TeamNote) => void;
     onDelete: (id: string) => void;
-    onReact: (id: string, emoji: string) => void;
+    onReact: (id: string, emoji: string, updatedReactions: Record<string, string[]>) => void;
     onResolve: (id: string, resolved: boolean) => void;
     onRetype: (id: string, newType: string) => void;
 }
 
 function NoteCard({ note, userId, userRole, onEdit, onDelete, onReact, onResolve, onRetype }: NoteCardProps) {
     const [imgExpanded, setImgExpanded] = useState(false);
+    // ── Reactions: own local state (same pattern as VerseOfTheDay) so onSnapshot can never overwrite a mid-click reaction ──
+    const [reactions, setReactions] = useState<Record<string, string[]>>(note.reactions ?? {});
+    // Sync from parent ONLY when the note id changes (different note) — not on every re-render
+    const prevIdRef = React.useRef(note.id);
+    useEffect(() => {
+        if (note.id !== prevIdRef.current) {
+            prevIdRef.current = note.id;
+            setReactions(note.reactions ?? {});
+        }
+    }, [note.id, note.reactions]);
+
+    const toggleReaction = (emoji: string) => {
+        const updated = { ...reactions };
+        const users: string[] = updated[emoji] ?? [];
+        updated[emoji] = users.includes(userId)
+            ? users.filter(u => u !== userId)
+            : [...users, userId];
+        setReactions(updated);
+        onReact(note.id, emoji, updated);
+    };
+
     const cfg = typeConfig(note.type);
     const isAuthor = note.authorId === userId;
     const isAdmin = userRole === "admin" || userRole === "leader";
     const canResolve = (isAuthor || isAdmin) && (note.type === "bug" || note.type === "feature");
-    const totalReactions = Object.values(note.reactions || {}).reduce((s, arr) => s + arr.length, 0);
+    const totalReactions = (Object.values(reactions) as string[][]).reduce((s, arr) => s + arr.length, 0);
 
     return (
         <div className={`rounded-2xl border p-4 transition-all ${note.resolved ? "border-green-500/20 bg-green-500/5 dark:bg-green-900/5 opacity-80" : "border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/50"}`}>
@@ -209,7 +230,7 @@ function NoteCard({ note, userId, userRole, onEdit, onDelete, onReact, onResolve
             {/* Status Reactions */}
             <div className="flex flex-wrap items-center gap-1.5 mt-2">
                 {STATUS_REACTIONS.map(({ key, label, icon, activeColor }) => {
-                    const users = note.reactions?.[key] || [];
+                    const users = reactions[key] || [];
                     const reacted = users.includes(userId);
                     const tooltip = reacted
                         ? `Remove "${label}" reaction${users.length > 1 ? ` · ${users.length} people` : ""}`
@@ -217,7 +238,7 @@ function NoteCard({ note, userId, userRole, onEdit, onDelete, onReact, onResolve
                     return (
                         <button
                             key={key}
-                            onClick={() => onReact(note.id, key)}
+                            onClick={() => toggleReaction(key)}
                             title={tooltip}
                             aria-label={tooltip}
                             className={`group relative flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border transition-all select-none active:scale-95 ${reacted
@@ -295,6 +316,8 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
     const [trashNotes, setTrashNotes] = useState<TeamNote[]>([]);
     const [trashSelected, setTrashSelected] = useState<Set<string>>(new Set());
     const [trashLoading, setTrashLoading] = useState(false);
+    // ── Bug #4 fix: track trash count separately so badge shows without opening trash ──
+    const [trashCount, setTrashCount] = useState(0);
 
 
 
@@ -317,6 +340,8 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
     const videoRef = useRef<HTMLInputElement>(null);
     const panelRef = useRef<HTMLDivElement>(null);
     const textRef = useRef<HTMLTextAreaElement>(null);
+    // ── Bug #5 fix: ref for sort dropdown outside-click dismissal ──
+    const sortRef = useRef<HTMLDivElement>(null);
     // Tracks IDs removed optimistically — deletedIdsRef comes from the hook
 
 
@@ -330,11 +355,19 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
     };
     useEffect(() => {
         const handler = (e: MouseEvent) => {
-            if (open && panelRef.current && !panelRef.current.contains(e.target as Node)) { setOpen(false); closeForm(); }
+            // ── Bug #5 fix: close sort dropdown on outside click ──
+            if (showSort && sortRef.current && !sortRef.current.contains(e.target as Node)) {
+                setShowSort(false);
+            }
+            // ── Bug #6 fix: don't auto-close panel if user has unsaved note content ──
+            if (open && panelRef.current && !panelRef.current.contains(e.target as Node)) {
+                const hasDirtyForm = showForm && (fContent.trim().length > 0 || !!fImage || !!fVideoData);
+                if (!hasDirtyForm) { setOpen(false); closeForm(); }
+            }
         };
         document.addEventListener("mousedown", handler);
         return () => document.removeEventListener("mousedown", handler);
-    }, [open]);
+    }, [open, showSort, showForm, fContent, fImage, fVideoData]);
 
     // (fetchNotes is kept for trash-restore refresh — notes list itself is real-time)
     const fetchNotes = useCallback(async (silent = false) => {
@@ -347,6 +380,18 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
                     .map(n => ({ ...n, reactions: prev.find(p => p.id === n.id)?.reactions ?? n.reactions })));
         } catch { /* keep existing notes on error */ }
     }, [setNotes]);
+
+    // ── Bug #4 fix: lightweight trash count fetch (no full note data needed) ──
+    const fetchTrashCount = useCallback(async () => {
+        try {
+            const res = await fetch("/api/notes/trash");
+            const data = await res.json();
+            if (Array.isArray(data)) setTrashCount(data.length);
+        } catch { /* noop */ }
+    }, []);
+
+    // Fetch trash count on mount so badge shows immediately
+    useEffect(() => { fetchTrashCount(); }, [fetchTrashCount]);
 
     // No fetch-on-open needed — Firestore onSnapshot keeps notes live
     // No 60s poll needed — onSnapshot fires on every change
@@ -362,7 +407,7 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
     }, []);
 
     const openTrash = () => { setShowTrash(true); setTrashSelected(new Set()); fetchTrash(); };
-    const closeTrash = () => { setShowTrash(false); setTrashSelected(new Set()); };
+    const closeTrash = () => { setShowTrash(false); setTrashSelected(new Set()); fetchTrashCount(); };
 
     const toggleTrashSelect = (id: string) => setTrashSelected(prev => {
         const next = new Set(prev);
@@ -376,6 +421,7 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
     const restoreNote = async (id: string) => {
         deletedIdsRef.current.delete(id);
         setTrashNotes(prev => prev.filter(n => n.id !== id));
+        setTrashCount(prev => Math.max(0, prev - 1));
         try {
             const res = await fetch(`/api/notes/trash/restore/${id}`, { method: "POST" });
             if (!res.ok) throw new Error();
@@ -383,24 +429,28 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
             onToast?.("success", "Note restored successfully.");
         } catch {
             onToast?.("error", "Failed to restore note. Try again.");
-            fetchTrash(); // re-fetch to put it back if failed
+            fetchTrash();
+            setTrashCount(prev => prev + 1);
         }
     };
 
     const permanentlyDelete = async (id: string) => {
         setTrashNotes(prev => prev.filter(n => n.id !== id));
+        setTrashCount(prev => Math.max(0, prev - 1));
         try {
             const res = await fetch(`/api/notes/trash/${id}`, { method: "DELETE" });
             if (!res.ok) throw new Error();
         } catch {
             onToast?.("error", "Failed to delete note permanently.");
             fetchTrash();
+            setTrashCount(prev => prev + 1);
         }
     };
 
     const permanentlyDeleteSelected = async () => {
         const ids = Array.from(trashSelected);
         setTrashNotes(prev => prev.filter(n => !trashSelected.has(n.id)));
+        setTrashCount(prev => Math.max(0, prev - ids.length));
         setTrashSelected(new Set());
         try {
             const res = await fetch("/api/notes/trash", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) });
@@ -409,12 +459,14 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
         } catch {
             onToast?.("error", "Failed to delete selected notes.");
             fetchTrash();
+            fetchTrashCount();
         }
     };
 
     const emptyTrash = async () => {
         const ids = trashNotes.map(n => n.id);
         setTrashNotes([]);
+        setTrashCount(0);
         setTrashSelected(new Set());
         try {
             const res = await fetch("/api/notes/trash", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) });
@@ -423,6 +475,7 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
         } catch {
             onToast?.("error", "Failed to empty trash.");
             fetchTrash();
+            fetchTrashCount();
         }
     };
 
@@ -539,29 +592,29 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
         if (!note) return;
         deletedIdsRef.current.add(id);
         setNotes(prev => prev.filter(n => n.id !== id));
+        // ── Bug #4 fix: bump trash badge immediately ──
+        setTrashCount(prev => prev + 1);
         fetch(`/api/notes/${id}`, {
             method: "DELETE",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ authorId: userId, userRole }),
         }).then(res => {
             if (!res.ok) throw new Error();
+            // ── Bug #2 fix: clean up deletedIdsRef once server confirms ──
+            deletedIdsRef.current.delete(id);
         }).catch(() => {
             // Restore note to list if delete failed
             setNotes(prev => [note, ...prev]);
             deletedIdsRef.current.delete(id);
+            setTrashCount(prev => Math.max(0, prev - 1));
             onToast?.("error", "Failed to delete note. Try again.");
         });
     };
 
-    // ── Optimistic react — onSnapshot will confirm server state instantly ────────
-    const reactToNote = (id: string, emoji: string) => {
-        setNotes(prev => prev.map(n => {
-            if (n.id !== id) return n;
-            const reactions = { ...(n.reactions || {}) };
-            const users: string[] = reactions[emoji] || [];
-            reactions[emoji] = users.includes(userId) ? users.filter(u => u !== userId) : [...users, userId];
-            return { ...n, reactions };
-        }));
+    // ── Optimistic react — NoteCard owns its local reactions state now; we sync back here so filtering/counts stay correct ──
+    const reactToNote = (id: string, emoji: string, updatedReactions: Record<string, string[]>) => {
+        // Sync the parent notes array so counts in tabs (e.g. dismissed) stay accurate
+        setNotes(prev => prev.map(n => n.id === id ? { ...n, reactions: updatedReactions } : n));
         fetch(`/api/notes/${id}/react`, {
             method: "PATCH", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ userId, emoji }),
@@ -689,7 +742,8 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
                             {!showForm && !showTrash && (
                                 <button onClick={openTrash} title="Recently Deleted" className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all relative">
                                     <Archive size={15} />
-                                    {trashNotes.length > 0 && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-400" />}
+                                    {/* Bug #4 fix: use trashCount so badge appears even before trash is opened */}
+                                    {trashCount > 0 && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-400" />}
                                 </button>
                             )}
                             <button onClick={() => { setOpen(false); closeForm(); closeTrash(); }} className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all">
@@ -862,8 +916,8 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
                                      "All"}
                                 </button>
                             ))}
-                            {/* Sort */}
-                            <div className="relative ml-auto">
+                            {/* Sort — Bug #5 fix: sortRef enables outside-click close */}
+                            <div ref={sortRef} className="relative ml-auto">
                                 <button onClick={() => setShowSort(v => !v)} className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 px-2 py-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all">
                                     {SORT_LABELS[sort]} <ChevronDown size={11} />
                                 </button>

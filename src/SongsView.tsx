@@ -94,6 +94,13 @@ export default function SongsView({
   // ── Songs search & filter ─────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
+
+  // ── Debounce: sync searchQuery → debouncedQuery with 150ms delay ────────────
+  // Without this useEffect, debouncedQuery is always "" and search never filters.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(searchQuery), 150);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const filterDropdownRef = useRef<HTMLDivElement>(null);
@@ -335,9 +342,10 @@ export default function SongsView({
   const filteredSongs = useMemo(() => {
     let result = allSongs;
 
+    const q = debouncedQuery.trim().toLowerCase();
+
     // Text search across title, artist, lyrics, chords, and tags
-    if (debouncedQuery.trim()) {
-      const q = debouncedQuery.trim().toLowerCase();
+    if (q) {
       result = result.filter(song =>
         song.title?.toLowerCase().includes(q) ||
         song.artist?.toLowerCase().includes(q) ||
@@ -345,6 +353,19 @@ export default function SongsView({
         song.chords?.toLowerCase().includes(q) ||
         song.tags?.some((t: Tag) => t.name?.toLowerCase().includes(q))
       );
+
+      // ── Relevance ranking ─────────────────────────────────────────────
+      // Score: 4 = title starts with query, 3 = title contains query,
+      //        2 = artist contains query, 1 = tag/lyrics match only
+      const score = (song: any): number => {
+        const title = song.title?.toLowerCase() ?? "";
+        const artist = song.artist?.toLowerCase() ?? "";
+        if (title.startsWith(q)) return 4;
+        if (title.includes(q)) return 3;
+        if (artist.includes(q)) return 2;
+        return 1;
+      };
+      result = [...result].sort((a, b) => score(b) - score(a));
     }
 
     // Tag filters
@@ -357,8 +378,8 @@ export default function SongsView({
       );
     }
 
-    // Sort
-    if (recentlyAdded) {
+    // Sort by date only when no active text search (relevance takes precedence)
+    if (recentlyAdded && !q) {
       result = [...result].sort((a, b) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
