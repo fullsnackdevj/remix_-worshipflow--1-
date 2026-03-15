@@ -55,7 +55,7 @@ export default function VerseOfTheDay({ userId }: Props) {
                     body: JSON.stringify({
                         contents: [{
                             parts: [{
-                                text: `Quote ONLY the exact NLT (New Living Translation) text of ${ref}. No commentary, no labels, no quotation marks — just the verse text itself.`,
+                                text: `Quote ONLY the exact NIV (New International Version) text of ${ref}. No commentary, no labels, no quotation marks — just the verse text itself.`,
                             }],
                         }],
                         generationConfig: { temperature: 0, maxOutputTokens: 300 },
@@ -92,7 +92,7 @@ export default function VerseOfTheDay({ userId }: Props) {
             lines.push(""); // blank line before verse
 
             lines.push(`"${verse.text}"`);
-            lines.push(`— ${verse.ref} (NLT)`);
+            lines.push(`— ${verse.ref} (NIV)`);
 
             if (verse.insight) {
                 lines.push(""); // blank line before insight
@@ -204,7 +204,7 @@ export default function VerseOfTheDay({ userId }: Props) {
                 <blockquote className="text-white text-sm sm:text-base font-medium leading-relaxed mb-2">
                     "{verse.text}"
                 </blockquote>
-                <p className="text-indigo-300 text-xs font-bold tracking-wide">— {verse.ref} (NLT)</p>
+                <p className="text-indigo-300 text-xs font-bold tracking-wide">— {verse.ref} (NIV)</p>
             </div>
 
             {/* Insight toggle */}
