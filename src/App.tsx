@@ -4,7 +4,7 @@ import { useAuth } from "./AuthContext";
 import { getAuth } from "firebase/auth";
 import { usePushNotifications } from "./usePushNotifications";
 import { useRealtimeNotifications } from "./useRealtimeNotifications";
-import { useTheme } from "./ThemeContext";
+
 
 // ── Lightweight always-loaded components ────────────────────────────────────
 import BroadcastOverlay from "./BroadcastOverlay";
@@ -256,7 +256,7 @@ export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "playground" | "admin">("dashboard");
   const { isAdmin, userRole, user, status: authStatus } = useAuth();
-  const { theme: uiTheme, cycleTheme: cycleUiTheme } = useTheme();
+
 
   // Dashboard is the default landing for all roles — no redirect needed.
 
@@ -875,22 +875,7 @@ export default function App() {
             </h1>
           </div>
           <div className="flex items-center gap-2">
-            {/* 🎨 Theme Toggle — admin only */}
-            {isAdmin && (() => {
-              const dots:   Record<string, string> = { default: "#6366f1", nordvpn: "#FF6B7A", glass: "#a78bfa" };
-              const labels: Record<string, string> = { default: "Def", nordvpn: "Nord", glass: "Glass" };
-              const next:   Record<string, string> = { default: "nordvpn", nordvpn: "glass", glass: "default" };
-              return (
-                <button
-                  onClick={cycleUiTheme}
-                  title={`${labels[uiTheme]} theme → click for ${labels[next[uiTheme]]}`}
-                  className="relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700/50 transition-colors text-[10px] font-bold tracking-wide uppercase"
-                >
-                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: dots[uiTheme] }} />
-                  {labels[uiTheme]}
-                </button>
-              );
-            })()}
+
 
             {/* Notification Bell */}
             {/* Team Notes */}
