@@ -27,7 +27,10 @@ async function sendScheduleEmail(
         eventName: string;
         date: string;
         serviceType: string;
-        worshipLeader?: { name: string } | null;
+        worshipLeader?: { name: string; role?: string } | null;
+        backupSingers?: { name: string; role?: string }[];
+        musicians?: { name: string; role?: string }[];
+        songLineup?: { joyful?: string; solemn?: string } | null;
         actorName: string;
         scheduleId: string;
     }
@@ -89,6 +92,9 @@ async function sendScheduleEmail(
                     </td>
                   </tr>
                   ${opts.worshipLeader ? `<tr><td style="padding:8px 0;border-top:1px solid #1e293b;"><span style="color:#64748b;font-size:13px;">🎤 Worship Leader</span><p style="margin:2px 0 0;color:#e2e8f0;font-size:14px;">${opts.worshipLeader.name}</p></td></tr>` : ""}
+                  ${opts.backupSingers && opts.backupSingers.length > 0 ? `<tr><td style="padding:8px 0;border-top:1px solid #1e293b;"><span style="color:#64748b;font-size:13px;">🎙️ Backup Singers</span>${opts.backupSingers.map(m => `<p style="margin:2px 0 0;color:#e2e8f0;font-size:14px;">${m.name}${m.role ? ` <span style="color:#7c3aed;font-size:12px;">(${m.role})</span>` : ""}</p>`).join("")}</td></tr>` : ""}
+                  ${opts.musicians && opts.musicians.length > 0 ? `<tr><td style="padding:8px 0;border-top:1px solid #1e293b;"><span style="color:#64748b;font-size:13px;">🎸 Musicians</span>${opts.musicians.map(m => `<p style="margin:2px 0 0;color:#e2e8f0;font-size:14px;">${m.name}${m.role ? ` <span style="color:#10b981;font-size:12px;">(${m.role})</span>` : ""}</p>`).join("")}</td></tr>` : ""}
+                  ${opts.songLineup && (opts.songLineup.solemn || opts.songLineup.joyful) ? `<tr><td style="padding:8px 0;border-top:1px solid #1e293b;"><span style="color:#64748b;font-size:13px;">🎵 Song Lineup</span>${opts.songLineup.solemn ? `<p style="margin:2px 0 0;color:#e2e8f0;font-size:14px;"><span style="color:#8b5cf6;font-size:11px;font-weight:700;text-transform:uppercase;">Solemn</span> ${opts.songLineup.solemn}</p>` : ""}${opts.songLineup.joyful ? `<p style="margin:4px 0 0;color:#e2e8f0;font-size:14px;"><span style="color:#10b981;font-size:11px;font-weight:700;text-transform:uppercase;">Joyful</span> ${opts.songLineup.joyful}</p>` : ""}</td></tr>` : ""}
                 </table>
               </td></tr>
             </table>
@@ -1315,6 +1321,9 @@ Rules:
                 date: ev.date,
                 serviceType: ev.serviceType || "sunday",
                 worshipLeader: ev.worshipLeader ?? null,
+                backupSingers: ev.backupSingers ?? [],
+                musicians: ev.musicians ?? [],
+                songLineup: ev.songLineup ?? null,
                 actorName,
                 scheduleId: id,
             });
