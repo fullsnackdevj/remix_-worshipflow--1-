@@ -125,11 +125,23 @@ function MetricTile({ label, value, sub, iconBg, icon, onClick }: {
 function NextServiceTile({ ev, songs, members, myMemberId, onClick }: {
     ev: Schedule | null; songs: Song[]; members: Member[]; myMemberId: string | null; onClick: () => void;
 }) {
-    const getLivePhoto = useCallback((id: string, fb?: string) => {
-        const m = members.find(mem => mem.id === id);
-        const u = m?.photo ?? fb ?? "";
-        return u.startsWith("http") ? u : "";
+    // Resolve the best available photo for a ScheduleMember.
+    // Priority: directPhoto (stored on record) → by Firestore doc ID → by full name → by first name
+    const resolvePhoto = useCallback((m: { memberId?: string; name?: string; photo?: string }): string => {
+        const direct = m.photo?.startsWith("http") ? m.photo : "";
+        if (direct) return direct;
+        const byId   = m.memberId ? members.find(mem => mem.id === m.memberId) : undefined;
+        if (byId?.photo?.startsWith("http")) return byId.photo;
+        const lower  = (m.name ?? "").toLowerCase().trim();
+        const byFull = members.find(mem => mem.name?.toLowerCase().trim() === lower);
+        if (byFull?.photo?.startsWith("http")) return byFull.photo;
+        // Partial: match by first word of name (less reliable but better than nothing)
+        const first  = lower.split(" ")[0];
+        const byFirst = first ? members.find(mem => mem.name?.toLowerCase().startsWith(first)) : undefined;
+        if (byFirst?.photo?.startsWith("http")) return byFirst.photo;
+        return "";
     }, [members]);
+
 
     if (!ev) return (
         <Tile className="p-6 flex flex-col gap-3 h-full" onClick={onClick}>
@@ -220,11 +232,7 @@ function NextServiceTile({ ev, songs, members, myMemberId, onClick }: {
                             ...(ev.backupSingers ?? []).slice(0, 1),
                             ...(ev.assignments ?? []).flatMap(a => a.members).slice(0, 2),
                         ].filter(Boolean).map((m, i) => {
-                            const directPhoto = m!.photo?.startsWith("http") ? m!.photo : "";
-                            const byId = members.find(mem => mem.id === m!.memberId);
-                            const byName = members.find(mem => mem.name?.toLowerCase() === m!.name?.toLowerCase());
-                            const resolved = directPhoto || byId?.photo || byName?.photo || "";
-                            const photo = resolved.startsWith("http") ? resolved : "";
+                            const photo = resolvePhoto(m!);
                             const initials = (m!.name || "?")[0].toUpperCase();
                             return photo ? (
                                 <img key={i} src={photo} alt={m!.name}
