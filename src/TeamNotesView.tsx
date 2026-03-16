@@ -67,6 +67,15 @@ function NoteCard({
   const isAuthor = note.authorId === userId;
   const isAdmin  = userRole === "admin" || userRole === "leader";
   const cfg      = catConfig(note.category);
+  const [expanded, setExpanded] = useState(false);
+  const bodyRef = React.useRef<HTMLParagraphElement>(null);
+  const [isOverflowing, setIsOverflowing] = useState(false);
+
+  // Check if text overflows the collapsed max-height
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (el) setIsOverflowing(el.scrollHeight > el.clientHeight + 2);
+  }, [note.body]);
 
   return (
     <div className={`group relative rounded-2xl border transition-all hover:shadow-md ${
@@ -110,7 +119,24 @@ function NoteCard({
         <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-1.5 leading-snug">{note.title}</h3>
 
         {/* Body */}
-        <p className="text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap break-words leading-relaxed">{note.body}</p>
+        <p
+          ref={bodyRef}
+          className={`text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap break-words leading-relaxed transition-all ${
+            expanded ? "overflow-y-auto max-h-96" : "overflow-hidden max-h-48"
+          }`}
+          style={{ scrollbarWidth: "thin" }}
+        >
+          {note.body}
+        </p>
+        {/* Show more / less toggle */}
+        {(isOverflowing || expanded) && (
+          <button
+            onClick={() => setExpanded(v => !v)}
+            className="mt-1.5 text-xs font-semibold text-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
+          >
+            {expanded ? "Show less ↑" : "Show more ↓"}
+          </button>
+        )}
 
         {/* Action row */}
         <div className="flex items-center justify-end gap-1 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700/50 opacity-0 group-hover:opacity-100 transition-opacity">
