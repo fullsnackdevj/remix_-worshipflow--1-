@@ -377,8 +377,8 @@ const handleNotifyTeam = async () => {
   });
 
   return (
+    <>
     <div className="max-w-7xl mx-auto">
-      {/* ── Scheduling Header ── */}
       <div className="flex flex-col gap-2 mb-4">
         {/* Row 1: centered month navigation */}
         <div className="flex items-center justify-center gap-2">
@@ -887,99 +887,7 @@ const handleNotifyTeam = async () => {
                       {onCooldown && (
                         <p className="text-center text-[11px] text-gray-400">Next notification available in {Math.ceil(24 - hoursSince)}h</p>
                       )}
-                      {/* ── Email Preview Modal ── */}
-                      {showEmailPreview && (() => {
-                        const dateLabel = new Date((editingExisting as any).date + "T00:00:00").toLocaleDateString("en", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
-                        const st = (editingExisting as any).serviceType || "sunday";
-                        const serviceLabel = st === "sunday" ? "Sunday Service" : st === "special" ? "Special Event" : st === "midweek" ? "Mid-Week Service" : st.charAt(0).toUpperCase() + st.slice(1);
-                        return (
-                          <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4" onClick={() => setShowEmailPreview(false)}>
-                            <div className="relative w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl shadow-2xl" onClick={e => e.stopPropagation()}>
-                              {/* Close */}
-                              <button onClick={() => setShowEmailPreview(false)} className="absolute top-3 right-3 z-10 w-7 h-7 flex items-center justify-center rounded-full bg-gray-700/80 text-gray-300 hover:text-white hover:bg-gray-600 transition-all">
-                                <X size={14} />
-                              </button>
-                              {/* Label */}
-                              <div className="bg-gray-900 rounded-t-2xl px-4 py-2 border-b border-gray-700 flex items-center gap-2">
-                                <Eye size={13} className="text-indigo-400" />
-                                <span className="text-xs font-semibold text-indigo-400 tracking-wide">Email Preview — what your team will receive</span>
-                              </div>
-                              {/* Email body replica */}
-                              <div style={{ background: "#0f172a", fontFamily: "'Segoe UI', Arial, sans-serif", padding: "32px 24px" }}>
-                                <div style={{ background: "#1e293b", borderRadius: 16, overflow: "hidden", maxWidth: 480, margin: "0 auto" }}>
-                                  {/* Header */}
-                                  <div style={{ background: "linear-gradient(135deg,#6d28d9,#4f46e5)", padding: "28px 32px", textAlign: "center" }}>
-                                    <div style={{ fontSize: 36, marginBottom: 6 }}>🎵</div>
-                                    <div style={{ color: "#fff", fontSize: 22, fontWeight: 700 }}>WorshipFlow</div>
-                                    <div style={{ color: "#c4b5fd", fontSize: 13, marginTop: 6 }}>Team Schedule Update</div>
-                                  </div>
-                                  {/* Body */}
-                                  <div style={{ padding: "28px 28px 20px" }}>
-                                    <p style={{ color: "#94a3b8", fontSize: 14, margin: "0 0 20px" }}>
-                                      🎉 <strong style={{ color: "#e2e8f0" }}>You</strong> has created a new event.
-                                    </p>
-                                    {/* Event card */}
-                                    <div style={{ background: "#0f172a", borderRadius: 12, border: "1px solid #334155", padding: "20px 20px" }}>
-                                      <div style={{ fontSize: 11, color: "#6366f1", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>{serviceLabel}</div>
-                                      <div style={{ color: "#f1f5f9", fontSize: 18, fontWeight: 700, marginBottom: 16 }}>{editSchedEventName || "Worship Service"}</div>
-                                      {/* Date */}
-                                      <div style={{ paddingTop: 10, paddingBottom: 10, borderTop: "1px solid #1e293b" }}>
-                                        <div style={{ color: "#64748b", fontSize: 12 }}>📅 Date</div>
-                                        <div style={{ color: "#e2e8f0", fontSize: 13, marginTop: 2 }}>{dateLabel}</div>
-                                      </div>
-                                      {/* Worship Leader */}
-                                      {editSchedWorshipLeader && (
-                                        <div style={{ paddingTop: 10, paddingBottom: 10, borderTop: "1px solid #1e293b" }}>
-                                          <div style={{ color: "#64748b", fontSize: 12 }}>🎤 Worship Leader</div>
-                                          <div style={{ color: "#e2e8f0", fontSize: 13, marginTop: 2 }}>{editSchedWorshipLeader.name}</div>
-                                        </div>
-                                      )}
-                                      {/* Backup Singers */}
-                                      {editSchedBackupSingers.length > 0 && (
-                                        <div style={{ paddingTop: 10, paddingBottom: 10, borderTop: "1px solid #1e293b" }}>
-                                          <div style={{ color: "#64748b", fontSize: 12 }}>🎙️ Backup Singers</div>
-                                          {editSchedBackupSingers.map((m, i) => (
-                                            <div key={i} style={{ color: "#e2e8f0", fontSize: 13, marginTop: 2 }}>
-                                              {m.name} {m.role && <span style={{ color: "#7c3aed", fontSize: 11 }}>({m.role})</span>}
-                                            </div>
-                                          ))}
-                                        </div>
-                                      )}
-                                      {/* Musicians */}
-                                      {editSchedMusicians.length > 0 && (
-                                        <div style={{ paddingTop: 10, paddingBottom: 10, borderTop: "1px solid #1e293b" }}>
-                                          <div style={{ color: "#64748b", fontSize: 12 }}>🎸 Musicians</div>
-                                          {editSchedMusicians.map((m, i) => (
-                                            <div key={i} style={{ color: "#e2e8f0", fontSize: 13, marginTop: 2 }}>
-                                              {m.name} {m.role && <span style={{ color: "#10b981", fontSize: 11 }}>({m.role})</span>}
-                                            </div>
-                                          ))}
-                                        </div>
-                                      )}
-                                      {/* Song Lineup */}
-                                      {(sSongPreview || jSongPreview) && (
-                                        <div style={{ paddingTop: 10, paddingBottom: 10, borderTop: "1px solid #1e293b" }}>
-                                          <div style={{ color: "#64748b", fontSize: 12 }}>🎵 Song Lineup</div>
-                                          {sSongPreview && <div style={{ color: "#e2e8f0", fontSize: 13, marginTop: 2 }}><span style={{ color: "#8b5cf6", fontSize: 10, fontWeight: 700, textTransform: "uppercase" }}>Solemn</span> {sSongPreview.title}</div>}
-                                          {jSongPreview && <div style={{ color: "#e2e8f0", fontSize: 13, marginTop: 4 }}><span style={{ color: "#10b981", fontSize: 10, fontWeight: 700, textTransform: "uppercase" }}>Joyful</span> {jSongPreview.title}</div>}
-                                        </div>
-                                      )}
-                                    </div>
-                                    {/* CTA */}
-                                    <div style={{ textAlign: "center", marginTop: 20 }}>
-                                      <div style={{ display: "inline-block", background: "linear-gradient(135deg,#6d28d9,#4f46e5)", color: "#fff", padding: "10px 28px", borderRadius: 8, fontSize: 13, fontWeight: 600 }}>View Schedule →</div>
-                                    </div>
-                                  </div>
-                                  {/* Footer */}
-                                  <div style={{ padding: "12px 28px", borderTop: "1px solid #334155", textAlign: "center" }}>
-                                    <div style={{ color: "#475569", fontSize: 11 }}>WorshipFlow · worshipflow.dev · You're receiving this because you're part of the worship team.</div>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })()}
+
                     </div>
                   );
                 })()}
@@ -1425,5 +1333,116 @@ const handleNotifyTeam = async () => {
         })()}
       </div>
     </div>
+
+    {/* ── Email Preview Modal — rendered at root so it truly covers the full screen ── */}
+    {showEmailPreview && editingExisting && (() => {
+      const _ev = editingExisting as any;
+      const dateLabel = new Date(_ev.date + "T00:00:00").toLocaleDateString("en", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+      const st = _ev.serviceType || "sunday";
+      const serviceLabel = st === "sunday" ? "Sunday Service" : st === "special" ? "Special Event" : st === "midweek" ? "Mid-Week Service" : st.charAt(0).toUpperCase() + st.slice(1);
+      const jSong = allSongs.find(sg => sg.id === editSchedSongLineup.joyful);
+      const sSong = allSongs.find(sg => sg.id === editSchedSongLineup.solemn);
+      return (
+        <div
+          className="fixed inset-0 z-[600] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
+          onClick={() => setShowEmailPreview(false)}
+        >
+          <div
+            className="relative w-full max-w-[480px] max-h-[90dvh] flex flex-col rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/10"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* ─ Sticky top bar ─ */}
+            <div className="flex-shrink-0 flex items-center justify-between bg-gray-900 border-b border-white/10 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <Eye size={14} className="text-indigo-400" />
+                <span className="text-xs font-semibold text-indigo-400 tracking-wide">Email Preview</span>
+                <span className="text-xs text-gray-500">— what your team will receive</span>
+              </div>
+              <button
+                onClick={() => setShowEmailPreview(false)}
+                className="w-7 h-7 flex items-center justify-center rounded-full bg-gray-700 hover:bg-gray-600 text-gray-300 hover:text-white transition-all"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            {/* ─ Scrollable email body ─ */}
+            <div className="overflow-y-auto" style={{ background: "#0f172a", fontFamily: "'Segoe UI', Arial, sans-serif" }}>
+              <div style={{ padding: "24px 16px" }}>
+                <div style={{ background: "#1e293b", borderRadius: 14, overflow: "hidden", margin: "0 auto" }}>
+                  {/* Header gradient */}
+                  <div style={{ background: "linear-gradient(135deg,#6d28d9,#4f46e5)", padding: "24px 20px", textAlign: "center" }}>
+                    <div style={{ fontSize: 34, marginBottom: 6 }}>🎵</div>
+                    <div style={{ color: "#fff", fontSize: 20, fontWeight: 700 }}>WorshipFlow</div>
+                    <div style={{ color: "#c4b5fd", fontSize: 12, marginTop: 5 }}>Team Schedule Update</div>
+                  </div>
+                  {/* Body */}
+                  <div style={{ padding: "20px 20px 16px" }}>
+                    <p style={{ color: "#94a3b8", fontSize: 13, margin: "0 0 16px", lineHeight: 1.5 }}>
+                      🎉 <strong style={{ color: "#e2e8f0" }}>You</strong> has created a new event.
+                    </p>
+                    {/* Event card */}
+                    <div style={{ background: "#0f172a", borderRadius: 10, border: "1px solid #334155", padding: "16px" }}>
+                      <div style={{ fontSize: 10, color: "#6366f1", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 3 }}>{serviceLabel}</div>
+                      <div style={{ color: "#f1f5f9", fontSize: 16, fontWeight: 700, marginBottom: 14 }}>{editSchedEventName || "Worship Service"}</div>
+                      {/* Date */}
+                      <div style={{ paddingTop: 10, paddingBottom: 10, borderTop: "1px solid #1e293b" }}>
+                        <div style={{ color: "#64748b", fontSize: 11 }}>📅 Date</div>
+                        <div style={{ color: "#e2e8f0", fontSize: 13, marginTop: 3 }}>{dateLabel}</div>
+                      </div>
+                      {/* Worship Leader */}
+                      {editSchedWorshipLeader && (
+                        <div style={{ paddingTop: 10, paddingBottom: 10, borderTop: "1px solid #1e293b" }}>
+                          <div style={{ color: "#64748b", fontSize: 11 }}>🎤 Worship Leader</div>
+                          <div style={{ color: "#e2e8f0", fontSize: 13, marginTop: 3 }}>{editSchedWorshipLeader.name}</div>
+                        </div>
+                      )}
+                      {/* Backup Singers */}
+                      {editSchedBackupSingers.length > 0 && (
+                        <div style={{ paddingTop: 10, paddingBottom: 10, borderTop: "1px solid #1e293b" }}>
+                          <div style={{ color: "#64748b", fontSize: 11 }}>🎙️ Backup Singers</div>
+                          {editSchedBackupSingers.map((m, i) => (
+                            <div key={i} style={{ color: "#e2e8f0", fontSize: 13, marginTop: 3 }}>
+                              {m.name}{m.role ? <span style={{ color: "#7c3aed", fontSize: 11, marginLeft: 4 }}>({m.role})</span> : null}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {/* Musicians */}
+                      {editSchedMusicians.length > 0 && (
+                        <div style={{ paddingTop: 10, paddingBottom: 10, borderTop: "1px solid #1e293b" }}>
+                          <div style={{ color: "#64748b", fontSize: 11 }}>🎸 Musicians</div>
+                          {editSchedMusicians.map((m, i) => (
+                            <div key={i} style={{ color: "#e2e8f0", fontSize: 13, marginTop: 3 }}>
+                              {m.name}{m.role ? <span style={{ color: "#10b981", fontSize: 11, marginLeft: 4 }}>({m.role})</span> : null}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {/* Song Lineup */}
+                      {(sSong || jSong) && (
+                        <div style={{ paddingTop: 10, paddingBottom: 10, borderTop: "1px solid #1e293b" }}>
+                          <div style={{ color: "#64748b", fontSize: 11 }}>🎵 Song Lineup</div>
+                          {sSong && <div style={{ color: "#e2e8f0", fontSize: 13, marginTop: 3 }}><span style={{ color: "#8b5cf6", fontSize: 10, fontWeight: 700, textTransform: "uppercase", marginRight: 4 }}>Solemn</span>{sSong.title}</div>}
+                          {jSong && <div style={{ color: "#e2e8f0", fontSize: 13, marginTop: 4 }}><span style={{ color: "#10b981", fontSize: 10, fontWeight: 700, textTransform: "uppercase", marginRight: 4 }}>Joyful</span>{jSong.title}</div>}
+                        </div>
+                      )}
+                    </div>
+                    {/* CTA */}
+                    <div style={{ textAlign: "center", marginTop: 18 }}>
+                      <div style={{ display: "inline-block", background: "linear-gradient(135deg,#6d28d9,#4f46e5)", color: "#fff", padding: "10px 28px", borderRadius: 8, fontSize: 13, fontWeight: 600 }}>View Schedule →</div>
+                    </div>
+                  </div>
+                  {/* Footer */}
+                  <div style={{ padding: "12px 20px", borderTop: "1px solid #334155", textAlign: "center" }}>
+                    <div style={{ color: "#475569", fontSize: 10 }}>WorshipFlow · worshipflow.dev · You're receiving this because you're part of the worship team.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    })()}
+    </>
   );
 }
