@@ -105,6 +105,51 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
   // Track whether this is a mobile/tablet device — used for autoplay workaround
   const isMobile = useRef(/Mobi|Android|iPhone|iPad|iPod|Tablet/i.test(navigator.userAgent)).current;
 
+  // ── Drag state (mini mode only) ────────────────────────────────────────────
+  //  pos: { x, y } = left/top in px
+  const MINI_W = 288; // w-72
+  const MINI_H = 220; // approx height — clamping uses this
+  const initPos = () => ({
+    x: Math.max(0, window.innerWidth  - MINI_W - 16),
+    y: Math.max(0, window.innerHeight - MINI_H - 16),
+  });
+  const [pos, setPos] = useState<{ x: number; y: number }>(initPos);
+  const dragRef = useRef<{ dragging: boolean; startPX: number; startPY: number; startX: number; startY: number }>({
+    dragging: false, startPX: 0, startPY: 0, startX: 0, startY: 0,
+  });
+  const miniShellRef = useRef<HTMLDivElement>(null);
+
+  // Re-init position when switching to mini so it doesn't jump to 0,0
+  const prevMini = useRef(false);
+  useEffect(() => {
+    if (mini && !prevMini.current) {
+      setPos(initPos());
+    }
+    prevMini.current = mini;
+  }, [mini]);
+
+  const onDragStart = (e: React.PointerEvent<HTMLDivElement>) => {
+    // Only drag from the header bar, and only in mini mode
+    if (!mini) return;
+    // Don't start drag if user clicked a button inside the header
+    if ((e.target as HTMLElement).closest("button")) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragRef.current = { dragging: true, startPX: e.clientX, startPY: e.clientY, startX: pos.x, startY: pos.y };
+  };
+
+  const onDragMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragRef.current.dragging) return;
+    const dx = e.clientX - dragRef.current.startPX;
+    const dy = e.clientY - dragRef.current.startPY;
+    const shellH = miniShellRef.current?.offsetHeight ?? MINI_H;
+    const newX = Math.max(0, Math.min(window.innerWidth  - MINI_W, dragRef.current.startX + dx));
+    const newY = Math.max(0, Math.min(window.innerHeight - shellH,  dragRef.current.startY + dy));
+    setPos({ x: newX, y: newY });
+  };
+
+  const onDragEnd = () => { dragRef.current.dragging = false; };
+
+  // ── YouTube IFrame API refs ─────────────────────────────────────────────────
   // YouTube IFrame API player ref — this is what gives us onStateChange
   const playerRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -285,16 +330,29 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
         <div className="fixed inset-0 z-[9998] bg-black/80 backdrop-blur-sm" onClick={() => setMini(true)} />
       )}
 
-      {/* ── Player shell — CSS only switch between mini/full ─────────────────
-          The YT player div NEVER unmounts so video keeps playing through mode switch */}
+      {/* ── Player shell ──────────────────────────────────────────────────────
+          Mini mode: freely draggable via pointer events.
+          Full mode: centered overlay — drag state is ignored. */}
       <div
-        className={`fixed z-[9999] bg-gray-900 shadow-2xl rounded-2xl overflow-hidden flex flex-col transition-all duration-300 ease-in-out ${
-          mini ? "bottom-4 right-4 w-72" : ""
+        ref={miniShellRef}
+        className={`fixed z-[9999] bg-gray-900 shadow-2xl rounded-2xl overflow-hidden flex flex-col transition-[width,max-height,border-radius] duration-300 ease-in-out ${
+          mini ? "w-72" : ""
         }`}
-        style={mini ? {} : { top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: "min(95vw, 960px)", maxHeight: "90vh" }}
+        style={
+          mini
+            ? { left: pos.x, top: pos.y }
+            : { top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: "min(95vw, 960px)", maxHeight: "90vh" }
+        }
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-2.5 bg-gray-950/80 border-b border-white/10 shrink-0">
+        {/* Header — drag handle in mini mode */}
+        <div
+          className="flex items-center justify-between px-4 py-2.5 bg-gray-950/80 border-b border-white/10 shrink-0"
+          style={mini ? { cursor: dragRef.current.dragging ? "grabbing" : "grab", userSelect: "none" } : {}}
+          onPointerDown={onDragStart}
+          onPointerMove={onDragMove}
+          onPointerUp={onDragEnd}
+          onPointerCancel={onDragEnd}
+        >
           <div className="flex items-center gap-2 min-w-0">
             <ListMusic size={mini ? 12 : 15} className="text-indigo-400 shrink-0" />
             <span className={`font-bold text-white truncate ${mini ? "text-xs" : "text-sm"}`}>
