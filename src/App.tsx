@@ -336,6 +336,8 @@ export default function App() {
       setPendingDeepLinkEventDate(resourceDate);
     } else if (type === "access_request") {
       setCurrentView("admin");
+    } else if (type === "team_note") {
+      setCurrentView("team-notes");
     }
   };
 
@@ -364,7 +366,7 @@ export default function App() {
   };
 
   const notifIcon: Record<string, React.ReactNode> = {
-    new_song: <Music size={14} />, new_event: <Calendar size={14} />, updated_event: <Pencil size={14} />, access_request: <Bell size={14} />,
+    new_song: <Music size={14} />, new_event: <Calendar size={14} />, updated_event: <Pencil size={14} />, access_request: <Bell size={14} />, team_note: <NotebookPen size={14} />,
   };
   // ── Role-based permission flags ───────────────────────────────────────────
   // All flags use effectiveRole so QA Specialist simulation works correctly

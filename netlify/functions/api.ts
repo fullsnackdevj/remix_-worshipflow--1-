@@ -1558,6 +1558,23 @@ Rules:
                 title, body: noteBody, category: category || "general",
                 pinned: false, createdAt: new Date().toISOString(),
             });
+            // ── Notify everyone in the bell ───────────────────────────────────────
+            const categoryLabels: Record<string, string> = {
+                meeting: "Meeting Recap", announcement: "Announcement",
+                decision: "Decision", general: "General Note",
+            };
+            const catLabel = categoryLabels[category] ?? "Note";
+            await writeNotif(firestore, {
+                type: "team_note",
+                message: `${authorName || "Someone"} posted a Team Note`,
+                subMessage: `[${catLabel}] ${title}`,
+                actorName: authorName || "Unknown",
+                actorPhoto: authorPhoto || "",
+                actorUserId: authorId,
+                targetAudience: "all",
+                resourceId: ref.id,
+                resourceType: "team_note",
+            });
             return json(200, { id: ref.id });
         } catch (e) { return json(500, { error: "Failed to create team note" }); }
     }
