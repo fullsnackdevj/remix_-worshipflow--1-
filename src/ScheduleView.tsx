@@ -4,7 +4,7 @@ import AutoTextarea from "./AutoTextarea";
 import { Member, ScheduleMember, Schedule, Song, Tag } from "./types";
 import {
   ChevronLeft, ChevronRight, Plus, Calendar, List, X,
-  Copy, Pencil, Lock, Users, Sun, Music, BookOpen, Bell,
+  Copy, Pencil, Lock, Users, Sun, Music, BookOpen, Bell, Eye,
 } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -80,6 +80,7 @@ const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
 const [schedPanelMode, setSchedPanelMode] = useState<"view" | "edit">("view");
 const [isSavingSchedule, setIsSavingSchedule] = useState(false);
 const [isNotifying, setIsNotifying] = useState(false);
+const [showEmailPreview, setShowEmailPreview] = useState(false);
 const [scheduleView, setScheduleView] = useState<"month" | "list">("month");
 const [calendarMonth, setCalendarMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
 // Edit form fields
@@ -853,25 +854,132 @@ const handleNotifyTeam = async () => {
                   const lastLabel = lastDate
                     ? lastDate.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", hour12: true })
                     : null;
+                  // Build song title labels for preview
+                  const jSongPreview = allSongs.find(sg => sg.id === editSchedSongLineup.joyful);
+                  const sSongPreview = allSongs.find(sg => sg.id === editSchedSongLineup.solemn);
                   return (
                     <div className="mt-4 space-y-1.5">
-                      <button
-                        onClick={handleNotifyTeam}
-                        disabled={isNotifying || onCooldown}
-                        title={onCooldown ? `Already notified today at ${lastLabel} — wait 24h` : "Send schedule email to all team members"}
-                        className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-                          onCooldown
-                            ? "bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed"
-                            : "bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white shadow-sm"
-                        }`}
-                      >
-                        {isNotifying
-                          ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Sending…</>
-                          : <><Bell size={15} />{onCooldown ? `Notified at ${lastLabel}` : "📢 Notify Team"}</>}
-                      </button>
+                      <div className="flex gap-2">
+                        {/* ── Email Preview button ── */}
+                        <button
+                          onClick={() => setShowEmailPreview(true)}
+                          title="Preview email before sending"
+                          className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-semibold border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-400 transition-all bg-white dark:bg-gray-700/50"
+                        >
+                          <Eye size={15} />
+                        </button>
+                        {/* ── Notify Team button ── */}
+                        <button
+                          onClick={handleNotifyTeam}
+                          disabled={isNotifying || onCooldown}
+                          title={onCooldown ? `Already notified today at ${lastLabel} — wait 24h` : "Send schedule email to all team members"}
+                          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                            onCooldown
+                              ? "bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed"
+                              : "bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white shadow-sm"
+                          }`}
+                        >
+                          {isNotifying
+                            ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Sending…</>
+                            : <><Bell size={15} />{onCooldown ? `Notified at ${lastLabel}` : "📢 Notify Team"}</>}
+                        </button>
+                      </div>
                       {onCooldown && (
                         <p className="text-center text-[11px] text-gray-400">Next notification available in {Math.ceil(24 - hoursSince)}h</p>
                       )}
+                      {/* ── Email Preview Modal ── */}
+                      {showEmailPreview && (() => {
+                        const dateLabel = new Date((editingExisting as any).date + "T00:00:00").toLocaleDateString("en", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+                        const st = (editingExisting as any).serviceType || "sunday";
+                        const serviceLabel = st === "sunday" ? "Sunday Service" : st === "special" ? "Special Event" : st === "midweek" ? "Mid-Week Service" : st.charAt(0).toUpperCase() + st.slice(1);
+                        return (
+                          <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4" onClick={() => setShowEmailPreview(false)}>
+                            <div className="relative w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl shadow-2xl" onClick={e => e.stopPropagation()}>
+                              {/* Close */}
+                              <button onClick={() => setShowEmailPreview(false)} className="absolute top-3 right-3 z-10 w-7 h-7 flex items-center justify-center rounded-full bg-gray-700/80 text-gray-300 hover:text-white hover:bg-gray-600 transition-all">
+                                <X size={14} />
+                              </button>
+                              {/* Label */}
+                              <div className="bg-gray-900 rounded-t-2xl px-4 py-2 border-b border-gray-700 flex items-center gap-2">
+                                <Eye size={13} className="text-indigo-400" />
+                                <span className="text-xs font-semibold text-indigo-400 tracking-wide">Email Preview — what your team will receive</span>
+                              </div>
+                              {/* Email body replica */}
+                              <div style={{ background: "#0f172a", fontFamily: "'Segoe UI', Arial, sans-serif", padding: "32px 24px" }}>
+                                <div style={{ background: "#1e293b", borderRadius: 16, overflow: "hidden", maxWidth: 480, margin: "0 auto" }}>
+                                  {/* Header */}
+                                  <div style={{ background: "linear-gradient(135deg,#6d28d9,#4f46e5)", padding: "28px 32px", textAlign: "center" }}>
+                                    <div style={{ fontSize: 36, marginBottom: 6 }}>🎵</div>
+                                    <div style={{ color: "#fff", fontSize: 22, fontWeight: 700 }}>WorshipFlow</div>
+                                    <div style={{ color: "#c4b5fd", fontSize: 13, marginTop: 6 }}>Team Schedule Update</div>
+                                  </div>
+                                  {/* Body */}
+                                  <div style={{ padding: "28px 28px 20px" }}>
+                                    <p style={{ color: "#94a3b8", fontSize: 14, margin: "0 0 20px" }}>
+                                      🎉 <strong style={{ color: "#e2e8f0" }}>You</strong> has created a new event.
+                                    </p>
+                                    {/* Event card */}
+                                    <div style={{ background: "#0f172a", borderRadius: 12, border: "1px solid #334155", padding: "20px 20px" }}>
+                                      <div style={{ fontSize: 11, color: "#6366f1", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>{serviceLabel}</div>
+                                      <div style={{ color: "#f1f5f9", fontSize: 18, fontWeight: 700, marginBottom: 16 }}>{editSchedEventName || "Worship Service"}</div>
+                                      {/* Date */}
+                                      <div style={{ paddingTop: 10, paddingBottom: 10, borderTop: "1px solid #1e293b" }}>
+                                        <div style={{ color: "#64748b", fontSize: 12 }}>📅 Date</div>
+                                        <div style={{ color: "#e2e8f0", fontSize: 13, marginTop: 2 }}>{dateLabel}</div>
+                                      </div>
+                                      {/* Worship Leader */}
+                                      {editSchedWorshipLeader && (
+                                        <div style={{ paddingTop: 10, paddingBottom: 10, borderTop: "1px solid #1e293b" }}>
+                                          <div style={{ color: "#64748b", fontSize: 12 }}>🎤 Worship Leader</div>
+                                          <div style={{ color: "#e2e8f0", fontSize: 13, marginTop: 2 }}>{editSchedWorshipLeader.name}</div>
+                                        </div>
+                                      )}
+                                      {/* Backup Singers */}
+                                      {editSchedBackupSingers.length > 0 && (
+                                        <div style={{ paddingTop: 10, paddingBottom: 10, borderTop: "1px solid #1e293b" }}>
+                                          <div style={{ color: "#64748b", fontSize: 12 }}>🎙️ Backup Singers</div>
+                                          {editSchedBackupSingers.map((m, i) => (
+                                            <div key={i} style={{ color: "#e2e8f0", fontSize: 13, marginTop: 2 }}>
+                                              {m.name} {m.role && <span style={{ color: "#7c3aed", fontSize: 11 }}>({m.role})</span>}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                      {/* Musicians */}
+                                      {editSchedMusicians.length > 0 && (
+                                        <div style={{ paddingTop: 10, paddingBottom: 10, borderTop: "1px solid #1e293b" }}>
+                                          <div style={{ color: "#64748b", fontSize: 12 }}>🎸 Musicians</div>
+                                          {editSchedMusicians.map((m, i) => (
+                                            <div key={i} style={{ color: "#e2e8f0", fontSize: 13, marginTop: 2 }}>
+                                              {m.name} {m.role && <span style={{ color: "#10b981", fontSize: 11 }}>({m.role})</span>}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                      {/* Song Lineup */}
+                                      {(sSongPreview || jSongPreview) && (
+                                        <div style={{ paddingTop: 10, paddingBottom: 10, borderTop: "1px solid #1e293b" }}>
+                                          <div style={{ color: "#64748b", fontSize: 12 }}>🎵 Song Lineup</div>
+                                          {sSongPreview && <div style={{ color: "#e2e8f0", fontSize: 13, marginTop: 2 }}><span style={{ color: "#8b5cf6", fontSize: 10, fontWeight: 700, textTransform: "uppercase" }}>Solemn</span> {sSongPreview.title}</div>}
+                                          {jSongPreview && <div style={{ color: "#e2e8f0", fontSize: 13, marginTop: 4 }}><span style={{ color: "#10b981", fontSize: 10, fontWeight: 700, textTransform: "uppercase" }}>Joyful</span> {jSongPreview.title}</div>}
+                                        </div>
+                                      )}
+                                    </div>
+                                    {/* CTA */}
+                                    <div style={{ textAlign: "center", marginTop: 20 }}>
+                                      <div style={{ display: "inline-block", background: "linear-gradient(135deg,#6d28d9,#4f46e5)", color: "#fff", padding: "10px 28px", borderRadius: 8, fontSize: 13, fontWeight: 600 }}>View Schedule →</div>
+                                    </div>
+                                  </div>
+                                  {/* Footer */}
+                                  <div style={{ padding: "12px 28px", borderTop: "1px solid #334155", textAlign: "center" }}>
+                                    <div style={{ color: "#475569", fontSize: 11 }}>WorshipFlow · worshipflow.dev · You're receiving this because you're part of the worship team.</div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   );
                 })()}
