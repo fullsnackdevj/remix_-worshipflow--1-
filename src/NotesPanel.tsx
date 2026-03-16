@@ -704,7 +704,7 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
             {/* Trigger */}
             <button
                 onClick={handleToggle}
-                title="Team Notes"
+                title="Feedback"
                 className={`relative p-2 rounded-xl transition-all active:scale-90 ${open ? "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400" : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
             >
                 <NotepadText size={18} />
@@ -726,7 +726,7 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
                     <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/60 shrink-0">
                         <div className="flex items-center gap-2">
                             <NotepadText size={15} className="text-indigo-500" />
-                            <span className="text-sm font-bold text-gray-900 dark:text-white">Team Notes</span>
+                            <span className="text-sm font-bold text-gray-900 dark:text-white">Feedback</span>
                             {activeCount > 0 && (
                                 <span className="text-[10px] font-bold bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded-full">{activeCount}</span>
                             )}

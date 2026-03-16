@@ -1533,7 +1533,71 @@ Rules:
         } catch (e) { return json(500, { error: "Failed to reclassify note" }); }
     }
 
+    // ─── TEAM NOTES (meeting recaps) ─────────────────────────────────────────
+    // GET /team-notes
+    if (rawPath === "/team-notes" && method === "GET") {
+        try {
+            const snap = await firestore.collection("teamNotes")
+                .orderBy("createdAt", "desc")
+                .limit(100)
+                .get();
+            const notes = snap.docs
+                .filter(d => !d.data().deletedAt)
+                .map(d => ({ id: d.id, ...d.data() }));
+            return json(200, notes);
+        } catch (e) { return json(500, { error: "Failed to fetch team notes" }); }
+    }
+
+    // POST /team-notes
+    if (rawPath === "/team-notes" && method === "POST") {
+        try {
+            const { authorId, authorName, authorPhoto, title, body: noteBody, category } = body || {};
+            if (!authorId || !title || !noteBody) return json(400, { error: "Missing fields" });
+            const ref = await firestore.collection("teamNotes").add({
+                authorId, authorName: authorName || "Unknown", authorPhoto: authorPhoto || "",
+                title, body: noteBody, category: category || "general",
+                pinned: false, createdAt: new Date().toISOString(),
+            });
+            return json(200, { id: ref.id });
+        } catch (e) { return json(500, { error: "Failed to create team note" }); }
+    }
+
+    // PUT /team-notes/:id
+    const teamNoteEditMatch = rawPath.match(/^\/team-notes\/([^/]+)$/);
+    if (teamNoteEditMatch && method === "PUT") {
+        const id = teamNoteEditMatch[1];
+        try {
+            const { title, body: noteBody, category } = body || {};
+            if (!title || !noteBody) return json(400, { error: "Missing fields" });
+            await firestore.collection("teamNotes").doc(id).update({
+                title, body: noteBody, category: category || "general", updatedAt: new Date().toISOString(),
+            });
+            return json(200, { success: true });
+        } catch (e) { return json(500, { error: "Failed to update team note" }); }
+    }
+
+    // DELETE /team-notes/:id
+    if (teamNoteEditMatch && method === "DELETE") {
+        const id = teamNoteEditMatch[1];
+        try {
+            await firestore.collection("teamNotes").doc(id).delete();
+            return json(200, { success: true });
+        } catch (e) { return json(500, { error: "Failed to delete team note" }); }
+    }
+
+    // PATCH /team-notes/:id/pin
+    const teamNotePinMatch = rawPath.match(/^\/team-notes\/([^/]+)\/pin$/);
+    if (teamNotePinMatch && method === "PATCH") {
+        const id = teamNotePinMatch[1];
+        try {
+            const { pinned } = body || {};
+            await firestore.collection("teamNotes").doc(id).update({ pinned: !!pinned });
+            return json(200, { success: true });
+        } catch (e) { return json(500, { error: "Failed to pin/unpin note" }); }
+    }
+
     // ─── VERSE OF THE DAY ────────────────────────────────────────────────────────
+
     // GET /verse-of-day?date=YYYY-MM-DD
     if (rawPath === "/verse-of-day" && method === "GET") {
         // Default date: Philippines time (UTC+8) so midnight PH = new verse/reactions
