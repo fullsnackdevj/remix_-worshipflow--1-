@@ -1590,8 +1590,92 @@ Rules:
         } catch (e) { return json(500, { error: "Failed to reclassify note" }); }
     }
 
+    // ─── PERSONAL NOTES (private, per-user) ──────────────────────────────────
+    // Stored in users/{userId}/personalNotes subcollection — structurally private.
+
+    // GET /personal-notes?userId=...
+    if (rawPath === "/personal-notes" && method === "GET") {
+        const userId = event.queryStringParameters?.userId;
+        if (!userId) return json(400, { error: "userId required" });
+        try {
+            const snap = await firestore
+                .collection("users").doc(userId)
+                .collection("personalNotes")
+                .orderBy("createdAt", "desc")
+                .limit(200)
+                .get();
+            const notes = snap.docs
+                .filter(d => !d.data().deletedAt)
+                .map(d => ({ id: d.id, ...d.data() }));
+            return json(200, notes);
+        } catch (e) { return json(500, { error: "Failed to fetch personal notes" }); }
+    }
+
+    // POST /personal-notes
+    if (rawPath === "/personal-notes" && method === "POST") {
+        const { userId, title, body: noteBody, category } = body || {};
+        if (!userId || !title || !noteBody) return json(400, { error: "Missing fields" });
+        try {
+            const ref = await firestore
+                .collection("users").doc(userId)
+                .collection("personalNotes")
+                .add({
+                    title, body: noteBody,
+                    category: category || "personal",
+                    pinned: false,
+                    createdAt: new Date().toISOString(),
+                });
+            return json(200, { id: ref.id });
+        } catch (e) { return json(500, { error: "Failed to create personal note" }); }
+    }
+
+    // PUT /personal-notes/:id  (body must include userId)
+    const personalNoteEditMatch = rawPath.match(/^\/personal-notes\/([^/]+)$/);
+    if (personalNoteEditMatch && method === "PUT") {
+        const id = personalNoteEditMatch[1];
+        const { userId, title, body: noteBody, category } = body || {};
+        if (!userId || !title || !noteBody) return json(400, { error: "Missing fields" });
+        try {
+            await firestore
+                .collection("users").doc(userId)
+                .collection("personalNotes").doc(id)
+                .update({ title, body: noteBody, category: category || "personal", updatedAt: new Date().toISOString() });
+            return json(200, { success: true });
+        } catch (e) { return json(500, { error: "Failed to update personal note" }); }
+    }
+
+    // DELETE /personal-notes/:id  (body must include userId)
+    if (personalNoteEditMatch && method === "DELETE") {
+        const id = personalNoteEditMatch[1];
+        const { userId } = body || {};
+        if (!userId) return json(400, { error: "userId required" });
+        try {
+            await firestore
+                .collection("users").doc(userId)
+                .collection("personalNotes").doc(id)
+                .delete();
+            return json(200, { success: true });
+        } catch (e) { return json(500, { error: "Failed to delete personal note" }); }
+    }
+
+    // PATCH /personal-notes/:id/pin  (body must include userId)
+    const personalNotePinMatch = rawPath.match(/^\/personal-notes\/([^/]+)\/pin$/);
+    if (personalNotePinMatch && method === "PATCH") {
+        const id = personalNotePinMatch[1];
+        const { userId, pinned } = body || {};
+        if (!userId) return json(400, { error: "userId required" });
+        try {
+            await firestore
+                .collection("users").doc(userId)
+                .collection("personalNotes").doc(id)
+                .update({ pinned: !!pinned });
+            return json(200, { success: true });
+        } catch (e) { return json(500, { error: "Failed to pin/unpin personal note" }); }
+    }
+
     // ─── TEAM NOTES (meeting recaps) ─────────────────────────────────────────
     // GET /team-notes
+
     if (rawPath === "/team-notes" && method === "GET") {
         try {
             const snap = await firestore.collection("teamNotes")

@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Plus, X, Pin, PinOff, Trash2, Pencil, Check, ChevronDown,
-  FileText, Users, Megaphone, NotebookPen, Loader2, Search,
+  FileText, Users, Megaphone, NotebookPen, Loader2, Search, Lock,
 } from "lucide-react";
 import AutoTextarea from "./AutoTextarea";
+import PersonalNotesTab from "./PersonalNotesTab";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface TeamNoteEntry {
@@ -25,6 +26,7 @@ interface TeamNotesViewProps {
   userPhoto: string;
   userRole?: string;
   onToast?: (type: "success" | "error" | "info" | "warning", message: string) => void;
+  initialTab?: "personal" | "team";
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -369,7 +371,8 @@ function NoteFormModal({
 }
 
 // ── Main View ─────────────────────────────────────────────────────────────────
-export default function TeamNotesView({ userId, userName, userPhoto, userRole, onToast }: TeamNotesViewProps) {
+export default function TeamNotesView({ userId, userName, userPhoto, userRole, onToast, initialTab = "personal" }: TeamNotesViewProps) {
+  const [activeTab, setActiveTab] = useState<"personal" | "team">(initialTab);
   const [notes,    setNotes]    = useState<TeamNoteEntry[]>([]);
   const [loading,  setLoading]  = useState(true);
   const [saving,   setSaving]   = useState(false);
@@ -496,22 +499,59 @@ export default function TeamNotesView({ userId, userName, userPhoto, userRole, o
   return (
     <div className="max-w-3xl mx-auto">
       {/* ── Page Header ── */}
-      <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
+      <div className="flex items-start justify-between mb-5 gap-3 flex-wrap">
         <div>
           <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <NotebookPen size={20} className="text-indigo-500" /> Team Notes
+            <NotebookPen size={20} className="text-indigo-500" /> Notes
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-            Meeting recaps, decisions, and team announcements
+            {activeTab === "personal" ? "Private notes visible only to you" : "Meeting recaps, decisions, and team announcements"}
           </p>
         </div>
+        {/* New Note button — adapts to active tab */}
         <button
           onClick={() => { setEditing(null); setShowForm(true); }}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl transition-all shadow-sm"
+          className={`flex items-center gap-2 px-4 py-2 text-white text-sm font-semibold rounded-xl transition-all shadow-sm ${
+            activeTab === "personal"
+              ? "bg-amber-500 hover:bg-amber-400"
+              : "bg-indigo-600 hover:bg-indigo-500"
+          }`}
         >
           <Plus size={16} /> New Note
         </button>
       </div>
+
+      {/* ── Tab Switcher ── */}
+      <div className="flex items-center gap-1.5 mb-6 p-1 bg-gray-100 dark:bg-gray-800/80 rounded-2xl w-fit">
+        <button
+          onClick={() => setActiveTab("personal")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+            activeTab === "personal"
+              ? "bg-gradient-to-r from-amber-500 to-amber-400 text-white shadow-md shadow-amber-500/20"
+              : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+          }`}
+        >
+          <Lock size={14} /> Personal Notes
+        </button>
+        <button
+          onClick={() => setActiveTab("team")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+            activeTab === "team"
+              ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/20"
+              : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+          }`}
+        >
+          <Users size={14} /> Team Notes
+        </button>
+      </div>
+
+      {/* ── Personal Notes Tab ── */}
+      {activeTab === "personal" && (
+        <PersonalNotesTab userId={userId} onToast={onToast} />
+      )}
+
+      {/* ── Team Notes Tab ── */}
+      {activeTab === "team" && <>
 
       {/* ── Filters bar ── */}
       <div className="flex items-center gap-2 mb-5 flex-wrap">
@@ -600,6 +640,7 @@ export default function TeamNotesView({ userId, userName, userPhoto, userRole, o
           saving={saving}
         />
       )}
+      </>}
     </div>
   );
 }
