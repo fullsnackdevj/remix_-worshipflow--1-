@@ -1350,6 +1350,28 @@ Rules:
             }
 
             const { actorName = "Someone" } = body;
+
+            // ── Resolve songLineup IDs → song titles ──────────────────────────
+            // songLineup stores Firestore document IDs, not titles.
+            // We must look up each song by ID and use its title for the email.
+            let resolvedSongLineup: { joyful?: string; solemn?: string } | null = null;
+            if (ev.songLineup && (ev.songLineup.solemn || ev.songLineup.joyful)) {
+                const songIds = [ev.songLineup.solemn, ev.songLineup.joyful].filter(Boolean) as string[];
+                const songDocs = await Promise.all(
+                    songIds.map((sid: string) => firestore.collection("songs").doc(sid).get())
+                );
+                const songTitleById: Record<string, string> = {};
+                songDocs.forEach(snap => {
+                    if (snap.exists) {
+                        songTitleById[snap.id] = (snap.data() as any).title || snap.id;
+                    }
+                });
+                resolvedSongLineup = {
+                    solemn: ev.songLineup.solemn ? (songTitleById[ev.songLineup.solemn] ?? ev.songLineup.solemn) : undefined,
+                    joyful: ev.songLineup.joyful ? (songTitleById[ev.songLineup.joyful] ?? ev.songLineup.joyful) : undefined,
+                };
+            }
+
             await sendScheduleEmail(firestore, {
                 action: "created",
                 eventName: ev.eventName || "",
@@ -1358,7 +1380,7 @@ Rules:
                 worshipLeader: ev.worshipLeader ?? null,
                 backupSingers: ev.backupSingers ?? [],
                 musicians: ev.musicians ?? [],
-                songLineup: ev.songLineup ?? null,
+                songLineup: resolvedSongLineup,
                 actorName,
                 scheduleId: id,
             });
