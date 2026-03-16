@@ -178,6 +178,8 @@ function NoteCard({
 }
 
 // ── Note Form Modal ───────────────────────────────────────────────────────────
+const DRAFT_KEY = "wf_team_note_draft";
+
 function NoteFormModal({
   initial, onSave, onClose, saving,
 }: {
@@ -186,18 +188,99 @@ function NoteFormModal({
   onClose: () => void;
   saving: boolean;
 }) {
-  const [title,    setTitle]    = useState(initial?.title    ?? "");
-  const [body,     setBody]     = useState(initial?.body     ?? "");
-  const [category, setCategory] = useState<CategoryValue>(initial?.category ?? "meeting");
+  // Seed from draft only for NEW notes (not edits) — so a crashed edit
+  // doesn't wrongly restore a stale draft
+  const seedDraft = !initial
+    ? (() => { try { const d = localStorage.getItem(DRAFT_KEY); return d ? JSON.parse(d) : null; } catch { return null; } })()
+    : null;
+
+  const [title,    setTitle]    = useState(initial?.title    ?? seedDraft?.title    ?? "");
+  const [body,     setBody]     = useState(initial?.body     ?? seedDraft?.body     ?? "");
+  const [category, setCategory] = useState<CategoryValue>(initial?.category ?? seedDraft?.category ?? "meeting");
+  const [showDiscard, setShowDiscard] = useState(false);
+
+  // "Dirty" — user has typed something that differs from whatever we started with
+  const isDirty = title.trim() !== (initial?.title ?? "").trim()
+    || body.trim() !== (initial?.body ?? "").trim();
+
+  // ── Auto-save draft every 500 ms (new notes only) ──────────────────────────
+  useEffect(() => {
+    if (initial) return; // Don't auto-save drafts for edit mode
+    const timer = setTimeout(() => {
+      try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ title, body, category })); } catch { /* noop */ }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [title, body, category, initial]);
+
+  // Clear draft once the note is successfully saved
+  const handleSave = () => {
+    if (!title.trim() || !body.trim()) return;
+    try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
+    onSave({ title: title.trim(), body: body.trim(), category });
+  };
+
+  // Guard close — show inline discard warning if there's unsaved content
+  const handleCloseAttempt = () => {
+    if (isDirty) {
+      setShowDiscard(true);
+    } else {
+      // Nothing typed — also clear any stale draft and close immediately
+      if (!initial) { try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ } }
+      onClose();
+    }
+  };
+
+  const handleConfirmDiscard = () => {
+    try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
+    onClose();
+  };
 
   const valid = title.trim().length > 0 && body.trim().length > 0;
+  const hasDraftBanner = !initial && !!seedDraft && (seedDraft.title || seedDraft.body);
 
   return (
-    <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
-      <div
-        className="w-full max-w-lg bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-white/10 overflow-hidden"
-        onClick={e => e.stopPropagation()}
-      >
+    // ⚠️  Backdrop does NOT call onClose — prevents accidental loss of typed content
+    <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="w-full max-w-lg bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-white/10 overflow-hidden">
+
+        {/* ── Discard confirmation banner ────────────────────────────────── */}
+        {showDiscard && (
+          <div className="flex items-center justify-between gap-3 px-5 py-3 bg-amber-50 dark:bg-amber-900/30 border-b border-amber-200 dark:border-amber-700/50">
+            <p className="text-sm font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-2">
+              ⚠️ Discard unsaved changes?
+            </p>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setShowDiscard(false)}
+                className="px-3 py-1 text-xs font-semibold rounded-lg bg-white dark:bg-gray-700 border border-amber-300 dark:border-amber-600 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/40 transition-all"
+              >
+                Keep writing
+              </button>
+              <button
+                onClick={handleConfirmDiscard}
+                className="px-3 py-1 text-xs font-semibold rounded-lg bg-red-500 hover:bg-red-600 text-white transition-all"
+              >
+                Discard
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Draft restored banner ──────────────────────────────────────── */}
+        {hasDraftBanner && !showDiscard && (
+          <div className="flex items-center justify-between gap-3 px-5 py-2.5 bg-indigo-50 dark:bg-indigo-900/30 border-b border-indigo-200 dark:border-indigo-700/50">
+            <p className="text-xs text-indigo-600 dark:text-indigo-300 font-medium">
+              📝 Draft restored from your last session
+            </p>
+            <button
+              onClick={() => { setTitle(""); setBody(""); setCategory("meeting"); try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ } }}
+              className="text-[10px] font-semibold text-indigo-500 hover:text-red-500 transition-colors"
+            >
+              Clear
+            </button>
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-white/10">
           <div className="flex items-center gap-2">
@@ -205,8 +288,16 @@ function NoteFormModal({
             <span className="text-sm font-bold text-gray-900 dark:text-white">
               {initial ? "Edit Note" : "New Team Note"}
             </span>
+            {/* Dirty indicator dot */}
+            {isDirty && (
+              <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" title="Unsaved changes" />
+            )}
           </div>
-          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-white rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-all">
+          <button
+            onClick={handleCloseAttempt}
+            className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-white rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-all"
+            title="Close"
+          >
             <X size={15} />
           </button>
         </div>
@@ -235,7 +326,7 @@ function NoteFormModal({
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Title</label>
             <input
               value={title}
-              onChange={e => setTitle(e.target.value)}
+              onChange={e => { setTitle(e.target.value); setShowDiscard(false); }}
               placeholder="e.g. Sunday Service Recap — Mar 16"
               className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition"
             />
@@ -246,7 +337,7 @@ function NoteFormModal({
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Content</label>
             <AutoTextarea
               value={body}
-              onChange={e => setBody(e.target.value)}
+              onChange={e => { setBody(e.target.value); setShowDiscard(false); }}
               minRows={5}
               placeholder="Write your meeting recap, decisions, or announcements here…"
               className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition resize-none"
@@ -257,11 +348,14 @@ function NoteFormModal({
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-gray-100 dark:border-white/10 bg-gray-50 dark:bg-white/5">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-800 dark:hover:text-white rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 transition-all font-medium">
+          <button
+            onClick={handleCloseAttempt}
+            className="px-4 py-2 text-sm text-gray-500 hover:text-gray-800 dark:hover:text-white rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 transition-all font-medium"
+          >
             Cancel
           </button>
           <button
-            onClick={() => valid && onSave({ title: title.trim(), body: body.trim(), category })}
+            onClick={handleSave}
             disabled={!valid || saving}
             className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
