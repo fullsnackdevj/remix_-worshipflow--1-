@@ -1348,93 +1348,103 @@ const handleNotifyTeam = async () => {
           onClick={() => setShowEmailPreview(false)}
         >
           <div
-            className="relative w-full max-w-[480px] max-h-[90dvh] flex flex-col rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/10"
+            className="relative w-full max-w-[480px] max-h-[90dvh] flex flex-col rounded-2xl overflow-hidden shadow-2xl ring-1 ring-black/10"
             onClick={e => e.stopPropagation()}
           >
             {/* ─ Sticky top bar ─ */}
-            <div className="flex-shrink-0 flex items-center justify-between bg-gray-900 border-b border-white/10 px-4 py-3">
+            <div className="flex-shrink-0 flex items-center justify-between bg-white border-b border-slate-200 px-4 py-3">
               <div className="flex items-center gap-2">
-                <Eye size={14} className="text-indigo-400" />
-                <span className="text-xs font-semibold text-indigo-400 tracking-wide">Email Preview</span>
-                <span className="text-xs text-gray-500">— what your team will receive</span>
+                <Eye size={14} className="text-violet-600" />
+                <span className="text-xs font-semibold text-violet-600 tracking-wide">Email Preview</span>
+                <span className="text-xs text-slate-400">— what your team will receive</span>
               </div>
               <button
                 onClick={() => setShowEmailPreview(false)}
-                className="w-7 h-7 flex items-center justify-center rounded-full bg-gray-700 hover:bg-gray-600 text-gray-300 hover:text-white transition-all"
+                className="w-7 h-7 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition-all"
               >
                 <X size={14} />
               </button>
             </div>
-            {/* ─ Scrollable email body ─ */}
-            <div className="overflow-y-auto" style={{ background: "#0f172a", fontFamily: "'Segoe UI', Arial, sans-serif" }}>
-              <div style={{ padding: "24px 16px" }}>
-                <div style={{ background: "#1e293b", borderRadius: 14, overflow: "hidden", margin: "0 auto" }}>
+            {/* ─ Scrollable email body (light theme matching actual email) ─ */}
+            <div className="overflow-y-auto" style={{ background: "#f1f5f9", fontFamily: "'Segoe UI', Arial, sans-serif" }}>
+              <div style={{ padding: "20px 14px" }}>
+                <div style={{ background: "#ffffff", borderRadius: 14, overflow: "hidden", border: "1px solid #e2e8f0", boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
                   {/* Header gradient */}
                   <div style={{ background: "linear-gradient(135deg,#6d28d9,#4f46e5)", padding: "24px 20px", textAlign: "center" }}>
-                    <div style={{ fontSize: 34, marginBottom: 6 }}>🎵</div>
-                    <div style={{ color: "#fff", fontSize: 20, fontWeight: 700 }}>WorshipFlow</div>
-                    <div style={{ color: "#c4b5fd", fontSize: 12, marginTop: 5 }}>Team Schedule Update</div>
+                    <div style={{ fontSize: 34, marginBottom: 8 }}>🎵</div>
+                    <div style={{ color: "#fff", fontSize: 20, fontWeight: 800 }}>WorshipFlow</div>
+                    <div style={{ color: "#ddd6fe", fontSize: 11, marginTop: 5, letterSpacing: "0.5px", textTransform: "uppercase" }}>Team Schedule Update</div>
                   </div>
                   {/* Body */}
                   <div style={{ padding: "20px 20px 16px" }}>
-                    <p style={{ color: "#94a3b8", fontSize: 13, margin: "0 0 16px", lineHeight: 1.5 }}>
-                      🎉 <strong style={{ color: "#e2e8f0" }}>You</strong> has created a new event.
+                    <p style={{ color: "#475569", fontSize: 13, margin: "0 0 16px", lineHeight: 1.6 }}>
+                      🎉 <strong style={{ color: "#1e293b" }}>You</strong> has scheduled a new event for your team.
                     </p>
                     {/* Event card */}
-                    <div style={{ background: "#0f172a", borderRadius: 10, border: "1px solid #334155", padding: "16px" }}>
-                      <div style={{ fontSize: 10, color: "#6366f1", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 3 }}>{serviceLabel}</div>
-                      <div style={{ color: "#f1f5f9", fontSize: 16, fontWeight: 700, marginBottom: 14 }}>{editSchedEventName || "Worship Service"}</div>
+                    <div style={{ background: "#f8fafc", borderRadius: 10, border: "1px solid #e2e8f0", padding: "14px 16px" }}>
+                      <div style={{ fontSize: 10, color: "#6d28d9", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 3 }}>{serviceLabel}</div>
+                      <div style={{ color: "#0f172a", fontSize: 17, fontWeight: 800, marginBottom: 14 }}>{editSchedEventName || "Worship Service"}</div>
                       {/* Date */}
-                      <div style={{ paddingTop: 10, paddingBottom: 10, borderTop: "1px solid #1e293b" }}>
-                        <div style={{ color: "#64748b", fontSize: 11 }}>📅 Date</div>
-                        <div style={{ color: "#e2e8f0", fontSize: 13, marginTop: 3 }}>{dateLabel}</div>
+                      <div style={{ paddingTop: 10, paddingBottom: 10, borderTop: "1px solid #e2e8f0" }}>
+                        <div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>📅 Date</div>
+                        <div style={{ color: "#1e293b", fontSize: 14, fontWeight: 600, marginTop: 4 }}>{dateLabel}</div>
                       </div>
                       {/* Worship Leader */}
                       {editSchedWorshipLeader && (
-                        <div style={{ paddingTop: 10, paddingBottom: 10, borderTop: "1px solid #1e293b" }}>
-                          <div style={{ color: "#64748b", fontSize: 11 }}>🎤 Worship Leader</div>
-                          <div style={{ color: "#e2e8f0", fontSize: 13, marginTop: 3 }}>{editSchedWorshipLeader.name}</div>
+                        <div style={{ paddingTop: 10, paddingBottom: 10, borderTop: "1px solid #e2e8f0" }}>
+                          <div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>🎤 Worship Leader</div>
+                          <div style={{ color: "#1e293b", fontSize: 14, fontWeight: 600, marginTop: 4 }}>{editSchedWorshipLeader.name}</div>
                         </div>
                       )}
                       {/* Backup Singers */}
                       {editSchedBackupSingers.length > 0 && (
-                        <div style={{ paddingTop: 10, paddingBottom: 10, borderTop: "1px solid #1e293b" }}>
-                          <div style={{ color: "#64748b", fontSize: 11 }}>🎙️ Backup Singers</div>
+                        <div style={{ paddingTop: 10, paddingBottom: 10, borderTop: "1px solid #e2e8f0" }}>
+                          <div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>🎙️ Backup Singers</div>
                           {editSchedBackupSingers.map((m, i) => (
-                            <div key={i} style={{ color: "#e2e8f0", fontSize: 13, marginTop: 3 }}>
-                              {m.name}{m.role ? <span style={{ color: "#7c3aed", fontSize: 11, marginLeft: 4 }}>({m.role})</span> : null}
+                            <div key={i} style={{ color: "#1e293b", fontSize: 13, fontWeight: 500, marginTop: 4 }}>
+                              {m.name}{m.role ? <span style={{ color: "#7c3aed", fontSize: 11, fontWeight: 600, marginLeft: 4 }}>({m.role})</span> : null}
                             </div>
                           ))}
                         </div>
                       )}
                       {/* Musicians */}
                       {editSchedMusicians.length > 0 && (
-                        <div style={{ paddingTop: 10, paddingBottom: 10, borderTop: "1px solid #1e293b" }}>
-                          <div style={{ color: "#64748b", fontSize: 11 }}>🎸 Musicians</div>
+                        <div style={{ paddingTop: 10, paddingBottom: 10, borderTop: "1px solid #e2e8f0" }}>
+                          <div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>🎸 Musicians</div>
                           {editSchedMusicians.map((m, i) => (
-                            <div key={i} style={{ color: "#e2e8f0", fontSize: 13, marginTop: 3 }}>
-                              {m.name}{m.role ? <span style={{ color: "#10b981", fontSize: 11, marginLeft: 4 }}>({m.role})</span> : null}
+                            <div key={i} style={{ color: "#1e293b", fontSize: 13, fontWeight: 500, marginTop: 4 }}>
+                              {m.name}{m.role ? <span style={{ color: "#0891b2", fontSize: 11, fontWeight: 600, marginLeft: 4 }}>({m.role})</span> : null}
                             </div>
                           ))}
                         </div>
                       )}
                       {/* Song Lineup */}
                       {(sSong || jSong) && (
-                        <div style={{ paddingTop: 10, paddingBottom: 10, borderTop: "1px solid #1e293b" }}>
-                          <div style={{ color: "#64748b", fontSize: 11 }}>🎵 Song Lineup</div>
-                          {sSong && <div style={{ color: "#e2e8f0", fontSize: 13, marginTop: 3 }}><span style={{ color: "#8b5cf6", fontSize: 10, fontWeight: 700, textTransform: "uppercase", marginRight: 4 }}>Solemn</span>{sSong.title}</div>}
-                          {jSong && <div style={{ color: "#e2e8f0", fontSize: 13, marginTop: 4 }}><span style={{ color: "#10b981", fontSize: 10, fontWeight: 700, textTransform: "uppercase", marginRight: 4 }}>Joyful</span>{jSong.title}</div>}
+                        <div style={{ paddingTop: 10, paddingBottom: 10, borderTop: "1px solid #e2e8f0" }}>
+                          <div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>🎵 Song Lineup</div>
+                          {sSong && (
+                            <div style={{ color: "#1e293b", fontSize: 13, fontWeight: 500, marginTop: 5 }}>
+                              <span style={{ display: "inline-block", background: "#ede9fe", color: "#6d28d9", fontSize: 10, fontWeight: 700, textTransform: "uppercase", padding: "2px 7px", borderRadius: 4, marginRight: 6 }}>Solemn</span>
+                              {sSong.title}
+                            </div>
+                          )}
+                          {jSong && (
+                            <div style={{ color: "#1e293b", fontSize: 13, fontWeight: 500, marginTop: 5 }}>
+                              <span style={{ display: "inline-block", background: "#dcfce7", color: "#166534", fontSize: 10, fontWeight: 700, textTransform: "uppercase", padding: "2px 7px", borderRadius: 4, marginRight: 6 }}>Joyful</span>
+                              {jSong.title}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
                     {/* CTA */}
                     <div style={{ textAlign: "center", marginTop: 18 }}>
-                      <div style={{ display: "inline-block", background: "linear-gradient(135deg,#6d28d9,#4f46e5)", color: "#fff", padding: "10px 28px", borderRadius: 8, fontSize: 13, fontWeight: 600 }}>View Schedule →</div>
+                      <div style={{ display: "inline-block", background: "linear-gradient(135deg,#6d28d9,#4f46e5)", color: "#fff", padding: "11px 30px", borderRadius: 10, fontSize: 14, fontWeight: 700 }}>View Schedule →</div>
                     </div>
                   </div>
                   {/* Footer */}
-                  <div style={{ padding: "12px 20px", borderTop: "1px solid #334155", textAlign: "center" }}>
-                    <div style={{ color: "#475569", fontSize: 10 }}>WorshipFlow · worshipflow.dev · You're receiving this because you're part of the worship team.</div>
+                  <div style={{ padding: "12px 20px", borderTop: "1px solid #e2e8f0", background: "#f8fafc", textAlign: "center" }}>
+                    <div style={{ color: "#94a3b8", fontSize: 10 }}>WorshipFlow · worshipflow.dev · You're receiving this because you're part of the worship team.</div>
                   </div>
                 </div>
               </div>

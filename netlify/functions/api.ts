@@ -62,54 +62,54 @@ async function sendScheduleEmail(
         const htmlBody = `
 <!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;background:#0f172a;font-family:'Segoe UI',Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a;padding:32px 0;">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 16px;">
     <tr><td align="center">
-      <table width="560" cellpadding="0" cellspacing="0" style="background:#1e293b;border-radius:16px;overflow:hidden;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);border:1px solid #e2e8f0;">
         <!-- Header -->
         <tr>
-          <td style="background:linear-gradient(135deg,#6d28d9,#4f46e5);padding:32px;text-align:center;">
-            <div style="font-size:40px;margin-bottom:8px;">🎵</div>
-            <h1 style="color:#fff;margin:0;font-size:24px;font-weight:700;">WorshipFlow</h1>
-            <p style="color:#c4b5fd;margin:8px 0 0;font-size:14px;">Team Schedule Update</p>
+          <td style="background:linear-gradient(135deg,#6d28d9,#4f46e5);padding:32px 32px 28px;text-align:center;">
+            <div style="font-size:38px;margin-bottom:10px;">🎵</div>
+            <h1 style="color:#ffffff;margin:0;font-size:26px;font-weight:800;letter-spacing:-0.5px;">WorshipFlow</h1>
+            <p style="color:#ddd6fe;margin:6px 0 0;font-size:13px;letter-spacing:0.5px;">TEAM SCHEDULE UPDATE</p>
           </td>
         </tr>
         <!-- Body -->
         <tr>
-          <td style="padding:32px;">
-            <p style="color:#94a3b8;margin:0 0 24px;font-size:15px;">${emoji} <strong style="color:#e2e8f0;">${opts.actorName}</strong> ${opts.action === "created" ? "has created a new event" : "has updated an event"}.</p>
+          <td style="padding:28px 32px 24px;">
+            <p style="color:#475569;margin:0 0 20px;font-size:15px;line-height:1.5;">${emoji} <strong style="color:#1e293b;">${opts.actorName}</strong> ${opts.action === "created" ? "has scheduled a new event for your team." : "has updated a team event."}</p>
             <!-- Event Card -->
-            <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a;border-radius:12px;border:1px solid #334155;">
-              <tr><td style="padding:24px;">
-                <p style="margin:0 0 4px;font-size:12px;color:#6366f1;font-weight:700;text-transform:uppercase;letter-spacing:1px;">${serviceLabel}</p>
-                <h2 style="margin:0 0 16px;color:#f1f5f9;font-size:20px;">${opts.eventName || "Worship Service"}</h2>
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;">
+              <tr><td style="padding:20px 22px;">
+                <p style="margin:0 0 3px;font-size:11px;color:#6d28d9;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;">${serviceLabel}</p>
+                <h2 style="margin:0 0 18px;color:#0f172a;font-size:20px;font-weight:800;">${opts.eventName || "Worship Service"}</h2>
                 <table width="100%" cellpadding="0" cellspacing="0">
                   <tr>
-                    <td style="padding:8px 0;border-top:1px solid #1e293b;">
-                      <span style="color:#64748b;font-size:13px;">📅 Date</span>
-                      <p style="margin:2px 0 0;color:#e2e8f0;font-size:14px;">${dateLabel}</p>
+                    <td style="padding:10px 0;border-top:1px solid #e2e8f0;">
+                      <span style="color:#94a3b8;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">📅 Date</span>
+                      <p style="margin:4px 0 0;color:#1e293b;font-size:15px;font-weight:600;">${dateLabel}</p>
                     </td>
                   </tr>
-                  ${opts.worshipLeader ? `<tr><td style="padding:8px 0;border-top:1px solid #1e293b;"><span style="color:#64748b;font-size:13px;">🎤 Worship Leader</span><p style="margin:2px 0 0;color:#e2e8f0;font-size:14px;">${opts.worshipLeader.name}</p></td></tr>` : ""}
-                  ${opts.backupSingers && opts.backupSingers.length > 0 ? `<tr><td style="padding:8px 0;border-top:1px solid #1e293b;"><span style="color:#64748b;font-size:13px;">🎙️ Backup Singers</span>${opts.backupSingers.map(m => `<p style="margin:2px 0 0;color:#e2e8f0;font-size:14px;">${m.name}${m.role ? ` <span style="color:#7c3aed;font-size:12px;">(${m.role})</span>` : ""}</p>`).join("")}</td></tr>` : ""}
-                  ${opts.musicians && opts.musicians.length > 0 ? `<tr><td style="padding:8px 0;border-top:1px solid #1e293b;"><span style="color:#64748b;font-size:13px;">🎸 Musicians</span>${opts.musicians.map(m => `<p style="margin:2px 0 0;color:#e2e8f0;font-size:14px;">${m.name}${m.role ? ` <span style="color:#10b981;font-size:12px;">(${m.role})</span>` : ""}</p>`).join("")}</td></tr>` : ""}
-                  ${opts.songLineup && (opts.songLineup.solemn || opts.songLineup.joyful) ? `<tr><td style="padding:8px 0;border-top:1px solid #1e293b;"><span style="color:#64748b;font-size:13px;">🎵 Song Lineup</span>${opts.songLineup.solemn ? `<p style="margin:2px 0 0;color:#e2e8f0;font-size:14px;"><span style="color:#8b5cf6;font-size:11px;font-weight:700;text-transform:uppercase;">Solemn</span> ${opts.songLineup.solemn}</p>` : ""}${opts.songLineup.joyful ? `<p style="margin:4px 0 0;color:#e2e8f0;font-size:14px;"><span style="color:#10b981;font-size:11px;font-weight:700;text-transform:uppercase;">Joyful</span> ${opts.songLineup.joyful}</p>` : ""}</td></tr>` : ""}
+                  ${opts.worshipLeader ? `<tr><td style="padding:10px 0;border-top:1px solid #e2e8f0;"><span style="color:#94a3b8;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">🎤 Worship Leader</span><p style="margin:4px 0 0;color:#1e293b;font-size:15px;font-weight:600;">${opts.worshipLeader.name}</p></td></tr>` : ""}
+                  ${opts.backupSingers && opts.backupSingers.length > 0 ? `<tr><td style="padding:10px 0;border-top:1px solid #e2e8f0;"><span style="color:#94a3b8;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">🎙️ Backup Singers</span>${opts.backupSingers.map(m => `<p style="margin:4px 0 0;color:#1e293b;font-size:14px;font-weight:500;">${m.name}${m.role ? ` <span style="color:#7c3aed;font-size:12px;font-weight:600;">(${m.role})</span>` : ""}</p>`).join("")}</td></tr>` : ""}
+                  ${opts.musicians && opts.musicians.length > 0 ? `<tr><td style="padding:10px 0;border-top:1px solid #e2e8f0;"><span style="color:#94a3b8;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">🎸 Musicians</span>${opts.musicians.map(m => `<p style="margin:4px 0 0;color:#1e293b;font-size:14px;font-weight:500;">${m.name}${m.role ? ` <span style="color:#0891b2;font-size:12px;font-weight:600;">(${m.role})</span>` : ""}</p>`).join("")}</td></tr>` : ""}
+                  ${opts.songLineup && (opts.songLineup.solemn || opts.songLineup.joyful) ? `<tr><td style="padding:10px 0;border-top:1px solid #e2e8f0;"><span style="color:#94a3b8;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">🎵 Song Lineup</span>${opts.songLineup.solemn ? `<p style="margin:6px 0 0;color:#1e293b;font-size:14px;font-weight:500;"><span style="display:inline-block;background:#ede9fe;color:#6d28d9;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;padding:2px 7px;border-radius:4px;margin-right:6px;">Solemn</span>${opts.songLineup.solemn}</p>` : ""}${opts.songLineup.joyful ? `<p style="margin:6px 0 0;color:#1e293b;font-size:14px;font-weight:500;"><span style="display:inline-block;background:#dcfce7;color:#166534;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;padding:2px 7px;border-radius:4px;margin-right:6px;">Joyful</span>${opts.songLineup.joyful}</p>` : ""}</td></tr>` : ""}
                 </table>
               </td></tr>
             </table>
             <!-- CTA -->
             <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:24px;">
               <tr><td align="center">
-                <a href="https://worshipflow.dev" style="display:inline-block;background:linear-gradient(135deg,#6d28d9,#4f46e5);color:#fff;text-decoration:none;padding:12px 32px;border-radius:8px;font-size:14px;font-weight:600;">View Schedule →</a>
+                <a href="https://worshipflow.dev" style="display:inline-block;background:linear-gradient(135deg,#6d28d9,#4f46e5);color:#fff;text-decoration:none;padding:13px 36px;border-radius:10px;font-size:15px;font-weight:700;letter-spacing:0.2px;">View Schedule →</a>
               </td></tr>
             </table>
           </td>
         </tr>
         <!-- Footer -->
         <tr>
-          <td style="padding:16px 32px;border-top:1px solid #334155;text-align:center;">
-            <p style="color:#475569;font-size:12px;margin:0;">WorshipFlow · worshipflow.dev · You're receiving this because you're part of the worship team.</p>
+          <td style="padding:16px 32px;border-top:1px solid #e2e8f0;background:#f8fafc;text-align:center;">
+            <p style="color:#94a3b8;font-size:12px;margin:0;">WorshipFlow · <a href="https://worshipflow.dev" style="color:#6d28d9;text-decoration:none;">worshipflow.dev</a> · You're receiving this because you're part of the worship team.</p>
           </td>
         </tr>
       </table>
