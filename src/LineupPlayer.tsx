@@ -129,10 +129,12 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
   }, [mini]);
 
   const onDragStart = (e: React.PointerEvent<HTMLDivElement>) => {
-    // Only drag from the header bar, and only in mini mode
+    // Only drag in mini mode
     if (!mini) return;
-    // Don't start drag if user clicked a button inside the header
-    if ((e.target as HTMLElement).closest("button")) return;
+    // Don't start drag if user pressed a button or interactive element
+    if ((e.target as HTMLElement).closest("button, input, select, textarea, a")) return;
+    // Prevent page scroll on mobile — critical for smooth touch drag
+    e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
     dragRef.current = { dragging: true, startPX: e.clientX, startPY: e.clientY, startX: pos.x, startY: pos.y };
   };
@@ -331,8 +333,8 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
       )}
 
       {/* ── Player shell ──────────────────────────────────────────────────────
-          Mini mode: freely draggable via pointer events.
-          Full mode: centered overlay — drag state is ignored. */}
+          Mini mode: entire shell is draggable (bigger touch target on mobile).
+          Full mode: centered overlay — drag handlers are no-ops. */}
       <div
         ref={miniShellRef}
         className={`fixed z-[9999] bg-gray-900 shadow-2xl rounded-2xl overflow-hidden flex flex-col transition-[width,max-height,border-radius] duration-300 ease-in-out ${
@@ -340,18 +342,24 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
         }`}
         style={
           mini
-            ? { left: pos.x, top: pos.y }
+            ? {
+                left: pos.x, top: pos.y,
+                // touch-action:none is the key fix — tells the browser
+                // "don't scroll / zoom on this element, we handle touch ourselves"
+                touchAction: "none",
+                cursor: dragRef.current.dragging ? "grabbing" : "grab",
+              }
             : { top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: "min(95vw, 960px)", maxHeight: "90vh" }
         }
+        onPointerDown={onDragStart}
+        onPointerMove={onDragMove}
+        onPointerUp={onDragEnd}
+        onPointerCancel={onDragEnd}
       >
-        {/* Header — drag handle in mini mode */}
+        {/* Header — visual header, drag is now on the whole shell */}
         <div
           className="flex items-center justify-between px-4 py-2.5 bg-gray-950/80 border-b border-white/10 shrink-0"
-          style={mini ? { cursor: dragRef.current.dragging ? "grabbing" : "grab", userSelect: "none" } : {}}
-          onPointerDown={onDragStart}
-          onPointerMove={onDragMove}
-          onPointerUp={onDragEnd}
-          onPointerCancel={onDragEnd}
+          style={mini ? { userSelect: "none" } : {}}
         >
           <div className="flex items-center gap-2 min-w-0">
             <ListMusic size={mini ? 12 : 15} className="text-indigo-400 shrink-0" />
