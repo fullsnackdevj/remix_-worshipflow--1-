@@ -106,26 +106,44 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
   const isMobile = useRef(/Mobi|Android|iPhone|iPad|iPod|Tablet/i.test(navigator.userAgent)).current;
 
   // ── Drag state (mini mode only) ────────────────────────────────────────────
-  //  pos: { x, y } = left/top in px
-  const MINI_W = 288; // w-72
-  const MINI_H = 220; // approx height — clamping uses this
+  const MINI_W = 360;
+  const MINI_H = 68;
   const initPos = () => ({
-    x: Math.max(0, window.innerWidth  - MINI_W - 16),
+    // Centre horizontally, 16px above the bottom edge — like Spotify
+    x: Math.max(0, Math.round((window.innerWidth  - Math.min(window.innerWidth * 0.92, MINI_W)) / 2)),
     y: Math.max(0, window.innerHeight - MINI_H - 16),
   });
   const [pos, setPos] = useState<{ x: number; y: number }>(initPos);
+  const [isPlaying, setIsPlaying] = useState(false);
   const dragRef = useRef<{ dragging: boolean; startPX: number; startPY: number; startX: number; startY: number }>({
     dragging: false, startPX: 0, startPY: 0, startX: 0, startY: 0,
   });
   const miniShellRef = useRef<HTMLDivElement>(null);
+  // Ref to the visible video slot in full-mode UI
+  const videoSlotRef = useRef<HTMLDivElement>(null);
+  // Off-screen parking div — always in DOM, keeps YT iframe alive
+  const offscreenRef = useRef<HTMLDivElement>(null);
 
-  // Re-init position when switching to mini so it doesn't jump to 0,0
+  // Re-init position when switching to mini so it snaps to bottom-centre
   const prevMini = useRef(false);
   useEffect(() => {
-    if (mini && !prevMini.current) {
-      setPos(initPos());
-    }
+    if (mini && !prevMini.current) setPos(initPos());
     prevMini.current = mini;
+  }, [mini]);
+
+  // Move the YT iframe container between off-screen parking and visible video slot
+  useEffect(() => {
+    const wrapper = containerRef.current;
+    if (!wrapper) return;
+    if (!mini && videoSlotRef.current) {
+      // Full mode: move iframe into the visible slot
+      videoSlotRef.current.appendChild(wrapper);
+      wrapper.style.cssText = "width:100%;height:100%;position:absolute;inset:0;";
+    } else if (offscreenRef.current) {
+      // Mini mode: park off-screen so audio keeps playing
+      offscreenRef.current.appendChild(wrapper);
+      wrapper.style.cssText = "width:1px;height:1px;";
+    }
   }, [mini]);
 
   const onDragStart = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -199,6 +217,8 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
             setPlayerReady(true);
           },
           onStateChange: (event: { data: number }) => {
+            // Track play/pause state for the mini bar button icon
+            setIsPlaying(event.data === 1);
             // 0 = ENDED — auto-mark listened, then advance and loop back to start
             if (event.data === 0) {
               // Auto-mark the just-finished track as listened
@@ -332,8 +352,15 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
         <div className="fixed inset-0 z-[9998] bg-black/80 backdrop-blur-sm" onClick={() => setMini(true)} />
       )}
 
-      {/* ══ MINI MODE: Spotify-style slim bar ══════════════════════════════════
-          Entire element is draggable. YT iframe hides inside at 1×1px.        */}
+      {/* Off-screen parking lot — YT iframe lives here; moved into video slot by useEffect */}
+      <div ref={offscreenRef} style={{ position: "fixed", left: -9999, top: -9999, width: 1, height: 1, overflow: "hidden", zIndex: 1, pointerEvents: "none", opacity: 0 }}>
+        <div ref={containerRef} style={{ width: 1, height: 1 }}>
+          <div id={playerDivId} style={{ width: 1, height: 1 }} />
+        </div>
+      </div>
+
+
+      {/* ══ MINI MODE: Spotify-style slim bar ═══════════════════════════════ */}
       {mini && (
         <div
           ref={miniShellRef}
@@ -349,14 +376,7 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
           onPointerUp={onDragEnd}
           onPointerCancel={onDragEnd}
         >
-          {/* Hidden YT iframe — keeps audio alive while mini */}
-          <div style={{ position: "absolute", width: 1, height: 1, opacity: 0, pointerEvents: "none", overflow: "hidden", top: 0, left: 0 }}>
-            <div className="relative" style={{ width: 1, height: 1 }}>
-              <div id={playerDivId} style={{ width: 1, height: 1 }} />
-            </div>
-          </div>
 
-          {/* Thumbnail — tap to expand to full player */}
           <button
             onClick={() => setMini(false)}
             title="Expand player"
@@ -422,7 +442,10 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
               title="Play / Pause"
               className="w-9 h-9 flex items-center justify-center rounded-full bg-white text-gray-950 hover:scale-105 active:scale-95 transition-transform shadow-md shrink-0 mx-1"
             >
-              <Play size={16} fill="currentColor" className="ml-0.5" />
+              {isPlaying
+                ? <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                : <Play size={16} fill="currentColor" className="ml-0.5" />
+              }
             </button>
 
             <button
@@ -479,7 +502,8 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
             {/* Video + controls column */}
             <div className="flex flex-col flex-shrink-0" style={{ flex: "1 1 0" }}>
               <div className="relative w-full bg-black" style={{ paddingBottom: "56.25%" }}>
-                <div id={playerDivId} className="absolute inset-0 w-full h-full" />
+                {/* Video slot — containerRef gets moved here by useEffect when in full mode */}
+                <div ref={videoSlotRef} className="absolute inset-0 w-full h-full" />
               </div>
               <div className="px-4 py-2.5 bg-gray-900 border-t border-white/10 shrink-0 space-y-2">
                 <div className="flex items-start justify-between gap-3">
