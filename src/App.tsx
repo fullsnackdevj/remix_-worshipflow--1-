@@ -781,17 +781,17 @@ export default function App() {
             )}
           </button>
 
-          {/* Team Notes */}
+          {/* Notes */}
           <button
             onClick={() => { setCurrentView("team-notes"); setIsMobileMenuOpen(false); }}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "team-notes"
               ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
               : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
               } ${isSidebarCollapsed ? "justify-center" : ""}`}
-            title="Team Notes"
+            title="Notes"
           >
             <NotebookPen size={20} className="shrink-0" />
-            {!isSidebarCollapsed && <span>Team Notes</span>}
+            {!isSidebarCollapsed && <span>Notes</span>}
           </button>
           {isRoleAdmin && (
             <button
@@ -871,7 +871,7 @@ export default function App() {
 
           <div className="flex-1 flex items-center">
             <h1 className="text-base sm:text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap">
-              {currentView === "dashboard" ? "Dashboard" : currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : currentView === "playground" ? "Playground" : currentView === "team-notes" ? "Team Notes" : "Song Management"}
+              {currentView === "dashboard" ? "Dashboard" : currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : currentView === "playground" ? "Playground" : currentView === "team-notes" ? "Notes" : "Song Management"}
             </h1>
           </div>
           <div className="flex items-center gap-2">
