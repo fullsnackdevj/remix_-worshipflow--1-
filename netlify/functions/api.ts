@@ -1204,12 +1204,46 @@ Rules:
     // GET /schedules
     if (rawPath === "/schedules" && method === "GET") {
         try {
-            const snapshot = await firestore.collection("schedules").orderBy("date").get();
-            const schedules = snapshot.docs.map(doc => {
+            const [schedSnap, membersSnap] = await Promise.all([
+                firestore.collection("schedules").orderBy("date").get(),
+                firestore.collection("members").get(),
+            ]);
+
+            // Build a fast lookup: memberId → photo URL
+            const photoById: Record<string, string> = {};
+            const photoByName: Record<string, string> = {};
+            membersSnap.docs.forEach(d => {
+                const p = d.data().photo || "";
+                if (p.startsWith("http")) {
+                    photoById[d.id] = p;
+                    const nameLower = (d.data().name || "").toLowerCase().trim();
+                    if (nameLower) photoByName[nameLower] = p;
+                }
+            });
+
+            // Inject photo back into a ScheduleMember-shaped object
+            const hydrate = (m: any): any => {
+                if (!m) return m;
+                const resolved =
+                    (m.photo?.startsWith("http") ? m.photo : "") ||
+                    photoById[m.memberId] ||
+                    photoByName[(m.name || "").toLowerCase().trim()] ||
+                    "";
+                return { ...m, photo: resolved };
+            };
+
+            const schedules = schedSnap.docs.map(doc => {
                 const data = doc.data();
                 return {
                     id: doc.id,
                     ...data,
+                    worshipLeader: hydrate(data.worshipLeader),
+                    backupSingers: (data.backupSingers ?? []).map(hydrate),
+                    musicians: (data.musicians ?? []).map(hydrate),
+                    assignments: (data.assignments ?? []).map((a: any) => ({
+                        ...a,
+                        members: (a.members ?? []).map(hydrate),
+                    })),
                     created_at: data.created_at?.toDate?.()?.toISOString() || data.created_at,
                     updated_at: data.updated_at?.toDate?.()?.toISOString() || data.updated_at,
                 };
@@ -1220,6 +1254,7 @@ Rules:
             return json(500, { error: "Failed to fetch schedules" });
         }
     }
+
 
     // POST /schedules
     if (rawPath === "/schedules" && method === "POST") {

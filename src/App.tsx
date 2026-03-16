@@ -404,10 +404,12 @@ export default function App() {
       if (!raw) return [];
       const data = JSON.parse(raw);
       const ts = localStorage.getItem("wf_schedules_cache_ts");
-      if (ts && Date.now() - Number(ts) < 10 * 60 * 1000 && Array.isArray(data)) return data;
+      // Reduced to 1 min so photo changes propagate quickly
+      if (ts && Date.now() - Number(ts) < 1 * 60 * 1000 && Array.isArray(data)) return data;
     } catch { /* noop */ }
     return [];
   });
+
   // Deep-link: open a specific event when navigating from a notification
   const [pendingDeepLinkEventId, setPendingDeepLinkEventId] = React.useState<string | null>(null);
   const [pendingDeepLinkEventDate, setPendingDeepLinkEventDate] = React.useState<string | null>(null);
