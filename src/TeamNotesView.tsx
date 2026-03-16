@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Plus, X, Pin, PinOff, Trash2, Pencil, Check, ChevronDown,
-  FileText, Users, Megaphone, BookOpen, Loader2, Search,
+  FileText, Users, Megaphone, NotebookPen, Loader2, Search,
 } from "lucide-react";
 import AutoTextarea from "./AutoTextarea";
 
@@ -201,7 +201,7 @@ function NoteFormModal({
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-white/10">
           <div className="flex items-center gap-2">
-            <BookOpen size={16} className="text-indigo-500" />
+            <NotebookPen size={16} className="text-indigo-500" />
             <span className="text-sm font-bold text-gray-900 dark:text-white">
               {initial ? "Edit Note" : "New Team Note"}
             </span>
@@ -405,7 +405,7 @@ export default function TeamNotesView({ userId, userName, userPhoto, userRole, o
       <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
         <div>
           <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <BookOpen size={20} className="text-indigo-500" /> Team Notes
+            <NotebookPen size={20} className="text-indigo-500" /> Team Notes
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
             Meeting recaps, decisions, and team announcements
@@ -464,7 +464,7 @@ export default function TeamNotesView({ userId, userName, userPhoto, userRole, o
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <div className="w-16 h-16 rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center mb-4">
-            <BookOpen size={28} className="text-indigo-400" />
+            <NotebookPen size={28} className="text-indigo-400" />
           </div>
           <p className="text-base font-semibold text-gray-700 dark:text-gray-300">
             {q || catFilter !== "all" ? "No notes match your search" : "No notes yet"}
