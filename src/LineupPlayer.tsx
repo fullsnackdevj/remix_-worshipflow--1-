@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { X, ChevronLeft, ChevronRight, Music, Sun, ListMusic, Check, RefreshCw } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, Music, Sun, ListMusic, Check, RefreshCw, SkipBack, SkipForward, Play } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface LineupTrack {
@@ -327,117 +327,190 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
 
   return (
     <>
-      {/* Backdrop — full mode only, click to minimize */}
+      {/* Backdrop — full mode only */}
       {!mini && (
         <div className="fixed inset-0 z-[9998] bg-black/80 backdrop-blur-sm" onClick={() => setMini(true)} />
       )}
 
-      {/* ── Player shell ──────────────────────────────────────────────────────
-          Mini mode: entire shell is draggable (bigger touch target on mobile).
-          Full mode: centered overlay — drag handlers are no-ops. */}
-      <div
-        ref={miniShellRef}
-        className={`fixed z-[9999] bg-gray-900 shadow-2xl rounded-2xl overflow-hidden flex flex-col transition-[width,max-height,border-radius] duration-300 ease-in-out ${
-          mini ? "w-72" : ""
-        }`}
-        style={
-          mini
-            ? {
-                left: pos.x, top: pos.y,
-                // touch-action:none is the key fix — tells the browser
-                // "don't scroll / zoom on this element, we handle touch ourselves"
-                touchAction: "none",
-                cursor: dragRef.current.dragging ? "grabbing" : "grab",
-              }
-            : { top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: "min(95vw, 960px)", maxHeight: "90vh" }
-        }
-        onPointerDown={onDragStart}
-        onPointerMove={onDragMove}
-        onPointerUp={onDragEnd}
-        onPointerCancel={onDragEnd}
-      >
-        {/* Header — visual header, drag is now on the whole shell */}
+      {/* ══ MINI MODE: Spotify-style slim bar ══════════════════════════════════
+          Entire element is draggable. YT iframe hides inside at 1×1px.        */}
+      {mini && (
         <div
-          className="flex items-center justify-between px-4 py-2.5 bg-gray-950/80 border-b border-white/10 shrink-0"
-          style={mini ? { userSelect: "none" } : {}}
+          ref={miniShellRef}
+          className="fixed z-[9999] flex items-center rounded-2xl bg-gray-950/95 backdrop-blur-md border border-white/10 shadow-2xl overflow-hidden"
+          style={{
+            left: pos.x, top: pos.y,
+            width: "min(92vw, 360px)",
+            touchAction: "none",
+            cursor: dragRef.current.dragging ? "grabbing" : "grab",
+          }}
+          onPointerDown={onDragStart}
+          onPointerMove={onDragMove}
+          onPointerUp={onDragEnd}
+          onPointerCancel={onDragEnd}
         >
-          <div className="flex items-center gap-2 min-w-0">
-            <ListMusic size={mini ? 12 : 15} className="text-indigo-400 shrink-0" />
-            <span className={`font-bold text-white truncate ${mini ? "text-xs" : "text-sm"}`}>
-              {mini ? `${currentIdx + 1}/${tracks.length} · ${current.title}` : "Lineup Playlist"}
-            </span>
-            {!mini && <span className="text-xs text-white/40 shrink-0">· {tracks.length} song{tracks.length !== 1 ? "s" : ""}</span>}
-            {/* Loop indicator */}
-            <span className="flex items-center gap-0.5 text-[9px] text-indigo-400/70 font-semibold shrink-0">
-              <RefreshCw size={9} />loop
-            </span>
+          {/* Hidden YT iframe — keeps audio alive while mini */}
+          <div style={{ position: "absolute", width: 1, height: 1, opacity: 0, pointerEvents: "none", overflow: "hidden", top: 0, left: 0 }}>
+            <div className="relative" style={{ width: 1, height: 1 }}>
+              <div id={playerDivId} style={{ width: 1, height: 1 }} />
+            </div>
           </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <button onClick={() => setMini(v => !v)}
-              title={mini ? "Expand" : "Minimize — video keeps playing!"}
-              className="p-1.5 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-colors">
-              {mini ? (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
-                  <polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" />
-                  <line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" />
-                </svg>
+
+          {/* Thumbnail — tap to expand to full player */}
+          <button
+            onClick={() => setMini(false)}
+            title="Expand player"
+            className="shrink-0 relative overflow-hidden hover:opacity-80 transition-opacity"
+            style={{ width: 68, height: 68, minWidth: 68, cursor: "pointer" }}
+          >
+            {(() => {
+              const vid = extractVideoId(current?.videoUrl ?? "");
+              return vid ? (
+                <img
+                  src={`https://img.youtube.com/vi/${vid}/mqdefault.jpg`}
+                  alt={current?.title ?? ""}
+                  className="w-full h-full object-cover"
+                  onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
+                />
               ) : (
+                <div className="w-full h-full flex items-center justify-center bg-indigo-900/50">
+                  <ListMusic size={22} className="text-indigo-400" />
+                </div>
+              );
+            })()}
+            {/* Expand icon on hover */}
+            <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 hover:opacity-100 transition-opacity pointer-events-none">
+              <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+                <polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" />
+                <line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" />
+              </svg>
+            </div>
+          </button>
+
+          {/* Track info */}
+          <div className="flex-1 min-w-0 px-3 select-none">
+            <p className="text-[13px] font-bold text-white truncate leading-tight">{current?.title}</p>
+            <p className="text-[11px] text-gray-400 truncate leading-snug mt-0.5 flex items-center gap-1.5">
+              <span className="truncate">{current?.artist || "Music Video"}</span>
+              <span className="text-gray-600 shrink-0">·</span>
+              <span className="text-indigo-400 font-semibold shrink-0">{currentIdx + 1}/{tracks.length}</span>
+              <span className="inline-flex items-center gap-0.5 text-[9px] text-indigo-500/60 font-semibold shrink-0">
+                <RefreshCw size={8} />
+              </span>
+            </p>
+          </div>
+
+          {/* Playback controls */}
+          <div className="flex items-center gap-0.5 pr-2 shrink-0">
+            <button
+              onClick={() => setCurrentIdx(i => i - 1)}
+              disabled={!hasPrev}
+              title="Previous"
+              className="p-2 rounded-full text-white/60 hover:text-white hover:bg-white/10 disabled:opacity-20 transition-all"
+            >
+              <SkipBack size={15} />
+            </button>
+
+            <button
+              onClick={() => {
+                if (playerRef.current) {
+                  const state = playerRef.current.getPlayerState?.();
+                  if (state === 1) playerRef.current.pauseVideo();
+                  else playerRef.current.playVideo();
+                }
+              }}
+              title="Play / Pause"
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-white text-gray-950 hover:scale-105 active:scale-95 transition-transform shadow-md shrink-0 mx-1"
+            >
+              <Play size={16} fill="currentColor" className="ml-0.5" />
+            </button>
+
+            <button
+              onClick={() => setCurrentIdx(i => i < tracks.length - 1 ? i + 1 : 0)}
+              title="Next"
+              className="p-2 rounded-full text-white/60 hover:text-white hover:bg-white/10 transition-all"
+            >
+              <SkipForward size={15} />
+            </button>
+
+            <button
+              onClick={onClose}
+              title="Close"
+              className="p-1.5 rounded-full text-white/25 hover:text-white hover:bg-white/10 transition-all"
+            >
+              <X size={13} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ══ FULL MODE: original full player ════════════════════════════════════ */}
+      {!mini && (
+        <div
+          className="fixed z-[9999] bg-gray-900 shadow-2xl rounded-2xl overflow-hidden flex flex-col"
+          style={{ top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: "min(95vw, 960px)", maxHeight: "90vh" }}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-2.5 bg-gray-950/80 border-b border-white/10 shrink-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <ListMusic size={15} className="text-indigo-400 shrink-0" />
+              <span className="font-bold text-white truncate text-sm">Lineup Playlist</span>
+              <span className="text-xs text-white/40 shrink-0">· {tracks.length} song{tracks.length !== 1 ? "s" : ""}</span>
+              <span className="flex items-center gap-0.5 text-[9px] text-indigo-400/70 font-semibold shrink-0">
+                <RefreshCw size={9} />loop
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button onClick={() => setMini(true)} title="Minimize — video keeps playing!"
+                className="p-1.5 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-colors">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
                   <polyline points="4 14 10 14 10 20" /><polyline points="20 10 14 10 14 4" />
                   <line x1="10" y1="14" x2="3" y2="21" /><line x1="21" y1="3" x2="14" y2="10" />
                 </svg>
-              )}
-            </button>
-            <button onClick={onClose} className="p-1.5 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-colors">
-              <X size={mini ? 13 : 16} />
-            </button>
-          </div>
-        </div>
-
-        {/* Body */}
-        <div ref={containerRef} className={`flex min-h-0 ${mini ? "flex-col" : "flex-col md:flex-row"}`}
-          style={mini ? {} : { maxHeight: "calc(90vh - 53px)" }}>
-
-          {/* Video column */}
-          <div className="flex flex-col flex-shrink-0" style={mini ? {} : { flex: "1 1 0" }}>
-            {/* YT Player container — ALWAYS rendered, never unmounts */}
-            <div className="relative w-full bg-black" style={{ paddingBottom: "56.25%" }}>
-              <div id={playerDivId} className="absolute inset-0 w-full h-full" />
+              </button>
+              <button onClick={onClose} className="p-1.5 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-colors">
+                <X size={16} />
+              </button>
             </div>
+          </div>
 
-            {/* Controls */}
-            <div className="px-4 py-2.5 bg-gray-900 border-t border-white/10 shrink-0 space-y-2">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
-                    <MoodPill mood={current.mood} />
-                    <span className="text-[10px] text-gray-500">{fmtDate(current.eventDate)}</span>
+          {/* Body */}
+          <div ref={containerRef} className="flex min-h-0 flex-col md:flex-row" style={{ maxHeight: "calc(90vh - 53px)" }}>
+            {/* Video + controls column */}
+            <div className="flex flex-col flex-shrink-0" style={{ flex: "1 1 0" }}>
+              <div className="relative w-full bg-black" style={{ paddingBottom: "56.25%" }}>
+                <div id={playerDivId} className="absolute inset-0 w-full h-full" />
+              </div>
+              <div className="px-4 py-2.5 bg-gray-900 border-t border-white/10 shrink-0 space-y-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                      <MoodPill mood={current.mood} />
+                      <span className="text-[10px] text-gray-500">{fmtDate(current.eventDate)}</span>
+                    </div>
+                    <p className="text-sm font-bold text-white truncate">{current.title}</p>
+                    {current.artist && <p className="text-xs text-gray-400 truncate">{current.artist}</p>}
+                    <p className="text-[10px] text-indigo-400 mt-0.5 truncate">{current.eventName}</p>
                   </div>
-                  <p className="text-sm font-bold text-white truncate">{current.title}</p>
-                  {current.artist && <p className="text-xs text-gray-400 truncate">{current.artist}</p>}
-                  {!mini && <p className="text-[10px] text-indigo-400 mt-0.5 truncate">{current.eventName}</p>}
+                  <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+                    <button onClick={() => setCurrentIdx(i => i - 1)} disabled={!hasPrev}
+                      className="flex items-center gap-0.5 rounded-xl bg-white/10 hover:bg-white/20 disabled:opacity-30 text-white font-medium transition-colors px-3 py-1.5 text-xs">
+                      <ChevronLeft size={14} /> Prev
+                    </button>
+                    <button onClick={() => setCurrentIdx(i => i + 1)} disabled={!hasNext}
+                      className="flex items-center gap-0.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 text-white font-medium transition-colors px-3 py-1.5 text-xs">
+                      Next <ChevronRight size={14} />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
-                  <button onClick={() => setCurrentIdx(i => i - 1)} disabled={!hasPrev}
-                    className={`flex items-center gap-0.5 rounded-xl bg-white/10 hover:bg-white/20 disabled:opacity-30 text-white font-medium transition-colors ${mini ? "px-2 py-1 text-[10px]" : "px-3 py-1.5 text-xs"}`}>
-                    <ChevronLeft size={mini ? 12 : 14} />{!mini && "Prev"}
-                  </button>
-                  <button onClick={() => setCurrentIdx(i => i + 1)} disabled={!hasNext}
-                    className={`flex items-center gap-0.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 text-white font-medium transition-colors ${mini ? "px-2 py-1 text-[10px]" : "px-3 py-1.5 text-xs"}`}>
-                    {!mini && "Next"}<ChevronRight size={mini ? 12 : 14} />
-                  </button>
+                <div className="flex items-center gap-3 pt-1.5 border-t border-white/8">
+                  <ListenBtn track={current} compact={false} />
+                  <ListenedBy entries={currentEntries} currentUserId={currentUser.uid} />
                 </div>
-              </div>
-              {/* I've Listened */}
-              <div className="flex items-center gap-3 pt-1.5 border-t border-white/8">
-                <ListenBtn track={current} compact={mini} />
-                <ListenedBy entries={currentEntries} currentUserId={currentUser.uid} />
               </div>
             </div>
-          </div>
 
-          {/* Track list — hidden in mini */}
-          {!mini && (
+            {/* Track list */}
             <div className="w-full md:w-64 lg:w-72 shrink-0 flex flex-col border-t md:border-t-0 md:border-l border-white/10 overflow-y-auto">
               <div className="px-4 py-2.5 border-b border-white/10 bg-gray-950/40 shrink-0">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Song Line-Up</p>
@@ -496,9 +569,9 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
                 })}
               </div>
             </div>
-          )}
+          </div>
         </div>
-      </div>
+      )}
     </>
   );
 }
