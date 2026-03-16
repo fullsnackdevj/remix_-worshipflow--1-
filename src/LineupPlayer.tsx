@@ -102,6 +102,8 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
   const [listens, setListens] = useState<Record<string, ListenEntry[]>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [playerReady, setPlayerReady] = useState(false);
+  // Track whether this is a mobile/tablet device — used for autoplay workaround
+  const isMobile = useRef(/Mobi|Android|iPhone|iPad|iPod|Tablet/i.test(navigator.userAgent)).current;
 
   // YouTube IFrame API player ref — this is what gives us onStateChange
   const playerRef = useRef<any>(null);
@@ -132,12 +134,23 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
         videoId,
         playerVars: {
           autoplay: 1,
+          // Mobile browsers block autoplay-with-audio unless the playback
+          // is directly triggered by a user gesture. Starting muted lets the
+          // browser allow autoplay; we immediately unMute inside onReady.
+          mute: 1,
           playsinline: 1, // Stay inline on iOS (no forced fullscreen)
           rel:  0,
           modestbranding: 1,
         },
         events: {
-          onReady: () => setPlayerReady(true),
+          onReady: (event: { target: any }) => {
+            // Unmute FIRST, then play — onReady is still within the gesture
+            // trust chain on both desktop and modern mobile browsers.
+            event.target.unMute();
+            event.target.setVolume(100);
+            event.target.playVideo();
+            setPlayerReady(true);
+          },
           onStateChange: (event: { data: number }) => {
             // 0 = ENDED — auto-mark listened, then advance and loop back to start
             if (event.data === 0) {
@@ -184,8 +197,14 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
     if (!playerRef.current || !playerReady) return;
     const videoId = extractVideoId(current?.videoUrl ?? "");
     if (!videoId) return;
-    // loadVideoById auto-plays on desktop and mobile
+    // loadVideoById triggers autoplay on desktop; on mobile we must also
+    // explicitly call playVideo() after a short tick to guarantee playback.
     playerRef.current.loadVideoById(videoId);
+    // Give the YT player one tick to accept the new video, then force play.
+    // This ensures mobile doesn't silently stall after a track switch.
+    setTimeout(() => {
+      try { playerRef.current?.playVideo(); } catch { /* noop */ }
+    }, 100);
   }, [currentIdx, playerReady]);
 
   // ── Fetch listens ─────────────────────────────────────────────────────────
