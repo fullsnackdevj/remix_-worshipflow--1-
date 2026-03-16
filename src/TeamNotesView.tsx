@@ -71,10 +71,14 @@ function NoteCard({
   const bodyRef = React.useRef<HTMLParagraphElement>(null);
   const [isOverflowing, setIsOverflowing] = useState(false);
 
-  // Check if text overflows the collapsed max-height
+  // Check if text overflows the collapsed max-height — run inside rAF so the
+  // browser has fully painted the capped height before we measure
   useEffect(() => {
     const el = bodyRef.current;
-    if (el) setIsOverflowing(el.scrollHeight > el.clientHeight + 2);
+    if (!el) return;
+    requestAnimationFrame(() => {
+      setIsOverflowing(el.scrollHeight > el.clientHeight + 2);
+    });
   }, [note.body]);
 
   return (
@@ -246,6 +250,7 @@ function NoteFormModal({
               minRows={5}
               placeholder="Write your meeting recap, decisions, or announcements here…"
               className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition resize-none"
+              style={{ maxHeight: "50vh", overflowY: "auto", scrollbarWidth: "thin" }}
             />
           </div>
         </div>
