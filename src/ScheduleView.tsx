@@ -4,7 +4,7 @@ import AutoTextarea from "./AutoTextarea";
 import { Member, ScheduleMember, Schedule, Song, Tag } from "./types";
 import {
   ChevronLeft, ChevronRight, Plus, Calendar, List, X,
-  Copy, Pencil, Lock, Users, Sun, Music, BookOpen, Bell, Eye,
+  Copy, Pencil, Lock, Users, Sun, Music, BookOpen, Mail, Eye,
 } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -881,7 +881,7 @@ const handleNotifyTeam = async () => {
                         >
                           {isNotifying
                             ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Sending…</>
-                            : <><Bell size={15} />{onCooldown ? `Notified at ${lastLabel}` : "📢 Notify Team"}</>}
+                            : <><Mail size={15} />{onCooldown ? `Notified at ${lastLabel}` : "Notify Team"}</>}
                         </button>
                       </div>
                       {onCooldown && (
