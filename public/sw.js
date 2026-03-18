@@ -1,73 +1,74 @@
-const CACHE_NAME = 'worshipflow-v2';
-const API_CACHE_NAME = 'worshipflow-api-v1';
-const OFFLINE_URL = '/offline.html';
+// WorshipFlow Service Worker — v8 (2026-03-18)
+// Strategy: network-first for EVERYTHING so returning users always get the latest
+// app code and data. Only fall back to cache when truly offline.
 
-// Static assets to pre-cache on install
-const PRECACHE_URLS = [
-    '/',
-    '/index.html',
-    '/offline.html',
-    '/manifest.json',
-    '/icon-192x192.png',
-    '/icon-512x512.png',
-];
+const CACHE_VERSION = 'wf-v8';
+const OFFLINE_URL   = '/offline.html';
 
-// API routes to cache with stale-while-revalidate (serve cache instantly, refresh in bg)
-const API_SWR_ROUTES = ['/api/songs', '/api/tags', '/api/members', '/api/schedules', '/api/notes'];
+// Minimal offline shell — only these need pre-caching
+const PRECACHE_URLS = ['/offline.html', '/icon-192x192.png'];
 
+// ── Message handler: allow clients to trigger skipWaiting ────────────────────
+self.addEventListener('message', event => {
+    if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
+});
+
+// ── Install: cache offline shell only ────────────────────────────────────────
 self.addEventListener('install', event => {
     event.waitUntil(
-        caches.open(CACHE_NAME).then(cache => cache.addAll(PRECACHE_URLS))
+        caches.open(CACHE_VERSION).then(cache => cache.addAll(PRECACHE_URLS))
     );
+    // Activate immediately — don't wait for old tabs to close
     self.skipWaiting();
 });
 
+// ── Activate: delete ALL old cache versions immediately ──────────────────────
 self.addEventListener('activate', event => {
     event.waitUntil(
         caches.keys().then(keys =>
-            Promise.all(
-                keys
-                    .filter(k => k !== CACHE_NAME && k !== API_CACHE_NAME)
-                    .map(k => caches.delete(k))
-            )
-        )
+            Promise.all(keys.filter(k => k !== CACHE_VERSION).map(k => caches.delete(k)))
+        ).then(() => self.clients.claim()) // take control of all open tabs right now
     );
-    self.clients.claim();
 });
 
+// ── Fetch: NETWORK-FIRST for everything ──────────────────────────────────────
+// • Navigation (HTML/JS/CSS): always network — ensures latest app code
+// • API calls: always network — ensures latest data
+// • Static assets (images/icons): network-first, cache as fallback
+// • Only serve from cache when the network fails (offline mode)
 self.addEventListener('fetch', event => {
+    // Skip non-GET and browser-extension requests
+    if (event.request.method !== 'GET') return;
+    if (!event.request.url.startsWith('http')) return;
+
     const url = new URL(event.request.url);
 
-    // Navigation — network-first, fallback to offline page
-    if (event.request.mode === 'navigate') {
-        event.respondWith(
-            fetch(event.request).catch(() => caches.match(OFFLINE_URL))
-        );
-        return;
-    }
+    // For Firebase, FCM, and external CDN requests — let browser handle normally
+    const isExternal = !url.hostname.includes('worshipflow') &&
+                       !url.hostname.includes('netlify') &&
+                       url.hostname !== self.location.hostname;
+    if (isExternal) return;
 
-    // API routes — stale-while-revalidate: respond instantly from cache, refresh in background
-    const isApiSwr = API_SWR_ROUTES.some(route => url.pathname.startsWith(route));
-    if (isApiSwr && event.request.method === 'GET') {
-        event.respondWith(
-            caches.open(API_CACHE_NAME).then(async cache => {
-                const cached = await cache.match(event.request);
-                // Kick off background refresh regardless
-                const networkFetch = fetch(event.request).then(networkRes => {
-                    if (networkRes.ok) {
-                        cache.put(event.request, networkRes.clone());
-                    }
-                    return networkRes;
-                }).catch(() => null);
-                // Serve cache immediately if available, otherwise await network
-                return cached ?? networkFetch;
-            })
-        );
-        return;
-    }
-
-    // Static assets — cache-first
     event.respondWith(
-        caches.match(event.request).then(cached => cached || fetch(event.request))
+        fetch(event.request)
+            .then(networkRes => {
+                // Cache successful responses for offline fallback
+                if (networkRes.ok) {
+                    const clone = networkRes.clone();
+                    caches.open(CACHE_VERSION).then(cache => cache.put(event.request, clone));
+                }
+                return networkRes;
+            })
+            .catch(async () => {
+                // Network failed — serve from cache
+                const cached = await caches.match(event.request);
+                if (cached) return cached;
+                // For navigation requests — show offline page
+                if (event.request.mode === 'navigate') {
+                    return caches.match(OFFLINE_URL);
+                }
+                // For everything else — return a generic network error response
+                return new Response('', { status: 503, statusText: 'Service Unavailable' });
+            })
     );
 });

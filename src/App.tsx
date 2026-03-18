@@ -528,6 +528,19 @@ export default function App() {
 
 
   useEffect(() => {
+    // ── Hard reset: if user hasn't visited in 12+ hours, wipe all caches ──────
+    // This handles returning users (overnight / 3+ days) so first render is
+    // always fresh — no grey buttons, no missing birthdays.
+    const HARD_RESET_MS = 12 * 60 * 60 * 1000;
+    const lastActive = Number(localStorage.getItem("wf_last_active") ?? "0");
+    if (Date.now() - lastActive > HARD_RESET_MS) {
+      ["wf_songs_cache", "wf_members_cache", "wf_schedules_cache",
+       "wf_schedules_cache_ts", "wf_notes_cache"].forEach(k => {
+        try { localStorage.removeItem(k); } catch { /* noop */ }
+      });
+    }
+    try { localStorage.setItem("wf_last_active", Date.now().toString()); } catch { /* noop */ }
+
     // ── Boot prefetch: skip if localStorage cache is still fresh ───────────────
     const isSongsCacheFresh = (() => {
       try { const { ts } = JSON.parse(localStorage.getItem("wf_songs_cache") || "{}"); return Date.now() - ts < 30 * 60 * 1000; } catch { return false; }

@@ -17,6 +17,35 @@ const isReturning = (() => { try { return !!sessionStorage.getItem('wf_visited')
 const MIN_SPLASH_MS = isReturning ? 400 : 1600;
 try { sessionStorage.setItem('wf_visited', '1'); } catch { /* noop */ }
 
+// ── Service Worker registration with auto-update ──────────────────────────────
+// When a new SW is waiting (new deploy), tell it to skip waiting and reload
+// so returning users always get the latest app version instantly.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').then(reg => {
+    // Already a new SW waiting — activate it now
+    if (reg.waiting) {
+      reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+    }
+    // New SW just installed while page is open
+    reg.addEventListener('updatefound', () => {
+      const newSW = reg.installing;
+      if (!newSW) return;
+      newSW.addEventListener('statechange', () => {
+        if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+          // New version ready — activate immediately
+          newSW.postMessage({ type: 'SKIP_WAITING' });
+        }
+      });
+    });
+  }).catch(() => { /* SW registration failed silently */ });
+
+  // When SW takes control (after skipWaiting), reload once to get fresh assets
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!refreshing) { refreshing = true; window.location.reload(); }
+  });
+}
+
 
 function Root() {
   const { status } = useAuth();
