@@ -1,8 +1,19 @@
 {
-    "title": "Email Notifications Are Live 🎉",
-    "message": "New this week — your team stays in the loop automatically:",
-    "updatedAt": "03-15-26 | 03:43 AM",
+    "title": "Birthday Cards Are Here 🎂",
+    "message": "New this week — celebrate your teammates right from the app:",
+    "updatedAt": "03-18-26 | 09:51 AM",
     "releases": [
+        {
+            "version": "March 18, 2026",
+            "highlights": [
+                "🎂 Birthday Card Modal — A personalized birthday card now pops up automatically when a teammate's birthday arrives. Cards are themed to each member's role (Musician, Worship Leader, Audio/Tech, and more) with matching colors, a Bible verse, and a special message.",
+                "💌 Send a Birthday Wish — Click 'Send Birthday Wishes' to write a personal note for the celebrant. Your message is saved and instantly delivered — no copy-paste, no group chat needed.",
+                "🔔 Live Notification — When you send a wish, the birthday person's notification bell lights up in real time so they never miss the love from their team.",
+                "🎉 Celebrant View — If it's your birthday, your card shows a personalized 'It's Your Birthday!' header and a scrollable feed of every wish and message your teammates wrote for you.",
+                "👤 Real Profile Photos — Birthday cards display the actual profile photos of the celebrant and every wisher — no more initials-only placeholders.",
+                "✨ Smooth Modal Experience — The card opens in a centered modal with a clean fade-and-slide animation. No jarring flashes or layout jumps."
+            ]
+        },
         {
             "version": "March 15, 2026",
             "highlights": [
