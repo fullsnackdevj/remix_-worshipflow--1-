@@ -293,14 +293,12 @@ export default function BirthdayCard({
       <style>{`
         @keyframes bdShimmer { 0% { transform:translateX(-100%) skewX(-15deg); } 100% { transform:translateX(250%) skewX(-15deg); } }
         @keyframes bdFloat  { 0%,100% { transform:translateY(0) rotate(0deg); } 50% { transform:translateY(-6px) rotate(4deg); } }
-        @keyframes bdPop    { 0% { transform:scale(0.85); opacity:0; } 100% { transform:scale(1); opacity:1; } }
         .bd-shimmer::after { content:''; position:absolute; inset:0; background:linear-gradient(90deg,transparent 20%,rgba(255,255,255,.18) 50%,transparent 80%); animation:bdShimmer 2.8s ease-in-out infinite; pointer-events:none; }
         .bd-cake { animation:bdFloat 3s ease-in-out infinite; display:inline-block; }
-        .bd-card { animation:bdPop 0.4s cubic-bezier(0.175,0.885,0.32,1.275) both; }
         .bd-dot  { position:absolute; border-radius:50%; opacity:.55; animation:bdFloat 2.5s ease-in-out infinite; }
       `}</style>
 
-      <div className="bd-card w-full rounded-2xl overflow-hidden shadow-2xl bg-gray-900 border border-white/5 flex flex-col">
+      <div className="w-full rounded-2xl overflow-hidden shadow-2xl bg-gray-900 border border-white/5 flex flex-col">
 
         {/* ── Themed header ─────────────────────────────────────────────── */}
         <div

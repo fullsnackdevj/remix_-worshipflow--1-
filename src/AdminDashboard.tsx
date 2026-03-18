@@ -410,30 +410,44 @@ export default function AdminDashboard({
             )}
 
             {/* ── Birthday Modal ──────────────────────────────────────────── */}
+            <style>{`
+              @keyframes bdBackdropIn {
+                from { opacity: 0; }
+                to   { opacity: 1; }
+              }
+              @keyframes bdModalIn {
+                from { opacity: 0; transform: scale(0.93) translateY(10px); }
+                to   { opacity: 1; transform: scale(1) translateY(0); }
+              }
+              .bd-backdrop { animation: bdBackdropIn 0.2s ease both; }
+              .bd-modal-in { animation: bdModalIn 0.25s cubic-bezier(0.175,0.885,0.32,1.275) both; }
+            `}</style>
             {birthdayModalOpen && celebrants.length > 0 && (
                 <div
-                    className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6"
-                    style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)" }}
+                    className="bd-backdrop fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6"
+                    style={{ background: "rgba(0,0,0,0.72)", backdropFilter: "blur(8px)" }}
                     onClick={() => setBirthdayModalOpen(false)}
                 >
+                    {/* Outer wrapper: relative so close btn can be absolute */}
                     <div
-                        className="relative w-full max-w-sm max-h-[92vh] overflow-y-auto rounded-2xl"
+                        className="bd-modal-in relative w-full max-w-sm"
                         onClick={e => e.stopPropagation()}
-                        style={{ scrollbarWidth: "thin" }}
                     >
-                        {/* Close button — floats above everything */}
+                        {/* Close button — absolute, outside scroll area, no layout shift */}
                         <button
                             onClick={() => setBirthdayModalOpen(false)}
-                            className="sticky top-2 ml-auto mr-2 z-20 flex w-8 h-8 items-center justify-center rounded-full bg-black/50 hover:bg-black/70 text-white transition-colors text-sm"
+                            className="absolute -top-3 -right-3 z-30 w-8 h-8 flex items-center justify-center rounded-full bg-gray-900 border border-white/10 hover:bg-gray-700 text-white transition-colors text-sm shadow-lg"
                             aria-label="Close birthday card"
                         >
                             ✕
                         </button>
 
-                        {/* Cards — stacked vertically, no extra header */}
-                        <div className="flex flex-col gap-3 -mt-8">
+                        {/* Scrollable card area — no negative margin */}
+                        <div
+                            className="max-h-[88vh] overflow-y-auto rounded-2xl flex flex-col gap-3"
+                            style={{ scrollbarWidth: "thin" }}
+                        >
                             {celebrants.map(m => {
-                                // Resolve current user's photo from members list (accurate picture)
                                 const myMember = members.find(mb =>
                                     mb.email?.trim().toLowerCase() === userEmail?.trim().toLowerCase()
                                 );
@@ -453,7 +467,6 @@ export default function AdminDashboard({
                     </div>
                 </div>
             )}
-
 
             {/* ── Top section: Daily Verse (left) + 2×2 metric tiles (right) ── */}
             {/* grid: mobile=1col, lg+=2col with 3:2 ratio. Grid cells auto-stretch to equal height */}
