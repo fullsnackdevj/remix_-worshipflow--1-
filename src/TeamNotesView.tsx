@@ -59,12 +59,13 @@ function relTime(iso: string) {
 function NoteCard({
   note, userId, userRole, onEdit, onDelete, onPin,
 }: {
+  key?: React.Key;
   note: TeamNoteEntry;
   userId: string;
   userRole?: string;
   onEdit: (n: TeamNoteEntry) => void;
-  onDelete: (id: string) => void;
-  onPin: (id: string, pinned: boolean) => void;
+  onDelete: (id: string) => Promise<void> | void;
+  onPin: (id: string, pinned: boolean) => Promise<void> | void;
 }) {
   const isAuthor = note.authorId === userId;
   const isAdmin  = userRole === "admin" || userRole === "leader";

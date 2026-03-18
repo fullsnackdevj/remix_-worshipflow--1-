@@ -53,10 +53,11 @@ function relTime(iso: string) {
 function PersonalNoteCard({
   note, onEdit, onDelete, onPin,
 }: {
+  key?: React.Key;
   note: PersonalNoteEntry;
   onEdit: (n: PersonalNoteEntry) => void;
-  onDelete: (id: string) => void;
-  onPin: (id: string, pinned: boolean) => void;
+  onDelete: (id: string) => Promise<void> | void;
+  onPin: (id: string, pinned: boolean) => Promise<void> | void;
 }) {
   const cfg = catConfig(note.category);
   const [expanded, setExpanded] = useState(false);

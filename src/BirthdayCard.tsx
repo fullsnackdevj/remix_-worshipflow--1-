@@ -158,6 +158,7 @@ function Avatar({ photo, name, size = 64, ring }: { photo?: string | null; name:
 interface Wish { userId: string; name: string; photo: string; message: string; sentAt: string; }
 
 interface BirthdayCardProps {
+  key?: React.Key;
   member: Member;
   currentUserId: string;
   currentUserName: string;

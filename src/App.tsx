@@ -416,33 +416,17 @@ export default function App() {
 
 
   // ── Songs shared state — seed from cache immediately for instant dashboard counts ──
-  const [allSongs, setAllSongs] = useState<Song[]>(() => {
-    try {
-      const raw = localStorage.getItem("wf_songs_cache");
-      if (!raw) return [];
-      const { songs, ts } = JSON.parse(raw);
-      // 30 min TTL — songs library changes infrequently
-      if (Date.now() - ts < 30 * 60 * 1000 && Array.isArray(songs)) return songs;
-    } catch { /* noop */ }
-    return [];
-  });
-  const [isLoadingSongs, setIsLoadingSongs] = useState(() => {
-    try {
-      const raw = localStorage.getItem("wf_songs_cache");
-      if (!raw) return true;
-      const { ts } = JSON.parse(raw);
-      return Date.now() - ts > 30 * 60 * 1000; // only show spinner if cache stale
-    } catch { return true; }
-  });
-  const [tags, setTags] = useState<Tag[]>(() => {
-    try {
-      const raw = localStorage.getItem("wf_songs_cache");
-      if (!raw) return [];
-      const { tags, ts } = JSON.parse(raw);
-      if (Date.now() - ts < 30 * 60 * 1000 && Array.isArray(tags)) return tags;
-    } catch { /* noop */ }
-    return [];
-  });
+  // Parse once — reused by allSongs, isLoadingSongs, and tags initialisers
+  const _songsCacheRaw = (() => { try { return JSON.parse(localStorage.getItem("wf_songs_cache") || "null"); } catch { return null; } })();
+  const _songsCacheFresh = !!_songsCacheRaw && Date.now() - (_songsCacheRaw.ts ?? 0) < 30 * 60 * 1000;
+
+  const [allSongs, setAllSongs] = useState<Song[]>(() =>
+    _songsCacheFresh && Array.isArray(_songsCacheRaw.songs) ? _songsCacheRaw.songs : []
+  );
+  const [isLoadingSongs, setIsLoadingSongs] = useState(() => !_songsCacheFresh);
+  const [tags, setTags] = useState<Tag[]>(() =>
+    _songsCacheFresh && Array.isArray(_songsCacheRaw.tags) ? _songsCacheRaw.tags : []
+  );
 
   // ── Lineup playlist player ────────────────────────────────────────────────
   const [lineupOpen, setLineupOpen] = useState(false);

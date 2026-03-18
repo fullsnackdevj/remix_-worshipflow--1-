@@ -803,7 +803,7 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
                 message: message?.trim() || "",
                 sentAt: new Date().toISOString(),
             };
-            if (!snap.exists()) {
+            if (!snap.exists) {
                 await ref.set({ memberId, date, reactions: {}, wishers: [senderUserId], wisherNames: [senderName], wishes: [wish] });
             } else {
                 await ref.update({
