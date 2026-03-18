@@ -6,12 +6,9 @@
         {
             "version": "March 18, 2026",
             "highlights": [
-                "Birthday Card Modal — A personalized birthday card now pops up automatically when a teammate's birthday arrives. Cards are themed to each member's role (Musician, Worship Leader, Audio/Tech, and more) with matching colors, a Bible verse, and a special message.",
-                "Send a Birthday Wish — Click 'Send Birthday Wishes' to write a personal note for the celebrant. Your message is saved and instantly delivered — no copy-paste, no group chat needed.",
-                "Live Notification — When you send a wish, the birthday person's notification bell lights up in real time so they never miss the love from their team.",
-                "Celebrant View — If it's your birthday, your card shows a personalized 'It's Your Birthday!' header and a scrollable feed of every wish and message your teammates wrote for you.",
-                "Real Profile Photos — Birthday cards display the actual profile photos of the celebrant and every wisher — no more initials-only placeholders.",
-                "Smooth Modal Experience — The card opens in a centered modal with a clean fade-and-slide animation. No jarring flashes or layout jumps."
+                "Birthday Cards — A role-themed birthday card automatically pops up for celebrating teammates, complete with a personalized message and Bible verse.",
+                "Send Wishes — Write a personal birthday note to the celebrant. They'll see all messages in a dedicated wish feed on their card, and get notified in real time.",
+                "Smooth Experience — Cards now open in a clean centered modal with profile photos, smooth animations, and no layout glitches."
             ]
         },
         {
