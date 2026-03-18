@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { Send } from "lucide-react";
+
 import { db } from "./firebase";
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove } from "firebase/firestore";
 import { Member } from "./types";
@@ -164,7 +166,8 @@ interface BirthdayCardProps {
   celebrantRole?: string;
 }
 
-const REACTION_EMOJIS = ["🎂", "🙏", "ROLE", "✨"] as const;
+const REACTION_EMOJIS = [] as const;
+
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function BirthdayCard({
@@ -173,7 +176,7 @@ export default function BirthdayCard({
 
   const theme = ROLE_THEMES[resolveThemeKey(member.roles ?? [], celebrantRole)] ?? ROLE_THEMES.member;
   const firstName = member.firstName ?? member.name.split(" ")[0];
-  const emojis = REACTION_EMOJIS.map(e => e === "ROLE" ? theme.uniqueEmoji : e);
+
 
   // Is the currently logged-in user the birthday person?
   const isSelf = !!currentUserEmail && !!member.email &&
@@ -338,27 +341,7 @@ export default function BirthdayCard({
             <p className="text-[11px] text-gray-500 mt-0.5">{theme.verseRef}</p>
           </div>
 
-          {/* Reactions */}
-          <div className="mt-4 w-full flex flex-wrap gap-2 justify-center">
-            {emojis.map(emoji => {
-              const count = (reactions[emoji] ?? []).length;
-              const isMine = (reactions[emoji] ?? []).includes(currentUserId);
-              return (
-                <button
-                  key={emoji}
-                  onClick={() => !isSelf && handleReact(emoji)}
-                  disabled={isSelf}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold transition-all border border-white/10
-                    ${isSelf ? "opacity-70 cursor-default bg-white/5 text-gray-400"
-                      : isMine ? theme.reactionTint + " ring-1 ring-white/20 active:scale-90"
-                      : "bg-white/5 hover:bg-white/10 text-gray-300 active:scale-90"}`}
-                >
-                  <span>{emoji}</span>
-                  {count > 0 && <span className="text-xs">{count}</span>}
-                </button>
-              );
-            })}
-          </div>
+
 
           {/* ── If self: show wish feed ──────────────────────────────────── */}
           {isSelf && wishes.length > 0 && (
@@ -422,7 +405,7 @@ export default function BirthdayCard({
                   className="flex-1 py-2 rounded-xl text-sm font-bold text-white transition-all active:scale-[0.98] disabled:opacity-60"
                   style={theme.btnStyle}
                 >
-                  {sending ? "Sending..." : "Send 💌"}
+                  {sending ? "Sending..." : <><Send size={14} className="inline mr-1.5" />Send</>}
                 </button>
               </div>
             </div>
