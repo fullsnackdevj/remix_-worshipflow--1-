@@ -343,6 +343,19 @@ export default function AdminDashboard({
     // Ref for scrolling to birthday cards section
     const birthdayRef = useRef<HTMLDivElement>(null);
 
+    // Modal: auto-open once per session if there are celebrants
+    const [birthdayModalOpen, setBirthdayModalOpen] = useState(() => false);
+    useEffect(() => {
+        if (celebrants.length > 0) {
+            const key = `wf_bday_modal_${new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" })}`;
+            if (!sessionStorage.getItem(key)) {
+                setBirthdayModalOpen(true);
+                sessionStorage.setItem(key, "1");
+            }
+        }
+    }, [celebrants.length]);
+
+
     return (
         <div className="space-y-4 p-0">
             {/* ── Greeting row — name left, Admin badge far right ── */}
@@ -392,30 +405,50 @@ export default function AdminDashboard({
             {celebrants.length > 0 && (
                 <BirthdayBanner
                     celebrants={celebrants}
-                    onScrollToCards={() => birthdayRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                    onScrollToCards={() => setBirthdayModalOpen(true)}
                 />
             )}
 
-            {/* ── Birthday Cards Row ──────────────────────────────────────── */}
-            {celebrants.length > 0 && (
-                <div ref={birthdayRef} className="w-full">
-                    <div className="flex items-center gap-2 mb-3">
-                        <span className="text-lg">🎂</span>
-                        <h2 className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                            Today's Birthday{celebrants.length > 1 ? "s" : ""}
-                        </h2>
-                    </div>
-                    {/* Responsive: 1 col mobile → 2 col sm → 3 col xl */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                        {celebrants.map(m => (
-                            <BirthdayCard
-                                key={m.id}
-                                member={m}
-                                currentUserId={userId ?? ""}
-                                currentUserName={userName}
-                                celebrantRole={celebrantRoles[m.id]}
-                            />
-                        ))}
+            {/* ── Birthday Modal ──────────────────────────────────────────── */}
+            {birthdayModalOpen && celebrants.length > 0 && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                    style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)" }}
+                    onClick={() => setBirthdayModalOpen(false)}
+                >
+                    <div
+                        className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        {/* Close button */}
+                        <button
+                            onClick={() => setBirthdayModalOpen(false)}
+                            className="absolute top-3 right-3 z-10 w-8 h-8 flex items-center justify-center rounded-full bg-black/40 hover:bg-black/60 text-white transition-colors"
+                            aria-label="Close birthday card"
+                        >
+                            ✕
+                        </button>
+
+                        {/* Header */}
+                        <div className="text-center py-4 px-6 bg-gradient-to-r from-amber-400 via-orange-400 to-pink-400 rounded-t-3xl">
+                            <p className="text-2xl">🎂</p>
+                            <h2 className="text-white font-bold text-lg tracking-wide drop-shadow">
+                                Today's Birthday{celebrants.length > 1 ? "s" : ""}!
+                            </h2>
+                        </div>
+
+                        {/* Cards — stack vertically inside the modal */}
+                        <div className="flex flex-col gap-0">
+                            {celebrants.map(m => (
+                                <BirthdayCard
+                                    key={m.id}
+                                    member={m}
+                                    currentUserId={userId ?? ""}
+                                    currentUserName={userName}
+                                    celebrantRole={celebrantRoles[m.id]}
+                                />
+                            ))}
+                        </div>
                     </div>
                 </div>
             )}
