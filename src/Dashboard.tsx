@@ -334,13 +334,41 @@ export default function Dashboard({
     const [loadingExtra, setLoadingExtra] = useState(true);
 
     useEffect(() => {
-        Promise.all([
-            fetch("/api/auth/pending").then(r => r.json()).catch(() => []),
-            fetch("/api/broadcasts").then(r => r.json()).catch(() => []),
-        ]).then(([p, b]) => {
-            setPendingUsers(Array.isArray(p) ? p : []);
-            setBroadcasts(Array.isArray(b) ? b : []);
-        }).finally(() => setLoadingExtra(false));
+    const EXTRA_TTL = 5 * 60 * 1000; // 5 minutes
+    const now = Date.now();
+
+    // Check cache first
+    let cachedPending: any[] | null = null;
+    let cachedBroadcasts: any[] | null = null;
+    try {
+      const rp = localStorage.getItem("wf_pending_cache");
+      if (rp) { const { data, ts } = JSON.parse(rp); if (now - ts < EXTRA_TTL) cachedPending = data; }
+      const rb = localStorage.getItem("wf_broadcasts_cache");
+      if (rb) { const { data, ts } = JSON.parse(rb); if (now - ts < EXTRA_TTL) cachedBroadcasts = data; }
+    } catch { /* noop */ }
+
+    if (cachedPending && cachedBroadcasts) {
+      setPendingUsers(cachedPending);
+      setBroadcasts(cachedBroadcasts);
+      setLoadingExtra(false);
+      return;
+    }
+
+    Promise.all([
+      cachedPending ? Promise.resolve(cachedPending)
+        : fetch("/api/auth/pending").then(r => r.json()).catch(() => []),
+      cachedBroadcasts ? Promise.resolve(cachedBroadcasts)
+        : fetch("/api/broadcasts").then(r => r.json()).catch(() => []),
+    ]).then(([p, b]) => {
+      const pending = Array.isArray(p) ? p : [];
+      const broadcasts = Array.isArray(b) ? b : [];
+      setPendingUsers(pending);
+      setBroadcasts(broadcasts);
+      try {
+        if (!cachedPending) localStorage.setItem("wf_pending_cache", JSON.stringify({ data: pending, ts: now }));
+        if (!cachedBroadcasts) localStorage.setItem("wf_broadcasts_cache", JSON.stringify({ data: broadcasts, ts: now }));
+      } catch { /* noop */ }
+    }).finally(() => setLoadingExtra(false));
     }, []);
 
     // All roles see the full bento dashboard

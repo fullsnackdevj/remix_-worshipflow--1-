@@ -1,7 +1,10 @@
-import React, { useMemo, useState, useEffect, useCallback } from "react";
+import React, { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { db } from "./firebase";
+import { collection, getDocs } from "firebase/firestore";
 import { Member, ScheduleMember, Schedule } from "./types";
 import VerseOfTheDay from "./VerseOfTheDay";
+import BirthdayCard from "./BirthdayCard";
+import BirthdayBanner from "./BirthdayBanner";
 import {
     Music, Users, Calendar, NotepadText, ChevronRight, Clock,
     Bug, Lightbulb, CheckCircle2, AlertCircle, Shield, Bell, UserCheck,
@@ -309,6 +312,37 @@ export default function AdminDashboard({
     const [releaseNotes, setReleaseNotes] = useState<{ title: string; message: string; updatedAt?: string; releases: { version: string; highlights: string[] }[] } | null>(null);
     useEffect(() => { fetch("/release-notes.json").then(r => r.json()).then(setReleaseNotes).catch(() => { }); }, []);
 
+    // ── Birthday detection ────────────────────────────────────────────────────
+    const todayMMDD = `${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`;
+    const celebrants: Member[] = useMemo(
+        () => members.filter(m => m.birthdate?.slice(5) === todayMMDD),
+        [members, todayMMDD]
+    );
+
+    // Fetch access roles for celebrants from approved_users Firestore collection
+    const [celebrantRoles, setCelebrantRoles] = useState<Record<string, string>>({});
+    useEffect(() => {
+        if (celebrants.length === 0) return;
+        getDocs(collection(db, "approved_users"))
+            .then(snap => {
+                const roleMap: Record<string, string> = {};
+                snap.forEach(d => {
+                    const data = d.data();
+                    if (data.email && data.role) roleMap[String(data.email).toLowerCase()] = data.role;
+                });
+                const resolved: Record<string, string> = {};
+                celebrants.forEach(m => {
+                    const role = roleMap[m.email?.toLowerCase() ?? ""];
+                    if (role) resolved[m.id] = role;
+                });
+                setCelebrantRoles(resolved);
+            })
+            .catch(() => {});
+    }, [celebrants.map(c => c.id).join(",")]);
+
+    // Ref for scrolling to birthday cards section
+    const birthdayRef = useRef<HTMLDivElement>(null);
+
     return (
         <div className="space-y-4 p-0">
             {/* ── Greeting row — name left, Admin badge far right ── */}
@@ -353,6 +387,38 @@ export default function AdminDashboard({
                 </div>
             </div>
 
+
+            {/* ── Birthday Banner ─────────────────────────────────────────── */}
+            {celebrants.length > 0 && (
+                <BirthdayBanner
+                    celebrants={celebrants}
+                    onScrollToCards={() => birthdayRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                />
+            )}
+
+            {/* ── Birthday Cards Row ──────────────────────────────────────── */}
+            {celebrants.length > 0 && (
+                <div ref={birthdayRef} className="w-full">
+                    <div className="flex items-center gap-2 mb-3">
+                        <span className="text-lg">🎂</span>
+                        <h2 className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                            Today's Birthday{celebrants.length > 1 ? "s" : ""}
+                        </h2>
+                    </div>
+                    {/* Responsive: 1 col mobile → 2 col sm → 3 col xl */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                        {celebrants.map(m => (
+                            <BirthdayCard
+                                key={m.id}
+                                member={m}
+                                currentUserId={userId ?? ""}
+                                currentUserName={userName}
+                                celebrantRole={celebrantRoles[m.id]}
+                            />
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* ── Top section: Daily Verse (left) + 2×2 metric tiles (right) ── */}
             {/* grid: mobile=1col, lg+=2col with 3:2 ratio. Grid cells auto-stretch to equal height */}

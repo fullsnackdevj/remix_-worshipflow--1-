@@ -72,7 +72,7 @@ export default function MembersView({
   // ── Members helpers + handlers ────────────────────────────────────────────
   // ── Member Functions ────────────────────────────────────────────────────────
   const MEMBERS_CACHE_KEY = "wf_members_cache";
-  const MEMBERS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+  const MEMBERS_CACHE_TTL_MS = 20 * 60 * 1000; // 20 minutes — matches App.tsx boot TTL
 
   const readMembersCache = (): any[] | null => {
     try {

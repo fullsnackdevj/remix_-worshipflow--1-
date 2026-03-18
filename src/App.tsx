@@ -404,8 +404,8 @@ export default function App() {
       if (!raw) return [];
       const data = JSON.parse(raw);
       const ts = localStorage.getItem("wf_schedules_cache_ts");
-      // Reduced to 1 min so photo changes propagate quickly
-      if (ts && Date.now() - Number(ts) < 1 * 60 * 1000 && Array.isArray(data)) return data;
+      // 15 min TTL — schedules rarely change mid-session
+      if (ts && Date.now() - Number(ts) < 15 * 60 * 1000 && Array.isArray(data)) return data;
     } catch { /* noop */ }
     return [];
   });
@@ -421,8 +421,8 @@ export default function App() {
       const raw = localStorage.getItem("wf_songs_cache");
       if (!raw) return [];
       const { songs, ts } = JSON.parse(raw);
-      // Use cache if it's less than 10 minutes old
-      if (Date.now() - ts < 10 * 60 * 1000 && Array.isArray(songs)) return songs;
+      // 30 min TTL — songs library changes infrequently
+      if (Date.now() - ts < 30 * 60 * 1000 && Array.isArray(songs)) return songs;
     } catch { /* noop */ }
     return [];
   });
@@ -431,7 +431,7 @@ export default function App() {
       const raw = localStorage.getItem("wf_songs_cache");
       if (!raw) return true;
       const { ts } = JSON.parse(raw);
-      return Date.now() - ts > 10 * 60 * 1000; // only show spinner if cache stale
+      return Date.now() - ts > 30 * 60 * 1000; // only show spinner if cache stale
     } catch { return true; }
   });
   const [tags, setTags] = useState<Tag[]>(() => {
@@ -439,7 +439,7 @@ export default function App() {
       const raw = localStorage.getItem("wf_songs_cache");
       if (!raw) return [];
       const { tags, ts } = JSON.parse(raw);
-      if (Date.now() - ts < 10 * 60 * 1000 && Array.isArray(tags)) return tags;
+      if (Date.now() - ts < 30 * 60 * 1000 && Array.isArray(tags)) return tags;
     } catch { /* noop */ }
     return [];
   });
@@ -482,7 +482,8 @@ export default function App() {
       const raw = localStorage.getItem("wf_members_cache");
       if (!raw) return [];
       const { members, ts } = JSON.parse(raw);
-      if (Date.now() - ts < 10 * 60 * 1000 && Array.isArray(members)) return members;
+      // 20 min TTL — member list rarely changes mid-session
+      if (Date.now() - ts < 20 * 60 * 1000 && Array.isArray(members)) return members;
     } catch { /* noop */ }
     return [];
   });
@@ -527,7 +528,17 @@ export default function App() {
 
 
   useEffect(() => {
-    // ── Boot prefetch: fan out both API calls in parallel immediately ─────────────
+    // ── Boot prefetch: skip if localStorage cache is still fresh ───────────────
+    const isSongsCacheFresh = (() => {
+      try { const { ts } = JSON.parse(localStorage.getItem("wf_songs_cache") || "{}"); return Date.now() - ts < 30 * 60 * 1000; } catch { return false; }
+    })();
+    const isMembersCacheFresh = (() => {
+      try { const { ts } = JSON.parse(localStorage.getItem("wf_members_cache") || "{}"); return Date.now() - ts < 20 * 60 * 1000; } catch { return false; }
+    })();
+    const isSchedulesCacheFresh = (() => {
+      try { const ts = localStorage.getItem("wf_schedules_cache_ts"); return !!ts && Date.now() - Number(ts) < 15 * 60 * 1000; } catch { return false; }
+    })();
+
     // Songs + tags
     const fetchSongs = async () => {
       try {
@@ -543,7 +554,6 @@ export default function App() {
         const tags  = Array.isArray(tagsData)  ? tagsData  : [];
         setAllSongs(songs);
         setTags(tags);
-        // Write back to cache so next boot is instant too
         try { localStorage.setItem("wf_songs_cache", JSON.stringify({ songs, tags, ts: Date.now() })); } catch { /* noop */ }
       } catch (e) {
         console.warn("Boot song fetch failed:", e);
@@ -584,15 +594,14 @@ export default function App() {
         } catch { /* noop */ }
       }
     };
-    // Fire all three in true parallel
-    fetchSongs();
-    fetchMembers();
-    fetchSchedules();
+    // Only fire fetches for data whose cache is stale — skip the rest
+    if (!isSongsCacheFresh) fetchSongs(); else setIsLoadingSongs(false);
+    if (!isMembersCacheFresh) fetchMembers();
+    if (!isSchedulesCacheFresh) fetchSchedules();
+
+    // NOTE: View-specific fetch functions in SongsView/MembersView serve as
+    // background refresh on mount (stale-while-revalidate pattern).
   }, []);
-
-  // NOTE: View-specific fetch functions in SongsView/MembersView serve as
-  // background refresh on mount (stale-while-revalidate pattern).
-
 
   /** The currently signed-in user's Member document (matched by email), if any */
   const myMemberProfile = useMemo(() => {
@@ -616,11 +625,11 @@ export default function App() {
     return map;
   }, [allMembers]);
 
-  // ── Dashboard notes — TTL cache: only re-fetch after 2 minutes ──────────
+  // ── Dashboard notes — TTL cache: only re-fetch after 8 minutes ──────────
   const [dashboardNotes, setDashboardNotes] = useState<any[]>(() => {
     try {
       const raw = localStorage.getItem("wf_notes_cache");
-      if (raw) { const { data, ts } = JSON.parse(raw); if (Date.now() - ts < 2 * 60 * 1000) return data; }
+      if (raw) { const { data, ts } = JSON.parse(raw); if (Date.now() - ts < 8 * 60 * 1000) return data; }
     } catch { /* noop */ } return [];
   });
   useEffect(() => {
@@ -629,7 +638,7 @@ export default function App() {
     if (raw) {
       try {
         const { ts } = JSON.parse(raw);
-        if (Date.now() - ts < 2 * 60 * 1000) return; // cache fresh — skip fetch
+        if (Date.now() - ts < 8 * 60 * 1000) return; // cache fresh — skip fetch
       } catch { /* noop */ }
     }
     fetch("/api/notes").then(r => r.json()).then(data => {
