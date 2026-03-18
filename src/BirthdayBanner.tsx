@@ -71,12 +71,12 @@ export default function BirthdayBanner({ celebrants, onScrollToCards }: Props) {
 
         {/* Message */}
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold text-amber-900 leading-tight truncate">
+          <p className="text-sm font-bold leading-tight truncate" style={{ color: "#fff", textShadow: "0 1px 3px rgba(0,0,0,0.5)" }}>
             🎉 Today's Birthday{celebrants.length > 1 ? "s" : ""}:{" "}
             <span className="underline decoration-dotted">{nameStr}</span>
           </p>
-          <p className="text-xs text-amber-800/80 mt-0.5">
-            {celebrants.length > 1 ? "Send them" : "Send"} your birthday wishes! 👇
+          <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.85)", textShadow: "0 1px 2px rgba(0,0,0,0.4)" }}>
+            {celebrants.length > 1 ? "Send them" : "Send"} your birthday wishes! 🎊
           </p>
         </div>
 
@@ -84,7 +84,7 @@ export default function BirthdayBanner({ celebrants, onScrollToCards }: Props) {
         <button
           aria-label="Dismiss birthday banner"
           onClick={handleDismiss}
-          className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-amber-900/20 hover:bg-amber-900/30 transition-colors text-amber-900 font-bold text-xs"
+          className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-black/20 hover:bg-black/35 transition-colors text-white font-bold text-xs"
         >
           ✕
         </button>

@@ -374,7 +374,7 @@ export default function Dashboard({
     // All roles see the full bento dashboard
     return (
         <AdminDashboard
-            userName={userName} userEmail={userEmail} userId={userId} userRole={userRole}
+            userName={userName} userEmail={userEmail} userId={userId} userRole={userRole} userPhoto={userPhoto}
             songs={songs} members={members} schedules={schedules} notes={notes}
             onNavigate={onNavigate}
             broadcasts={broadcasts} pendingUsers={pendingUsers} loadingExtra={loadingExtra}

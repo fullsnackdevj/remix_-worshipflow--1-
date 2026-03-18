@@ -787,6 +787,49 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
         }
     }
 
+    // ─── BIRTHDAY WISH ───────────────────────────────────────────────────────────
+    if (rawPath === "/birthday-wish" && method === "POST") {
+        const { memberId, memberName, date, senderUserId, senderName, senderPhoto, message } = body;
+        if (!memberId || !date || !senderUserId || !senderName) return json(400, { error: "Missing required fields" });
+        if (!firestore) return json(500, { error: "DB unavailable" });
+        try {
+            const docId = `${memberId}_${date}`;
+            const ref = firestore.collection("birthday_reactions").doc(docId);
+            const snap = await ref.get();
+            const wish = {
+                userId: senderUserId,
+                name: senderName,
+                photo: senderPhoto || "",
+                message: message?.trim() || "",
+                sentAt: new Date().toISOString(),
+            };
+            if (!snap.exists()) {
+                await ref.set({ memberId, date, reactions: {}, wishers: [senderUserId], wisherNames: [senderName], wishes: [wish] });
+            } else {
+                await ref.update({
+                    wishers: admin.firestore.FieldValue.arrayUnion(senderUserId),
+                    wisherNames: admin.firestore.FieldValue.arrayUnion(senderName),
+                    wishes: admin.firestore.FieldValue.arrayUnion(wish),
+                });
+            }
+            // Notify the whole team so the celebrant sees it in their bell
+            const firstName = memberName?.split(" ")[0] || memberName || "your teammate";
+            await writeNotif(firestore, {
+                type: "birthday_wish",
+                message: `🎂 Birthday Wishes for ${firstName}!`,
+                subMessage: `${senderName}: "${(message?.trim() || "Happy Birthday!").slice(0, 60)}"`,
+                actorName: senderName,
+                actorPhoto: senderPhoto?.startsWith("http") ? senderPhoto : "",
+                actorUserId: senderUserId,
+                targetAudience: "all",
+            });
+            return json(200, { success: true });
+        } catch (e) {
+            console.error("birthday-wish failed:", e);
+            return json(500, { error: "Failed to save wish" });
+        }
+    }
+
     // ─── OCR ────────────────────────────────────────────────────────────────────
     if (rawPath === "/ocr" && method === "POST") {
 

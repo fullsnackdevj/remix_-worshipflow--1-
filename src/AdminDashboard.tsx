@@ -264,7 +264,7 @@ function NextServiceTile({ ev, songs, members, myMemberId, onClick }: {
 
 // ── Main AdminDashboard ───────────────────────────────────────────────────────
 export default function AdminDashboard({
-    userName, userEmail, userId = "", songs, members, schedules, notes, onNavigate,
+    userName, userEmail, userId = "", userPhoto, songs, members, schedules, notes, onNavigate,
     broadcasts: broadcastsProp, pendingUsers: pendingUsersProp, loadingExtra = false,
     canAddSong, canWriteSchedule, canAddMember, userRole = "admin",
     onOpenLineup, lineupTrackCount = 0,
@@ -412,46 +412,48 @@ export default function AdminDashboard({
             {/* ── Birthday Modal ──────────────────────────────────────────── */}
             {birthdayModalOpen && celebrants.length > 0 && (
                 <div
-                    className="fixed inset-0 z-50 flex items-center justify-center p-4"
-                    style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)" }}
+                    className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6"
+                    style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)" }}
                     onClick={() => setBirthdayModalOpen(false)}
                 >
                     <div
-                        className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl"
+                        className="relative w-full max-w-sm max-h-[92vh] overflow-y-auto rounded-2xl"
                         onClick={e => e.stopPropagation()}
+                        style={{ scrollbarWidth: "thin" }}
                     >
-                        {/* Close button */}
+                        {/* Close button — floats above everything */}
                         <button
                             onClick={() => setBirthdayModalOpen(false)}
-                            className="absolute top-3 right-3 z-10 w-8 h-8 flex items-center justify-center rounded-full bg-black/40 hover:bg-black/60 text-white transition-colors"
+                            className="sticky top-2 ml-auto mr-2 z-20 flex w-8 h-8 items-center justify-center rounded-full bg-black/50 hover:bg-black/70 text-white transition-colors text-sm"
                             aria-label="Close birthday card"
                         >
                             ✕
                         </button>
 
-                        {/* Header */}
-                        <div className="text-center py-4 px-6 bg-gradient-to-r from-amber-400 via-orange-400 to-pink-400 rounded-t-3xl">
-                            <p className="text-2xl">🎂</p>
-                            <h2 className="text-white font-bold text-lg tracking-wide drop-shadow">
-                                Today's Birthday{celebrants.length > 1 ? "s" : ""}!
-                            </h2>
-                        </div>
-
-                        {/* Cards — stack vertically inside the modal */}
-                        <div className="flex flex-col gap-0">
-                            {celebrants.map(m => (
-                                <BirthdayCard
-                                    key={m.id}
-                                    member={m}
-                                    currentUserId={userId ?? ""}
-                                    currentUserName={userName}
-                                    celebrantRole={celebrantRoles[m.id]}
-                                />
-                            ))}
+                        {/* Cards — stacked vertically, no extra header */}
+                        <div className="flex flex-col gap-3 -mt-8">
+                            {celebrants.map(m => {
+                                // Resolve current user's photo from members list (accurate picture)
+                                const myMember = members.find(mb =>
+                                    mb.email?.trim().toLowerCase() === userEmail?.trim().toLowerCase()
+                                );
+                                return (
+                                    <BirthdayCard
+                                        key={m.id}
+                                        member={m}
+                                        currentUserId={userId ?? ""}
+                                        currentUserName={userName}
+                                        currentUserEmail={userEmail}
+                                        currentUserPhoto={myMember?.photo || userPhoto}
+                                        celebrantRole={celebrantRoles[m.id]}
+                                    />
+                                );
+                            })}
                         </div>
                     </div>
                 </div>
             )}
+
 
             {/* ── Top section: Daily Verse (left) + 2×2 metric tiles (right) ── */}
             {/* grid: mobile=1col, lg+=2col with 3:2 ratio. Grid cells auto-stretch to equal height */}
