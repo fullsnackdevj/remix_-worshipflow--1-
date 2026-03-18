@@ -1088,6 +1088,9 @@ export default function App() {
                     setPendingDeepLinkEventDate(null);
                   }}
                    onOpenVideo={openVideo}
+                   onEventPanelOpen={() => {
+                     if (window.innerWidth >= 768) setIsSidebarCollapsed(true);
+                   }}
                 />
               ) : null}
 

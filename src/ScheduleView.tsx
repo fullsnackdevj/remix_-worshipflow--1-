@@ -50,6 +50,8 @@ export interface ScheduleViewProps {
   onDeepLinkHandled?: () => void;
   /** Open a YouTube video in the persistent mini player */
   onOpenVideo?: (url: string) => void;
+  /** Called when an event panel opens — lets App auto-collapse the sidebar */
+  onEventPanelOpen?: () => void;
 }
 
 export default function ScheduleView({
@@ -70,6 +72,7 @@ export default function ScheduleView({
   deepLinkEventDate,
   onDeepLinkHandled,
   onOpenVideo,
+  onEventPanelOpen,
 }: ScheduleViewProps) {
 
   // ── Local scheduling state ────────────────────────────────────────────────
@@ -194,6 +197,7 @@ const openEventById = (eventId: string, dateStr: string) => {
   setSelectedScheduleDate(dateStr);
   setSelectedEventId(eventId);
   setSchedPanelMode("view");
+  onEventPanelOpen?.();
   setEditSchedEventName((ev as any).eventName || (ev.serviceType === "sunday" ? "Sunday Service" : "Midweek Service"));
   setEditSchedServiceType((ev.serviceType as any) || "sunday");
   setEditSchedWorshipLeader(ev.worshipLeader ?? null);
@@ -224,10 +228,12 @@ const openScheduleEditor = (dateStr: string) => {
     setSelectedEventId(null);
   } else if (eventsOnDate.length === 1) {
     openEventById(eventsOnDate[0].id, dateStr);
+    // onEventPanelOpen called inside openEventById
   } else {
     // Day view — show list
     setSelectedEventId(null);
     setSchedPanelMode("view");
+    onEventPanelOpen?.();
   }
 };
 
