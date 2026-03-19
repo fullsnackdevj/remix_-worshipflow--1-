@@ -261,21 +261,22 @@ export default function RehearsalView({ allSchedules, allSongs, lineupTracks, on
             onTouchStart={onTouchStart}
             onTouchEnd={onTouchEnd}
         >
-            {/* Single shared header row — one border-b, no alignment gap possible */}
-            <div className="flex shrink-0 border-b border-gray-200 dark:border-gray-800">
-                <div className="w-1/2 flex items-center px-4 py-2">
+            {/* Single shared header row */}
+            <div className="flex items-center shrink-0 border-b border-gray-200 dark:border-gray-800">
+                <div className="flex-1 px-4 py-2">
                     <span className="text-[11px] font-bold uppercase tracking-widest text-rose-500">Lyrics</span>
                 </div>
-                <div className="w-1/2 flex items-center justify-between px-4 py-2 border-l border-gray-200 dark:border-gray-800">
+                {/* Vertical divider — same element in header and content keeps x identical */}
+                <div className="w-px self-stretch bg-gray-200 dark:bg-gray-800 shrink-0" />
+                <div className="flex-1 px-4 py-2 flex items-center justify-between">
                     <span className="text-[11px] font-bold uppercase tracking-widest text-indigo-500">Chords</span>
                     {transposeControls}
                 </div>
             </div>
 
-            {/* Scrollable content — two columns side by side */}
-            <div className="flex flex-1 overflow-hidden min-h-0">
-                {/* Lyrics */}
-                <div className="w-1/2 overflow-y-auto border-r border-gray-200 dark:border-gray-800">
+            {/* Scrollable content */}
+            <div className="flex flex-1 min-h-0 overflow-hidden">
+                <div className="flex-1 overflow-y-auto">
                     {currentSong?.lyrics?.trim() ? (
                         <pre className="font-mono text-sm leading-7 text-gray-800 dark:text-gray-200 px-5 py-4 whitespace-pre-wrap break-words">
                             {currentSong.lyrics}
@@ -287,9 +288,9 @@ export default function RehearsalView({ allSchedules, allSongs, lineupTracks, on
                         </div>
                     )}
                 </div>
-
-                {/* Chords */}
-                <div className="w-1/2 overflow-y-auto">
+                {/* Same vertical divider element — guarantees same x position */}
+                <div className="w-px bg-gray-200 dark:bg-gray-800 shrink-0" />
+                <div className="flex-1 overflow-y-auto">
                     {transposedChords?.trim() ? (
                         <pre className="font-mono text-sm leading-7 text-gray-800 dark:text-gray-200 px-5 py-4 whitespace-pre-wrap break-words">
                             {transposedChords}
@@ -304,6 +305,8 @@ export default function RehearsalView({ allSchedules, allSongs, lineupTracks, on
             </div>
         </div>
     );
+
+
 
 
 
