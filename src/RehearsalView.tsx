@@ -175,6 +175,7 @@ export default function RehearsalView({
 
     // OCR screenshot upload
     const ocrFileRef = useRef<HTMLInputElement>(null);
+    const ocrColRef = useRef<"lyrics" | "chords">("chords"); // tracks which column triggered the upload
     const [isOcrLoading, setIsOcrLoading] = useState(false);
 
     const handleOcrUpload = async (file: File) => {
@@ -185,7 +186,6 @@ export default function RehearsalView({
             const base64 = await new Promise<string>((resolve, reject) => {
                 reader.onload = () => {
                     const result = reader.result as string;
-                    // Strip the data:image/...;base64, prefix
                     resolve(result.split(",")[1] ?? "");
                 };
                 reader.onerror = reject;
@@ -194,21 +194,21 @@ export default function RehearsalView({
             const res = await fetch("/api/ocr", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ base64Data: base64, mimeType: file.type, type: "chords" }),
+                body: JSON.stringify({ base64Data: base64, mimeType: file.type, type: ocrColRef.current }),
             });
             if (!res.ok) throw new Error("OCR failed");
             const { text } = await res.json();
-            chordsEdit.onChange(text ?? "");
-            showToast?.("success", "Chords extracted from image!");
+            // Route to the correct column
+            if (ocrColRef.current === "lyrics") lyricsEdit.onChange(text ?? "");
+            else chordsEdit.onChange(text ?? "");
+            showToast?.("success", `${ocrColRef.current === "lyrics" ? "Lyrics" : "Chords"} extracted from image!`);
         } catch {
-            showToast?.("error", "Could not extract chords from image. Try a clearer photo.");
+            showToast?.("error", "Could not extract text from image. Try a clearer photo.");
         } finally {
             setIsOcrLoading(false);
-            // Reset input so the same file can be re-selected
             if (ocrFileRef.current) ocrFileRef.current.value = "";
         }
     };
-
 
     const songs: ("joyful" | "solemn")[] = [];
     const event = getNextEventWithLineup(allSchedules);
@@ -371,17 +371,15 @@ export default function RehearsalView({
                 {/* Divider */}
                 <div className="w-px h-4 bg-gray-200 dark:bg-gray-700 mx-1" />
 
-                {/* Screenshot / OCR — chords column only */}
-                {col === "chords" && (
-                    <button
-                        onClick={() => ocrFileRef.current?.click()}
-                        disabled={isOcrLoading}
-                        title="Upload a chord sheet screenshot (AI will extract the chords)"
-                        className="p-1.5 rounded-lg text-violet-400 hover:text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-900/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                    >
-                        {isOcrLoading ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}
-                    </button>
-                )}
+                {/* Screenshot / OCR — both lyrics and chords columns */}
+                <button
+                    onClick={() => { ocrColRef.current = col; ocrFileRef.current?.click(); }}
+                    disabled={isOcrLoading}
+                    title="Upload a screenshot — AI will extract the text"
+                    className="p-1.5 rounded-lg text-violet-400 hover:text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-900/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                >
+                    {isOcrLoading ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}
+                </button>
 
                 {/* Divider */}
                 <div className="w-px h-4 bg-gray-200 dark:bg-gray-700 mx-1" />
