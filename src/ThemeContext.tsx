@@ -30,13 +30,11 @@ function applyToDOM(t: AppTheme) {
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<AppTheme>(() => {
     const saved = localStorage.getItem(STORAGE_KEY) as AppTheme | null;
-    return THEMES.includes(saved as AppTheme) ? (saved as AppTheme) : "default";
+    const t = THEMES.includes(saved as AppTheme) ? (saved as AppTheme) : "default";
+    // Apply synchronously during initialisation — before first paint — to prevent white flash
+    applyToDOM(t);
+    return t;
   });
-
-  useEffect(() => {
-    applyToDOM(theme);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const setTheme = useCallback((t: AppTheme) => {
     applyToDOM(t);
