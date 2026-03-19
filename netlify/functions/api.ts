@@ -636,33 +636,71 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
     }
 
 
-    // GET /api/release-notes — auto-generate What's New from GitHub commits
+    // GET /api/release-notes — auto-generate What's New from latest GitHub commits via Gemini AI
     if (rawPath === "/release-notes" && method === "GET") {
         try {
-            // Fetch our curated release-notes.json from the public directory
-            const siteUrl = event.headers?.host
-                ? `https://${event.headers.host}`
-                : "https://worshipflow.netlify.app";
-            const fileRes = await fetch(`${siteUrl}/release-notes.json`);
-            if (!fileRes.ok) throw new Error("Could not load release-notes.json");
-            const data = await fileRes.json();
+            const REPO = "fullsnackdevj/remix_-worshipflow--1-";
 
-            // Collect all highlights across all releases (newest first)
-            const allHighlights: string[] = [];
-            for (const release of (data.releases ?? [])) {
-                for (const h of (release.highlights ?? [])) {
-                    allHighlights.push(h);
-                }
-            }
+            // 1. Fetch recent commits from public GitHub API (no token needed for public repo)
+            const ghRes = await fetch(
+                `https://api.github.com/repos/${REPO}/commits?per_page=40`,
+                { headers: { "Accept": "application/vnd.github.v3+json", "User-Agent": "WorshipFlow/1.0" } }
+            );
+            if (!ghRes.ok) throw new Error(`GitHub API returned ${ghRes.status}`);
+            const commits: any[] = await ghRes.json();
 
-            const bulletPoints = allHighlights.slice(0, 8);
+            // 2. Clean + filter commit messages (skip merges, reverts, chores, version bumps)
+            const skipPatterns = /^(merge|revert|bump|chore|wip|ci:|docs:|style:|test:|refactor:)/i;
+            const messages = commits
+                .map((c: any) => c.commit.message.split("\n")[0].trim())
+                .filter((msg: string) => msg.length > 5 && !skipPatterns.test(msg))
+                .slice(0, 20);
+
+            if (messages.length === 0) throw new Error("No meaningful commits found");
+
+            // 3. Use Gemini to generate a friendly What's New summary
+            const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+            const prompt = `You are writing a "What's New" announcement for WorshipFlow — a church worship team management app used by non-technical team members.
+
+Based on these recent git commit messages, generate a user-friendly update:
+
+${messages.map((m: string, i: number) => `${i + 1}. ${m}`).join("\n")}
+
+Rules:
+- Write 5 to 8 short bullet points describing improvements from a user's perspective
+- Do NOT use emojis anywhere in the output
+- Do NOT use markdown symbols (no **, ##, or - bullets)
+- Skip internal/technical changes (refactors, type fixes, config tweaks)
+- Keep each bullet concise — under 12 words, starting with a past-tense verb
+- Combine closely related changes into one bullet
+
+Output ONLY in this exact format, nothing else:
+TITLE: What's New in WorshipFlow
+MESSAGE: Here's what's been updated and improved for your team:
+BULLET: [first improvement]
+BULLET: [second improvement]
+BULLET: [...]`;
+
+            const aiRes = await ai.models.generateContent({
+                model: "gemini-2.5-flash",
+                contents: [{ role: "user", parts: [{ text: prompt }] }],
+            });
+
+            const raw = aiRes.text ?? "";
+            const titleMatch  = raw.match(/^TITLE:\s*(.+)$/m);
+            const messageMatch = raw.match(/^MESSAGE:\s*(.+)$/m);
+            const bullets = [...raw.matchAll(/^BULLET:\s*(.+)$/gm)].map((m: RegExpMatchArray) => m[1].trim());
+
             const today = new Date().toLocaleDateString("en", { month: "long", day: "numeric", year: "numeric" });
             return json(200, {
-                title: data.title ?? `What's New — ${today}`,
-                message: data.message ?? "Here's what's new in WorshipFlow:",
-                bulletPoints,
+                title:        titleMatch?.[1]?.trim()  ?? `What's New — ${today}`,
+                message:      messageMatch?.[1]?.trim() ?? "Here's what's new in WorshipFlow:",
+                bulletPoints: bullets.length ? bullets : ["Various updates and improvements have been applied."],
             });
-        } catch (e) { return json(500, { error: "Could not load release notes" }); }
+        } catch (e) {
+            console.error("Release notes error:", e);
+            return json(500, { error: "Could not generate release notes" });
+        }
     }
 
 
