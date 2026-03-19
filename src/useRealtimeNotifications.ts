@@ -73,12 +73,14 @@ export function useRealtimeNotifications(
   // ── Window focus — instant update when user switches back to tab ─────────
   useEffect(() => {
     const onFocus = () => fetchNotifications();
-    window.addEventListener("focus", onFocus);
-    document.addEventListener("visibilitychange", () => {
+    const onVisibility = () => {
       if (document.visibilityState === "visible") fetchNotifications();
-    });
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [fetchNotifications]);
 

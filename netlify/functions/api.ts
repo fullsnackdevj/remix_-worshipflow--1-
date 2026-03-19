@@ -392,16 +392,17 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
     if (rawPath === "/auth/approve" && method === "POST") {
         const { email, role = "member" } = body;
         if (!email) return json(400, { error: "Missing email" });
+        // Read pending doc FIRST (before deleting) so we have the user's name for the welcome email
+        const pendingDoc = firestore
+            ? await firestore.collection("pending_users").doc(email).get().catch(() => null)
+            : null;
+        const pendingName = (pendingDoc?.data()?.name as string) || "";
         await firestore?.collection("approved_users").doc(email).set({ email, role, approvedAt: new Date().toISOString() });
         // Remove from pending once approved
         await firestore?.collection("pending_users").doc(email).delete().catch(() => { });
         // Send auto-welcome email to the newly approved member
-        if (firestore) {
-            const pendingDoc = await firestore.collection("pending_users").doc(email).get().catch(() => null);
-            const pendingName = (pendingDoc?.data()?.name as string) || "";
-            const firstName = pendingName.split(" ")[0] || email.split("@")[0];
-            sendWelcomeEmail(email, firstName); // fire-and-forget
-        }
+        const firstName = pendingName.split(" ")[0] || email.split("@")[0];
+        sendWelcomeEmail(email, firstName); // fire-and-forget
         return json(200, { success: true });
     }
 

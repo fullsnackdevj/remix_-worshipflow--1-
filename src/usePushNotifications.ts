@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { messaging, getToken, onMessage, VAPID_KEY } from "./firebase";
 
 /**
@@ -14,6 +14,9 @@ import { messaging, getToken, onMessage, VAPID_KEY } from "./firebase";
 export function usePushNotifications(userId: string | null, userRole: string | null) {
     const [showPrompt, setShowPrompt] = useState(false);
     const [pushEnabled, setPushEnabled] = useState(false);
+    // Guard: only register the FCM token once per mount, not on every userId/userRole change.
+    // Without this, re-renders (e.g. role loaded async) cause repeated token registrations.
+    const registeredRef = useRef(false);
 
     // Determine if we should show the prompt
     useEffect(() => {
@@ -22,8 +25,11 @@ export function usePushNotifications(userId: string | null, userRole: string | n
         if (!("serviceWorker" in navigator)) return;
 
         if (Notification.permission === "granted") {
-            // Already granted — just register silently (re-login scenario)
-            registerAndStoreToken(userId, userRole).catch(() => { });
+            if (!registeredRef.current) {
+                // Already granted — register silently once (covers re-login scenario)
+                registeredRef.current = true;
+                registerAndStoreToken(userId, userRole).catch(() => { });
+            }
             setPushEnabled(true);
         } else if (Notification.permission === "default") {
             // Not yet asked — show our in-app banner after 2 seconds
@@ -62,16 +68,32 @@ export function usePushNotifications(userId: string | null, userRole: string | n
     }, []);
 
     // Listen for foreground messages (app open)
+    // IMPORTANT: Use reg.showNotification() with the same `tag` as the service worker
+    // so that if the SW also fires (ambiguous foreground/background state), the OS
+    // deduplicates them and the user only ever sees ONE notification.
     useEffect(() => {
         if (!userId || !pushEnabled) return;
-        const unsubscribe = onMessage(messaging, (payload) => {
+        const unsubscribe = onMessage(messaging, async (payload) => {
             const { title, body } = payload.notification || {};
-            if (Notification.permission === "granted" && title) {
-                new Notification(title, {
-                    body: body || "",
-                    icon: "/icon-192x192.png",
-                    badge: "/favicon-32.png",
-                });
+            if (Notification.permission !== "granted" || !title) return;
+            try {
+                const reg = await navigator.serviceWorker.getRegistration("/");
+                if (reg) {
+                    // Show via the SW registration so `tag` deduplication applies
+                    reg.showNotification(title, {
+                        body: body || "",
+                        icon: "/icon-192x192.png",
+                        badge: "/favicon-32.png",
+                        tag: "worshipflow-notif",  // same tag as firebase-messaging-sw.js
+                        renotify: true,
+                        data: payload.data || {},
+                    } as NotificationOptions);
+                } else {
+                    // Fallback: no SW available
+                    new Notification(title, { body: body || "", icon: "/icon-192x192.png" });
+                }
+            } catch {
+                new Notification(title, { body: body || "", icon: "/icon-192x192.png" });
             }
         });
         return () => unsubscribe();
