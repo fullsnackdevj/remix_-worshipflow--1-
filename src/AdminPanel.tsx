@@ -282,7 +282,7 @@ export default function AdminPanel({
     }, [activeTab]);
 
     // ── Activity Monitor state ────────────────────────────────────────────────
-    const [activityData, setActivityData] = useState<{ online: any[]; recent: any[] }>({ online: [], recent: [] });
+    const [activityData, setActivityData] = useState<{ online: any[]; lastLogins: any[] }>({ online: [], lastLogins: [] });
     const [activityLoading, setActivityLoading] = useState(false);
     const activityIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -880,89 +880,54 @@ export default function AdminPanel({
                         )}
                     </div>
 
-                    {/* 📋 Session History */}
+                    {/* 👤 Last Login per user */}
                     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                         <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
                             <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                                <Clock size={14} className="text-indigo-400" /> Session History
+                                <Clock size={14} className="text-indigo-400" /> Last Login
                             </h3>
-                            <span className="text-xs text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full">Last 50</span>
+                            <span className="text-xs text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full">
+                                {activityData.lastLogins.length} member{activityData.lastLogins.length !== 1 ? "s" : ""}
+                            </span>
                         </div>
 
-                        {activityLoading && activityData.recent.length === 0 ? (
+                        {activityLoading && activityData.lastLogins.length === 0 ? (
                             <div className="flex justify-center py-8"><Loader2 size={18} className="animate-spin text-gray-400" /></div>
-                        ) : activityData.recent.length === 0 ? (
-                            <div className="text-center py-8 text-sm text-gray-400">No sessions recorded yet.</div>
+                        ) : activityData.lastLogins.length === 0 ? (
+                            <div className="text-center py-8 text-sm text-gray-400">No login data yet.</div>
                         ) : (
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-sm">
-                                    <thead>
-                                        <tr className="text-[11px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100 dark:border-gray-700">
-                                            <th className="text-left px-4 py-2.5">Member</th>
-                                            <th className="text-left px-3 py-2.5 hidden sm:table-cell">Role</th>
-                                            <th className="text-left px-3 py-2.5">Login</th>
-                                            <th className="text-left px-3 py-2.5 hidden md:table-cell">Logout</th>
-                                            <th className="text-right px-4 py-2.5">Duration</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60">
-                                        {activityData.recent.map((s: any) => {
-                                            const opt = ROLE_OPTIONS.find(r => r.value === s.role) ?? ROLE_OPTIONS[0];
-                                            const loginDate = s.loginAt ? new Date(s.loginAt) : null;
-                                            const logoutDate = s.logoutAt ? new Date(s.logoutAt) : null;
-                                            const isActive = !s.logoutAt;
-                                            const dur = s.durationMinutes;
-                                            const durStr = dur === null || dur === undefined
-                                                ? (isActive ? "—" : "< 1 min")
-                                                : dur < 1 ? "< 1 min"
-                                                : dur < 60 ? `${dur} min`
-                                                : `${Math.floor(dur / 60)}h ${dur % 60}m`;
-                                            return (
-                                                <tr key={s.sessionId} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-                                                    <td className="px-4 py-2.5">
-                                                        <div className="flex items-center gap-2 min-w-0">
-                                                            {s.photo
-                                                                ? <img src={s.photo} alt={s.name} className="w-7 h-7 rounded-full object-cover shrink-0" />
-                                                                : <div className="w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-xs shrink-0">{(s.name || s.email || "?")[0].toUpperCase()}</div>
-                                                            }
-                                                            <div className="min-w-0">
-                                                                <p className="text-xs font-semibold text-gray-900 dark:text-white truncate">{s.name || s.email}</p>
-                                                                <p className="text-[10px] text-gray-400 truncate hidden sm:block">{s.email}</p>
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-3 py-2.5 hidden sm:table-cell">
-                                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${opt.bg} ${opt.color}`}>
-                                                            {opt.icon} {opt.label}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-3 py-2.5">
-                                                        <p className="text-xs text-gray-700 dark:text-gray-300">{loginDate ? loginDate.toLocaleTimeString("en", { hour: "2-digit", minute: "2-digit" }) : "—"}</p>
-                                                        <p className="text-[10px] text-gray-400">{loginDate ? loginDate.toLocaleDateString("en", { month: "short", day: "numeric" }) : ""}</p>
-                                                    </td>
-                                                    <td className="px-3 py-2.5 hidden md:table-cell">
-                                                        {isActive ? (
-                                                            <span className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
-                                                                <Wifi size={11} /> Online
-                                                            </span>
-                                                        ) : (
-                                                            <>
-                                                                <p className="text-xs text-gray-700 dark:text-gray-300">{logoutDate ? logoutDate.toLocaleTimeString("en", { hour: "2-digit", minute: "2-digit" }) : "—"}</p>
-                                                                <p className="text-[10px] text-gray-400">{logoutDate ? logoutDate.toLocaleDateString("en", { month: "short", day: "numeric" }) : ""}</p>
-                                                            </>
-                                                        )}
-                                                    </td>
-                                                    <td className="px-4 py-2.5 text-right">
-                                                        <span className={`text-xs font-bold ${isActive ? "text-emerald-600 dark:text-emerald-400" : "text-gray-700 dark:text-gray-300"}`}>
-                                                            {isActive ? "Active" : durStr}
-                                                        </span>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            </div>
+                            <ul className="divide-y divide-gray-100 dark:divide-gray-700">
+                                {activityData.lastLogins.map((u: any) => {
+                                    const isOnline = activityData.online.some(o => o.userId === u.userId);
+                                    const loginTs = u.lastLogin || u.lastSeen;
+                                    const loginDate = loginTs ? new Date(loginTs) : null;
+                                    const opt = ROLE_OPTIONS.find(r => r.value === u.role) ?? ROLE_OPTIONS[0];
+                                    return (
+                                        <li key={u.userId} className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                                            <div className="relative shrink-0">
+                                                {u.photo
+                                                    ? <img src={u.photo} alt={u.name} className="w-8 h-8 rounded-full object-cover" />
+                                                    : <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-xs">{(u.name || u.email || "?")[0].toUpperCase()}</div>
+                                                }
+                                                <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-gray-800 ${isOnline ? "bg-emerald-500" : "bg-gray-300 dark:bg-gray-600"}`} />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{u.name || u.email}</p>
+                                                <span className={`inline-flex items-center gap-0.5 text-[10px] font-semibold ${opt.color}`}>{opt.icon} {opt.label}</span>
+                                            </div>
+                                            <div className="text-right shrink-0">
+                                                <p className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                                                    {isOnline ? <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Online now</span>
+                                                        : loginDate ? loginDate.toLocaleTimeString("en", { hour: "2-digit", minute: "2-digit" }) : "—"}
+                                                </p>
+                                                {!isOnline && loginDate && (
+                                                    <p className="text-[10px] text-gray-400">{loginDate.toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}</p>
+                                                )}
+                                            </div>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
                         )}
                     </div>
                 </div>

@@ -2049,51 +2049,31 @@ Rules:
 
         try {
             if (action === "start") {
-                // Write live presence doc
+                // Write live presence doc (also stores lastLogin so we avoid a
+                // separate per-session collection that grows forever)
                 await firestore.collection("user_presence").doc(userId).set({
                     userId, sessionId, name: name || email, email, role, photo,
                     isOnline: true,
                     sessionStart: nowIso,
                     lastSeen: nowIso,
+                    lastLogin: nowIso,    // upsert — one doc per user, no collection growth
                 }, { merge: false });
 
-                // Create session record
-                await firestore.collection("user_sessions").doc(sessionId).set({
-                    userId, sessionId, name: name || email, email, role, photo,
-                    loginAt: nowIso,
-                    logoutAt: null,
-                    durationMinutes: null,
-                    lastSeen: nowIso,
-                });
-
             } else if (action === "ping") {
-                // Update lastSeen in both collections
-                const presenceRef = firestore.collection("user_presence").doc(userId);
-                const sessionRef  = firestore.collection("user_sessions").doc(sessionId);
-                await Promise.all([
-                    presenceRef.set({ isOnline: true, lastSeen: nowIso }, { merge: true }),
-                    sessionRef.set({ lastSeen: nowIso }, { merge: true }),
-                ]);
+                // Only update lastSeen on the presence doc — no session log needed
+                await firestore.collection("user_presence").doc(userId).set(
+                    { isOnline: true, lastSeen: nowIso },
+                    { merge: true }
+                );
 
             } else if (action === "end") {
-                // Calculate duration from session record
-                const sessionSnap = await firestore.collection("user_sessions").doc(sessionId).get();
-                const loginAt = sessionSnap.data()?.loginAt as string | undefined;
-                const durationMinutes = loginAt
-                    ? Math.round((Date.now() - new Date(loginAt).getTime()) / 60_000)
-                    : null;
-
-                await Promise.all([
-                    firestore.collection("user_presence").doc(userId).set(
-                        { isOnline: false, lastSeen: nowIso },
-                        { merge: true }
-                    ),
-                    firestore.collection("user_sessions").doc(sessionId).set(
-                        { logoutAt: nowIso, durationMinutes, lastSeen: nowIso },
-                        { merge: true }
-                    ),
-                ]);
+                // Mark offline — no session log write needed anymore
+                await firestore.collection("user_presence").doc(userId).set(
+                    { isOnline: false, lastSeen: nowIso },
+                    { merge: true }
+                );
             }
+
 
             return json(200, { ok: true });
         } catch (e) {
@@ -2103,19 +2083,14 @@ Rules:
     }
 
     // ── GET /activity/sessions — Admin Activity Monitor data ────────────────────
+    // Only reads user_presence (one doc per user, bounded) — no more growing user_sessions log.
     if (rawPath === "/activity/sessions" && method === "GET") {
-        if (!firestore) return json(200, { online: [], recent: [] });
+        if (!firestore) return json(200, { online: [], lastLogins: [] });
         try {
             // Auto-expire presence docs whose lastSeen is > 2 min ago
             const twoMinAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
 
-            const [presenceSnap, sessionsSnap] = await Promise.all([
-                firestore.collection("user_presence").get(),
-                firestore.collection("user_sessions")
-                    .orderBy("loginAt", "desc")
-                    .limit(50)
-                    .get(),
-            ]);
+            const presenceSnap = await firestore.collection("user_presence").get();
 
             // Mark stale presence docs as offline (fire-and-forget batch)
             const batch = firestore.batch();
@@ -2129,17 +2104,21 @@ Rules:
             });
             if (hasStaleDocs) batch.commit().catch(() => {});
 
-            const online = presenceSnap.docs
-                .map(d => d.data())
+            const allPresence = presenceSnap.docs.map(d => d.data());
+
+            const online = allPresence
                 .filter(d => d.isOnline && (d.lastSeen || "") >= twoMinAgo)
                 .sort((a, b) => (a.sessionStart || "").localeCompare(b.sessionStart || ""));
 
-            const recent = sessionsSnap.docs.map(d => d.data());
+            // lastLogins — all users sorted by lastLogin desc (one row per user)
+            const lastLogins = allPresence
+                .filter(d => d.lastLogin || d.lastSeen)
+                .sort((a, b) => ((b.lastLogin || b.lastSeen) || "").localeCompare((a.lastLogin || a.lastSeen) || ""));
 
-            return json(200, { online, recent });
+            return json(200, { online, lastLogins });
         } catch (e) {
             console.error("[activity/sessions] error:", e);
-            return json(200, { online: [], recent: [] });
+            return json(200, { online: [], lastLogins: [] });
         }
     }
 
