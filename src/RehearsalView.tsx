@@ -263,7 +263,6 @@ export default function RehearsalView({
 
         setConfirmSave(null);
         setIsSaving(true);
-        showToast?.("info", `Saving ${label}…`);
         try {
             // Use PATCH — partial update, only the edited field.
             // No need to send tags/title/artist — the server only touches what's provided.
