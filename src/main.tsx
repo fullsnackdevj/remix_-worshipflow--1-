@@ -1,4 +1,4 @@
-import { StrictMode, useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
@@ -61,14 +61,13 @@ function Root() {
     return () => clearTimeout(t);
   }, []);
 
-  // When both gates pass → start fade-out
+  // When both gates pass → start fade-out (guard with `visible` to fire only once)
   useEffect(() => {
     if (timerDone && authResolved && visible) {
-      // Give a tick for the fade class to apply, then unmount
       const t = setTimeout(() => setVisible(false), 450);
       return () => clearTimeout(t);
     }
-  }, [timerDone, authResolved]);
+  }, [timerDone, authResolved, visible]);
 
   const isFading = timerDone && authResolved;
 
@@ -92,11 +91,9 @@ function Root() {
 }
 
 createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <ThemeProvider>
-      <AuthProvider>
-        <Root />
-      </AuthProvider>
-    </ThemeProvider>
-  </StrictMode>,
+  <ThemeProvider>
+    <AuthProvider>
+      <Root />
+    </AuthProvider>
+  </ThemeProvider>,
 );

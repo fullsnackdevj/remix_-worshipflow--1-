@@ -10,7 +10,7 @@ import { useSessionTracking } from "./useSessionTracking";
 // ── Lightweight always-loaded components ────────────────────────────────────
 import BroadcastOverlay from "./BroadcastOverlay";
 import WelcomeToast from "./WelcomeToast";
-import SplashScreen from "./SplashScreen";
+
 import BirthdatePromptModal from "./BirthdatePromptModal";
 
 // ── Heavy views — lazy-loaded on first visit (code splitting) ────────────────
