@@ -57,8 +57,8 @@ export function useSessionTracking(
             ping("start");
         }
 
-        // Heartbeat every 60 seconds
-        const interval = setInterval(() => ping("ping"), 60_000);
+        // Heartbeat every 2 minutes (120 s) — halves Netlify function invocations vs 60 s
+        const interval = setInterval(() => ping("ping"), 120_000);
 
         // End session on cleanup / tab close
         const handleUnload = () => ping("end");

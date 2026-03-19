@@ -210,10 +210,10 @@ async function sendWelcomeEmail(
     }
 }
 
-function json(statusCode: number, body: unknown) {
+function json(statusCode: number, body: unknown, extraHeaders: Record<string, string> = {}) {
     return {
         statusCode,
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...extraHeaders },
         body: JSON.stringify(body),
     };
 }
@@ -912,7 +912,7 @@ Rules:
             if (tagId) songs = songs.filter((song: any) => song.tagIds?.includes(tagId));
             songs.sort((a: any, b: any) => (a.title || "").localeCompare(b.title || ""));
 
-            return json(200, songs);
+            return json(200, songs, { "Cache-Control": "public, max-age=0, s-maxage=300" });
         } catch (err) {
             console.error(err);
             return json(500, { error: "Failed to fetch songs" });
@@ -1189,7 +1189,7 @@ Rules:
                     updated_at: data.updated_at?.toDate?.()?.toISOString() || data.updated_at,
                 };
             });
-            return json(200, members);
+            return json(200, members, { "Cache-Control": "public, max-age=0, s-maxage=300" });
         } catch (err) {
             console.error(err);
             return json(500, { error: "Failed to fetch members" });
