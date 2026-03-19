@@ -303,8 +303,9 @@ export default function App() {
   );
 
   // 🎸 Auto-collapse sidebar when entering Rehearsal mode (needs full width)
+  // Desktop/tablet only  — on mobile the sidebar is already a drawer overlay
   useEffect(() => {
-    if (currentView === "rehearsal") {
+    if (currentView === "rehearsal" && window.innerWidth >= 1024) {
       setIsSidebarCollapsed(true);
     }
   }, [currentView]);
@@ -744,134 +745,158 @@ export default function App() {
           </button>
         </div>
 
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto overflow-x-visible">
           {!isSidebarCollapsed && (
             <p className="px-3 text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 mt-2">Worship</p>
           )}
 
           {/* Dashboard — available to all roles */}
-          <button
-            onClick={() => { setCurrentView("dashboard"); setIsMobileMenuOpen(false); }}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "dashboard"
-              ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300"
-              : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-              } ${isSidebarCollapsed ? "justify-center" : ""}`}
-            title="Dashboard"
-          >
-            <LayoutGrid size={20} className="shrink-0" />
-            {!isSidebarCollapsed && <span>Dashboard</span>}
-          </button>
+          <div className="relative group/tip">
+            <button
+              onClick={() => { setCurrentView("dashboard"); setIsMobileMenuOpen(false); }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "dashboard"
+                ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300"
+                : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                } ${isSidebarCollapsed ? "justify-center" : ""}`}
+              title="Dashboard"
+            >
+              <LayoutGrid size={20} className="shrink-0" />
+              {!isSidebarCollapsed && <span>Dashboard</span>}
+            </button>
+            {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Dashboard</span>}
+          </div>
 
 
           {/* Song Management */}
-          <button
-            onClick={() => { setCurrentView("songs"); setIsMobileMenuOpen(false); }}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "songs"
-              ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300"
-              : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-              } ${isSidebarCollapsed ? "justify-center" : ""}`}
-            title="Song Management"
-          >
-            <BookOpen size={20} className="shrink-0" />
-            {!isSidebarCollapsed && <span>Song Management</span>}
-          </button>
+          <div className="relative group/tip">
+            <button
+              onClick={() => { setCurrentView("songs"); setIsMobileMenuOpen(false); }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "songs"
+                ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300"
+                : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                } ${isSidebarCollapsed ? "justify-center" : ""}`}
+              title="Song Management"
+            >
+              <BookOpen size={20} className="shrink-0" />
+              {!isSidebarCollapsed && <span>Song Management</span>}
+            </button>
+            {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Song Management</span>}
+          </div>
 
           {/* Team Members */}
-          <button
-            onClick={() => { setCurrentView("members"); setIsMobileMenuOpen(false); }}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "members"
-              ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300"
-              : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-              } ${isSidebarCollapsed ? "justify-center" : ""}`}
-            title="Team Members"
-          >
-            <Users size={20} className="shrink-0" />
-            {!isSidebarCollapsed && <span>Team Members</span>}
-          </button>
+          <div className="relative group/tip">
+            <button
+              onClick={() => { setCurrentView("members"); setIsMobileMenuOpen(false); }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "members"
+                ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300"
+                : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                } ${isSidebarCollapsed ? "justify-center" : ""}`}
+              title="Team Members"
+            >
+              <Users size={20} className="shrink-0" />
+              {!isSidebarCollapsed && <span>Team Members</span>}
+            </button>
+            {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Team Members</span>}
+          </div>
 
           {/* Scheduling */}
-          <button
-            onClick={() => { setCurrentView("schedule"); setIsMobileMenuOpen(false); }}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "schedule"
-              ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
-              : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
-              } ${isSidebarCollapsed ? "justify-center" : ""}`}
-          >
-            <Calendar size={20} className="shrink-0" />
-            {!isSidebarCollapsed && (
-              <span className="flex items-center gap-2">
-                Scheduling
-              </span>
-            )}
-          </button>
+          <div className="relative group/tip">
+            <button
+              onClick={() => { setCurrentView("schedule"); setIsMobileMenuOpen(false); }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "schedule"
+                ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
+                : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
+                } ${isSidebarCollapsed ? "justify-center" : ""}`}
+              title="Scheduling"
+            >
+              <Calendar size={20} className="shrink-0" />
+              {!isSidebarCollapsed && <span>Scheduling</span>}
+            </button>
+            {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Scheduling</span>}
+          </div>
 
           {/* Notes */}
-          <button
-            onClick={() => { setCurrentView("team-notes"); setIsMobileMenuOpen(false); }}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "team-notes"
-              ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
-              : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
-              } ${isSidebarCollapsed ? "justify-center" : ""}`}
-            title="Notes"
-          >
-            <NotebookPen size={20} className="shrink-0" />
-            {!isSidebarCollapsed && <span>Notes</span>}
-          </button>
+          <div className="relative group/tip">
+            <button
+              onClick={() => { setCurrentView("team-notes"); setIsMobileMenuOpen(false); }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "team-notes"
+                ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
+                : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
+                } ${isSidebarCollapsed ? "justify-center" : ""}`}
+              title="Notes"
+            >
+              <NotebookPen size={20} className="shrink-0" />
+              {!isSidebarCollapsed && <span>Notes</span>}
+            </button>
+            {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Notes</span>}
+          </div>
 
           {/* Rehearsal */}
-          <button
-            onClick={() => { setCurrentView("rehearsal"); setIsMobileMenuOpen(false); }}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "rehearsal"
-              ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
-              : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
-              } ${isSidebarCollapsed ? "justify-center" : ""}`}
-            title="Rehearsal"
-          >
-            <Mic2 size={20} className="shrink-0" />
-            {!isSidebarCollapsed && <span>Rehearsal</span>}
-          </button>
-          {isRoleAdmin && (
+          <div className="relative group/tip">
             <button
-              onClick={() => { setCurrentView("playground"); setIsMobileMenuOpen(false); }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${
-                currentView === "playground"
-                  ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
-                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
-              } ${isSidebarCollapsed ? "justify-center" : ""}`}
-              title="Playground"
+              onClick={() => { setCurrentView("rehearsal"); setIsMobileMenuOpen(false); }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "rehearsal"
+                ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
+                : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
+                } ${isSidebarCollapsed ? "justify-center" : ""}`}
+              title="Rehearsal"
             >
-              <FlaskConical size={20} className="shrink-0" />
-              {!isSidebarCollapsed && <span>Playground</span>}
+              <Mic2 size={20} className="shrink-0" />
+              {!isSidebarCollapsed && <span>Rehearsal</span>}
             </button>
+            {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Rehearsal</span>}
+          </div>
+          {isRoleAdmin && (
+            <div className="relative group/tip">
+              <button
+                onClick={() => { setCurrentView("playground"); setIsMobileMenuOpen(false); }}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${
+                  currentView === "playground"
+                    ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
+                    : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
+                } ${isSidebarCollapsed ? "justify-center" : ""}`}
+                title="Playground"
+              >
+                <FlaskConical size={20} className="shrink-0" />
+                {!isSidebarCollapsed && <span>Playground</span>}
+              </button>
+              {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Playground</span>}
+            </div>
           )}
 
           {/* Admin Panel — admin only, always hidden for QA Specialist */}
           {isRoleAdmin && !isQA && (
-            <button
-              onClick={() => { setCurrentView("admin"); setIsMobileMenuOpen(false); }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "admin"
-                ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300"
-                : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-                } ${isSidebarCollapsed ? "justify-center" : ""}`}
-              title="Team Access"
-            >
-              <Shield size={20} className="shrink-0" />
-              {!isSidebarCollapsed && <span>Team Access</span>}
-            </button>
+            <div className="relative group/tip">
+              <button
+                onClick={() => { setCurrentView("admin"); setIsMobileMenuOpen(false); }}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "admin"
+                  ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300"
+                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                  } ${isSidebarCollapsed ? "justify-center" : ""}`}
+                title="Team Access"
+              >
+                <Shield size={20} className="shrink-0" />
+                {!isSidebarCollapsed && <span>Team Access</span>}
+              </button>
+              {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Team Access</span>}
+            </div>
           )}
 
           {/* Preaching — disabled / coming soon */}
-          <div
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium opacity-40 cursor-not-allowed select-none text-gray-500 dark:text-gray-500 ${isSidebarCollapsed ? "justify-center" : ""}`}
-            title="Preaching — Coming Soon"
-          >
-            <Mic2 size={20} className="shrink-0" />
-            {!isSidebarCollapsed && (
-              <span className="flex items-center gap-2">
-                Preaching
-                <span className="text-[10px] font-bold uppercase tracking-wider bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded-full">Soon</span>
-              </span>
-            )}
+          <div className="relative group/tip">
+            <div
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium opacity-40 cursor-not-allowed select-none text-gray-500 dark:text-gray-500 ${isSidebarCollapsed ? "justify-center" : ""}`}
+              title="Preaching — Coming Soon"
+            >
+              <Mic2 size={20} className="shrink-0" />
+              {!isSidebarCollapsed && (
+                <span className="flex items-center gap-2">
+                  Preaching
+                  <span className="text-[10px] font-bold uppercase tracking-wider bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded-full">Soon</span>
+                </span>
+              )}
+            </div>
+            {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Preaching (Soon)</span>}
           </div>
         </nav>
 
