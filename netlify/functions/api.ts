@@ -660,25 +660,40 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
 
             // 3. Use Gemini to generate a friendly What's New summary
             const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-            const prompt = `You are writing a "What's New" announcement for WorshipFlow — a church worship team management app used by non-technical team members.
+            const prompt = `You are writing a "What's New" announcement for WorshipFlow — a church worship team management app used by non-technical church team members.
 
-Based on these recent git commit messages, generate a user-friendly update:
+Based on these recent git commit messages, identify and describe ONLY the significant, visible changes:
 
 ${messages.map((m: string, i: number) => `${i + 1}. ${m}`).join("\n")}
 
+What counts as SIGNIFICANT (include these):
+- New modules or sections added to the app
+- Major new features that change how users interact with the app
+- Important workflow improvements that save time
+- Meaningful UI/UX enhancements users will notice
+- New capabilities (e.g. file uploads, notifications, integrations)
+
+What to SKIP entirely (do not mention these):
+- Bug fixes and error corrections
+- Performance optimizations
+- Code refactors or internal cleanup
+- Minor UI tweaks (color changes, spacing, labels)
+- Small usability adjustments
+- Anything prefixed with fix:, perf:, style:, or hotfix
+
 Rules:
-- Write 5 to 8 short bullet points describing improvements from a user's perspective
+- Write 3 to 6 bullet points — ONLY for big, user-visible updates
+- If there are fewer than 3 significant updates, write fewer bullets (don't pad with minor items)
 - Do NOT use emojis anywhere in the output
 - Do NOT use markdown symbols (no **, ##, or - bullets)
-- Skip internal/technical changes (refactors, type fixes, config tweaks)
-- Keep each bullet concise — under 12 words, starting with a past-tense verb
-- Combine closely related changes into one bullet
+- Keep each bullet concise — under 15 words, starting with a past-tense verb
+- Write for non-technical church members, not developers
 
 Output ONLY in this exact format, nothing else:
 TITLE: What's New in WorshipFlow
-MESSAGE: Here's what's been updated and improved for your team:
-BULLET: [first improvement]
-BULLET: [second improvement]
+MESSAGE: Here's what's been added and improved for your team:
+BULLET: [first major update]
+BULLET: [second major update]
 BULLET: [...]`;
 
             const aiRes = await ai.models.generateContent({
