@@ -20,6 +20,7 @@ const NotesPanel    = lazy(() => import("./NotesPanel"));
 const Dashboard     = lazy(() => import("./Dashboard"));
 const DashboardView = lazy(() => import("./DashboardView"));
 const Playground    = lazy(() => import("./Playground"));
+const RehearsalView = lazy(() => import("./RehearsalView"));
 const ScheduleView  = lazy(() => import("./ScheduleView"));
 const SongsView     = lazy(() => import("./SongsView"));
 const MembersView   = lazy(() => import("./MembersView"));
@@ -255,7 +256,7 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
-  const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "playground" | "admin">("dashboard");
+  const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "playground" | "admin" | "team-notes" | "rehearsal">("dashboard");
   const { isAdmin, userRole, user, status: authStatus } = useAuth();
 
 
@@ -300,6 +301,13 @@ export default function App() {
     userRole ?? null,
     user?.photoURL ?? null,
   );
+
+  // 🎸 Auto-collapse sidebar when entering Rehearsal mode (needs full width)
+  useEffect(() => {
+    if (currentView === "rehearsal") {
+      setIsSidebarCollapsed(true);
+    }
+  }, [currentView]);
 
   // ── Real-time notifications ──────────────────────────────────────────────────
   // 10s poll + window focus/visibility — max 10s latency, instant on tab switch
@@ -809,6 +817,19 @@ export default function App() {
             <NotebookPen size={20} className="shrink-0" />
             {!isSidebarCollapsed && <span>Notes</span>}
           </button>
+
+          {/* Rehearsal */}
+          <button
+            onClick={() => { setCurrentView("rehearsal"); setIsMobileMenuOpen(false); }}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "rehearsal"
+              ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
+              : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
+              } ${isSidebarCollapsed ? "justify-center" : ""}`}
+            title="Rehearsal"
+          >
+            <Mic2 size={20} className="shrink-0" />
+            {!isSidebarCollapsed && <span>Rehearsal</span>}
+          </button>
           {isRoleAdmin && (
             <button
               onClick={() => { setCurrentView("playground"); setIsMobileMenuOpen(false); }}
@@ -887,7 +908,7 @@ export default function App() {
 
           <div className="flex-1 flex items-center">
             <h1 className="text-base sm:text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap">
-              {currentView === "dashboard" ? "Dashboard" : currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : currentView === "playground" ? "Playground" : currentView === "team-notes" ? "Notes" : "Song Management"}
+              {currentView === "dashboard" ? "Dashboard" : currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : currentView === "playground" ? "Playground" : currentView === "team-notes" ? "Notes" : currentView === "rehearsal" ? "Rehearsal" : "Song Management"}
             </h1>
           </div>
           <div className="flex items-center gap-2">
@@ -1153,6 +1174,13 @@ export default function App() {
                   pendingNavSongId={pendingNavSongId}
                   onPendingNavHandled={() => setPendingNavSongId(null)}
                   onOpenVideo={openVideo}
+                />
+              ) : currentView === "rehearsal" ? (
+                <RehearsalView
+                  allSchedules={allSchedules}
+                  allSongs={allSongs}
+                  lineupTracks={lineupTracks}
+                  onOpenLineup={() => setLineupOpen(true)}
                 />
               ) : null}
               </Suspense>
