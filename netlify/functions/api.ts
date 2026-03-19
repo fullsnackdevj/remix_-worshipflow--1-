@@ -1069,7 +1069,46 @@ Rules:
                 return json(500, { error: "Failed to delete song" });
             }
         }
+
+        // PATCH /songs/:id — partial update (lyrics/chords only, no full validation)
+        // Used by the Rehearsal module to update just lyrics or chords without
+        // requiring the full song payload (title, artist, tags, etc.).
+        if (method === "PATCH") {
+            try {
+                const doc = await firestore.collection("songs").doc(id).get();
+                if (!doc.exists) return json(404, { error: "Song not found" });
+
+                const updates: Record<string, any> = {
+                    updated_at: admin.firestore.FieldValue.serverTimestamp(),
+                };
+
+                if (typeof body.lyrics === "string") {
+                    updates.lyrics = body.lyrics.trim().toUpperCase();
+                }
+                if (typeof body.chords === "string") {
+                    updates.chords = body.chords;
+                }
+                if (typeof body.actorName === "string") {
+                    updates.updated_by_name = body.actorName;
+                }
+                if (typeof body.actorPhoto === "string") {
+                    updates.updated_by_photo = body.actorPhoto;
+                }
+
+                if (Object.keys(updates).length === 1) {
+                    // only updated_at — nothing to patch
+                    return json(400, { error: "No patchable fields provided" });
+                }
+
+                await firestore.collection("songs").doc(id).update(updates);
+                return json(200, { success: true });
+            } catch (err) {
+                console.error(err);
+                return json(500, { error: "Failed to patch song" });
+            }
+        }
     }
+
 
     // ─── TAGS ───────────────────────────────────────────────────────────────────
     // GET /tags

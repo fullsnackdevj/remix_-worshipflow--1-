@@ -262,18 +262,16 @@ export default function RehearsalView({
         setConfirmSave(null);
         setIsSaving(true);
         try {
+            // Use PATCH — partial update, only the edited field.
+            // No need to send tags/title/artist — the server only touches what's provided.
             const payload: Record<string, string> = {
-                title: currentSong.title,
-                artist: currentSong.artist ?? "",
-                lyrics: col === "lyrics" ? edit.draft : (currentSong.lyrics ?? ""),
-                chords: col === "chords" ? edit.draft : (currentSong.chords ?? ""),
-                video_url: currentSong.video_url ?? "",
+                [col]: edit.draft,                              // "lyrics" or "chords" key
                 actorName: currentUser?.displayName ?? "Rehearsal Edit",
                 actorPhoto: currentUser?.photoURL ?? "",
             };
 
             const res = await fetch(`/api/songs/${currentSong.id}`, {
-                method: "PUT",
+                method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload),
             });
@@ -300,6 +298,7 @@ export default function RehearsalView({
             setIsSaving(false);
         }
     };
+
 
     // ── Edit toolbar for a column ─────────────────────────────────────────────
     const editToolbar = (col: "lyrics" | "chords") => {
