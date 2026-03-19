@@ -4,6 +4,7 @@ import { useAuth } from "./AuthContext";
 import { getAuth } from "firebase/auth";
 import { usePushNotifications } from "./usePushNotifications";
 import { useRealtimeNotifications } from "./useRealtimeNotifications";
+import { useSessionTracking } from "./useSessionTracking";
 
 
 // ── Lightweight always-loaded components ────────────────────────────────────
@@ -290,6 +291,15 @@ export default function App() {
   // 🔔 Push notifications — iOS-safe: user must tap "Enable" button
   const { showPrompt: showPushPrompt, requestPushPermission, dismissPrompt: dismissPushPrompt } =
     usePushNotifications(user?.uid ?? null, userRole ?? null);
+
+  // 📊 Session tracking — writes presence + session history for Admin Activity Monitor
+  useSessionTracking(
+    user?.uid ?? null,
+    user?.displayName ?? null,
+    user?.email ?? null,
+    userRole ?? null,
+    user?.photoURL ?? null,
+  );
 
   // ── Real-time notifications ──────────────────────────────────────────────────
   // 10s poll + window focus/visibility — max 10s latency, instant on tab switch

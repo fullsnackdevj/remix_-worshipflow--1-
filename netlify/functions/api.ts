@@ -1999,6 +1999,111 @@ Rules:
         } catch { return json(500, { error: "Failed to move" }); }
     }
 
+    // ── POST /activity/heartbeat — session tracking for Admin Activity Monitor ──
+    if (rawPath === "/activity/heartbeat" && method === "POST") {
+        const { userId, sessionId, name, email, role, photo, action } = body;
+        if (!userId || !sessionId || !action) return json(400, { error: "Missing fields" });
+        if (!firestore) return json(200, { ok: true }); // Silently pass if DB unavailable
+
+        const now = admin.firestore.FieldValue.serverTimestamp();
+        const nowIso = new Date().toISOString();
+
+        try {
+            if (action === "start") {
+                // Write live presence doc
+                await firestore.collection("user_presence").doc(userId).set({
+                    userId, sessionId, name: name || email, email, role, photo,
+                    isOnline: true,
+                    sessionStart: nowIso,
+                    lastSeen: nowIso,
+                }, { merge: false });
+
+                // Create session record
+                await firestore.collection("user_sessions").doc(sessionId).set({
+                    userId, sessionId, name: name || email, email, role, photo,
+                    loginAt: nowIso,
+                    logoutAt: null,
+                    durationMinutes: null,
+                    lastSeen: nowIso,
+                });
+
+            } else if (action === "ping") {
+                // Update lastSeen in both collections
+                const presenceRef = firestore.collection("user_presence").doc(userId);
+                const sessionRef  = firestore.collection("user_sessions").doc(sessionId);
+                await Promise.all([
+                    presenceRef.set({ isOnline: true, lastSeen: nowIso }, { merge: true }),
+                    sessionRef.set({ lastSeen: nowIso }, { merge: true }),
+                ]);
+
+            } else if (action === "end") {
+                // Calculate duration from session record
+                const sessionSnap = await firestore.collection("user_sessions").doc(sessionId).get();
+                const loginAt = sessionSnap.data()?.loginAt as string | undefined;
+                const durationMinutes = loginAt
+                    ? Math.round((Date.now() - new Date(loginAt).getTime()) / 60_000)
+                    : null;
+
+                await Promise.all([
+                    firestore.collection("user_presence").doc(userId).set(
+                        { isOnline: false, lastSeen: nowIso },
+                        { merge: true }
+                    ),
+                    firestore.collection("user_sessions").doc(sessionId).set(
+                        { logoutAt: nowIso, durationMinutes, lastSeen: nowIso },
+                        { merge: true }
+                    ),
+                ]);
+            }
+
+            return json(200, { ok: true });
+        } catch (e) {
+            console.error("[activity/heartbeat] error:", e);
+            return json(200, { ok: true }); // Don't break the app if tracking fails
+        }
+    }
+
+    // ── GET /activity/sessions — Admin Activity Monitor data ────────────────────
+    if (rawPath === "/activity/sessions" && method === "GET") {
+        if (!firestore) return json(200, { online: [], recent: [] });
+        try {
+            // Auto-expire presence docs whose lastSeen is > 2 min ago
+            const twoMinAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+
+            const [presenceSnap, sessionsSnap] = await Promise.all([
+                firestore.collection("user_presence").get(),
+                firestore.collection("user_sessions")
+                    .orderBy("loginAt", "desc")
+                    .limit(50)
+                    .get(),
+            ]);
+
+            // Mark stale presence docs as offline (fire-and-forget batch)
+            const batch = firestore.batch();
+            let hasStaleDocs = false;
+            presenceSnap.docs.forEach(doc => {
+                const lastSeen = doc.data().lastSeen as string | undefined;
+                if (lastSeen && lastSeen < twoMinAgo && doc.data().isOnline) {
+                    batch.update(doc.ref, { isOnline: false });
+                    hasStaleDocs = true;
+                }
+            });
+            if (hasStaleDocs) batch.commit().catch(() => {});
+
+            const online = presenceSnap.docs
+                .map(d => d.data())
+                .filter(d => d.isOnline && (d.lastSeen || "") >= twoMinAgo)
+                .sort((a, b) => (a.sessionStart || "").localeCompare(b.sessionStart || ""));
+
+            const recent = sessionsSnap.docs.map(d => d.data());
+
+            return json(200, { online, recent });
+        } catch (e) {
+            console.error("[activity/sessions] error:", e);
+            return json(200, { online: [], recent: [] });
+        }
+    }
+
     return json(404, { error: "Not found" });
 };
 

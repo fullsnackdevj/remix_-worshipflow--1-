@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "./AuthContext";
-import { UserPlus, Trash2, Shield, Users, Loader2, Check, X, Clock, UserCheck, Pencil, ShieldCheck, ShieldAlert, Megaphone, Plus, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, Eye, Sparkles, User, Guitar, Mic2, ClipboardList, Sliders, Wrench, ThumbsUp, FlaskConical, Mail } from "lucide-react";
+import { UserPlus, Trash2, Shield, Users, Loader2, Check, X, Clock, UserCheck, Pencil, ShieldCheck, ShieldAlert, Megaphone, Plus, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, Eye, Sparkles, User, Guitar, Mic2, ClipboardList, Sliders, Wrench, ThumbsUp, FlaskConical, Mail, Activity, Wifi, WifiOff, Timer, RefreshCw } from "lucide-react";
 import AutoTextarea from "./AutoTextarea";
 
 interface ApprovedUser {
@@ -125,7 +125,7 @@ export default function AdminPanel({
     onConfirm?: (msg: string, onOk: () => void) => void;
 }) {
     const { isAdmin } = useAuth();
-    const [activeTab, setActiveTab] = useState<"team" | "broadcasts" | "birthdays">("team");
+    const [activeTab, setActiveTab] = useState<"team" | "broadcasts" | "birthdays" | "activity">("team");
     const [members, setMembers] = useState<any[]>([]);
     const [users, setUsers] = useState<ApprovedUser[]>([]);
     const [pending, setPending] = useState<PendingUser[]>([]);
@@ -281,6 +281,30 @@ export default function AdminPanel({
         }
     }, [activeTab]);
 
+    // ── Activity Monitor state ────────────────────────────────────────────────
+    const [activityData, setActivityData] = useState<{ online: any[]; recent: any[] }>({ online: [], recent: [] });
+    const [activityLoading, setActivityLoading] = useState(false);
+    const activityIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+    const fetchActivity = useCallback(async () => {
+        try {
+            const res = await fetch("/api/activity/sessions");
+            const data = await res.json();
+            setActivityData(data);
+        } catch { /* silent */ }
+    }, []);
+
+    useEffect(() => {
+        if (activeTab !== "activity") {
+            if (activityIntervalRef.current) clearInterval(activityIntervalRef.current);
+            return;
+        }
+        setActivityLoading(true);
+        fetchActivity().finally(() => setActivityLoading(false));
+        activityIntervalRef.current = setInterval(fetchActivity, 30_000);
+        return () => { if (activityIntervalRef.current) clearInterval(activityIntervalRef.current); };
+    }, [activeTab, fetchActivity]);
+
 
     const approve = async (email: string, role = "member", fromPending = false) => {
         if (fromPending) setApprovingEmail(email);
@@ -396,6 +420,14 @@ export default function AdminPanel({
                     </button>
                     <button onClick={() => setActiveTab("birthdays")} className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${activeTab === "birthdays" ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"}`}>
                         <span className="flex items-center gap-1.5">🎂 Birthdays</span>
+                    </button>
+                    <button onClick={() => setActiveTab("activity")} className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${activeTab === "activity" ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"}`}>
+                        <span className="flex items-center gap-1.5">
+                            <Activity size={14} /> Activity
+                            {activityData.online.length > 0 && (
+                                <span className="flex items-center justify-center w-4 h-4 rounded-full bg-emerald-500 text-white text-[9px] font-bold">{activityData.online.length}</span>
+                            )}
+                        </span>
                     </button>
                 </div>
             </div>
@@ -773,6 +805,167 @@ export default function AdminPanel({
             {/* ── BIRTHDAYS TAB ───────────────────────────────────────────── */}
             {activeTab === "birthdays" && (
                 <BirthdayTab members={members} />
+            )}
+
+            {/* ── ACTIVITY MONITOR TAB ────────────────────────────────────── */}
+            {activeTab === "activity" && (
+                <div className="space-y-5">
+                    {/* Header row */}
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                                Live presence updates every <span className="font-semibold text-gray-700 dark:text-gray-300">30s</span>.
+                                Sessions expire after <span className="font-semibold text-gray-700 dark:text-gray-300">2 min</span> of inactivity.
+                            </p>
+                        </div>
+                        <button
+                            onClick={() => { setActivityLoading(true); fetchActivity().finally(() => setActivityLoading(false)); }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-all"
+                        >
+                            <RefreshCw size={13} className={activityLoading ? "animate-spin" : ""} /> Refresh
+                        </button>
+                    </div>
+
+                    {/* 🟢 Live Now */}
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                        <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+                            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse inline-block" />
+                                Live Now
+                            </h3>
+                            <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full font-bold">
+                                {activityData.online.length} online
+                            </span>
+                        </div>
+
+                        {activityLoading && activityData.online.length === 0 ? (
+                            <div className="flex justify-center py-8"><Loader2 size={18} className="animate-spin text-gray-400" /></div>
+                        ) : activityData.online.length === 0 ? (
+                            <div className="flex flex-col items-center py-10 gap-2 text-gray-400">
+                                <WifiOff size={28} className="opacity-40" />
+                                <p className="text-sm">No one is online right now.</p>
+                            </div>
+                        ) : (
+                            <ul className="divide-y divide-gray-100 dark:divide-gray-700">
+                                {activityData.online.map((u: any) => {
+                                    const elapsedMs = u.sessionStart ? Date.now() - new Date(u.sessionStart).getTime() : 0;
+                                    const elapsedMin = Math.floor(elapsedMs / 60_000);
+                                    const elapsedStr = elapsedMin < 1 ? "Just joined" : elapsedMin < 60 ? `${elapsedMin}m` : `${Math.floor(elapsedMin / 60)}h ${elapsedMin % 60}m`;
+                                    const opt = ROLE_OPTIONS.find(r => r.value === u.role) ?? ROLE_OPTIONS[0];
+                                    return (
+                                        <li key={u.userId} className="flex items-center gap-3 px-4 py-3">
+                                            <div className="relative shrink-0">
+                                                {u.photo
+                                                    ? <img src={u.photo} alt={u.name} className="w-9 h-9 rounded-full object-cover ring-2 ring-emerald-400 dark:ring-emerald-500" />
+                                                    : <div className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center text-emerald-700 dark:text-emerald-400 font-bold text-sm">{(u.name || u.email || "?")[0].toUpperCase()}</div>
+                                                }
+                                                <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-white dark:border-gray-800" />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{u.name || u.email}</p>
+                                                <p className="text-xs text-gray-400 truncate">{u.email}</p>
+                                            </div>
+                                            <div className="flex flex-col items-end gap-1 shrink-0">
+                                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold capitalize ${opt.bg} ${opt.color}`}>
+                                                    {opt.icon} {opt.label}
+                                                </span>
+                                                <span className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                                                    <Timer size={11} /> {elapsedStr}
+                                                </span>
+                                            </div>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        )}
+                    </div>
+
+                    {/* 📋 Session History */}
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                        <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+                            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                                <Clock size={14} className="text-indigo-400" /> Session History
+                            </h3>
+                            <span className="text-xs text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full">Last 50</span>
+                        </div>
+
+                        {activityLoading && activityData.recent.length === 0 ? (
+                            <div className="flex justify-center py-8"><Loader2 size={18} className="animate-spin text-gray-400" /></div>
+                        ) : activityData.recent.length === 0 ? (
+                            <div className="text-center py-8 text-sm text-gray-400">No sessions recorded yet.</div>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="text-[11px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100 dark:border-gray-700">
+                                            <th className="text-left px-4 py-2.5">Member</th>
+                                            <th className="text-left px-3 py-2.5 hidden sm:table-cell">Role</th>
+                                            <th className="text-left px-3 py-2.5">Login</th>
+                                            <th className="text-left px-3 py-2.5 hidden md:table-cell">Logout</th>
+                                            <th className="text-right px-4 py-2.5">Duration</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60">
+                                        {activityData.recent.map((s: any) => {
+                                            const opt = ROLE_OPTIONS.find(r => r.value === s.role) ?? ROLE_OPTIONS[0];
+                                            const loginDate = s.loginAt ? new Date(s.loginAt) : null;
+                                            const logoutDate = s.logoutAt ? new Date(s.logoutAt) : null;
+                                            const isActive = !s.logoutAt;
+                                            const dur = s.durationMinutes;
+                                            const durStr = dur === null || dur === undefined
+                                                ? (isActive ? "—" : "< 1 min")
+                                                : dur < 1 ? "< 1 min"
+                                                : dur < 60 ? `${dur} min`
+                                                : `${Math.floor(dur / 60)}h ${dur % 60}m`;
+                                            return (
+                                                <tr key={s.sessionId} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                                                    <td className="px-4 py-2.5">
+                                                        <div className="flex items-center gap-2 min-w-0">
+                                                            {s.photo
+                                                                ? <img src={s.photo} alt={s.name} className="w-7 h-7 rounded-full object-cover shrink-0" />
+                                                                : <div className="w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-xs shrink-0">{(s.name || s.email || "?")[0].toUpperCase()}</div>
+                                                            }
+                                                            <div className="min-w-0">
+                                                                <p className="text-xs font-semibold text-gray-900 dark:text-white truncate">{s.name || s.email}</p>
+                                                                <p className="text-[10px] text-gray-400 truncate hidden sm:block">{s.email}</p>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-3 py-2.5 hidden sm:table-cell">
+                                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${opt.bg} ${opt.color}`}>
+                                                            {opt.icon} {opt.label}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-3 py-2.5">
+                                                        <p className="text-xs text-gray-700 dark:text-gray-300">{loginDate ? loginDate.toLocaleTimeString("en", { hour: "2-digit", minute: "2-digit" }) : "—"}</p>
+                                                        <p className="text-[10px] text-gray-400">{loginDate ? loginDate.toLocaleDateString("en", { month: "short", day: "numeric" }) : ""}</p>
+                                                    </td>
+                                                    <td className="px-3 py-2.5 hidden md:table-cell">
+                                                        {isActive ? (
+                                                            <span className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                                                                <Wifi size={11} /> Online
+                                                            </span>
+                                                        ) : (
+                                                            <>
+                                                                <p className="text-xs text-gray-700 dark:text-gray-300">{logoutDate ? logoutDate.toLocaleTimeString("en", { hour: "2-digit", minute: "2-digit" }) : "—"}</p>
+                                                                <p className="text-[10px] text-gray-400">{logoutDate ? logoutDate.toLocaleDateString("en", { month: "short", day: "numeric" }) : ""}</p>
+                                                            </>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-4 py-2.5 text-right">
+                                                        <span className={`text-xs font-bold ${isActive ? "text-emerald-600 dark:text-emerald-400" : "text-gray-700 dark:text-gray-300"}`}>
+                                                            {isActive ? "Active" : durStr}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                </div>
             )}
 
             {/* ── What's New Preview Modal ─────────────────────────────────── */}
