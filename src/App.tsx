@@ -450,7 +450,9 @@ export default function App() {
   // ── Lineup playlist player ────────────────────────────────────────────────
   const [lineupOpen, setLineupOpen] = useState(false);
 
-  const lineupTracks = React.useMemo((): LineupTrack[] => {
+  // All songs assigned to the lineup (joyful + solemn) for the relevant upcoming event.
+  // Used for the button count — includes songs even if they have no video_url.
+  const { lineupTracks, lineupSongCount } = React.useMemo(() => {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const in7 = new Date(today); in7.setDate(today.getDate() + 7);
     const relevant = allSchedules.filter(s => {
@@ -463,19 +465,28 @@ export default function App() {
       } catch { return false; }
     }).sort((a, b) => a.date.localeCompare(b.date));
 
+    let songCount = 0;
     const tracks: LineupTrack[] = [];
     relevant.forEach(ev => {
       if (ev.songLineup?.joyful) {
         const song = allSongs.find(s => s.id === ev.songLineup!.joyful);
-        if (song?.video_url) tracks.push({ songId: song.id, title: song.title, artist: song.artist ?? "", videoUrl: song.video_url, mood: "joyful", eventName: ev.eventName ?? "Service", eventDate: ev.date, serviceType: ev.serviceType });
+        if (song) {
+          songCount++;
+          // Only add to playable tracks if it has a video
+          if (song.video_url) tracks.push({ songId: song.id, title: song.title, artist: song.artist ?? "", videoUrl: song.video_url, mood: "joyful", eventName: ev.eventName ?? "Service", eventDate: ev.date, serviceType: ev.serviceType });
+        }
       }
       if (ev.songLineup?.solemn) {
         const song = allSongs.find(s => s.id === ev.songLineup!.solemn);
-        if (song?.video_url) tracks.push({ songId: song.id, title: song.title, artist: song.artist ?? "", videoUrl: song.video_url, mood: "solemn", eventName: ev.eventName ?? "Service", eventDate: ev.date, serviceType: ev.serviceType });
+        if (song) {
+          songCount++;
+          if (song.video_url) tracks.push({ songId: song.id, title: song.title, artist: song.artist ?? "", videoUrl: song.video_url, mood: "solemn", eventName: ev.eventName ?? "Service", eventDate: ev.date, serviceType: ev.serviceType });
+        }
       }
     });
-    return tracks;
+    return { lineupTracks: tracks, lineupSongCount: songCount };
   }, [allSchedules, allSongs]);
+
 
 
 
@@ -1098,7 +1109,7 @@ export default function App() {
                   showToast={showToast}
                   setCurrentView={setCurrentView}
                   onOpenLineup={() => setLineupOpen(true)}
-                  lineupTrackCount={lineupTracks.length}
+                  lineupTrackCount={lineupSongCount}
                 />
               ) : null}
 
