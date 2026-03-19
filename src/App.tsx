@@ -12,6 +12,7 @@ import BroadcastOverlay from "./BroadcastOverlay";
 import WelcomeToast from "./WelcomeToast";
 
 import BirthdatePromptModal from "./BirthdatePromptModal";
+import ProfileSetupModal from "./ProfileSetupModal";
 
 // ── Heavy views — lazy-loaded on first visit (code splitting) ────────────────
 const AdminPanel    = lazy(() => import("./AdminPanel"));
@@ -404,7 +405,7 @@ export default function App() {
   const isMyProfile = (member: any) =>
     !!user?.email && !!member?.email &&
     member.email.trim().toLowerCase() === user.email.trim().toLowerCase();
-  const canAddMember = isRoleAdmin || isQARole;                          // Admin + QA Specialist (Worship Leader removed)
+  const canAddMember_base = isRoleAdmin || isQARole;                     // Admin + QA Specialist
   const canEditMember = (member: any) => isRoleAdmin || isQARole || isMyProfile(member); // Admin & QA edit all; others own only
   const canDeleteMember = isRoleAdmin || isQARole;                       // Admin + QA Specialist
 
@@ -502,6 +503,20 @@ export default function App() {
     return [];
   });
   const [isLoadingMembers, setIsLoadingMembers] = useState(false);
+
+  // ── Profile check: wait until members are confirmed loaded before showing setup prompt ──
+  // One-shot: immediate if cache is warm, 2.5 s fallback for network-fetched members.
+  const [profileCheckReady, setProfileCheckReady] = useState(false);
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout>;
+    if (allMembers.length > 0) {
+      setProfileCheckReady(true);
+    } else {
+      t = setTimeout(() => setProfileCheckReady(true), 2500);
+    }
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // intentional: one-shot on mount
 
   const [pendingNavSongId, setPendingNavSongId] = useState<string | null>(null);
 
@@ -640,6 +655,12 @@ export default function App() {
   /** True when the user has a member profile but hasn't set their birthdate yet */
   const needsBirthdatePrompt = !!myMemberProfile && !myMemberProfile.birthdate;
 
+  /** True when logged-in user has no team member profile yet → show setup modal */
+  const needsProfileSetup = profileCheckReady && !!user && !myMemberProfile;
+
+  /** Final canAddMember: base admin/QA OR no profile yet (self-register case) */
+  const canAddMember = canAddMember_base || needsProfileSetup;
+
   /** Map of "MM-DD" -> Member[] for birthday lookups */
   const birthdayMap = useMemo(() => {
     const map: Record<string, Member[]> = {};
@@ -709,6 +730,17 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 👤 Profile Setup — blocks UI for users who haven't created their Team Member profile yet */}
+      {needsProfileSetup && (
+        <ProfileSetupModal
+          user={user}
+          onSuccess={(newMember) => {
+            // Optimistically add the new member so myMemberProfile resolves immediately
+            setAllMembers(prev => [...prev, { id: newMember.id ?? `tmp-${Date.now()}`, ...newMember }]);
+          }}
+        />
       )}
 
       {/* 🎂 Birthdate Prompt — blocks UI for members who haven't set their birthday yet */}
