@@ -1219,6 +1219,7 @@ export default function App() {
                   onOpenLineup={() => setLineupOpen(true)}
                   currentUser={user}
                   canEditSong={canEditSong}
+                  showToast={showToast}
                   onSongUpdated={(updated) => {
                     setAllSongs(prev => prev.map(s => s.id === updated.id ? updated : s));
                     // Also update the local songs cache so the change persists across navigations

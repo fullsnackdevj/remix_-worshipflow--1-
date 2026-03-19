@@ -154,12 +154,13 @@ interface RehearsalViewProps {
     currentUser?: { displayName?: string | null; photoURL?: string | null } | null;
     canEditSong?: boolean;
     onSongUpdated?: (updatedSong: Song) => void;
+    showToast?: (type: string, message: string) => void;
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function RehearsalView({
     allSchedules, allSongs, lineupTracks, onOpenLineup,
-    currentUser, canEditSong = false, onSongUpdated,
+    currentUser, canEditSong = false, onSongUpdated, showToast,
 }: RehearsalViewProps) {
 
     const [activeSong, setActiveSong] = useState<"joyful" | "solemn">("joyful");
@@ -258,14 +259,16 @@ export default function RehearsalView({
         if (!currentSong) return;
         const edit = col === "lyrics" ? lyricsEdit : chordsEdit;
         const setIsSaving = col === "lyrics" ? setIsSavingLyrics : setIsSavingChords;
+        const label = col === "lyrics" ? "Lyrics" : "Chords";
 
         setConfirmSave(null);
         setIsSaving(true);
+        showToast?.("info", `Saving ${label}…`);
         try {
             // Use PATCH — partial update, only the edited field.
             // No need to send tags/title/artist — the server only touches what's provided.
             const payload: Record<string, string> = {
-                [col]: edit.draft,                              // "lyrics" or "chords" key
+                [col]: edit.draft,
                 actorName: currentUser?.displayName ?? "Rehearsal Edit",
                 actorPhoto: currentUser?.photoURL ?? "",
             };
@@ -292,8 +295,9 @@ export default function RehearsalView({
             };
             onSongUpdated?.(updatedSong);
             edit.setIsEditing(false);
+            showToast?.("success", `${label} saved for "${currentSong.title}"`);
         } catch (err: any) {
-            alert(`Save failed: ${err.message}`);
+            showToast?.("error", `Save failed: ${err.message}`);
         } finally {
             setIsSaving(false);
         }
