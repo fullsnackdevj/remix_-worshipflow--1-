@@ -193,6 +193,7 @@ export default function MembersView({
     if (!editMemberPhone.trim()) errors.phone = "Phone number is required.";
     if (!editMemberEmail.trim()) errors.email = "Email address is required.";
     else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(editMemberEmail.trim())) errors.email = "Please enter a valid email address.";
+    if (!editMemberBirthdate) errors.birthdate = "Birthdate is required.";
     if (Object.keys(errors).length > 0) { setMemberFormErrors(errors); return; }
     setMemberFormErrors({});
 
@@ -598,7 +599,7 @@ export default function MembersView({
             {/* Birthdate */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Birthdate
+                Birthdate <span className="text-red-500">*</span>
               </label>
               <DatePicker
                 value={editMemberBirthdate}
