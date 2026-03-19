@@ -257,13 +257,13 @@ export default function RehearsalView({ allSchedules, allSongs, lineupTracks, on
     // ── Desktop / Tablet: 2-column layout ───────────────────────────────────
     const desktopLayout = (
         <div
-            className="hidden md:grid grid-cols-2 h-full divide-x divide-gray-200 dark:divide-gray-800"
+            className="hidden md:flex h-full"
             onTouchStart={onTouchStart}
             onTouchEnd={onTouchEnd}
         >
             {/* Lyrics column */}
-            <div className="flex flex-col h-full overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-2 shrink-0 border-b border-gray-200 dark:border-gray-800">
+            <div className="flex flex-col w-1/2 h-full border-r border-gray-200 dark:border-gray-800 overflow-hidden">
+                <div className="flex items-center px-4 py-2 shrink-0 border-b border-gray-200 dark:border-gray-800">
                     <span className="text-[11px] font-bold uppercase tracking-widest text-rose-500">Lyrics</span>
                 </div>
                 <div className="flex-1 overflow-y-auto">
@@ -281,7 +281,7 @@ export default function RehearsalView({ allSchedules, allSongs, lineupTracks, on
             </div>
 
             {/* Chords column */}
-            <div className="flex flex-col h-full overflow-hidden">
+            <div className="flex flex-col w-1/2 h-full overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-2 shrink-0 border-b border-gray-200 dark:border-gray-800">
                     <span className="text-[11px] font-bold uppercase tracking-widest text-indigo-500">Chords</span>
                     {transposeControls}
@@ -301,6 +301,7 @@ export default function RehearsalView({ allSchedules, allSongs, lineupTracks, on
             </div>
         </div>
     );
+
 
     // ── Mobile: 2-row layout with swap ──────────────────────────────────────
     const mobileRow = (type: "lyrics" | "chords", isTop: boolean) => {
