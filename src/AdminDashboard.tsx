@@ -502,7 +502,7 @@ export default function AdminDashboard({
                 {/* ── ROW 1 ─────────────────────────── */}
 
                 {/* What's New */}
-                <Tile className="flex flex-col min-h-0 [contain:size]">
+                <Tile className="flex flex-col min-h-[240px] lg:min-h-0 lg:[contain:size]">
                     <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 shrink-0">
                         <div className="flex items-center gap-2 font-semibold text-gray-900 dark:text-white text-base">
                             <Megaphone size={15} className="text-amber-500" />
