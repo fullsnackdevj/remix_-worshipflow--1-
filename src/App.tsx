@@ -504,19 +504,15 @@ export default function App() {
   });
   const [isLoadingMembers, setIsLoadingMembers] = useState(false);
 
-  // ── Profile check: wait until members are confirmed loaded before showing setup prompt ──
-  // One-shot: immediate if cache is warm, 2.5 s fallback for network-fetched members.
+  // ── Profile check: ONLY mark ready once allMembers actually has loaded data ──
+  // Reactive watcher (not a timer) — avoids race where timer fires before
+  // network fetch completes and myMemberProfile is temporarily null.
   const [profileCheckReady, setProfileCheckReady] = useState(false);
   useEffect(() => {
-    let t: ReturnType<typeof setTimeout>;
-    if (allMembers.length > 0) {
+    if (allMembers.length > 0 && !profileCheckReady) {
       setProfileCheckReady(true);
-    } else {
-      t = setTimeout(() => setProfileCheckReady(true), 2500);
     }
-    return () => clearTimeout(t);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // intentional: one-shot on mount
+  }, [allMembers]); // fires whenever allMembers updates
 
   const [pendingNavSongId, setPendingNavSongId] = useState<string | null>(null);
 
@@ -655,8 +651,9 @@ export default function App() {
   /** True when the user has a member profile but hasn't set their birthdate yet */
   const needsBirthdatePrompt = !!myMemberProfile && !myMemberProfile.birthdate;
 
-  /** True when logged-in user has no team member profile yet → show setup modal */
-  const needsProfileSetup = profileCheckReady && !!user && !myMemberProfile;
+  /** True when logged-in user has no team member profile yet → show setup modal.
+   *  Guard allMembers.length > 0 prevents false-positive while members are loading. */
+  const needsProfileSetup = profileCheckReady && !!user && !myMemberProfile && allMembers.length > 0;
 
   /** Final canAddMember: base admin/QA OR no profile yet (self-register case) */
   const canAddMember = canAddMember_base || needsProfileSetup;
