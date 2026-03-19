@@ -1,8 +1,8 @@
-// WorshipFlow Service Worker — v8 (2026-03-18)
+// WorshipFlow Service Worker — v9 (2026-03-20)
 // Strategy: network-first for EVERYTHING so returning users always get the latest
 // app code and data. Only fall back to cache when truly offline.
 
-const CACHE_VERSION = 'wf-v8';
+const CACHE_VERSION = 'wf-v9';
 const OFFLINE_URL   = '/offline.html';
 
 // Minimal offline shell — only these need pre-caching

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { StrictMode, useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
@@ -18,9 +18,12 @@ const MIN_SPLASH_MS = isReturning ? 400 : 1600;
 try { sessionStorage.setItem('wf_visited', '1'); } catch { /* noop */ }
 
 // ── Service Worker registration with auto-update ──────────────────────────────
-// When a new SW is waiting (new deploy), tell it to skip waiting and reload
-// so returning users always get the latest app version instantly.
+// Snapshot BEFORE registration — if no controller yet, this is the first install.
+// Only auto-reload when a NEW SW replaces an EXISTING one (version update).
+// Without this guard, controllerchange fires on first install mid-splash → double splash.
 if ('serviceWorker' in navigator) {
+  const hadController = !!navigator.serviceWorker.controller;
+
   navigator.serviceWorker.register('/sw.js').then(reg => {
     // Already a new SW waiting — activate it now
     if (reg.waiting) {
@@ -39,10 +42,12 @@ if ('serviceWorker' in navigator) {
     });
   }).catch(() => { /* SW registration failed silently */ });
 
-  // When SW takes control (after skipWaiting), reload once to get fresh assets
+  // Reload to pick up new assets — but ONLY if a previous SW was already active.
+  // First-ever install: hadController=false → skip reload (app already has latest assets).
+  // Version update: hadController=true → reload to flush old cached chunks.
   let refreshing = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!refreshing) { refreshing = true; window.location.reload(); }
+    if (hadController && !refreshing) { refreshing = true; window.location.reload(); }
   });
 }
 
@@ -91,9 +96,11 @@ function Root() {
 }
 
 createRoot(document.getElementById('root')!).render(
-  <ThemeProvider>
-    <AuthProvider>
-      <Root />
-    </AuthProvider>
-  </ThemeProvider>,
+  <StrictMode>
+    <ThemeProvider>
+      <AuthProvider>
+        <Root />
+      </AuthProvider>
+    </ThemeProvider>
+  </StrictMode>,
 );
