@@ -16,6 +16,10 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
+// Always show the account picker — prevents auto-sign-in with the previous
+// account after the user has explicitly signed out.
+googleProvider.setCustomParameters({ prompt: 'select_account' });
+
 export const db = getFirestore(app);
 
 // Firebase Cloud Messaging — for push notifications

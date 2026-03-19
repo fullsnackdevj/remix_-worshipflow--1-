@@ -78,8 +78,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     const logOut = async () => {
+        // Clear all app caches so the next user starts with a clean state.
+        // Without this, cached songs/members/schedules from the signed-out
+        // session would briefly flash on the next user's screen.
+        try {
+            Object.keys(localStorage)
+                .filter(k => k.startsWith("wf_"))
+                .forEach(k => localStorage.removeItem(k));
+        } catch { /* noop — storage may be restricted */ }
         await signOut(auth);
     };
+
 
     return (
         <AuthContext.Provider
