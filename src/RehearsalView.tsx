@@ -257,42 +257,45 @@ export default function RehearsalView({ allSchedules, allSongs, lineupTracks, on
     // ── Desktop / Tablet: 2-column layout ───────────────────────────────────
     const desktopLayout = (
         <div
-            className="hidden md:flex h-full"
+            className="hidden md:flex flex-col h-full"
             onTouchStart={onTouchStart}
             onTouchEnd={onTouchEnd}
         >
-            {/* Lyrics column */}
-            <div className="flex flex-col w-1/2 h-full border-r border-gray-200 dark:border-gray-800 overflow-hidden">
-                <div className="flex items-center px-4 py-2 shrink-0 border-b border-gray-200 dark:border-gray-800">
+            {/* Single shared header row — one border-b, no alignment gap possible */}
+            <div className="flex shrink-0 border-b border-gray-200 dark:border-gray-800">
+                <div className="w-1/2 flex items-center px-4 py-2">
                     <span className="text-[11px] font-bold uppercase tracking-widest text-rose-500">Lyrics</span>
                 </div>
-                <div className="flex-1 overflow-y-auto">
+                <div className="w-1/2 flex items-center justify-between px-4 py-2 border-l border-gray-200 dark:border-gray-800">
+                    <span className="text-[11px] font-bold uppercase tracking-widest text-indigo-500">Chords</span>
+                    {transposeControls}
+                </div>
+            </div>
+
+            {/* Scrollable content — two columns side by side */}
+            <div className="flex flex-1 overflow-hidden min-h-0">
+                {/* Lyrics */}
+                <div className="w-1/2 overflow-y-auto border-r border-gray-200 dark:border-gray-800">
                     {currentSong?.lyrics?.trim() ? (
                         <pre className="font-mono text-sm leading-7 text-gray-800 dark:text-gray-200 px-5 py-4 whitespace-pre-wrap break-words">
                             {currentSong.lyrics}
                         </pre>
                     ) : (
-                        <div className="flex flex-col items-center justify-center h-full gap-2 text-gray-400 py-16">
+                        <div className="flex flex-col items-center justify-center py-16 gap-2 text-gray-400">
                             <Music size={28} className="opacity-30" />
                             <p className="text-sm">No lyrics available.</p>
                         </div>
                     )}
                 </div>
-            </div>
 
-            {/* Chords column */}
-            <div className="flex flex-col w-1/2 h-full overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-2 shrink-0 border-b border-gray-200 dark:border-gray-800">
-                    <span className="text-[11px] font-bold uppercase tracking-widest text-indigo-500">Chords</span>
-                    {transposeControls}
-                </div>
-                <div className="flex-1 overflow-y-auto">
+                {/* Chords */}
+                <div className="w-1/2 overflow-y-auto">
                     {transposedChords?.trim() ? (
                         <pre className="font-mono text-sm leading-7 text-gray-800 dark:text-gray-200 px-5 py-4 whitespace-pre-wrap break-words">
                             {transposedChords}
                         </pre>
                     ) : (
-                        <div className="flex flex-col items-center justify-center h-full gap-2 text-gray-400 py-16">
+                        <div className="flex flex-col items-center justify-center py-16 gap-2 text-gray-400">
                             <Music size={28} className="opacity-30" />
                             <p className="text-sm">No chords available.</p>
                         </div>
@@ -301,6 +304,7 @@ export default function RehearsalView({ allSchedules, allSongs, lineupTracks, on
             </div>
         </div>
     );
+
 
 
     // ── Mobile: 2-row layout with swap ──────────────────────────────────────
