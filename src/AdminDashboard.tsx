@@ -474,7 +474,7 @@ export default function AdminDashboard({
                 {/* LEFT — Daily Bible Verse fills the full grid cell height */}
                 <VerseOfTheDay userId={userId} userName={userName.split(" ")[0] || userName} userPhoto="" />
                 {/* RIGHT — 2×2 metric tiles: Songs | Members on top, Events | Issues on bottom */}
-                <div className="grid grid-cols-2 gap-3 content-start">
+                <div className="grid grid-cols-2 gap-3">
                     <MetricTile label="Songs" value={songs.length} sub={`${songsUsed} in services`}
                         iconBg="bg-indigo-100 dark:bg-indigo-900/40" icon={<Music size={15} className="text-indigo-600 dark:text-indigo-400" />}
                         onClick={() => onNavigate("songs")} />
@@ -502,7 +502,7 @@ export default function AdminDashboard({
                 {/* ── ROW 1 ─────────────────────────── */}
 
                 {/* What's New */}
-                <Tile className="h-[260px] flex flex-col">
+                <Tile className="min-h-[260px] flex flex-col">
                     <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 shrink-0">
                         <div className="flex items-center gap-2 font-semibold text-gray-900 dark:text-white text-base">
                             <Megaphone size={15} className="text-amber-500" />
@@ -512,7 +512,7 @@ export default function AdminDashboard({
                             Manage <ChevronRight size={13} />
                         </button>
                     </div>
-                    <div className="flex-1 overflow-y-auto px-5 py-4">
+                    <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
                         {releaseNotes ? (
                             <>
                                 {releaseNotes.updatedAt && (
@@ -536,10 +536,9 @@ export default function AdminDashboard({
                     </div>
                 </Tile>
 
-                {/* Church Events */}
-                <Tile className="min-h-[260px]">
-                    <NextServiceTile ev={nextEvent} songs={songs} members={members} myMemberId={myMemberId} onClick={() => onNavigate("schedule")} />
-                </Tile>
+                {/* Church Events — NextServiceTile renders its own Tile with h-full;
+                     no outer Tile wrapper needed so h-full correctly fills the grid row */}
+                <NextServiceTile ev={nextEvent} songs={songs} members={members} myMemberId={myMemberId} onClick={() => onNavigate("schedule")} />
 
                 {/* Upcoming Events */}
                 <Tile className="min-h-[260px]">
