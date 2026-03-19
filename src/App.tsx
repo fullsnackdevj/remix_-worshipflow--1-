@@ -1217,6 +1217,22 @@ export default function App() {
                   allSongs={allSongs}
                   lineupTracks={lineupTracks}
                   onOpenLineup={() => setLineupOpen(true)}
+                  currentUser={user}
+                  canEditSong={canEditSong}
+                  onSongUpdated={(updated) => {
+                    setAllSongs(prev => prev.map(s => s.id === updated.id ? updated : s));
+                    // Also update the local songs cache so the change persists across navigations
+                    try {
+                      const raw = localStorage.getItem("wf_songs_cache");
+                      if (raw) {
+                        const parsed = JSON.parse(raw);
+                        if (parsed?.songs) {
+                          parsed.songs = parsed.songs.map((s: Song) => s.id === updated.id ? updated : s);
+                          localStorage.setItem("wf_songs_cache", JSON.stringify(parsed));
+                        }
+                      }
+                    } catch { /* noop */ }
+                  }}
                 />
               ) : null}
               </Suspense>
