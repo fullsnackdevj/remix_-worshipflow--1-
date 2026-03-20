@@ -542,7 +542,22 @@ export default function AdminDashboard({
                         </button>
                     </div>
                     <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
-                        {latestBroadcast ? (
+                        {loadingExtra ? (
+                            /* Skeleton shimmer while broadcasts are fetching */
+                            <div className="animate-pulse space-y-3 pt-1">
+                                <div className="h-3 w-24 bg-gray-200 dark:bg-gray-700 rounded" />
+                                <div className="h-3 w-full bg-gray-200 dark:bg-gray-700 rounded" />
+                                <div className="h-3 w-5/6 bg-gray-200 dark:bg-gray-700 rounded" />
+                                <div className="space-y-2 pt-2">
+                                    {[1,2,3].map(i => (
+                                        <div key={i} className="flex items-start gap-2">
+                                            <div className="w-2 h-2 rounded-full bg-gray-200 dark:bg-gray-700 mt-1.5 shrink-0" />
+                                            <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded flex-1" />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : latestBroadcast ? (
                             <>
                                 {latestBroadcast.createdAt && (
                                     <span className="text-xs text-gray-400 font-medium block mb-2">Updated: {formatBroadcastDate(latestBroadcast.createdAt)}</span>
@@ -563,6 +578,7 @@ export default function AdminDashboard({
                             </div>
                         )}
                     </div>
+
                 </Tile>
 
                 {/* Church Events — NextServiceTile renders its own Tile with h-full;
