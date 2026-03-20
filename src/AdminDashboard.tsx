@@ -16,6 +16,11 @@ import {
 interface Song { id: string; title: string; artist: string; created_at?: string; }
 interface Note { id: string; type: "bug" | "feature" | "general"; content: string; resolved?: boolean; createdAt: string; authorName: string; reactions?: Record<string, string[]>; }
 
+// Module-level cache: approved_users roles are fetched once per page load.
+// This avoids re-querying Firestore every time AdminDashboard remounts.
+let _approvedRolesCache: Record<string, string> | null = null;
+
+
 
 interface Props {
     userName: string; userEmail: string; userId?: string; userPhoto?: string; userRole?: string;
@@ -333,17 +338,35 @@ export default function AdminDashboard({
         } catch { return ""; }
     };
 
-    // ── Birthday detection ────────────────────────────────────────────────────
-    const todayMMDD = `${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`;
+    // ── Birthday detection ─────────────────────────────────────────────────────
+    // Memoized so it only recomputes when the date actually changes (not on every render)
+    const todayMMDD = useMemo(() =>
+        `${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`,
+        [] // stable for the lifetime of this component mount (one session = one day)
+    );
     const celebrants: Member[] = useMemo(
         () => members.filter(m => m.birthdate?.slice(5) === todayMMDD),
         [members, todayMMDD]
     );
 
-    // Fetch access roles for celebrants from approved_users Firestore collection
+    // Stable string key for dep array — avoids creating new array/string on every render
+    const celebrantKey = useMemo(() => celebrants.map(c => c.id).join(","), [celebrants]);
+
+    // Module-level cache so getDocs is only called ONCE per app session, not on every remount.
+    // Cleared automatically when the page reloads.
     const [celebrantRoles, setCelebrantRoles] = useState<Record<string, string>>({});
     useEffect(() => {
         if (celebrants.length === 0) return;
+        // Use module-level cache to avoid re-fetching approved_users on every remount
+        if (_approvedRolesCache) {
+            const resolved: Record<string, string> = {};
+            celebrants.forEach(m => {
+                const role = _approvedRolesCache![m.email?.toLowerCase() ?? ""];
+                if (role) resolved[m.id] = role;
+            });
+            setCelebrantRoles(resolved);
+            return;
+        }
         getDocs(collection(db, "approved_users"))
             .then(snap => {
                 const roleMap: Record<string, string> = {};
@@ -351,6 +374,7 @@ export default function AdminDashboard({
                     const data = d.data();
                     if (data.email && data.role) roleMap[String(data.email).toLowerCase()] = data.role;
                 });
+                _approvedRolesCache = roleMap; // cache for this session
                 const resolved: Record<string, string> = {};
                 celebrants.forEach(m => {
                     const role = roleMap[m.email?.toLowerCase() ?? ""];
@@ -359,7 +383,7 @@ export default function AdminDashboard({
                 setCelebrantRoles(resolved);
             })
             .catch(() => {});
-    }, [celebrants.map(c => c.id).join(",")]);
+    }, [celebrantKey]); // stable dep — only re-runs when celebrant IDs actually change
 
     // Ref for scrolling to birthday cards section
     const birthdayRef = useRef<HTMLDivElement>(null);
