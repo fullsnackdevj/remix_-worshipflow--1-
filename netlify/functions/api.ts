@@ -983,7 +983,7 @@ Rules:
             if (tagId) songs = songs.filter((song: any) => song.tagIds?.includes(tagId));
             songs.sort((a: any, b: any) => (a.title || "").localeCompare(b.title || ""));
 
-            return json(200, songs, { "Cache-Control": "public, max-age=0, s-maxage=300" });
+            return json(200, songs, { "Cache-Control": "no-store" });
         } catch (err) {
             console.error(err);
             return json(500, { error: "Failed to fetch songs" });

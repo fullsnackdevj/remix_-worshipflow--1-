@@ -273,13 +273,14 @@ export default function SongsView({
   };
 
   // ── Fetch: songs + tags in parallel, with localStorage cache ────────────────
-  const fetchSongs = useCallback(async ({ background = false } = {}) => {
+  const fetchSongs = useCallback(async ({ background = false, bustCache = false } = {}) => {
     if (fetchAbortRef.current) fetchAbortRef.current.abort();
     const controller = new AbortController();
     fetchAbortRef.current = controller;
 
     // 1. Serve from cache immediately (stale-while-revalidate)
-    if (!background) {
+    // bustCache: true skips cache entirely — used after a save to guarantee fresh data
+    if (!background && !bustCache) {
       const cached = readCache();
       if (cached) {
         setAllSongs(cached.songs);
@@ -466,7 +467,9 @@ export default function SongsView({
       setIsEditing(false);
       setSelectedSong(null);
       clearSongsCache();
-      await fetchSongs(); // refresh + re-cache
+      // bustCache: true — bypasses stale-while-revalidate so the post-save
+      // fetch always hits the network and never serves old cached data
+      await fetchSongs({ bustCache: true });
       showToast("success", isEdit
         ? `Song "${payload.title}" updated successfully!`
         : `Song "${payload.title}" saved successfully!`
@@ -585,10 +588,10 @@ export default function SongsView({
       setEditArtist(song.artist || "");
       setEditVideoUrl(song.video_url || "");
       setEditLyrics(song.lyrics);
-      setEditChords(song.chords);
+      setEditChords(song.chords ?? "");
       setEditTags(Array.isArray(song.tags) ? song.tags.map((t) => t.id) : []);
       resetLyricsHistory(song.lyrics);
-      resetChordsHistory(song.chords);
+      resetChordsHistory(song.chords ?? "");
     } else {
       setSelectedSong(null);
       setEditTitle("");
