@@ -219,6 +219,8 @@ export default function AdminPanel({
                 await fetch(`/api/broadcasts/${id}`, { method: "DELETE" });
                 onToast?.("success", "Broadcast deleted.");
                 fetchBroadcasts();
+                try { localStorage.removeItem("wf_broadcasts_cache"); } catch { /* noop */ }
+                window.dispatchEvent(new CustomEvent("broadcastsUpdated"));
             } catch { onToast?.("error", "Failed to delete broadcast."); }
         };
         if (onConfirm) onConfirm("Delete this broadcast?", doDelete);
@@ -249,6 +251,9 @@ export default function AdminPanel({
         setBTitle(""); setBMessage(""); setBBullets(["", "", ""]); setBTargetAll(true); setBSelected([]);
         setShowForm(false); setBCreating(false); setEditingBroadcastId(null);
         fetchBroadcasts();
+        // Bust the Dashboard cache so the card updates immediately
+        try { localStorage.removeItem("wf_broadcasts_cache"); } catch { /* noop */ }
+        window.dispatchEvent(new CustomEvent("broadcastsUpdated"));
     };
 
     const openEditBroadcast = (b: any) => {

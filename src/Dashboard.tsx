@@ -371,6 +371,19 @@ export default function Dashboard({
     }).finally(() => setLoadingExtra(false));
     }, []);
 
+    // Re-fetch broadcasts immediately when AdminPanel creates/deletes a broadcast
+    useEffect(() => {
+        const refetch = () => {
+            try { localStorage.removeItem("wf_broadcasts_cache"); } catch { /* noop */ }
+            fetch("/api/broadcasts")
+                .then(r => r.json())
+                .then(b => { if (Array.isArray(b)) setBroadcasts(b); })
+                .catch(() => {});
+        };
+        window.addEventListener("broadcastsUpdated", refetch);
+        return () => window.removeEventListener("broadcastsUpdated", refetch);
+    }, []);
+
     // All roles see the full bento dashboard
     return (
         <AdminDashboard
