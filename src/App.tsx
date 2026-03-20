@@ -448,6 +448,10 @@ export default function App() {
     _songsCacheFresh && Array.isArray(_songsCacheRaw.tags) ? _songsCacheRaw.tags : []
   );
 
+  // Capture initial freshness in a ref so the boot effect can reuse them
+  // without re-reading localStorage (avoids 6 duplicate reads per page load).
+  const _initCacheFreshRef = useRef({ songs: _songsCacheFresh });
+
   // ── Lineup playlist player ────────────────────────────────────────────────
   const [lineupOpen, setLineupOpen] = useState(false);
 
@@ -558,7 +562,8 @@ export default function App() {
     // always fresh — no grey buttons, no missing birthdays.
     const HARD_RESET_MS = 12 * 60 * 60 * 1000;
     const lastActive = Number(localStorage.getItem("wf_last_active") ?? "0");
-    if (Date.now() - lastActive > HARD_RESET_MS) {
+    const didHardReset = Date.now() - lastActive > HARD_RESET_MS;
+    if (didHardReset) {
       ["wf_songs_cache", "wf_members_cache", "wf_schedules_cache",
        "wf_schedules_cache_ts", "wf_notes_cache"].forEach(k => {
         try { localStorage.removeItem(k); } catch { /* noop */ }
@@ -567,13 +572,14 @@ export default function App() {
     try { localStorage.setItem("wf_last_active", Date.now().toString()); } catch { /* noop */ }
 
     // ── Boot prefetch: skip if localStorage cache is still fresh ───────────────
-    const isSongsCacheFresh = (() => {
-      try { const { ts } = JSON.parse(localStorage.getItem("wf_songs_cache") || "{}"); return Date.now() - ts < 30 * 60 * 1000; } catch { return false; }
-    })();
-    const isMembersCacheFresh = (() => {
+    // After a hard reset all caches are wiped, so we must fetch everything.
+    // Otherwise reuse the freshness flags already evaluated at render time
+    // (stored in _initCacheFreshRef) to avoid re-reading localStorage.
+    const isSongsCacheFresh = !didHardReset && _initCacheFreshRef.current.songs;
+    const isMembersCacheFresh = !didHardReset && (() => {
       try { const { ts } = JSON.parse(localStorage.getItem("wf_members_cache") || "{}"); return Date.now() - ts < 20 * 60 * 1000; } catch { return false; }
     })();
-    const isSchedulesCacheFresh = (() => {
+    const isSchedulesCacheFresh = !didHardReset && (() => {
       try { const ts = localStorage.getItem("wf_schedules_cache_ts"); return !!ts && Date.now() - Number(ts) < 15 * 60 * 1000; } catch { return false; }
     })();
 

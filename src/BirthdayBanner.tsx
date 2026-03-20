@@ -1,21 +1,12 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { Member } from "./types";
 
 interface Props {
   celebrants: Member[];
-  onScrollToCards?: () => void;
 }
 
-export default function BirthdayBanner({ celebrants, onScrollToCards }: Props) {
-  const [dismissed, setDismissed] = useState(false);
-
-  // Persist dismiss state per calendar day in sessionStorage
-  useEffect(() => {
-    const key = `wf_bd_banner_${new Date().toISOString().slice(0, 10)}`;
-    if (sessionStorage.getItem(key) === "1") setDismissed(true);
-  }, []);
-
-  if (dismissed || celebrants.length === 0) return null;
+export default function BirthdayBanner({ celebrants }: Props) {
+  if (celebrants.length === 0) return null;
 
   const names = celebrants.map(m => m.firstName ?? m.name.split(" ")[0]);
   const nameStr =
@@ -24,12 +15,6 @@ export default function BirthdayBanner({ celebrants, onScrollToCards }: Props) {
       : names.length === 2
       ? `${names[0]} & ${names[1]}`
       : `${names.slice(0, -1).join(", ")} & ${names[names.length - 1]}`;
-
-  const handleDismiss = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setDismissed(true);
-    sessionStorage.setItem(`wf_bd_banner_${new Date().toISOString().slice(0, 10)}`, "1");
-  };
 
   return (
     <>
@@ -61,10 +46,11 @@ export default function BirthdayBanner({ celebrants, onScrollToCards }: Props) {
         .bd-bell { animation: bdBell 1.8s ease-in-out infinite; display:inline-block; }
       `}</style>
 
+      {/* Static banner — no click, no dismiss */}
       <div
-        role="banner"
-        onClick={onScrollToCards}
-        className="bd-banner-pop bd-banner-shimmer relative flex items-center gap-3 px-4 py-3 rounded-2xl shadow-lg cursor-pointer select-none mb-4"
+        role="status"
+        aria-live="polite"
+        className="bd-banner-pop bd-banner-shimmer relative flex items-center gap-3 px-4 py-3 rounded-2xl shadow-lg select-none mb-4"
       >
         {/* Bell icon */}
         <span className="bd-bell text-xl shrink-0">🎂</span>
@@ -73,21 +59,12 @@ export default function BirthdayBanner({ celebrants, onScrollToCards }: Props) {
         <div className="flex-1 min-w-0">
           <p className="text-sm font-bold leading-tight truncate" style={{ color: "#fff", textShadow: "0 1px 3px rgba(0,0,0,0.5)" }}>
             🎉 Today's Birthday{celebrants.length > 1 ? "s" : ""}:{" "}
-            <span className="underline decoration-dotted">{nameStr}</span>
+            <span>{nameStr}</span>
           </p>
           <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.85)", textShadow: "0 1px 2px rgba(0,0,0,0.4)" }}>
-            {celebrants.length > 1 ? "Send them" : "Send"} your birthday greetings! 🎊
+            Wishing {celebrants.length > 1 ? "them" : "them"} a wonderful birthday! 🎊
           </p>
         </div>
-
-        {/* Dismiss X */}
-        <button
-          aria-label="Dismiss birthday banner"
-          onClick={handleDismiss}
-          className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-black/20 hover:bg-black/35 transition-colors text-white font-bold text-xs"
-        >
-          ✕
-        </button>
       </div>
     </>
   );

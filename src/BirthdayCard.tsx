@@ -165,6 +165,8 @@ interface BirthdayCardProps {
   currentUserEmail?: string;
   currentUserPhoto?: string;
   celebrantRole?: string;
+  /** Called after a greeting is successfully sent, with the celebrant's member ID */
+  onGreetingSent?: (memberId: string) => void;
 }
 
 const REACTION_EMOJIS = [] as const;
@@ -172,7 +174,7 @@ const REACTION_EMOJIS = [] as const;
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function BirthdayCard({
-  member, currentUserId, currentUserName, currentUserEmail, currentUserPhoto, celebrantRole,
+  member, currentUserId, currentUserName, currentUserEmail, currentUserPhoto, celebrantRole, onGreetingSent,
 }: BirthdayCardProps) {
 
   const theme = ROLE_THEMES[resolveThemeKey(member.roles ?? [], celebrantRole)] ?? ROLE_THEMES.member;
@@ -263,7 +265,7 @@ export default function BirthdayCard({
     if (sending || hasReachedLimit) return;
     setSending(true);
     const message = wishText.trim() || "Happy Birthday! 🎉";
-    // Optimistic update
+    // ── Optimistic UI update ───────────────────────────────────────────────
     setSent(true);
     setShowWishBox(false);
     setWishText("");
@@ -276,6 +278,12 @@ export default function BirthdayCard({
     };
     setWishes(prev => [...prev, newWish]);
     setWishers(prev => prev.includes(currentUserId) ? prev : [...prev, currentUserId]);
+
+    // ── Notify parent IMMEDIATELY (before the API call) ────────────────────
+    // This ensures the localStorage "already greeted" key is written RIGHT NOW,
+    // so no matter how fast the user navigates away, the modal will never pop again.
+    onGreetingSent?.(member.id);
+
     try {
       await fetch("/api/birthday-wish", {
         method: "POST",
@@ -291,7 +299,7 @@ export default function BirthdayCard({
         }),
       });
     } catch {
-      // Revert optimistic update on failure
+      // Revert optimistic UI on failure
       setSent(false);
       setWishes(prev => prev.filter((w, i) => !(w.userId === currentUserId && i === prev.length - 1)));
     } finally {

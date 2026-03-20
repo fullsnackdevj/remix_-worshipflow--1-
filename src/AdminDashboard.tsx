@@ -388,17 +388,27 @@ export default function AdminDashboard({
     // Ref for scrolling to birthday cards section
     const birthdayRef = useRef<HTMLDivElement>(null);
 
-    // Modal: auto-open once per session if there are celebrants
+    // Modal: auto-open ONCE per birthday day, but ONLY if the user hasn't already
+    // sent a greeting to every celebrant. Stored in localStorage so it survives
+    // app restarts — unlike sessionStorage which resets every tab/close.
     const [birthdayModalOpen, setBirthdayModalOpen] = useState(() => false);
     useEffect(() => {
-        if (celebrants.length > 0) {
-            const key = `wf_bday_modal_${new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" })}`;
-            if (!sessionStorage.getItem(key)) {
+        if (celebrants.length === 0 || !userId) return;
+        const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+        // Check if the user has greeted ALL celebrants today
+        const allGreeted = celebrants.every(c =>
+            localStorage.getItem(`wf_bday_sent_${userId}_${c.id}_${today}`) === "1"
+        );
+        if (!allGreeted) {
+            // Also only pop once per calendar day per session (prevent re-open when
+            // switching views back to dashboard after partial greetings)
+            const sessionKey = `wf_bday_modal_session_${today}`;
+            if (!sessionStorage.getItem(sessionKey)) {
                 setBirthdayModalOpen(true);
-                sessionStorage.setItem(key, "1");
+                sessionStorage.setItem(sessionKey, "1");
             }
         }
-    }, [celebrants.length]);
+    }, [celebrants.length, userId]);
 
 
     return (
@@ -454,11 +464,10 @@ export default function AdminDashboard({
             </div>
 
 
-            {/* ── Birthday Banner ─────────────────────────────────────────── */}
+            {/* ── Birthday Banner — static, informational only ─────────── */}
             {celebrants.length > 0 && (
                 <BirthdayBanner
                     celebrants={celebrants}
-                    onScrollToCards={() => setBirthdayModalOpen(true)}
                 />
             )}
 
@@ -512,6 +521,18 @@ export default function AdminDashboard({
                                         currentUserEmail={userEmail}
                                         currentUserPhoto={myMember?.photo || userPhoto}
                                         celebrantRole={celebrantRoles[m.id]}
+                                        onGreetingSent={(memberId) => {
+                                            if (!userId) return;
+                                            const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+                                            // Write IMMEDIATELY — this is called before the API fetch,
+                                            // so the key exists the moment the user taps Send.
+                                            try { localStorage.setItem(`wf_bday_sent_${userId}_${memberId}_${today}`, "1"); } catch { /* noop */ }
+                                            // If ALL celebrants are now greeted, close the modal right away.
+                                            const allDone = celebrants.every(c =>
+                                                localStorage.getItem(`wf_bday_sent_${userId}_${c.id}_${today}`) === "1"
+                                            );
+                                            if (allDone) setBirthdayModalOpen(false);
+                                        }}
                                     />
                                 );
                             })}
