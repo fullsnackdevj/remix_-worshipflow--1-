@@ -22,18 +22,27 @@ export default function BroadcastOverlay() {
     // Admins skip everything so we default to false for them immediately.
     const [isChecking, setIsChecking] = useState(!isAdmin);
 
+    const MIN_LOAD_MS = 4000; // minimum splash duration in ms
+
     useEffect(() => {
         // Admins are never blocked — they control broadcasts
         if (isAdmin) { setIsChecking(false); return; }
         // Wait until Firebase has resolved the user
         if (user?.email === undefined) return;
-        if (!user?.email) { setIsChecking(false); return; }
+        if (!user?.email) {
+            // Still honour the minimum splash time for signed-out users
+            const t = setTimeout(() => setIsChecking(false), MIN_LOAD_MS);
+            return () => clearTimeout(t);
+        }
 
-        fetch(`/api/broadcasts?email=${encodeURIComponent(user.email)}`)
+        const minDelay = new Promise<void>(res => setTimeout(res, MIN_LOAD_MS));
+        const fetchBroadcast = fetch(`/api/broadcasts?email=${encodeURIComponent(user.email)}`)
             .then(r => r.json())
             .then(data => { if (data?.id) setBroadcast(data); })
-            .catch(() => { })
-            .finally(() => setIsChecking(false));
+            .catch(() => {});
+
+        // Only hide loader when BOTH the fetch AND the 4s timer are done
+        Promise.all([fetchBroadcast, minDelay]).finally(() => setIsChecking(false));
     }, [user?.email, isAdmin]);
 
     // ── Still loading: render an opaque overlay so dashboard never flashes ──
