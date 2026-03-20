@@ -187,7 +187,7 @@ export default function BirthdayCard({
   const docId = `${member.id}_${today}`;
   const reactDocRef = doc(db, "birthday_reactions", docId);
 
-  const MAX_WISHES = 3; // max wishes one user can send per celebrant per day
+  const MAX_WISHES = 1; // max wishes one user can send per celebrant per day
 
   const [reactions, setReactions] = useState<Record<string, string[]>>({});
   const [wishes, setWishes]       = useState<Wish[]>([]);
