@@ -349,7 +349,7 @@ export default function Dashboard({
       cachedPending
         ? Promise.resolve(cachedPending)
         : fetch("/api/auth/pending").then(r => r.json()).catch(() => []),
-      fetch("/api/broadcasts").then(r => r.json()).catch(() => []),
+      fetch("/api/broadcasts/all").then(r => r.json()).catch(() => []),
     ]).then(([p, b]) => {
       const pending = Array.isArray(p) ? p : [];
       const broadcasts = Array.isArray(b) ? b : [];
