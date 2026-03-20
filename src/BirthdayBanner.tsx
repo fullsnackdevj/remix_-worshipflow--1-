@@ -76,7 +76,7 @@ export default function BirthdayBanner({ celebrants, onScrollToCards }: Props) {
             <span className="underline decoration-dotted">{nameStr}</span>
           </p>
           <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.85)", textShadow: "0 1px 2px rgba(0,0,0,0.4)" }}>
-            {celebrants.length > 1 ? "Send them" : "Send"} your birthday wishes! 🎊
+            {celebrants.length > 1 ? "Send them" : "Send"} your birthday greetings! 🎊
           </p>
         </div>
 
