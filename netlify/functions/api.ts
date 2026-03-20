@@ -898,7 +898,7 @@ BULLET: [...]`;
             const firstName = memberName?.split(" ")[0] || memberName || "your teammate";
             await writeNotif(firestore, {
                 type: "birthday_wish",
-                message: `🎂 Birthday Wishes for ${firstName}!`,
+                message: `🎂 Birthday Greetings for ${firstName}!`,
                 subMessage: `${senderName}: "${(message?.trim() || "Happy Birthday!").slice(0, 60)}"`,
                 actorName: senderName,
                 actorPhoto: senderPhoto?.startsWith("http") ? senderPhoto : "",

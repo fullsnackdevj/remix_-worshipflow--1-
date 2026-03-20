@@ -351,7 +351,7 @@ export default function BirthdayCard({
           {isSelf && wishes.length > 0 && (
             <div className="mt-4 w-full">
               <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 text-center">
-                💌 Birthday Wishes from your team
+                💌 Birthday Greetings from your team
               </p>
               <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
                 {wishes.map((w, i) => (
@@ -365,13 +365,13 @@ export default function BirthdayCard({
                 ))}
               </div>
               <p className="text-[11px] text-gray-500 mt-2 text-center">
-                {wishes.length} teammate{wishes.length !== 1 ? "s" : ""} sent you wishes 🎊
+                {wishes.length} teammate{wishes.length !== 1 ? "s" : ""} sent you greetings 🎊
               </p>
             </div>
           )}
 
           {isSelf && wishes.length === 0 && (
-            <p className="mt-4 text-xs text-gray-500 text-center italic">No wishes yet — your teammates will show up here 🎊</p>
+            <p className="mt-4 text-xs text-gray-500 text-center italic">No greetings yet — your teammates will show up here 🎊</p>
           )}
 
           {/* ── If not self: wish text box or send button ────────────────── */}
@@ -381,7 +381,7 @@ export default function BirthdayCard({
               className="mt-4 mb-1 w-full py-3 rounded-xl text-sm font-bold text-white transition-all active:scale-[0.98] shadow-lg hover:opacity-90"
               style={theme.btnStyle}
             >
-              Send Birthday Wishes 🎉
+              Send Birthday Greetings 🎉
             </button>
           )}
 
@@ -427,10 +427,10 @@ export default function BirthdayCard({
 
           {!isSelf && hasReachedLimit && (
             <div className="mt-4 mb-5 w-full py-3 rounded-xl text-sm font-bold text-center text-gray-400 bg-white/5">
-              Max wishes sent ✓ ({MAX_WISHES}/{MAX_WISHES})
+              Greeting Sent ✓
               {wishers.length > 0 && (
                 <p className="text-[11px] font-normal text-gray-500 mt-0.5">
-                  {wishers.length} teammate{wishers.length !== 1 ? "s" : ""} sent wishes 🎊
+                  {wishers.length} teammate{wishers.length !== 1 ? "s" : ""} sent greetings 🎊
                 </p>
               )}
             </div>
