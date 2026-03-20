@@ -774,7 +774,7 @@ export default function App() {
 
         <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between h-16">
           <div className={`flex items-center gap-2 overflow-hidden whitespace-nowrap ${isSidebarCollapsed ? "justify-center w-full" : ""}`}>
-            <Music className="text-indigo-600 dark:text-indigo-400 shrink-0" size={24} />
+            <img src="/icon-192x192.png" alt="WorshipFlow" className="w-8 h-8 rounded-xl shrink-0 shadow-md" />
             {!isSidebarCollapsed && <span className="text-xl font-bold dark:text-white">WorshipFlow</span>}
           </div>
           <button
