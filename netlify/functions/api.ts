@@ -663,29 +663,34 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
             // 3. Build prompt — topic-focused OR general big-changes mode
             const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
             const prompt = topic
-                ? `You are writing a "What's New" announcement for WorshipFlow, a church worship team management app.
+                ? `You are writing a "What's New" announcement for WorshipFlow, a church worship team management app used by worship team members.
 
-The admin wants to highlight this topic: "${topic}"
+The admin wants to announce this feature or module: "${topic}"
 
-Here are recent git commit messages — use them to pull supporting details:
+Use these recent git commits as clues to identify specific capabilities:
 ${messages.map((m: string, i: number) => `${i + 1}. ${m}`).join("\n")}
 
 Your tasks:
-1. Refine "${topic}" into a short, compelling headline (8 words max). Make it sound professional and exciting without being over the top.
-2. Write one sentence that expands on the topic as a subtitle.
-3. Write 3 to 5 bullet points about "${topic}", using related commits for details. Skip commits unrelated to this topic.
+1. Refine "${topic}" into a punchy, exciting headline (6-8 words max). Think of it like a product launch headline.
+2. Write one engaging sentence that introduces the feature to users.
+3. Write 4 to 6 bullet points that describe what users CAN DO with this feature — its capabilities and value. Think: "What will a worship team member actually use this for?" Use the commits to find specific features, and use your own knowledge to fill in what makes sense for a worship app context.
+
+Bullet point style:
+- Each bullet should describe a specific capability or interaction (e.g. "View song lyrics and chords side by side while rehearsing")
+- Do NOT say "was added", "was updated", "was improved" — describe the feature as it EXISTS today
+- Start each bullet with a present-tense verb or a capability noun phrase
+- Under 20 words per bullet, no jargon
 
 Rules for ALL output:
 - Do NOT use emojis anywhere
 - Do NOT use markdown (no **, ##, dashes, or asterisks)
-- Bullets must start with a past-tense verb, under 15 words
-- Write for non-technical church team members, not developers
+- Write for non-technical church team members
 
 Output ONLY in this exact format:
-TITLE: [refined headline]
-MESSAGE: [one-sentence subtitle]
-BULLET: [first point]
-BULLET: [second point]
+TITLE: [exciting headline]
+MESSAGE: [one-sentence intro]
+BULLET: [capability 1]
+BULLET: [capability 2]
 BULLET: [...]`
 
                 : `You are writing a "What's New" announcement for WorshipFlow, a church worship team management app.
