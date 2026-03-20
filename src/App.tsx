@@ -769,8 +769,7 @@ export default function App() {
       )}
 
       {/* Sidebar */}
-      <div className={`fixed lg:static inset-y-0 left-0 z-30 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col transition-all duration-300 transform ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-        } ${isSidebarCollapsed ? "w-20" : "w-64"}`}>
+      <div className={`fixed lg:static inset-y-0 left-0 z-30 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col transition-all duration-300 transform overflow-x-visible ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"} ${isSidebarCollapsed ? "w-20" : "w-64"}`}>
 
         <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between h-16">
           <div className={`flex items-center gap-2 overflow-hidden whitespace-nowrap ${isSidebarCollapsed ? "justify-center w-full" : ""}`}>
@@ -785,7 +784,7 @@ export default function App() {
           </button>
         </div>
 
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto overflow-x-visible">
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto overflow-x-hidden">
           {!isSidebarCollapsed && (
             <p className="px-3 text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 mt-2">Worship</p>
           )}
