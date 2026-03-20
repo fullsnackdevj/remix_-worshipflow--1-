@@ -187,19 +187,18 @@ export default function BirthdayCard({
   const docId = `${member.id}_${today}`;
   const reactDocRef = doc(db, "birthday_reactions", docId);
 
+  const MAX_WISHES = 3; // max wishes one user can send per celebrant per day
+
   const [reactions, setReactions] = useState<Record<string, string[]>>({});
   const [wishes, setWishes]       = useState<Wish[]>([]);
   const [wishers, setWishers]     = useState<string[]>([]);
   const [loadingReact, setLoadingReact] = useState(false);
-  const [wished, setWished]       = useState(false);
   const [showWishBox, setShowWishBox] = useState(false);
   const [wishText, setWishText]   = useState("");
   const [sending, setSending]     = useState(false);
   const [sent, setSent]           = useState(false);
 
   // Live-sync reactions + wishes via real-time listener
-  // Using onSnapshot instead of getDoc so the recipient sees wishes
-  // appear instantly without refreshing the page.
   useEffect(() => {
     const unsub = onSnapshot(reactDocRef, (snap) => {
       if (!snap.exists()) return;
@@ -207,11 +206,16 @@ export default function BirthdayCard({
       setReactions(data.reactions ?? {});
       const w: string[] = data.wishers ?? [];
       setWishers(w);
-      setWished(w.includes(currentUserId));
       setWishes(data.wishes ?? []);
     }, () => { /* ignore errors silently */ });
     return () => unsub();
   }, [docId]);
+
+  // Derived — how many times this user has already sent a wish today
+  const myWishCount = wishes.filter(w => w.userId === currentUserId).length;
+  const hasReachedLimit = myWishCount >= MAX_WISHES;
+  const wishesLeft = MAX_WISHES - myWishCount;
+
 
 
   // Toggle emoji reaction (Firestore)
@@ -244,29 +248,28 @@ export default function BirthdayCard({
 
   // Open the wish text box
   const handleWishClick = () => {
-    if (wished) return;
+    if (hasReachedLimit) return;
     setShowWishBox(true);
   };
 
   // Submit wish message → /api/birthday-wish (writes Firestore + fires notification)
   const handleSendWish = async () => {
-    if (sending || sent) return;
+    if (sending || hasReachedLimit) return;
     setSending(true);
     const message = wishText.trim() || "Happy Birthday! 🎉";
-    // Optimistic
-    setWished(true);
+    // Optimistic update
     setSent(true);
     setShowWishBox(false);
+    setWishText("");
     const newWish: Wish = {
       userId: currentUserId,
       name: currentUserName,
-      // Only store http photo in Firestore (base64 too large); show by photo in UI from prop
       photo: currentUserPhoto?.startsWith("http") ? currentUserPhoto : "",
       message,
       sentAt: new Date().toISOString(),
     };
     setWishes(prev => [...prev, newWish]);
-    setWishers(prev => [...prev, currentUserId]);
+    setWishers(prev => prev.includes(currentUserId) ? prev : [...prev, currentUserId]);
     try {
       await fetch("/api/birthday-wish", {
         method: "POST",
@@ -282,12 +285,12 @@ export default function BirthdayCard({
         }),
       });
     } catch {
-      // Revert on failure
-      setWished(false); setSent(false);
-      setWishes(prev => prev.filter(w => w.userId !== currentUserId));
-      setWishers(prev => prev.filter(id => id !== currentUserId));
+      // Revert optimistic update on failure
+      setSent(false);
+      setWishes(prev => prev.filter((w, i) => !(w.userId === currentUserId && i === prev.length - 1)));
     } finally {
       setSending(false);
+      setTimeout(() => setSent(false), 2000);
     }
   };
 
@@ -372,17 +375,27 @@ export default function BirthdayCard({
           )}
 
           {/* ── If not self: wish text box or send button ────────────────── */}
-          {!isSelf && !wished && !showWishBox && (
+          {!isSelf && !hasReachedLimit && !showWishBox && (
             <button
               onClick={handleWishClick}
-              className="mt-4 mb-5 w-full py-3 rounded-xl text-sm font-bold text-white transition-all active:scale-[0.98] shadow-lg hover:opacity-90"
+              className="mt-4 mb-1 w-full py-3 rounded-xl text-sm font-bold text-white transition-all active:scale-[0.98] shadow-lg hover:opacity-90"
               style={theme.btnStyle}
             >
               Send Birthday Wishes 🎉
             </button>
           )}
 
-          {!isSelf && !wished && showWishBox && (
+          {/* Remaining wishes hint */}
+          {!isSelf && !hasReachedLimit && !showWishBox && myWishCount > 0 && (
+            <p className="text-[11px] text-gray-500 text-center mb-4">
+              {wishesLeft} wish{wishesLeft !== 1 ? "es" : ""} remaining
+            </p>
+          )}
+          {!isSelf && !hasReachedLimit && !showWishBox && myWishCount === 0 && (
+            <p className="text-[11px] text-gray-500 text-center mb-4 opacity-0 pointer-events-none">·</p>
+          )}
+
+          {!isSelf && !hasReachedLimit && showWishBox && (
             <div className="mt-4 mb-5 w-full space-y-2">
               <textarea
                 autoFocus
@@ -412,9 +425,9 @@ export default function BirthdayCard({
             </div>
           )}
 
-          {!isSelf && wished && (
+          {!isSelf && hasReachedLimit && (
             <div className="mt-4 mb-5 w-full py-3 rounded-xl text-sm font-bold text-center text-gray-400 bg-white/5">
-              Wishes Sent ✓
+              Max wishes sent ✓ ({MAX_WISHES}/{MAX_WISHES})
               {wishers.length > 0 && (
                 <p className="text-[11px] font-normal text-gray-500 mt-0.5">
                   {wishers.length} teammate{wishers.length !== 1 ? "s" : ""} sent wishes 🎊
@@ -422,6 +435,7 @@ export default function BirthdayCard({
               )}
             </div>
           )}
+
         </div>
       </div>
     </>

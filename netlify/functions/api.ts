@@ -868,6 +868,16 @@ BULLET: [...]`;
             const docId = `${memberId}_${date}`;
             const ref = firestore.collection("birthday_reactions").doc(docId);
             const snap = await ref.get();
+            // ── Enforce per-sender wish limit (3 per day) ────────────────────
+            const MAX_WISHES = 3;
+            if (snap.exists) {
+                const existingWishes: any[] = snap.data()?.wishes ?? [];
+                const senderCount = existingWishes.filter((w: any) => w.userId === senderUserId).length;
+                if (senderCount >= MAX_WISHES) {
+                    return json(429, { error: `Wish limit reached (max ${MAX_WISHES} per day)` });
+                }
+            }
+
             const wish = {
                 userId: senderUserId,
                 name: senderName,
