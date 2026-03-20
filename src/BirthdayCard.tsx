@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Send } from "lucide-react";
 
 import { db } from "./firebase";
-import { doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, onSnapshot } from "firebase/firestore";
 import { Member } from "./types";
 
 // ── Role theme config ─────────────────────────────────────────────────────────
@@ -197,20 +197,22 @@ export default function BirthdayCard({
   const [sending, setSending]     = useState(false);
   const [sent, setSent]           = useState(false);
 
-  // Load existing reactions + wishes
+  // Live-sync reactions + wishes via real-time listener
+  // Using onSnapshot instead of getDoc so the recipient sees wishes
+  // appear instantly without refreshing the page.
   useEffect(() => {
-    let cancelled = false;
-    getDoc(reactDocRef).then(snap => {
-      if (cancelled || !snap.exists()) return;
+    const unsub = onSnapshot(reactDocRef, (snap) => {
+      if (!snap.exists()) return;
       const data = snap.data();
       setReactions(data.reactions ?? {});
       const w: string[] = data.wishers ?? [];
       setWishers(w);
       setWished(w.includes(currentUserId));
       setWishes(data.wishes ?? []);
-    }).catch(() => {});
-    return () => { cancelled = true; };
+    }, () => { /* ignore errors silently */ });
+    return () => unsub();
   }, [docId]);
+
 
   // Toggle emoji reaction (Firestore)
   const handleReact = useCallback(async (emoji: string) => {
