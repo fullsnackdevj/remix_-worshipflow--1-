@@ -301,6 +301,7 @@ export default function App() {
     user?.email ?? null,
     userRole ?? null,
     user?.photoURL ?? null,
+    currentView,   // ← kept in sync so admin sees the user's last active section
   );
 
   // 🎸 Auto-collapse sidebar when entering Rehearsal mode (needs full width)

@@ -2138,19 +2138,20 @@ Rules:
                     sessionStart: nowIso,
                     lastSeen: nowIso,
                     lastLogin: nowIso,    // upsert — one doc per user, no collection growth
+                    lastView: body.lastView || "dashboard",
                 }, { merge: false });
 
             } else if (action === "ping") {
-                // Only update lastSeen on the presence doc — no session log needed
+                // Update lastSeen + lastView on every heartbeat
                 await firestore.collection("user_presence").doc(userId).set(
-                    { isOnline: true, lastSeen: nowIso },
+                    { isOnline: true, lastSeen: nowIso, lastView: body.lastView || "dashboard" },
                     { merge: true }
                 );
 
             } else if (action === "end") {
-                // Mark offline — no session log write needed anymore
+                // Mark offline — preserve lastView as the final section they were in
                 await firestore.collection("user_presence").doc(userId).set(
-                    { isOnline: false, lastSeen: nowIso },
+                    { isOnline: false, lastSeen: nowIso, lastView: body.lastView || "dashboard" },
                     { merge: true }
                 );
             }
@@ -2191,9 +2192,11 @@ Rules:
                 .filter(d => d.isOnline && (d.lastSeen || "") >= twoMinAgo)
                 .sort((a, b) => (a.sessionStart || "").localeCompare(b.sessionStart || ""));
 
-            // lastLogins — all users sorted by lastLogin desc (one row per user)
+            // lastLogins — OFFLINE users only, sorted by lastLogin desc
+            // Online users are already shown in the "Live Now" section above.
+            // Including them here too is redundant and confusing.
             const lastLogins = allPresence
-                .filter(d => d.lastLogin || d.lastSeen)
+                .filter(d => !d.isOnline && (d.lastLogin || d.lastSeen))
                 .sort((a, b) => ((b.lastLogin || b.lastSeen) || "").localeCompare((a.lastLogin || a.lastSeen) || ""));
 
             return json(200, { online, lastLogins });
