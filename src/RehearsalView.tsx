@@ -25,6 +25,73 @@ function transposeChords(text: string, steps: number): string {
     );
 }
 
+// ── Chord audio synthesis ───────────────────────────────────────────────────────
+const ROOT_HZ: Record<string, number> = {
+    'C': 130.81, 'C#': 138.59, 'Db': 138.59,
+    'D': 146.83, 'D#': 155.56, 'Eb': 155.56,
+    'E': 164.81, 'F': 174.61,  'F#': 185.00, 'Gb': 185.00,
+    'G': 196.00, 'G#': 207.65, 'Ab': 207.65,
+    'A': 110.00, 'A#': 116.54, 'Bb': 116.54,
+    'B': 123.47,
+};
+function getChordIntervals(q: string): number[] {
+    if (!q || q === 'maj')              return [0, 7, 12, 16, 19];
+    if (q === 'm' || q === 'min')       return [0, 7, 12, 15, 19];
+    if (q === '7')                      return [0, 7, 10, 16, 19];
+    if (q === 'maj7')                   return [0, 7, 11, 16, 19];
+    if (q === 'm7' || q === 'min7')     return [0, 7, 10, 15, 19];
+    if (q === 'sus2' || q === '2')      return [0, 7, 12, 14, 19];
+    if (q === 'sus4' || q === '4')      return [0, 5, 12, 17, 19];
+    if (q === '7sus4')                  return [0, 5, 10, 17, 19];
+    if (q.startsWith('add') || q === 'add9') return [0, 7, 12, 16, 26];
+    if (q === '9')                      return [0, 7, 10, 16, 26];
+    if (q === 'm9')                     return [0, 7, 10, 15, 26];
+    if (q === 'maj9')                   return [0, 7, 11, 16, 26];
+    if (q === 'aug')                    return [0, 8, 12, 16, 20];
+    if (q === 'dim' || q === 'dim7')    return [0, 6, 12, 15, 18];
+    if (q === '6')                      return [0, 7,  9, 16, 19];
+    if (q === 'm6')                     return [0, 7,  9, 15, 19];
+    if (q === '11')                     return [0, 7, 10, 17, 19];
+    if (q.startsWith('m'))              return [0, 7, 12, 15, 19];
+    return [0, 7, 12, 16, 19];
+}
+let _audioCtx: AudioContext | null = null;
+function getAudioCtx(): AudioContext | null {
+    try {
+        const Ctx = window.AudioContext || (window as any).webkitAudioContext;
+        if (!Ctx) return null;
+        if (!_audioCtx || _audioCtx.state === 'closed') _audioCtx = new Ctx();
+        if (_audioCtx.state === 'suspended') void _audioCtx.resume();
+        return _audioCtx;
+    } catch { return null; }
+}
+function playChord(chordName: string): void {
+    const ctx = getAudioCtx();
+    if (!ctx) return;
+    const base = chordName.split('/')[0];
+    const m = base.match(/^([A-G][#b]?)(.*)$/);
+    if (!m) return;
+    const rootHz = ROOT_HZ[m[1]];
+    if (!rootHz) return;
+    const intervals = getChordIntervals((m[2] ?? '').trim());
+    intervals.forEach((semitones, idx) => {
+        const freq = rootHz * Math.pow(2, semitones / 12);
+        const delay = idx * 0.038;
+        const osc  = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.value = freq * (1 + (Math.random() - 0.5) * 0.003);
+        const t = ctx.currentTime + delay;
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(0.28, t + 0.012);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 1.4);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(t);
+        osc.stop(t + 1.5);
+    });
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function getNextEventWithLineup(schedules: Schedule[]): Schedule | null {
     const today = new Date();
@@ -259,6 +326,39 @@ export default function RehearsalView({
     const resetTranspose = () => {
         setTranspose(prev => ({ ...prev, [activeSong]: 0 }));
     };
+
+    // ── Render chord text with clickable playable chord tokens ────────────────
+    const renderClickableChords = useCallback((text: string): React.ReactNode => {
+        const CHORD_RE = /(?<![A-Za-z])([A-G][#b]?(?:m(?:aj)?7?|maj7?|min7?|dim7?|aug|sus[24]?|add\d+|\d+)?(?:\/[A-G][#b]?)?)(?![a-z])/g;
+        return text.split('\n').map((line, li, arr) => {
+            const parts: React.ReactNode[] = [];
+            let last = 0;
+            CHORD_RE.lastIndex = 0;
+            let cm: RegExpExecArray | null;
+            while ((cm = CHORD_RE.exec(line)) !== null) {
+                if (!cm[0].trim()) continue;
+                if (cm.index > last) parts.push(line.slice(last, cm.index));
+                const token = cm[0];
+                parts.push(
+                    <span
+                        key={cm.index}
+                        onClick={() => playChord(token)}
+                        className="inline-block cursor-pointer select-none px-1 rounded font-mono font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-200 dark:hover:bg-indigo-800/50 active:scale-95 transition-all"
+                        title={`▶ Play ${token}`}
+                    >
+                        {token}
+                    </span>
+                );
+                last = CHORD_RE.lastIndex;
+            }
+            if (last < line.length) parts.push(line.slice(last));
+            return (
+                <React.Fragment key={li}>
+                    {parts}{li < arr.length - 1 ? '\n' : null}
+                </React.Fragment>
+            );
+        });
+    }, []);
 
     const transposedChords = currentSong?.chords
         ? transposeChords(currentSong.chords, transpose[activeSong])
@@ -542,7 +642,7 @@ export default function RehearsalView({
         if (readValue?.trim()) {
             return (
                 <pre className="font-mono text-sm leading-7 text-gray-800 dark:text-gray-200 px-5 py-4 whitespace-pre-wrap break-words">
-                    {readValue}
+                    {col === 'chords' ? renderClickableChords(readValue) : readValue}
                 </pre>
             );
         }
@@ -575,7 +675,12 @@ export default function RehearsalView({
                 <div className="w-px self-stretch bg-gray-200 dark:bg-gray-800 shrink-0" />
                 {/* Chords header */}
                 <div className="flex-1 flex items-center justify-between px-4 py-2">
-                    <span className="text-[11px] font-bold uppercase tracking-widest text-indigo-500">Chords</span>
+                    <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-indigo-500">
+                    Chords
+                    {!chordsEdit.isEditing && transposedChords?.trim() && (
+                        <span className="text-[9px] normal-case font-normal opacity-60">🔊 tap</span>
+                    )}
+                </span>
                     <div className="flex items-center gap-1">
                         {chordsEdit.isEditing ? editToolbar("chords") : (
                             <div className="flex items-center gap-1">
@@ -611,7 +716,12 @@ export default function RehearsalView({
         return (
             <div className="flex flex-col overflow-hidden" style={{ flex: 1 }}>
                 <div className="flex items-center justify-between px-4 py-2 shrink-0 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
-                    <span className={`text-[11px] font-bold uppercase tracking-widest ${accent}`}>{label}</span>
+                    <span className={`flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest ${accent}`}>
+                        {label}
+                        {!isLyrics && !edit.isEditing && transposedChords?.trim() && (
+                            <span className="text-[9px] normal-case font-normal opacity-60">🔊 tap</span>
+                        )}
+                    </span>
                     <div className="flex items-center gap-1">
                         {edit.isEditing ? editToolbar(col) : (
                             <>
