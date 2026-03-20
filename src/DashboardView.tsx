@@ -18,6 +18,7 @@ export interface DashboardViewProps {
   setCurrentView: (view: string) => void;
   onOpenLineup?: () => void;
   lineupTrackCount?: number;
+  isLineupOpen?: boolean;
 }
 
 export default function DashboardView({
@@ -36,6 +37,7 @@ export default function DashboardView({
   setCurrentView,
   onOpenLineup,
   lineupTrackCount = 0,
+  isLineupOpen = false,
 }: DashboardViewProps) {
   return authStatus === "loading" ? (
     /* Auth resolving — show a gentle skeleton so screen isn't blank */
@@ -74,6 +76,7 @@ export default function DashboardView({
       canAddMember={canAddMember}
       onOpenLineup={onOpenLineup}
       lineupTrackCount={lineupTrackCount}
+      isLineupOpen={isLineupOpen}
     />
   );
 }

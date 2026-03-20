@@ -25,6 +25,7 @@ interface Props {
     canAddSong?: boolean; canWriteSchedule?: boolean; canAddMember?: boolean;
     onOpenLineup?: () => void;
     lineupTrackCount?: number;
+    isLineupOpen?: boolean;
 }
 
 const ROLE_STYLE: Record<string, { label: string; bg: string; text: string; border: string; glow: string }> = {
@@ -267,7 +268,7 @@ export default function AdminDashboard({
     userName, userEmail, userId = "", userPhoto, songs, members, schedules, notes, onNavigate,
     broadcasts: broadcastsProp, pendingUsers: pendingUsersProp, loadingExtra = false,
     canAddSong, canWriteSchedule, canAddMember, userRole = "admin",
-    onOpenLineup, lineupTrackCount = 0,
+    onOpenLineup, lineupTrackCount = 0, isLineupOpen = false,
 }: Props) {
     const broadcasts = broadcastsProp ?? [];
     const pendingUsers = pendingUsersProp ?? [];
@@ -398,15 +399,23 @@ export default function AdminDashboard({
                     {onOpenLineup && (
                         <button
                             onClick={onOpenLineup}
-                            disabled={lineupTrackCount === 0}
+                            disabled={lineupTrackCount === 0 || isLineupOpen}
                             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-                                lineupTrackCount > 0
-                                    ? "bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40"
-                                    : "bg-gray-100 dark:bg-gray-700/60 text-gray-400 dark:text-gray-500 cursor-not-allowed"
+                                isLineupOpen
+                                    ? "bg-gray-100 dark:bg-gray-700/60 text-gray-400 dark:text-gray-500 cursor-not-allowed"
+                                    : lineupTrackCount > 0
+                                        ? "bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40"
+                                        : "bg-gray-100 dark:bg-gray-700/60 text-gray-400 dark:text-gray-500 cursor-not-allowed"
                             }`}
-                            title={lineupTrackCount === 0 ? "No upcoming service with a song lineup this week" : `Play ${lineupTrackCount} song${lineupTrackCount !== 1 ? "s" : ""} from this week's lineup`}
+                            title={
+                                isLineupOpen
+                                    ? "Player is already open"
+                                    : lineupTrackCount === 0
+                                        ? "No upcoming service with a song lineup this week"
+                                        : `Play ${lineupTrackCount} song${lineupTrackCount !== 1 ? "s" : ""} from this week's lineup`
+                            }
                         >
-                            <ListMusic size={15} className={lineupTrackCount > 0 ? "text-white" : ""} />
+                            <ListMusic size={15} className={lineupTrackCount > 0 && !isLineupOpen ? "text-white" : ""} />
                             {lineupTrackCount > 0 ? `Listen to Lineup (${lineupTrackCount})` : "Listen to Lineup"}
                         </button>
                     )}

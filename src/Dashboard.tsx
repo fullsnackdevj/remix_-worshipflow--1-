@@ -50,6 +50,7 @@ interface Props {
     canAddSong?: boolean; canWriteSchedule?: boolean; canAddMember?: boolean;
   onOpenLineup?: () => void;
   lineupTrackCount?: number;
+  isLineupOpen?: boolean;
 }
 
 // ── Role config — matches App.tsx ROLE_BADGE exactly ──────────────────────────
@@ -327,7 +328,7 @@ function BroadcastsCard({ broadcasts, loading, isAdmin, onNavigate }: {
 export default function Dashboard({
     isAdmin, userRole, userName, userPhoto, userEmail, userId, songs, members, schedules, notes, onNavigate,
     canAddSong = false, canWriteSchedule = false, canAddMember = false,
-    onOpenLineup, lineupTrackCount = 0,
+    onOpenLineup, lineupTrackCount = 0, isLineupOpen = false,
 }: Props) {
     const [broadcasts, setBroadcasts] = useState<any[]>([]);
     const [pendingUsers, setPendingUsers] = useState<any[]>([]);
@@ -379,7 +380,7 @@ export default function Dashboard({
             onNavigate={onNavigate}
             broadcasts={broadcasts} pendingUsers={pendingUsers} loadingExtra={loadingExtra}
             canAddSong={canAddSong} canWriteSchedule={canWriteSchedule} canAddMember={canAddMember}
-            onOpenLineup={onOpenLineup} lineupTrackCount={lineupTrackCount}
+            onOpenLineup={onOpenLineup} lineupTrackCount={lineupTrackCount} isLineupOpen={isLineupOpen}
         />
     );
 }

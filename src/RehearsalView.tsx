@@ -151,6 +151,7 @@ interface RehearsalViewProps {
     allSongs: Song[];
     lineupTracks: LineupTrack[];
     onOpenLineup: () => void;
+    isLineupOpen?: boolean;
     currentUser?: { displayName?: string | null; photoURL?: string | null } | null;
     canEditSong?: boolean;
     onSongUpdated?: (updatedSong: Song) => void;
@@ -159,7 +160,7 @@ interface RehearsalViewProps {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function RehearsalView({
-    allSchedules, allSongs, lineupTracks, onOpenLineup,
+    allSchedules, allSongs, lineupTracks, onOpenLineup, isLineupOpen = false,
     currentUser, canEditSong = false, onSongUpdated, showToast,
 }: RehearsalViewProps) {
 
@@ -504,7 +505,14 @@ export default function RehearsalView({
 
             {lineupTracks.length > 0 && (
                 <button onClick={onOpenLineup}
-                    className="flex items-center gap-1.5 p-2 rounded-xl text-gray-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-all" title="Listen to Lineup">
+                    disabled={isLineupOpen}
+                    className={`flex items-center gap-1.5 p-2 rounded-xl transition-all ${
+                        isLineupOpen
+                            ? "text-gray-300 dark:text-gray-600 cursor-not-allowed"
+                            : "text-gray-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20"
+                    }`}
+                    title={isLineupOpen ? "Player is already open" : "Listen to Lineup"}
+                >
                     <Headphones size={18} />
                 </button>
             )}

@@ -1138,6 +1138,7 @@ export default function App() {
                   setCurrentView={setCurrentView}
                   onOpenLineup={() => setLineupOpen(true)}
                   lineupTrackCount={lineupSongCount}
+                  isLineupOpen={lineupOpen}
                 />
               ) : null}
 
@@ -1245,6 +1246,7 @@ export default function App() {
                   allSongs={allSongs}
                   lineupTracks={lineupTracks}
                   onOpenLineup={() => setLineupOpen(true)}
+                  isLineupOpen={lineupOpen}
                   currentUser={user}
                   canEditSong={canEditSong}
                   showToast={showToast}
