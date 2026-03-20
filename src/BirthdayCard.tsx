@@ -197,17 +197,23 @@ export default function BirthdayCard({
   const [wishText, setWishText]   = useState("");
   const [sending, setSending]     = useState(false);
   const [sent, setSent]           = useState(false);
+  // Guards the button until Firestore confirms whether this user already sent
+  const [reactionsLoaded, setReactionsLoaded] = useState(false);
 
   // Live-sync reactions + wishes via real-time listener
   useEffect(() => {
+    setReactionsLoaded(false); // reset when celebrant changes
     const unsub = onSnapshot(reactDocRef, (snap) => {
+      setReactionsLoaded(true); // Firestore responded — we know the real state
       if (!snap.exists()) return;
       const data = snap.data();
       setReactions(data.reactions ?? {});
       const w: string[] = data.wishers ?? [];
       setWishers(w);
       setWishes(data.wishes ?? []);
-    }, () => { /* ignore errors silently */ });
+    }, () => {
+      setReactionsLoaded(true); // also unblock on error so user isn't stuck
+    });
     return () => unsub();
   }, [docId]);
 
@@ -374,67 +380,62 @@ export default function BirthdayCard({
             <p className="mt-4 text-xs text-gray-500 text-center italic">No greetings yet — your teammates will show up here 🎊</p>
           )}
 
-          {/* ── If not self: wish text box or send button ────────────────── */}
-          {!isSelf && !hasReachedLimit && !showWishBox && (
-            <button
-              onClick={handleWishClick}
-              className="mt-4 mb-1 w-full py-3 rounded-xl text-sm font-bold text-white transition-all active:scale-[0.98] shadow-lg hover:opacity-90"
-              style={theme.btnStyle}
-            >
-              Send Birthday Greetings 🎉
-            </button>
-          )}
-
-          {/* Remaining wishes hint */}
-          {!isSelf && !hasReachedLimit && !showWishBox && myWishCount > 0 && (
-            <p className="text-[11px] text-gray-500 text-center mb-4">
-              {wishesLeft} wish{wishesLeft !== 1 ? "es" : ""} remaining
-            </p>
-          )}
-          {!isSelf && !hasReachedLimit && !showWishBox && myWishCount === 0 && (
-            <p className="text-[11px] text-gray-500 text-center mb-4 opacity-0 pointer-events-none">·</p>
-          )}
-
-          {!isSelf && !hasReachedLimit && showWishBox && (
-            <div className="mt-4 mb-5 w-full space-y-2">
-              <textarea
-                autoFocus
-                rows={3}
-                value={wishText}
-                onChange={e => setWishText(e.target.value)}
-                maxLength={200}
-                placeholder={`Write a message for ${firstName}... (optional)`}
-                className="w-full px-3 py-2 rounded-xl bg-white/10 text-white text-sm placeholder-gray-500 border border-white/10 focus:outline-none focus:border-white/30 resize-none"
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setShowWishBox(false)}
-                  className="flex-1 py-2 rounded-xl text-sm font-semibold text-gray-400 bg-white/5 hover:bg-white/10 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSendWish}
-                  disabled={sending}
-                  className="flex-1 py-2 rounded-xl text-sm font-bold text-white transition-all active:scale-[0.98] disabled:opacity-60"
-                  style={theme.btnStyle}
-                >
-                  {sending ? "Sending..." : <><Send size={14} className="inline mr-1.5" />Send</>}
-                </button>
+          {/* ── If not self: guard entire button area until Firestore confirms ── */}
+          {!isSelf && (
+            !reactionsLoaded ? (
+              /* Shimmer placeholder while Firestore loads — prevents flash of Send button */
+              <div className="mt-4 mb-5 w-full py-3 rounded-xl bg-white/5 animate-pulse" style={{ height: 48 }} />
+            ) : hasReachedLimit ? (
+              /* Already sent a greeting today */
+              <div className="mt-4 mb-5 w-full py-3 rounded-xl text-sm font-bold text-center text-gray-400 bg-white/5">
+                Greeting Sent ✓
+                {wishers.length > 0 && (
+                  <p className="text-[11px] font-normal text-gray-500 mt-0.5">
+                    {wishers.length} teammate{wishers.length !== 1 ? "s" : ""} sent greetings 🎊
+                  </p>
+                )}
               </div>
-            </div>
+            ) : showWishBox ? (
+              /* Write + send message box */
+              <div className="mt-4 mb-5 w-full space-y-2">
+                <textarea
+                  autoFocus
+                  rows={3}
+                  value={wishText}
+                  onChange={e => setWishText(e.target.value)}
+                  maxLength={200}
+                  placeholder={`Write a message for ${firstName}... (optional)`}
+                  className="w-full px-3 py-2 rounded-xl bg-white/10 text-white text-sm placeholder-gray-500 border border-white/10 focus:outline-none focus:border-white/30 resize-none"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowWishBox(false)}
+                    className="flex-1 py-2 rounded-xl text-sm font-semibold text-gray-400 bg-white/5 hover:bg-white/10 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSendWish}
+                    disabled={sending}
+                    className="flex-1 py-2 rounded-xl text-sm font-bold text-white transition-all active:scale-[0.98] disabled:opacity-60"
+                    style={theme.btnStyle}
+                  >
+                    {sending ? "Sending..." : <><Send size={14} className="inline mr-1.5" />Send</>}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* Send button — only shown when not yet greeted */
+              <button
+                onClick={handleWishClick}
+                className="mt-4 mb-5 w-full py-3 rounded-xl text-sm font-bold text-white transition-all active:scale-[0.98] shadow-lg hover:opacity-90"
+                style={theme.btnStyle}
+              >
+                Send Birthday Greetings 🎉
+              </button>
+            )
           )}
 
-          {!isSelf && hasReachedLimit && (
-            <div className="mt-4 mb-5 w-full py-3 rounded-xl text-sm font-bold text-center text-gray-400 bg-white/5">
-              Greeting Sent ✓
-              {wishers.length > 0 && (
-                <p className="text-[11px] font-normal text-gray-500 mt-0.5">
-                  {wishers.length} teammate{wishers.length !== 1 ? "s" : ""} sent greetings 🎊
-                </p>
-              )}
-            </div>
-          )}
 
         </div>
       </div>
