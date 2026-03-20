@@ -309,8 +309,28 @@ export default function AdminDashboard({
     const first = userName.split(" ")[0] || "Admin";
     const nextEvent = upcomingEvents[0] ?? null;
 
-    const [releaseNotes, setReleaseNotes] = useState<{ title: string; message: string; updatedAt?: string; releases: { version: string; highlights: string[] }[] } | null>(null);
-    useEffect(() => { fetch("/release-notes.json").then(r => r.json()).then(setReleaseNotes).catch(() => { }); }, []);
+    // ── What's New tile: always pick the latest active whats_new broadcast ─────
+    // This replaces the old static /release-notes.json fetch so the tile updates
+    // immediately every time a new broadcast is posted from Admin Panel.
+    const latestBroadcast = useMemo(() => {
+        const active = (broadcasts ?? [])
+            .filter((b: any) => b.type === "whats_new" && b.active !== false)
+            .sort((a: any, b: any) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
+        return active[0] ?? null;
+    }, [broadcasts]);
+
+    const formatBroadcastDate = (iso: string) => {
+        try {
+            const d = new Date(iso);
+            const mm = String(d.getMonth() + 1).padStart(2, "0");
+            const dd = String(d.getDate()).padStart(2, "0");
+            const yy = String(d.getFullYear()).slice(2);
+            let h = d.getHours(); const ampm = h >= 12 ? "PM" : "AM";
+            h = h % 12 || 12;
+            const min = String(d.getMinutes()).padStart(2, "0");
+            return `${mm}-${dd}-${yy} | ${h}:${min} ${ampm}`;
+        } catch { return ""; }
+    };
 
     // ── Birthday detection ────────────────────────────────────────────────────
     const todayMMDD = `${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`;
@@ -506,21 +526,21 @@ export default function AdminDashboard({
                     <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 shrink-0">
                         <div className="flex items-center gap-2 font-semibold text-gray-900 dark:text-white text-base">
                             <Megaphone size={15} className="text-amber-500" />
-                            {releaseNotes?.title ?? "What's New in WorshipFlow ✨"}
+                            {latestBroadcast?.title ?? "What's New in WorshipFlow"}
                         </div>
                         <button onClick={() => onNavigate("admin")} className="text-xs text-indigo-500 hover:text-indigo-400 flex items-center gap-1 font-medium">
                             Manage <ChevronRight size={13} />
                         </button>
                     </div>
                     <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
-                        {releaseNotes ? (
+                        {latestBroadcast ? (
                             <>
-                                {releaseNotes.updatedAt && (
-                                    <span className="text-xs text-gray-400 font-medium block mb-2">Updated: {releaseNotes.updatedAt}</span>
+                                {latestBroadcast.createdAt && (
+                                    <span className="text-xs text-gray-400 font-medium block mb-2">Updated: {formatBroadcastDate(latestBroadcast.createdAt)}</span>
                                 )}
-                                <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">{releaseNotes.message}</p>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">{latestBroadcast.message}</p>
                                 <ul className="space-y-2.5">
-                                    {releaseNotes.releases.flatMap(r => r.highlights).map((h, i) => (
+                                    {(latestBroadcast.bulletPoints ?? []).filter(Boolean).map((h: string, i: number) => (
                                         <li key={i} className="flex items-start gap-2.5 text-sm text-gray-700 dark:text-gray-200">
                                             <span className="w-2 h-2 rounded-full bg-amber-400 mt-1.5 shrink-0" />
                                             {h}
@@ -530,7 +550,7 @@ export default function AdminDashboard({
                             </>
                         ) : (
                             <div className="flex items-center gap-2 text-gray-400 text-sm py-2">
-                                <Megaphone size={16} className="opacity-40" /> Loading updates…
+                                <Megaphone size={16} className="opacity-40" /> No announcements yet
                             </div>
                         )}
                     </div>
