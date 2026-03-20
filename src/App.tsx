@@ -1108,14 +1108,7 @@ export default function App() {
         <main className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-900">
           <div className="flex flex-col h-full">
             <div className="view-enter flex-1 p-4 sm:p-6 overflow-auto">
-              <Suspense fallback={
-                <div className="flex items-center justify-center h-64">
-                  <div className="flex items-center gap-3 text-gray-400">
-                    <Loader2 size={20} className="animate-spin" />
-                    <span className="text-sm">Loading…</span>
-                  </div>
-                </div>
-              }>
+              <Suspense fallback={null}>
 
 
               {/* ══════════════════════════════════════════════════════════════
