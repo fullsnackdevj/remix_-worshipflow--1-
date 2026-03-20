@@ -224,6 +224,21 @@ export default function BirthdayCard({
   const hasReachedLimit = myWishCount >= MAX_WISHES;
   const wishesLeft = MAX_WISHES - myWishCount;
 
+  // ── Self-healing sync: Firestore is the source of truth ──────────────────
+  // The localStorage "already greeted" key might be missing if:
+  //   • The user sent before this fix was deployed
+  //   • localStorage was cleared
+  //   • The API call failed but the wish was partially saved
+  // Solution: the moment Firestore confirms this user already sent today,
+  // call onGreetingSent immediately — this writes the key AND closes the modal.
+  const healedRef = React.useRef(false);
+  useEffect(() => {
+    if (!isSelf && reactionsLoaded && hasReachedLimit && !healedRef.current) {
+      healedRef.current = true;
+      onGreetingSent?.(member.id);
+    }
+  }, [reactionsLoaded, hasReachedLimit, isSelf]);
+
 
 
   // Toggle emoji reaction (Firestore)
