@@ -181,8 +181,12 @@ export default function AdminPanel({
                 setBMessage(pick.message);
                 setBBullets([]);
             } else {
-                // What's New — fetch from curated release-notes.json via API
-                const res = await fetch("/api/release-notes");
+                // What's New — pass whatever the user typed in the message field as a topic hint
+                const topic = bMessage.trim();
+                const url = topic
+                    ? `/api/release-notes?topic=${encodeURIComponent(topic)}`
+                    : "/api/release-notes";
+                const res = await fetch(url);
                 const data = await res.json();
                 if (data.title) setBTitle(data.title);
                 if (data.message) setBMessage(data.message);

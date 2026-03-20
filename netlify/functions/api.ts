@@ -637,11 +637,13 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
 
 
     // GET /api/release-notes — auto-generate What's New from latest GitHub commits via Gemini AI
+    // ?topic=  (optional) — if set, focus the content on that topic and refine it into a headline
     if (rawPath === "/release-notes" && method === "GET") {
         try {
             const REPO = "fullsnackdevj/remix_-worshipflow--1-";
+            const topic = (event.queryStringParameters?.topic ?? "").trim();
 
-            // 1. Fetch recent commits from public GitHub API (no token needed for public repo)
+            // 1. Fetch recent commits from public GitHub API
             const ghRes = await fetch(
                 `https://api.github.com/repos/${REPO}/commits?per_page=40`,
                 { headers: { "Accept": "application/vnd.github.v3+json", "User-Agent": "WorshipFlow/1.0" } }
@@ -658,38 +660,49 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
 
             if (messages.length === 0) throw new Error("No meaningful commits found");
 
-            // 3. Use Gemini to generate a friendly What's New summary
+            // 3. Build prompt — topic-focused OR general big-changes mode
             const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-            const prompt = `You are writing a "What's New" announcement for WorshipFlow — a church worship team management app used by non-technical church team members.
+            const prompt = topic
+                ? `You are writing a "What's New" announcement for WorshipFlow, a church worship team management app.
 
-Based on these recent git commit messages, identify and describe ONLY the significant, visible changes:
+The admin wants to highlight this topic: "${topic}"
 
+Here are recent git commit messages — use them to pull supporting details:
 ${messages.map((m: string, i: number) => `${i + 1}. ${m}`).join("\n")}
 
-What counts as SIGNIFICANT (include these):
-- New modules or sections added to the app
-- Major new features that change how users interact with the app
-- Important workflow improvements that save time
-- Meaningful UI/UX enhancements users will notice
-- New capabilities (e.g. file uploads, notifications, integrations)
+Your tasks:
+1. Refine "${topic}" into a short, compelling headline (8 words max). Make it sound professional and exciting without being over the top.
+2. Write one sentence that expands on the topic as a subtitle.
+3. Write 3 to 5 bullet points about "${topic}", using related commits for details. Skip commits unrelated to this topic.
 
-What to SKIP entirely (do not mention these):
-- Bug fixes and error corrections
-- Performance optimizations
-- Code refactors or internal cleanup
-- Minor UI tweaks (color changes, spacing, labels)
-- Small usability adjustments
-- Anything prefixed with fix:, perf:, style:, or hotfix
+Rules for ALL output:
+- Do NOT use emojis anywhere
+- Do NOT use markdown (no **, ##, dashes, or asterisks)
+- Bullets must start with a past-tense verb, under 15 words
+- Write for non-technical church team members, not developers
+
+Output ONLY in this exact format:
+TITLE: [refined headline]
+MESSAGE: [one-sentence subtitle]
+BULLET: [first point]
+BULLET: [second point]
+BULLET: [...]`
+
+                : `You are writing a "What's New" announcement for WorshipFlow, a church worship team management app.
+
+Based on these recent git commit messages, identify the biggest visible changes only:
+${messages.map((m: string, i: number) => `${i + 1}. ${m}`).join("\n")}
+
+Include ONLY: new modules, major features, meaningful UI/UX changes, new capabilities.
+Skip entirely: bug fixes, perf tweaks, refactors, minor adjustments, anything prefixed fix:/style:/hotfix.
 
 Rules:
-- Write 3 to 6 bullet points — ONLY for big, user-visible updates
-- If there are fewer than 3 significant updates, write fewer bullets (don't pad with minor items)
-- Do NOT use emojis anywhere in the output
-- Do NOT use markdown symbols (no **, ##, or - bullets)
-- Keep each bullet concise — under 15 words, starting with a past-tense verb
-- Write for non-technical church members, not developers
+- Write 3 to 5 bullets — only for big user-visible updates
+- Do NOT use emojis
+- Do NOT use markdown
+- Bullets start with a past-tense verb, under 15 words
 
-Output ONLY in this exact format, nothing else:
+Output ONLY in this exact format:
 TITLE: What's New in WorshipFlow
 MESSAGE: Here's what's been added and improved for your team:
 BULLET: [first major update]
