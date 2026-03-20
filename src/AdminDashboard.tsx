@@ -398,14 +398,14 @@ export default function AdminDashboard({
                     {/* ── Listen to Lineup button — visible to all roles when lineup tracks exist */}
                     {onOpenLineup && (
                         <button
-                            onClick={onOpenLineup}
+                            onClick={isLineupOpen ? undefined : onOpenLineup}
                             disabled={lineupTrackCount === 0 || isLineupOpen}
                             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
                                 isLineupOpen
-                                    ? "bg-gray-100 dark:bg-gray-700/60 text-gray-400 dark:text-gray-500 cursor-not-allowed"
+                                    ? "bg-gray-100 dark:bg-gray-700/60 text-gray-400 dark:text-gray-500 cursor-not-allowed pointer-events-none"
                                     : lineupTrackCount > 0
                                         ? "bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40"
-                                        : "bg-gray-100 dark:bg-gray-700/60 text-gray-400 dark:text-gray-500 cursor-not-allowed"
+                                        : "bg-gray-100 dark:bg-gray-700/60 text-gray-400 dark:text-gray-500 cursor-not-allowed pointer-events-none"
                             }`}
                             title={
                                 isLineupOpen

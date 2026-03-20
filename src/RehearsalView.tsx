@@ -504,11 +504,11 @@ export default function RehearsalView({
             </button>
 
             {lineupTracks.length > 0 && (
-                <button onClick={onOpenLineup}
+                <button onClick={isLineupOpen ? undefined : onOpenLineup}
                     disabled={isLineupOpen}
                     className={`flex items-center gap-1.5 p-2 rounded-xl transition-all ${
                         isLineupOpen
-                            ? "text-gray-300 dark:text-gray-600 cursor-not-allowed"
+                            ? "text-gray-300 dark:text-gray-600 cursor-not-allowed pointer-events-none"
                             : "text-gray-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20"
                     }`}
                     title={isLineupOpen ? "Player is already open" : "Listen to Lineup"}
