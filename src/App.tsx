@@ -1107,7 +1107,7 @@ export default function App() {
         {/* Content Area */}
         <main className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-900">
           <div className="flex flex-col h-full">
-            <div key={currentView} className="view-enter flex-1 p-4 sm:p-6 overflow-auto">
+            <div className="view-enter flex-1 p-4 sm:p-6 overflow-auto">
               <Suspense fallback={
                 <div className="flex items-center justify-center h-64">
                   <div className="flex items-center gap-3 text-gray-400">

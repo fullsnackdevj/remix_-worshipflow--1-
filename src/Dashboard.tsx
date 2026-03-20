@@ -334,30 +334,39 @@ export default function Dashboard({
     const [loadingExtra, setLoadingExtra] = useState(true);
 
     useEffect(() => {
-    const PENDING_TTL = 5 * 60 * 1000; // 5 minutes
+    const PENDING_TTL   = 5 * 60 * 1000; // 5 minutes
+    const BROADCAST_TTL = 3 * 60 * 1000; // 3 minutes
     const now = Date.now();
 
-    // pendingUsers: still cached (slow/heavy endpoint)
+    // pendingUsers: cached (slow/heavy endpoint)
     let cachedPending: any[] | null = null;
     try {
       const rp = localStorage.getItem("wf_pending_cache");
       if (rp) { const { data, ts } = JSON.parse(rp); if (now - ts < PENDING_TTL) cachedPending = data; }
     } catch { /* noop */ }
 
-    // broadcasts: ALWAYS fetch fresh — they must reflect new posts immediately
+    // broadcasts: short TTL cache — fresh enough to show new posts, avoids refetch on every mount
+    let cachedBroadcasts: any[] | null = null;
+    try {
+      const rb = localStorage.getItem("wf_broadcast_cache");
+      if (rb) { const { data, ts } = JSON.parse(rb); if (now - ts < BROADCAST_TTL) cachedBroadcasts = data; }
+    } catch { /* noop */ }
+
     Promise.all([
       cachedPending
         ? Promise.resolve(cachedPending)
         : fetch("/api/auth/pending").then(r => r.json()).catch(() => []),
-      fetch("/api/broadcasts/all").then(r => r.json()).catch(() => []),
+      cachedBroadcasts
+        ? Promise.resolve(cachedBroadcasts)
+        : fetch("/api/broadcasts/all").then(r => r.json()).catch(() => []),
     ]).then(([p, b]) => {
-      const pending = Array.isArray(p) ? p : [];
+      const pending    = Array.isArray(p) ? p : [];
       const broadcasts = Array.isArray(b) ? b : [];
       setPendingUsers(pending);
       setBroadcasts(broadcasts);
       try {
-        if (!cachedPending) localStorage.setItem("wf_pending_cache", JSON.stringify({ data: pending, ts: now }));
-        // Note: broadcasts intentionally NOT cached so card always shows latest
+        if (!cachedPending)    localStorage.setItem("wf_pending_cache",    JSON.stringify({ data: pending,    ts: now }));
+        if (!cachedBroadcasts) localStorage.setItem("wf_broadcast_cache",  JSON.stringify({ data: broadcasts, ts: now }));
       } catch { /* noop */ }
     }).finally(() => setLoadingExtra(false));
     }, []);
