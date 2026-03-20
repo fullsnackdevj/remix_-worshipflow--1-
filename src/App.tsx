@@ -26,12 +26,11 @@ const ScheduleView  = lazy(() => import("./ScheduleView"));
 const SongsView     = lazy(() => import("./SongsView"));
 const MembersView   = lazy(() => import("./MembersView"));
 const TeamNotesView = lazy(() => import("./TeamNotesView"));
-const TunerView     = lazy(() => import("./TunerView"));
 // AutoTextarea & DatePicker are tiny UI primitives — import statically to avoid extra chunk round-trips
 import AutoTextarea from "./AutoTextarea";
 import DatePicker from "./DatePicker";
 
-import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, BookOpen, LayoutGrid, Mic2, Copy, Pencil, Shield, Mail, Bell, Lock, AlertTriangle, CheckCircle, HelpCircle, FlaskConical, NotebookPen, Guitar } from "lucide-react";
+import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, BookOpen, LayoutGrid, Mic2, Copy, Pencil, Shield, Mail, Bell, Lock, AlertTriangle, CheckCircle, HelpCircle, FlaskConical, NotebookPen } from "lucide-react";
 import { Song, Tag, Member, ScheduleMember, Schedule } from "./types";
 import LineupPlayer, { LineupTrack, CurrentUser } from "./LineupPlayer";
 
@@ -258,7 +257,7 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
-  const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "playground" | "admin" | "team-notes" | "rehearsal" | "tuner">("dashboard");
+  const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "playground" | "admin" | "team-notes" | "rehearsal">("dashboard");
   const { isAdmin, userRole, user, status: authStatus } = useAuth();
 
 
@@ -872,27 +871,6 @@ export default function App() {
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Notes</span>}
           </div>
 
-          {/* Tuner */}
-          <div className="relative group/tip">
-            <button
-              onClick={() => { setCurrentView("tuner"); setIsMobileMenuOpen(false); }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "tuner"
-                ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300"
-                : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
-                } ${isSidebarCollapsed ? "justify-center" : ""}`}
-              title="Tuner"
-            >
-              <Guitar size={20} className="shrink-0" />
-              {!isSidebarCollapsed && (
-                <span className="flex items-center gap-2">
-                  Tuner
-                  <span className="text-[9px] font-bold uppercase tracking-wider bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded-full">New</span>
-                </span>
-              )}
-            </button>
-            {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Tuner</span>}
-          </div>
-
           {/* Rehearsal */}
           <div className="relative group/tip">
             <button
@@ -995,7 +973,7 @@ export default function App() {
 
           <div className="flex-1 flex items-center">
             <h1 className="text-base sm:text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap">
-              {currentView === "dashboard" ? "Dashboard" : currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : currentView === "playground" ? "Playground" : currentView === "team-notes" ? "Notes" : currentView === "rehearsal" ? "Rehearsal" : currentView === "tuner" ? "Tuner" : "Song Management"}
+              {currentView === "dashboard" ? "Dashboard" : currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : currentView === "playground" ? "Playground" : currentView === "team-notes" ? "Notes" : currentView === "rehearsal" ? "Rehearsal" : "Song Management"}
             </h1>
           </div>
           <div className="flex items-center gap-2">
@@ -1286,8 +1264,6 @@ export default function App() {
                     } catch { /* noop */ }
                   }}
                 />
-              ) : currentView === "tuner" ? (
-                <TunerView />
               ) : null}
               </Suspense>
             </div>
