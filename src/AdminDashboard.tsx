@@ -455,7 +455,6 @@ export default function AdminDashboard({
                 <div
                     className="bd-backdrop fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6"
                     style={{ background: "rgba(0,0,0,0.72)", backdropFilter: "blur(8px)" }}
-                    onClick={() => setBirthdayModalOpen(false)}
                 >
                     {/* Outer wrapper: relative so close btn can be absolute */}
                     <div
