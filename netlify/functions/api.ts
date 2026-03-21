@@ -1108,7 +1108,8 @@ BULLET: [...]`;
                     if (!tally[e.userId]) {
                         tally[e.userId] = { userId: e.userId, name: e.name || "Team Member", photo: e.photo || "", count: 0 };
                     }
-                    tally[e.userId].count += 1;
+                    // Use stored count if available (new records), otherwise treat as 1 (old records)
+                    tally[e.userId].count += (e.count ?? 1);
                 });
             });
             const sorted = Object.values(tally).sort((a, b) => b.count - a.count).slice(0, 10);
@@ -1126,8 +1127,11 @@ BULLET: [...]`;
             const current: any[] = Array.isArray(snap?.data()?.listens) ? snap!.data()!.listens : [];
             let updated: any[];
             if (action === "add") {
-                // Remove any existing entry for this user first, then add fresh
-                updated = [...current.filter((e: any) => e.userId !== entry.userId), entry];
+                // Find existing entry for this user (if any) and increment their count
+                const existing = current.find((e: any) => e.userId === entry.userId);
+                const newCount = (existing?.count ?? 0) + 1;
+                const newEntry = { ...entry, count: newCount };
+                updated = [...current.filter((e: any) => e.userId !== entry.userId), newEntry];
             } else {
                 // remove
                 updated = current.filter((e: any) => e.userId !== entry.userId);
