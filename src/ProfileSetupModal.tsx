@@ -46,34 +46,38 @@ export default function ProfileSetupModal({ user, onSuccess }: ProfileSetupModal
     if (Object.keys(e).length) { setErrors(e); return; }
     setSaving(true);
     setErrors({});
+    const submittedPayload = {
+      firstName: firstName.trim(),
+      middleInitial: "",
+      lastName: lastName.trim(),
+      name: [firstName.trim(), lastName.trim()].filter(Boolean).join(" "),
+      phone: phone.trim(),
+      email,
+      photo: photoURL,
+      roles,
+      status: "active",
+      birthdate,
+      gender,
+      notes: "",
+    };
     try {
       const res = await fetch("/api/members", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          firstName: firstName.trim(),
-          middleInitial: "",
-          lastName: lastName.trim(),
-          phone: phone.trim(),
-          email,
-          photo: photoURL,
-          roles,
-          status: "active",
-          birthdate,
-          gender,
-          notes: "",
-        }),
+        body: JSON.stringify(submittedPayload),
       });
       if (!res.ok) throw new Error("Failed");
-      const newMember = await res.json();
+      const { id } = await res.json();
       setDone(true);
-      setTimeout(() => onSuccess(newMember), 2000);
+      // Pass the FULL record (with email) back so App.tsx can resolve myMemberProfile immediately
+      setTimeout(() => onSuccess({ id, ...submittedPayload }), 1500);
     } catch {
       setErrors({ submit: "Something went wrong. Please try again." });
     } finally {
       setSaving(false);
     }
   };
+
 
   return (
     <div className="fixed inset-0 z-[500] flex items-start sm:items-center justify-center bg-gray-950/85 backdrop-blur-sm p-4 overflow-y-auto">

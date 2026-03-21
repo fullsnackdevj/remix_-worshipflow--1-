@@ -741,8 +741,17 @@ export default function App() {
         <ProfileSetupModal
           user={user}
           onSuccess={(newMember) => {
-            // Optimistically add the new member so myMemberProfile resolves immediately
-            setAllMembers(prev => [...prev, { id: newMember.id ?? `tmp-${Date.now()}`, ...newMember }]);
+            // newMember now contains the full submitted payload + server id
+            // Normalise email to lowercase so myMemberProfile (email match) resolves immediately
+            // → needsProfileSetup flips false → modal closes without waiting for a re-fetch
+            setAllMembers(prev => [
+              ...prev,
+              {
+                id: newMember.id ?? `tmp-${Date.now()}`,
+                ...newMember,
+                email: (newMember.email || user?.email || "").trim().toLowerCase(),
+              },
+            ]);
           }}
         />
       )}
