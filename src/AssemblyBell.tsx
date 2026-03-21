@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Bell, X, Send, Loader2, AlertTriangle } from "lucide-react";
+import { Bell, X, Loader2, AlertTriangle, FlaskConical } from "lucide-react";
 
 interface Props {
     userId: string;
@@ -7,41 +7,36 @@ interface Props {
     userPhoto: string;
 }
 
+const DEFAULT_MSG = "Guys, we're starting practice now. Where are you? Please go to the worship hall already!";
+
 // ── Web Audio siren generator ──────────────────────────────────────────────────
 function playSiren(durationMs = 8000) {
     try {
         const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
         const endTime = ctx.currentTime + durationMs / 1000;
         let t = ctx.currentTime;
-
         while (t < endTime) {
-            // Rising wail
-            const osc1 = ctx.createOscillator();
-            const gain1 = ctx.createGain();
-            osc1.connect(gain1);
-            gain1.connect(ctx.destination);
-            osc1.type = "sawtooth";
-            osc1.frequency.setValueAtTime(440, t);
-            osc1.frequency.linearRampToValueAtTime(880, t + 0.6);
-            gain1.gain.setValueAtTime(0.35, t);
-            gain1.gain.linearRampToValueAtTime(0, t + 0.65);
-            osc1.start(t);
-            osc1.stop(t + 0.65);
-            t += 0.7;
-
-            // Short pause
-            t += 0.05;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.type = "sawtooth";
+            osc.frequency.setValueAtTime(440, t);
+            osc.frequency.linearRampToValueAtTime(880, t + 0.6);
+            gain.gain.setValueAtTime(0.35, t);
+            gain.gain.linearRampToValueAtTime(0, t + 0.65);
+            osc.start(t);
+            osc.stop(t + 0.65);
+            t += 0.75;
         }
-        // Stop context after siren ends
         setTimeout(() => ctx.close(), durationMs + 500);
         return ctx;
     } catch { return null; }
 }
 
-// ── Vibration pulse pattern (like NDRRMC) ─────────────────────────────────────
+// ── Vibration pulse (NDRRMC-style) ────────────────────────────────────────────
 function vibrateAlert() {
     if (!("vibrate" in navigator)) return;
-    // Long-short-long-short-long — louder "feel"
     navigator.vibrate([500, 150, 500, 150, 500, 150, 200, 100, 200, 100, 200]);
 }
 
@@ -49,15 +44,16 @@ export default function AssemblyBell({ userId, userName, userPhoto }: Props) {
     const [showConfirm, setShowConfirm] = useState(false);
     const [showAlarm, setShowAlarm] = useState(false);
     const [customMsg, setCustomMsg] = useState("");
+    const [testMode, setTestMode] = useState(true); // ← default ON for safety
     const [sending, setSending] = useState(false);
-    const [cooldown, setCooldown] = useState(0); // seconds remaining
+    const [cooldown, setCooldown] = useState(0);
     const [pushed, setPushed] = useState<number | null>(null);
+    const [isTestRun, setIsTestRun] = useState(false);
 
     const audioCtxRef = useRef<any>(null);
     const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const alarmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // ── Check cooldown on mount ────────────────────────────────────────────────
     useEffect(() => {
         fetch("/api/assembly-cooldown")
             .then(r => r.json())
@@ -72,19 +68,17 @@ export default function AssemblyBell({ userId, userName, userPhoto }: Props) {
     const startCooldownTick = (seconds: number) => {
         setCooldown(seconds);
         if (cooldownRef.current) clearInterval(cooldownRef.current);
-        let remaining = seconds;
+        let rem = seconds;
         cooldownRef.current = setInterval(() => {
-            remaining -= 1;
-            setCooldown(remaining);
-            if (remaining <= 0) {
-                clearInterval(cooldownRef.current!);
-                cooldownRef.current = null;
-            }
+            rem -= 1;
+            setCooldown(rem);
+            if (rem <= 0) { clearInterval(cooldownRef.current!); cooldownRef.current = null; }
         }, 1000);
     };
 
     const handleSend = useCallback(async () => {
         setSending(true);
+        const wasTest = testMode;
         try {
             const res = await fetch("/api/assembly-call", {
                 method: "POST",
@@ -93,7 +87,8 @@ export default function AssemblyBell({ userId, userName, userPhoto }: Props) {
                     callerId: userId,
                     callerName: userName,
                     callerPhoto: userPhoto,
-                    message: customMsg.trim() || undefined,
+                    message: customMsg.trim() || DEFAULT_MSG,
+                    testMode: wasTest,   // ← server only sends to this user's token
                 }),
             });
             const data = await res.json();
@@ -104,15 +99,16 @@ export default function AssemblyBell({ userId, userName, userPhoto }: Props) {
             }
             if (!res.ok) throw new Error(data.error || "Failed");
 
-            // ── Success — trigger local alarm too ─────────────────────────
+            setIsTestRun(wasTest);
             setPushed(data.pushed ?? 0);
             setShowConfirm(false);
             setShowAlarm(true);
             vibrateAlert();
             audioCtxRef.current = playSiren(8000);
-            startCooldownTick(300); // 5 min
 
-            // Auto-dismiss alarm overlay after 12 sec
+            // Test mode: no cooldown (so you can test repeatedly)
+            if (!wasTest) startCooldownTick(300);
+
             alarmTimeoutRef.current = setTimeout(() => {
                 setShowAlarm(false);
                 audioCtxRef.current?.close?.();
@@ -122,7 +118,7 @@ export default function AssemblyBell({ userId, userName, userPhoto }: Props) {
         } finally {
             setSending(false);
         }
-    }, [userId, userName, userPhoto, customMsg]);
+    }, [userId, userName, userPhoto, customMsg, testMode]);
 
     const dismissAlarm = () => {
         setShowAlarm(false);
@@ -132,37 +128,39 @@ export default function AssemblyBell({ userId, userName, userPhoto }: Props) {
 
     const fmtCooldown = (s: number) => {
         const m = Math.floor(s / 60);
-        const sec = s % 60;
-        return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
+        return m > 0 ? `${m}m ${s % 60}s` : `${s}s`;
     };
+
+    const effectiveCooldown = testMode ? 0 : cooldown; // test mode ignores cooldown
 
     return (
         <>
-            {/* ── Assembly Bell trigger button ─────────────────────────────── */}
+            {/* ── Trigger button ────────────────────────────────────────────── */}
             <button
-                onClick={() => { if (cooldown === 0) setShowConfirm(true); }}
-                disabled={cooldown > 0}
-                title={cooldown > 0 ? `Assembly call on cooldown — ${fmtCooldown(cooldown)} left` : "Send Assembly Call to all members"}
+                onClick={() => { if (effectiveCooldown === 0) setShowConfirm(true); }}
+                disabled={effectiveCooldown > 0}
+                title={effectiveCooldown > 0
+                    ? `Assembly call on cooldown — ${fmtCooldown(effectiveCooldown)} left`
+                    : "Send Assembly Call to all members"}
                 className={[
                     "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all",
-                    cooldown > 0
+                    effectiveCooldown > 0
                         ? "bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed"
                         : "bg-gradient-to-r from-red-600 to-rose-500 hover:from-red-500 hover:to-rose-400 text-white shadow-lg shadow-red-500/30 hover:shadow-red-500/50 active:scale-95"
                 ].join(" ")}
             >
-                <Bell size={15} className={cooldown === 0 ? "animate-bounce" : ""} />
-                {cooldown > 0 ? `Cooldown ${fmtCooldown(cooldown)}` : "Assembly Call"}
+                <Bell size={15} className={effectiveCooldown === 0 ? "animate-bounce" : ""} />
+                {effectiveCooldown > 0 ? `Cooldown ${fmtCooldown(effectiveCooldown)}` : "Assembly Call"}
             </button>
 
-            {/* ── Confirm Modal ────────────────────────────────────────────────── */}
+            {/* ── Confirm Modal ─────────────────────────────────────────────── */}
             {showConfirm && (
                 <div className="fixed inset-0 z-[9998] flex items-center justify-center p-4">
-                    {/* Backdrop */}
                     <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !sending && setShowConfirm(false)} />
                     <div className="relative z-10 w-full max-w-md bg-white dark:bg-gray-900 rounded-3xl shadow-2xl border border-red-200 dark:border-red-900/50 overflow-hidden">
-                        {/* Red top bar */}
                         <div className="h-1.5 bg-gradient-to-r from-red-500 via-rose-500 to-red-500" />
                         <div className="p-6">
+
                             {/* Header */}
                             <div className="flex items-start gap-4 mb-5">
                                 <div className="w-12 h-12 rounded-2xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center shrink-0">
@@ -171,53 +169,89 @@ export default function AssemblyBell({ userId, userName, userPhoto }: Props) {
                                 <div>
                                     <h2 className="text-lg font-bold text-gray-900 dark:text-white">Send Assembly Call?</h2>
                                     <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-                                        This will blast a push notification to <strong>every team member's device</strong> right now.
+                                        {testMode
+                                            ? <><span className="text-emerald-600 dark:text-emerald-400 font-semibold">Test mode ON</span> — only <strong>you</strong> will receive this.</>
+                                            : <>This will blast a push to <strong>every team member's device</strong> right now.</>
+                                        }
                                     </p>
                                 </div>
-                                <button onClick={() => setShowConfirm(false)} className="ml-auto p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg transition-colors">
+                                <button onClick={() => setShowConfirm(false)} className="ml-auto p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg">
                                     <X size={18} />
                                 </button>
                             </div>
 
-                            {/* Custom message */}
+                            {/* 🧪 Test Mode toggle */}
+                            <button
+                                onClick={() => setTestMode(p => !p)}
+                                className={[
+                                    "w-full flex items-center gap-3 px-4 py-3 rounded-2xl border-2 mb-5 transition-all",
+                                    testMode
+                                        ? "border-emerald-400 bg-emerald-50 dark:bg-emerald-900/20"
+                                        : "border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 hover:border-gray-300"
+                                ].join(" ")}
+                            >
+                                <div className={[
+                                    "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
+                                    testMode ? "bg-emerald-100 dark:bg-emerald-800/40" : "bg-gray-200 dark:bg-gray-700"
+                                ].join(" ")}>
+                                    <FlaskConical size={18} className={testMode ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400"} />
+                                </div>
+                                <div className="flex-1 text-left">
+                                    <p className={`text-sm font-bold ${testMode ? "text-emerald-700 dark:text-emerald-300" : "text-gray-600 dark:text-gray-300"}`}>
+                                        {testMode ? "🧪 Test Mode — Only Me" : "🚨 Live — All Members"}
+                                    </p>
+                                    <p className="text-xs text-gray-400 mt-0.5">
+                                        {testMode
+                                            ? "Send only to your own device. No cooldown applied."
+                                            : "Sends to every registered device. 5-min cooldown."}
+                                    </p>
+                                </div>
+                                {/* Toggle pill */}
+                                <div className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${testMode ? "bg-emerald-500" : "bg-gray-300 dark:bg-gray-600"}`}>
+                                    <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${testMode ? "translate-x-5" : "translate-x-0.5"}`} />
+                                </div>
+                            </button>
+
+                            {/* Message */}
                             <div className="mb-5">
                                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
-                                    Message (optional)
+                                    Message
                                 </label>
                                 <textarea
                                     value={customMsg}
                                     onChange={e => setCustomMsg(e.target.value)}
-                                    maxLength={120}
-                                    rows={2}
-                                    placeholder="Rehearsal is starting NOW! Please report immediately. 🚨"
+                                    maxLength={160}
+                                    rows={3}
+                                    placeholder={DEFAULT_MSG}
                                     className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-white resize-none outline-none focus:border-red-400 focus:ring-2 focus:ring-red-200 dark:focus:ring-red-900/50 transition-all"
                                 />
-                                <p className="text-right text-[10px] text-gray-400 mt-0.5">{customMsg.length}/120</p>
+                                <p className="text-right text-[10px] text-gray-400 mt-0.5">{customMsg.length}/160</p>
                             </div>
 
-                            <div className="flex items-center gap-2 mb-5 px-3 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40">
-                                <AlertTriangle size={14} className="text-amber-500 shrink-0" />
-                                <p className="text-xs text-amber-700 dark:text-amber-300">
-                                    5-minute cooldown applies after sending. Use only when needed.
-                                </p>
-                            </div>
+                            {!testMode && (
+                                <div className="flex items-center gap-2 mb-5 px-3 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40">
+                                    <AlertTriangle size={14} className="text-amber-500 shrink-0" />
+                                    <p className="text-xs text-amber-700 dark:text-amber-300">
+                                        5-minute cooldown applies. This will notify <strong>everyone</strong>.
+                                    </p>
+                                </div>
+                            )}
 
                             {/* Actions */}
                             <div className="flex gap-3">
-                                <button
-                                    onClick={() => setShowConfirm(false)}
-                                    disabled={sending}
-                                    className="flex-1 px-4 py-2.5 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                                >
+                                <button onClick={() => setShowConfirm(false)} disabled={sending}
+                                    className="flex-1 px-4 py-2.5 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
                                     Cancel
                                 </button>
-                                <button
-                                    onClick={handleSend}
-                                    disabled={sending}
-                                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-rose-500 hover:from-red-500 hover:to-rose-400 text-white font-bold text-sm shadow-lg shadow-red-500/30 transition-all active:scale-95 disabled:opacity-60"
-                                >
+                                <button onClick={handleSend} disabled={sending}
+                                    className={[
+                                        "flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm text-white shadow-lg transition-all active:scale-95 disabled:opacity-60",
+                                        testMode
+                                            ? "bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 shadow-emerald-500/30"
+                                            : "bg-gradient-to-r from-red-600 to-rose-500 hover:from-red-500 hover:to-rose-400 shadow-red-500/30"
+                                    ].join(" ")}>
                                     {sending ? <Loader2 size={16} className="animate-spin" /> : <Bell size={16} />}
-                                    {sending ? "Sending..." : "🚨 Send Now"}
+                                    {sending ? "Sending..." : testMode ? "🧪 Send Test" : "🚨 Send to Everyone"}
                                 </button>
                             </div>
                         </div>
@@ -225,19 +259,23 @@ export default function AssemblyBell({ userId, userName, userPhoto }: Props) {
                 </div>
             )}
 
-            {/* ── Full-screen Alarm Overlay ─────────────────────────────────────── */}
+            {/* ── Full-screen Alarm Overlay ──────────────────────────────────── */}
             {showAlarm && (
-                <div
-                    className="fixed inset-0 z-[9999] flex flex-col items-center justify-center"
+                <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center"
                     style={{
-                        background: "radial-gradient(ellipse at center, #7f1d1d 0%, #450a0a 60%, #1a0000 100%)",
-                        animation: "alarmFlash 0.5s ease-in-out infinite alternate",
-                    }}
-                >
+                        background: isTestRun
+                            ? "radial-gradient(ellipse at center, #064e3b 0%, #022c22 60%, #000 100%)"
+                            : "radial-gradient(ellipse at center, #7f1d1d 0%, #450a0a 60%, #1a0000 100%)",
+                        animation: `alarmFlash${isTestRun ? "Green" : "Red"} 0.5s ease-in-out infinite alternate`,
+                    }}>
                     <style>{`
-                        @keyframes alarmFlash {
+                        @keyframes alarmFlashRed {
                             from { background: radial-gradient(ellipse at center, #7f1d1d 0%, #450a0a 60%, #1a0000 100%); }
                             to   { background: radial-gradient(ellipse at center, #991b1b 0%, #7f1d1d 60%, #450a0a 100%); }
+                        }
+                        @keyframes alarmFlashGreen {
+                            from { background: radial-gradient(ellipse at center, #064e3b 0%, #022c22 60%, #000 100%); }
+                            to   { background: radial-gradient(ellipse at center, #065f46 0%, #064e3b 60%, #022c22 100%); }
                         }
                         @keyframes bellShake {
                             0%, 100% { transform: rotate(0deg); }
@@ -248,48 +286,40 @@ export default function AssemblyBell({ userId, userName, userPhoto }: Props) {
                             75%  { transform: rotate(-6deg); }
                             90%  { transform: rotate(6deg); }
                         }
-                        @keyframes pulseRing {
-                            0%   { transform: scale(1);   opacity: 0.7; }
-                            100% { transform: scale(2.2); opacity: 0;   }
-                        }
+                        @keyframes pulseRing { 0% { transform:scale(1); opacity:0.7; } 100% { transform:scale(2.2); opacity:0; } }
                     `}</style>
 
-                    {/* Pulsing rings */}
                     {[0, 0.4, 0.8].map((delay, i) => (
-                        <div key={i} className="absolute w-48 h-48 rounded-full border-4 border-red-400/40"
+                        <div key={i} className={`absolute w-48 h-48 rounded-full border-4 ${isTestRun ? "border-emerald-400/40" : "border-red-400/40"}`}
                             style={{ animation: `pulseRing 1.6s ease-out ${delay}s infinite` }} />
                     ))}
 
-                    {/* Bell icon */}
                     <div className="relative mb-6">
-                        <div className="w-28 h-28 rounded-full bg-red-500/20 border-4 border-red-400/60 flex items-center justify-center"
+                        <div className={`w-28 h-28 rounded-full border-4 flex items-center justify-center ${isTestRun ? "bg-emerald-500/20 border-emerald-400/60" : "bg-red-500/20 border-red-400/60"}`}
                             style={{ animation: "bellShake 0.5s ease-in-out infinite" }}>
-                            <Bell size={52} className="text-white drop-shadow-2xl" />
+                            {isTestRun ? <FlaskConical size={46} className="text-white drop-shadow-2xl" /> : <Bell size={52} className="text-white drop-shadow-2xl" />}
                         </div>
                     </div>
 
-                    {/* Text */}
-                    <h1 className="text-4xl sm:text-5xl font-black text-white tracking-tight mb-3 drop-shadow-2xl text-center px-4">
-                        🚨 ASSEMBLY CALL
+                    <h1 className="text-3xl sm:text-5xl font-black text-white tracking-tight mb-3 drop-shadow-2xl text-center px-4">
+                        {isTestRun ? "🧪 TEST SENT!" : "🚨 ASSEMBLY CALL"}
                     </h1>
-                    <p className="text-red-200 text-base sm:text-lg font-semibold text-center px-8 max-w-md mb-2 drop-shadow">
-                        {customMsg.trim() || "Rehearsal is starting NOW! Please report immediately."}
+                    <p className="text-white/80 text-base sm:text-lg font-semibold text-center px-8 max-w-md mb-2 drop-shadow">
+                        {customMsg.trim() || DEFAULT_MSG}
                     </p>
                     {pushed !== null && (
-                        <p className="text-red-300/70 text-sm font-medium mb-8">
-                            Sent to {pushed} device{pushed !== 1 ? "s" : ""}
+                        <p className="text-white/50 text-sm font-medium mb-8">
+                            {isTestRun
+                                ? "Sent to your device only — check your phone! 📱"
+                                : `Sent to ${pushed} device${pushed !== 1 ? "s" : ""}`}
                         </p>
                     )}
 
-                    {/* Dismiss */}
-                    <button
-                        onClick={dismissAlarm}
-                        className="mt-2 flex items-center gap-2 px-8 py-3 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold text-sm backdrop-blur-sm transition-all active:scale-95"
-                    >
+                    <button onClick={dismissAlarm}
+                        className="mt-2 flex items-center gap-2 px-8 py-3 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold text-sm backdrop-blur-sm transition-all active:scale-95">
                         <X size={16} /> Dismiss
                     </button>
-
-                    <p className="absolute bottom-6 text-red-400/50 text-xs">Auto-dismisses in 12 seconds</p>
+                    <p className="absolute bottom-6 text-white/30 text-xs">Auto-dismisses in 12 seconds</p>
                 </div>
             )}
         </>

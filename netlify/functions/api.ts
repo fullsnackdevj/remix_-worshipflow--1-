@@ -575,47 +575,55 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
     // ── POST /assembly-call ─────────────────────────────────────────────────────
     // Admin-only: blast a high-priority push to ALL registered devices + writes
     // a permanent in-app notification. 5-minute cooldown enforced server-side.
+    // testMode=true → only sends to the caller's own FCM token, no cooldown.
     if (rawPath === "/assembly-call" && method === "POST") {
-        const { callerName, callerPhoto, callerId, message } = body;
+        const { callerName, callerPhoto, callerId, message, testMode } = body;
         if (!callerId) return json(401, { error: "Unauthorized" });
 
         try {
-            // ── Cooldown check (5 minutes) ──────────────────────────────────
-            const cooldownDoc = await firestore?.collection("assembly_cooldown").doc("global").get();
-            if (cooldownDoc?.exists) {
-                const lastAt = cooldownDoc.data()?.lastCalledAt?.toMillis?.() ?? 0;
-                const diffMs = Date.now() - lastAt;
-                if (diffMs < 5 * 60 * 1000) {
-                    const remaining = Math.ceil((5 * 60 * 1000 - diffMs) / 1000);
-                    return json(429, { error: `Assembly call on cooldown. Try again in ${remaining}s.`, remaining });
-                }
-            }
-
-            const alertMessage = message?.trim() || "Rehearsal is starting NOW! Please report immediately. 🚨";
+            const isTest = testMode === true;
+            const alertMessage = message?.trim() ||
+                "Guys, we're starting practice now. Where are you? Please go to the worship hall already!";
             const now = admin.firestore.FieldValue.serverTimestamp();
 
-            // ── Update cooldown timestamp ────────────────────────────────────
-            await firestore?.collection("assembly_cooldown").doc("global").set({
-                lastCalledAt: now, callerId, callerName,
-            });
+            // ── Cooldown check — skipped in test mode ───────────────────────
+            if (!isTest) {
+                const cooldownDoc = await firestore?.collection("assembly_cooldown").doc("global").get();
+                if (cooldownDoc?.exists) {
+                    const lastAt = cooldownDoc.data()?.lastCalledAt?.toMillis?.() ?? 0;
+                    const diffMs = Date.now() - lastAt;
+                    if (diffMs < 5 * 60 * 1000) {
+                        const remaining = Math.ceil((5 * 60 * 1000 - diffMs) / 1000);
+                        return json(429, { error: `Assembly call on cooldown. Try again in ${remaining}s.`, remaining });
+                    }
+                }
+                // Record cooldown timestamp only for real sends
+                await firestore?.collection("assembly_cooldown").doc("global").set({
+                    lastCalledAt: now, callerId, callerName,
+                });
+            }
 
-            // ── Blast push to ALL tokens (no audience filter — everyone) ─────
+            // ── Resolve target tokens ───────────────────────────────────────
+            // Test mode: only the caller's own token
+            // Live mode: every token in the collection
             const tokensSnap = await firestore?.collection("fcm_tokens").get();
             const tokens: string[] = [];
             tokensSnap?.docs.forEach(doc => {
-                const t = doc.data().token;
-                if (t) tokens.push(t);
+                const data = doc.data();
+                const t: string = data.token;
+                if (!t) return;
+                if (isTest && data.userId !== callerId) return; // test: my token only
+                tokens.push(t);
             });
+
+            const notifTitle = isTest ? "🧪 TEST — Assembly Call" : "🚨 ASSEMBLY CALL";
 
             if (tokens.length > 0) {
                 for (let i = 0; i < tokens.length; i += 500) {
                     const batch = tokens.slice(i, i + 500);
                     const resp = await admin.messaging().sendEachForMulticast({
                         tokens: batch,
-                        notification: {
-                            title: "🚨 ASSEMBLY CALL",
-                            body: alertMessage,
-                        },
+                        notification: { title: notifTitle, body: alertMessage },
                         android: {
                             priority: "high",
                             notification: {
@@ -631,12 +639,12 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
                         },
                         webpush: {
                             notification: {
-                                title: "🚨 ASSEMBLY CALL",
+                                title: notifTitle,
                                 body: alertMessage,
                                 icon: "/icon-192x192.png",
                                 badge: "/favicon-32.png",
                                 vibrate: [300, 100, 300, 100, 300, 100, 300],
-                                requireInteraction: true,   // stays on screen until dismissed
+                                requireInteraction: true,
                             },
                             fcmOptions: { link: "/" },
                         },
@@ -657,35 +665,26 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
                 }
             }
 
-            // ── Write in-app notification for everyone ───────────────────────
+            // ── Write in-app notification ────────────────────────────────────
+            // Test mode: write with targetAudience "admin_only" so only
+            // admin sees it in their bell feed.
             await firestore?.collection("notifications").add({
                 type: "assembly_call",
-                message: "🚨 ASSEMBLY CALL",
-                subMessage: alertMessage,
+                message: notifTitle,
+                subMessage: isTest ? `[TEST] ${alertMessage}` : alertMessage,
                 actorName: callerName || "Admin",
                 actorPhoto: callerPhoto || "",
                 actorUserId: callerId,
-                targetAudience: "all",
+                targetAudience: isTest ? "admin_only" : "all",
                 readBy: [], deletedBy: [],
                 createdAt: now,
             });
 
-            return json(200, { success: true, pushed: tokens.length });
+            return json(200, { success: true, pushed: tokens.length, testMode: isTest });
         } catch (e: any) {
             console.error("Assembly call failed:", e);
             return json(500, { error: "Failed to send assembly call" });
         }
-    }
-
-    // GET /assembly-cooldown — check remaining cooldown for UI
-    if (rawPath === "/assembly-cooldown" && method === "GET") {
-        try {
-            const doc = await firestore?.collection("assembly_cooldown").doc("global").get();
-            if (!doc?.exists) return json(200, { remaining: 0 });
-            const lastAt = doc.data()?.lastCalledAt?.toMillis?.() ?? 0;
-            const remaining = Math.max(0, Math.ceil((5 * 60 * 1000 - (Date.now() - lastAt)) / 1000));
-            return json(200, { remaining });
-        } catch { return json(200, { remaining: 0 }); }
     }
 
     // POST /fcm-token — store FCM push token for a user
