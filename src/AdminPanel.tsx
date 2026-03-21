@@ -183,10 +183,47 @@ function PokeButton({ targetUserId, targetName, senderId, senderName, senderPhot
     senderName: string;
     senderPhoto: string;
 }) {
-    const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+    const [state, setState] = useState<"idle" | "composing" | "sending" | "sent" | "error">("idle");
+    const [message, setMessage] = useState("");
+    const popoverRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
 
-    const poke = async () => {
-        if (state === "sending" || state === "sent") return;
+    const QUICK_MSGS = [
+        "👉 Poke! Are you there?",
+        "🙃 Wake up!",
+        "⚡ Please check the app!",
+        "🎵 We're about to start!",
+        "🙏 We need you now!",
+    ];
+
+    // Close popover on outside click or Escape
+    useEffect(() => {
+        if (state !== "composing") return;
+        const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") setState("idle"); };
+        const handleClick = (e: MouseEvent) => {
+            if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) setState("idle");
+        };
+        document.addEventListener("keydown", handleKey);
+        document.addEventListener("mousedown", handleClick);
+        return () => {
+            document.removeEventListener("keydown", handleKey);
+            document.removeEventListener("mousedown", handleClick);
+        };
+    }, [state]);
+
+    // Focus input when popover opens
+    useEffect(() => {
+        if (state === "composing") setTimeout(() => inputRef.current?.focus(), 50);
+    }, [state]);
+
+    const openCompose = () => {
+        if (state === "sent") return;
+        setMessage("👉 Hey, are you there?");
+        setState("composing");
+    };
+
+    const sendPoke = async () => {
+        if (state === "sending") return;
         setState("sending");
         try {
             const res = await fetch("/api/poke", {
@@ -198,15 +235,11 @@ function PokeButton({ targetUserId, targetName, senderId, senderName, senderPhot
                     fromPhoto: senderPhoto,
                     toUserId: targetUserId,
                     toName: targetName,
+                    message: message.trim() || "👉 Hey, are you there?",
                 }),
             });
-            if (res.ok) {
-                setState("sent");
-                setTimeout(() => setState("idle"), 3000);
-            } else {
-                setState("error");
-                setTimeout(() => setState("idle"), 2000);
-            }
+            setState(res.ok ? "sent" : "error");
+            setTimeout(() => setState("idle"), res.ok ? 3000 : 2000);
         } catch {
             setState("error");
             setTimeout(() => setState("idle"), 2000);
@@ -214,22 +247,77 @@ function PokeButton({ targetUserId, targetName, senderId, senderName, senderPhot
     };
 
     if (state === "sent") return (
-        <span className="text-[11px] font-bold text-emerald-500 animate-pulse px-1">✓ Poked!</span>
+        <span className="text-[11px] font-bold text-emerald-500 animate-pulse px-1 shrink-0">✓ Poked!</span>
     );
     if (state === "error") return (
-        <span className="text-[11px] font-bold text-rose-500 px-1">Failed</span>
+        <span className="text-[11px] font-bold text-rose-500 px-1 shrink-0">Failed</span>
     );
 
     return (
-        <button
-            onClick={poke}
-            disabled={state === "sending"}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-full border border-amber-300 dark:border-amber-600 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 text-[11px] font-bold hover:bg-amber-100 dark:hover:bg-amber-900/40 active:scale-95 transition-all disabled:opacity-50 shrink-0"
-            title={`Poke ${targetName}`}
-        >
-            {state === "sending" ? <Loader2 size={11} className="animate-spin" /> : "👉"}
-            Poke
-        </button>
+        <div className="relative shrink-0" ref={popoverRef}>
+            {/* Poke trigger button */}
+            <button
+                onClick={openCompose}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full border border-amber-300 dark:border-amber-600 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 text-[11px] font-bold hover:bg-amber-100 dark:hover:bg-amber-900/40 active:scale-95 transition-all"
+                title={`Poke ${targetName}`}
+            >
+                👉 Poke
+            </button>
+
+            {/* Compose popover */}
+            {state === "composing" && (
+                <div className="absolute right-0 top-8 z-50 w-72 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-2xl shadow-2xl p-3 space-y-2.5">
+                    {/* Header */}
+                    <p className="text-xs font-bold text-gray-700 dark:text-gray-200">
+                        👉 Poke <span className="text-indigo-500">{targetName}</span>
+                    </p>
+
+                    {/* Quick-pick messages */}
+                    <div className="flex flex-wrap gap-1">
+                        {QUICK_MSGS.map(q => (
+                            <button
+                                key={q}
+                                onClick={() => setMessage(q)}
+                                className={`text-[10px] px-2 py-0.5 rounded-full border transition-all ${message === q
+                                    ? "bg-amber-500 text-white border-amber-500"
+                                    : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-amber-400"
+                                    }`}
+                            >
+                                {q}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Custom message input */}
+                    <input
+                        ref={inputRef}
+                        value={message}
+                        onChange={e => setMessage(e.target.value)}
+                        onKeyDown={e => { if (e.key === "Enter") sendPoke(); }}
+                        placeholder="Or type your own message..."
+                        maxLength={120}
+                        className="w-full text-xs px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    />
+
+                    {/* Send button */}
+                    <div className="flex gap-2 pt-0.5">
+                        <button
+                            onClick={() => setState("idle")}
+                            className="flex-1 py-1.5 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors rounded-xl"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={sendPoke}
+                            disabled={!message.trim()}
+                            className="flex-[2] py-1.5 text-xs font-bold rounded-xl bg-gradient-to-r from-amber-400 to-orange-400 text-white hover:from-amber-500 hover:to-orange-500 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                            Send 👉
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
     );
 }
 
