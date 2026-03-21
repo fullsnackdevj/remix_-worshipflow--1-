@@ -768,7 +768,7 @@ export default function AdminDashboard({
                 </Tile>
 
                 {/* What's New */}
-                <Tile className="h-[380px] flex flex-col">
+                <Tile className="h-full flex flex-col">
                     <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 shrink-0">
                         <div className="flex items-center gap-2 font-semibold text-gray-900 dark:text-white text-base">
                             <Megaphone size={15} className="text-amber-500" />
