@@ -26,6 +26,15 @@ export function usePushNotifications(userId: string | null, userRole: string | n
         try { localStorage.setItem("pushSkipCount", String(getSkipCount() + 1)); } catch { /* noop */ }
     };
 
+    // Save prompt interaction to backend so admin can see it in Push Coverage
+    const savePromptStatus = (userId: string, status: string, skipCount: number, lastPromptType: string | null, browserBlocked = false) => {
+        fetch("/api/push-prompt-status", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId, status, skipCount, lastPromptType, browserBlocked }),
+        }).catch(() => { /* silent — non-critical */ });
+    };
+
     // Determine which prompt to show
     useEffect(() => {
         if (!userId || !userRole) return;
@@ -41,14 +50,22 @@ export function usePushNotifications(userId: string | null, userRole: string | n
             return;
         }
 
-        if (Notification.permission === "denied") return; // respect hard block
+        if (Notification.permission === "denied") {
+            // Browser-level block — record it once
+            savePromptStatus(userId, "blocked", getSkipCount(), null, true);
+            return;
+        }
 
         // permission === "default" — user hasn't decided yet
         const skipCount = getSkipCount();
 
         if (skipCount >= 2) {
             // Persistent: show blocking modal every session after 2 skips
-            const t = setTimeout(() => setShowForcedModal(true), 1500);
+            const t = setTimeout(() => {
+                setShowForcedModal(true);
+                // Record that the forced modal was shown
+                savePromptStatus(userId, "skipped", skipCount, "forced_modal");
+            }, 1500);
             return () => clearTimeout(t);
         }
 
@@ -57,7 +74,11 @@ export function usePushNotifications(userId: string | null, userRole: string | n
         const dismissed = localStorage.getItem("pushPromptDismissed");
         if (dismissed && Date.now() - Number(dismissed) < cooldownMs) return;
 
-        const t = setTimeout(() => setShowPrompt(true), 2000);
+        const t = setTimeout(() => {
+            setShowPrompt(true);
+            // Record that the banner was shown (but not yet interacted with)
+            if (skipCount > 0) savePromptStatus(userId, "skipped", skipCount, "banner");
+        }, 2000);
         return () => clearTimeout(t);
     }, [userId, userRole]);
 
@@ -74,7 +95,10 @@ export function usePushNotifications(userId: string | null, userRole: string | n
                     localStorage.removeItem("pushSkipCount");
                     localStorage.removeItem("pushPromptDismissed");
                 } catch { /* noop */ }
+                if (userId) savePromptStatus(userId, "enabled", 0, null);
                 await registerAndStoreToken(userId!, userRole!);
+            } else if (permission === "denied") {
+                if (userId) savePromptStatus(userId, "blocked", getSkipCount(), null, true);
             }
         } catch (err) {
             console.warn("[Push] Permission request failed:", err);
@@ -85,13 +109,16 @@ export function usePushNotifications(userId: string | null, userRole: string | n
     const dismissPrompt = useCallback(() => {
         setShowPrompt(false);
         bumpSkipCount();
+        const newCount = getSkipCount();
         try { localStorage.setItem("pushPromptDismissed", String(Date.now())); } catch { /* noop */ }
-    }, []);
+        if (userId) savePromptStatus(userId, "skipped", newCount, "banner");
+    }, [userId]);
 
-    // "Maybe later" — forced modal dismiss (no bump needed, already at 2+)
+    // "Maybe later" — forced modal dismiss
     const dismissForcedModal = useCallback(() => {
         setShowForcedModal(false);
-    }, []);
+        if (userId) savePromptStatus(userId, "skipped", getSkipCount(), "forced_modal");
+    }, [userId]);
 
     // Listen for foreground messages (app open)
     // Use reg.showNotification() with same `tag` as service worker → deduplication

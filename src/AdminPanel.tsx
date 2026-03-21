@@ -1062,32 +1062,50 @@ export default function AdminPanel({
                                     <div className="flex justify-center py-8"><Loader2 size={18} className="animate-spin text-gray-400" /></div>
                                 ) : pushStatus.length === 0 ? (
                                     <div className="text-center py-8 text-sm text-gray-400">No data available.</div>
-                                ) : (
-                                    <ul className="divide-y divide-gray-100 dark:divide-gray-700 max-h-72 overflow-y-auto"
+                                                                ) : (
+                                    <ul className="divide-y divide-gray-100 dark:divide-gray-700 max-h-80 overflow-y-auto"
                                         style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(0,0,0,0.15) transparent" }}>
                                         {pushStatus.map((u: any) => {
                                             const opt = ROLE_OPTIONS.find(r => r.value === u.role) ?? ROLE_OPTIONS[0];
                                             const hasDevices = u.deviceCount > 0;
+
+                                            // Prompt status badge
+                                            const promptBadge = (() => {
+                                                if (hasDevices) return { label: "\u2705 Enabled", cls: "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400" };
+                                                if (u.browserBlocked) return { label: "\uD83D\uDEAB Blocked", cls: "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400" };
+                                                if (u.lastPromptType === "forced_modal") return { label: "\u26A0\uFE0F Forced modal seen", cls: "bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400" };
+                                                if (u.skipCount >= 1) return { label: `\u23ED Skipped ${u.skipCount}\u00D7`, cls: "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400" };
+                                                return { label: "\u2753 Never prompted", cls: "bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400" };
+                                            })();
+
+                                            const lastSeen = u.lastSeenAt?._seconds
+                                                ? new Date(u.lastSeenAt._seconds * 1000).toLocaleDateString("en", { month: "short", day: "numeric" })
+                                                : null;
+
                                             return (
-                                                <li key={u.email} className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-                                                    {/* Avatar */}
+                                                <li key={u.email} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
                                                     {u.photo
                                                         ? <img src={u.photo} alt={u.name || u.email} className="w-8 h-8 rounded-full object-cover shrink-0" />
                                                         : <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-500 font-bold text-xs shrink-0">{(u.name || u.email || "?")[0].toUpperCase()}</div>
                                                     }
-                                                    {/* Name + role */}
                                                     <div className="flex-1 min-w-0">
                                                         <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{u.name || u.email}</p>
-                                                        <span className={`inline-flex items-center gap-0.5 text-[10px] font-semibold ${opt.color}`}>{opt.icon} {opt.label}</span>
+                                                        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${promptBadge.cls}`}>
+                                                                {promptBadge.label}
+                                                            </span>
+                                                            {lastSeen && (
+                                                                <span className="text-[10px] text-gray-400">seen {lastSeen}</span>
+                                                            )}
+                                                        </div>
                                                     </div>
-                                                    {/* Device count badge */}
                                                     {hasDevices ? (
                                                         <span className="flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-[11px] font-bold shrink-0">
-                                                            <Wifi size={11} /> {u.deviceCount} device{u.deviceCount !== 1 ? "s" : ""}
+                                                            <Wifi size={11} /> {u.deviceCount}
                                                         </span>
                                                     ) : (
                                                         <span className="flex items-center gap-1 px-2 py-1 rounded-full bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 text-[11px] font-bold shrink-0">
-                                                            <WifiOff size={11} /> No device
+                                                            <WifiOff size={11} /> 0
                                                         </span>
                                                     )}
                                                 </li>
@@ -1096,11 +1114,20 @@ export default function AdminPanel({
                                     </ul>
                                 )}
 
-                                {/* Help note at bottom */}
-                                <div className="px-4 py-2.5 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
-                                    <p className="text-[11px] text-gray-400">
-                                        "No device" means that member has never clicked <strong className="text-gray-500 dark:text-gray-300">"Enable"</strong> on the notification banner — they won't receive Assembly Calls or push alerts.
-                                    </p>
+                                {/* Legend */}
+                                <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 space-y-1">
+                                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1.5">Status Legend</p>
+                                    {[
+                                        { label: "\u2705 Enabled", desc: "Notifications on — will receive all alerts" },
+                                        { label: "\uD83D\uDEAB Blocked", desc: "Browser is hard-blocked — must change in browser settings" },
+                                        { label: "\u26A0\uFE0F Forced modal seen", desc: "Saw the blocking modal (skipped 2+ times)" },
+                                        { label: "\u23ED Skipped N\u00D7", desc: "Dismissed the banner — hasn't enabled yet" },
+                                        { label: "\u2753 Never prompted", desc: "Hasn't seen any prompt yet" },
+                                    ].map(({ label, desc }) => (
+                                        <p key={label} className="text-[10px] text-gray-400 leading-snug">
+                                            <span className="font-semibold text-gray-500 dark:text-gray-300">{label}</span> — {desc}
+                                        </p>
+                                    ))}
                                 </div>
                             </div>
                         );
