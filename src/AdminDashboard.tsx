@@ -686,39 +686,84 @@ export default function AdminDashboard({
                      no outer Tile wrapper needed so h-full correctly fills the grid row */}
                 <NextServiceTile ev={nextEvent} songs={songs} members={members} myMemberId={myMemberId} onClick={() => onNavigate("schedule")} />
 
-                {/* Upcoming Events */}
-                <Tile className="min-h-[260px]">
-                    <CardHeader icon={<Clock size={14} className="text-indigo-500" />} title="Upcoming Events" action="Full calendar" onAction={() => onNavigate("schedule")} />
-                    <div className="divide-y divide-gray-100 dark:divide-gray-700">
-                        {upcomingEvents.length === 0 ? (
-                            <div className="flex items-center gap-3 px-5 py-4"><Calendar size={16} className="text-gray-300" /><p className="text-sm text-gray-400">Nothing scheduled</p></div>
-                        ) : upcomingEvents.slice(0, 6).map((ev, i) => {
-                            const d = new Date(ev.date + "T00:00:00");
-                            return (
-                                <div key={ev.id} className={`flex items-center gap-3 px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors ${i === 0 ? "bg-indigo-50/50 dark:bg-indigo-900/10" : ""}`}>
-                                    <div className={`flex flex-col items-center justify-center w-10 h-10 rounded-xl shrink-0 ${i === 0 ? "bg-indigo-600 text-white" : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"}`}>
-                                        <p className="text-[8px] font-bold uppercase opacity-80">{d.toLocaleDateString("en", { month: "short" })}</p>
-                                        <p className="text-sm font-black leading-none">{d.getDate()}</p>
+                {/* Upcoming Events — current + next month, including birthdays */}
+                {(() => {
+                    const now = new Date(); now.setHours(0,0,0,0);
+                    const endOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 2, 0); // last day of next month
+
+                    // Schedule events in window
+                    const windowEvents = schedules
+                        .filter(s => { try { const d = new Date(s.date + "T00:00:00"); return d >= now && d <= endOfNextMonth; } catch { return false; } })
+                        .sort((a, b) => a.date.localeCompare(b.date))
+                        .map(s => ({ id: s.id, date: s.date, label: s.eventName ?? "Event", sub: isServiceEvent(s) ? (s.worshipLeader?.name ? `Leader: ${s.worshipLeader.name}` : "No leader") : ((s as any).created_by_name ? `By: ${(s as any).created_by_name.split(" ")[0]}` : "Custom event"), kind: "event" as const }));
+
+                    // Birthdays in current + next month window
+                    const bdayItems = members
+                        .filter(m => m.birthdate && m.birthdate.length >= 5)
+                        .flatMap(m => {
+                            const mmdd = m.birthdate!.slice(5); // "MM-DD"
+                            return [now.getFullYear(), now.getFullYear() + (now.getMonth() === 11 ? 1 : 0)].map(yr => {
+                                const iso = `${yr}-${mmdd}`;
+                                try {
+                                    const d = new Date(iso + "T00:00:00");
+                                    if (d >= now && d <= endOfNextMonth) return { id: `bday-${m.id}-${yr}`, date: iso, label: `🎂 ${m.name?.split(" ")[0]}'s Birthday`, sub: m.name ?? "", kind: "birthday" as const };
+                                } catch {}
+                                return null;
+                            }).filter(Boolean);
+                        });
+
+                    const merged = [...windowEvents, ...(bdayItems as any[])]
+                        .sort((a, b) => a.date.localeCompare(b.date));
+
+                    const first5 = merged.slice(0, 5);
+                    const overflow = merged.slice(5);
+
+                    return (
+                        <Tile className="min-h-[260px]">
+                            <CardHeader icon={<Clock size={14} className="text-indigo-500" />} title="Upcoming Events" action="Full calendar" onAction={() => onNavigate("schedule")} />
+                            <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                                {first5.length === 0 ? (
+                                    <div className="flex items-center gap-3 px-5 py-4"><Calendar size={16} className="text-gray-300" /><p className="text-sm text-gray-400">Nothing this month or next</p></div>
+                                ) : first5.map((ev, i) => {
+                                    const d = new Date(ev.date + "T00:00:00");
+                                    const isBday = ev.kind === "birthday";
+                                    return (
+                                        <div key={ev.id} className={`flex items-center gap-3 px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors ${i === 0 ? "bg-indigo-50/50 dark:bg-indigo-900/10" : ""}`}>
+                                            <div className={`flex flex-col items-center justify-center w-10 h-10 rounded-xl shrink-0 ${isBday ? "bg-pink-500 text-white" : i === 0 ? "bg-indigo-600 text-white" : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"}`}>
+                                                <p className="text-[8px] font-bold uppercase opacity-80">{d.toLocaleDateString("en", { month: "short" })}</p>
+                                                <p className="text-sm font-black leading-none">{d.getDate()}</p>
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{ev.label}</p>
+                                                <p className="text-xs text-gray-400 truncate">{ev.sub}</p>
+                                            </div>
+                                            <span className={`text-xs font-semibold shrink-0 ${i === 0 ? "text-indigo-600 dark:text-indigo-400" : "text-gray-400"}`}>{daysUntil(ev.date)}</span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            {overflow.length > 0 && (
+                                <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700">
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">+{overflow.length} more</p>
+                                    <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
+                                        {overflow.map(ev => {
+                                            const d = new Date(ev.date + "T00:00:00");
+                                            const isBday = ev.kind === "birthday";
+                                            return (
+                                                <div key={ev.id} className={`shrink-0 flex flex-col items-center px-3 py-2 rounded-xl border text-center min-w-[68px] ${isBday ? "bg-pink-500/10 border-pink-400/30" : "bg-indigo-50 dark:bg-indigo-900/20 border-indigo-100 dark:border-indigo-800/30"}`}>
+                                                    <p className="text-[9px] font-bold uppercase text-gray-400">{d.toLocaleDateString("en", { month: "short" })}</p>
+                                                    <p className={`text-base font-black leading-tight ${isBday ? "text-pink-500" : "text-indigo-600 dark:text-indigo-400"}`}>{d.getDate()}</p>
+                                                    <p className="text-[9px] text-gray-400 truncate max-w-[60px]">{ev.label.replace("🎂 ", "").split("'")[0]}</p>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{ev.eventName ?? "Event"}</p>
-                                        <p className="text-xs text-gray-400 truncate">
-                                            {isServiceEvent(ev)
-                                                ? ev.worshipLeader?.name
-                                                    ? <span>Leader: {ev.worshipLeader.name}</span>
-                                                    : <span className="text-red-400 flex items-center gap-1"><AlertTriangle size={9} />No leader assigned</span>
-                                                : (ev as any).created_by_name
-                                                    ? <span>Added by: {(ev as any).created_by_name.split(" ")[0]}</span>
-                                                    : <span className="text-gray-400">Custom event</span>
-                                            }
-                                        </p>
-                                    </div>
-                                    <span className={`text-xs font-semibold shrink-0 ${i === 0 ? "text-indigo-600 dark:text-indigo-400" : "text-gray-400"}`}>{daysUntil(ev.date)}</span>
                                 </div>
-                            );
-                        })}
-                    </div>
-                </Tile>
+                            )}
+                        </Tile>
+                    );
+                })()}
+
 
                 {/* ── ROW 2 ─────────────────────────── */}
 
