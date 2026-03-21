@@ -1086,6 +1086,11 @@ BULLET: [...]`;
 
     // ── GET /api/lineup-listens/leaderboard — top listeners across all tracks
     if (rawPath === "/lineup-listens/leaderboard" && method === "GET") {
+        // Test accounts — excluded from leaderboard permanently
+        const TEST_EMAILS = new Set([
+            "nthlastchild@gmail.com",
+            "iclcproject8@gmail.com",
+        ]);
         try {
             const snap = await firestore?.collection("lineupListens").get();
             const tally: Record<string, { userId: string; name: string; photo: string; count: number }> = {};
@@ -1093,6 +1098,8 @@ BULLET: [...]`;
                 const listens: any[] = Array.isArray(doc.data()?.listens) ? doc.data().listens : [];
                 listens.forEach((e: any) => {
                     if (!e?.userId) return;
+                    // Skip test accounts (match by email if stored, otherwise skip)
+                    if (e.email && TEST_EMAILS.has(e.email.toLowerCase().trim())) return;
                     if (!tally[e.userId]) {
                         tally[e.userId] = { userId: e.userId, name: e.name || "Team Member", photo: e.photo || "", count: 0 };
                     }

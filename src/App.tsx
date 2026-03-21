@@ -1605,7 +1605,7 @@ export default function App() {
       {lineupOpen && lineupTracks.length > 0 && (
         <LineupPlayer
           tracks={lineupTracks}
-          currentUser={{ uid: user?.uid ?? "", name: user?.displayName ?? user?.email ?? "Team Member", photo: user?.photoURL ?? "" } as CurrentUser}
+          currentUser={{ uid: user?.uid ?? "", name: user?.displayName ?? user?.email ?? "Team Member", photo: user?.photoURL ?? "", email: user?.email ?? "" } as CurrentUser}
           onClose={() => setLineupOpen(false)}
         />
       )}

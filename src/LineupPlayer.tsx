@@ -17,12 +17,14 @@ export interface CurrentUser {
   uid: string;
   name: string;
   photo: string;
+  email: string;
 }
 
 interface ListenEntry {
   userId: string;
   name: string;
   photo: string;
+  email: string;
   listenedAt: string;
 }
 
@@ -292,6 +294,7 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
       userId: currentUser.uid,
       name: currentUser.name || "Team Member",
       photo: currentUser.photo || "",
+      email: currentUser.email || "",
       listenedAt: new Date().toISOString(),
     };
     setSaving(prev => ({ ...prev, [key]: true }));
