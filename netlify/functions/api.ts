@@ -1394,22 +1394,32 @@ Rules:
 
     // POST /members
     if (rawPath === "/members" && method === "POST") {
-        const { name, phone, email, photo, roles, status, notes } = body;
+        const { name, firstName, middleInitial, lastName, phone, email, photo, roles, status, notes, birthdate, gender } = body;
+
+        // Accept either a combined `name` OR separate `firstName` / `lastName`
+        // (ProfileSetupModal sends the structured fields, the admin panel sends `name`)
+        const resolvedName = name?.trim() || [firstName, middleInitial, lastName].filter(Boolean).join(" ").trim();
+
         const missingFields: string[] = [];
-        if (!name?.trim()) missingFields.push("Name");
+        if (!resolvedName) missingFields.push("Name");
         if (!phone?.trim()) missingFields.push("Phone");
         if (missingFields.length > 0) {
             return json(400, { error: `Missing required fields: ${missingFields.join(", ")}.` });
         }
         try {
             const docRef = await firestore.collection("members").add({
-                name: toTitleCase(name),
+                name: toTitleCase(resolvedName),
+                firstName: firstName?.trim() || resolvedName.split(" ")[0] || "",
+                middleInitial: middleInitial?.trim() || "",
+                lastName: lastName?.trim() || resolvedName.split(" ").slice(1).join(" ") || "",
                 phone: phone.trim(),
                 email: (email || "").trim().toLowerCase(),
                 photo: photo || "",
                 roles: roles || [],
                 status: status || "active",
                 notes: notes || "",
+                birthdate: birthdate || null,
+                gender: gender || "",
                 created_at: admin.firestore.FieldValue.serverTimestamp(),
                 updated_at: admin.firestore.FieldValue.serverTimestamp(),
             });
@@ -1419,6 +1429,7 @@ Rules:
             return json(500, { error: "Failed to create member" });
         }
     }
+
 
     // PUT /members/:id  &  DELETE /members/:id
     const memberMatch = rawPath.match(/^\/members\/([^/]+)$/);
