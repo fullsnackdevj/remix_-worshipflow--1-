@@ -572,6 +572,122 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
         } catch { return json(500, { error: "Failed" }); }
     }
 
+    // ── POST /assembly-call ─────────────────────────────────────────────────────
+    // Admin-only: blast a high-priority push to ALL registered devices + writes
+    // a permanent in-app notification. 5-minute cooldown enforced server-side.
+    if (rawPath === "/assembly-call" && method === "POST") {
+        const { callerName, callerPhoto, callerId, message } = body;
+        if (!callerId) return json(401, { error: "Unauthorized" });
+
+        try {
+            // ── Cooldown check (5 minutes) ──────────────────────────────────
+            const cooldownDoc = await firestore?.collection("assembly_cooldown").doc("global").get();
+            if (cooldownDoc?.exists) {
+                const lastAt = cooldownDoc.data()?.lastCalledAt?.toMillis?.() ?? 0;
+                const diffMs = Date.now() - lastAt;
+                if (diffMs < 5 * 60 * 1000) {
+                    const remaining = Math.ceil((5 * 60 * 1000 - diffMs) / 1000);
+                    return json(429, { error: `Assembly call on cooldown. Try again in ${remaining}s.`, remaining });
+                }
+            }
+
+            const alertMessage = message?.trim() || "Rehearsal is starting NOW! Please report immediately. 🚨";
+            const now = admin.firestore.FieldValue.serverTimestamp();
+
+            // ── Update cooldown timestamp ────────────────────────────────────
+            await firestore?.collection("assembly_cooldown").doc("global").set({
+                lastCalledAt: now, callerId, callerName,
+            });
+
+            // ── Blast push to ALL tokens (no audience filter — everyone) ─────
+            const tokensSnap = await firestore?.collection("fcm_tokens").get();
+            const tokens: string[] = [];
+            tokensSnap?.docs.forEach(doc => {
+                const t = doc.data().token;
+                if (t) tokens.push(t);
+            });
+
+            if (tokens.length > 0) {
+                for (let i = 0; i < tokens.length; i += 500) {
+                    const batch = tokens.slice(i, i + 500);
+                    const resp = await admin.messaging().sendEachForMulticast({
+                        tokens: batch,
+                        notification: {
+                            title: "🚨 ASSEMBLY CALL",
+                            body: alertMessage,
+                        },
+                        android: {
+                            priority: "high",
+                            notification: {
+                                channelId: "assembly_call",
+                                priority: "max",
+                                defaultSound: true,
+                                defaultVibrateTimings: true,
+                            },
+                        },
+                        apns: {
+                            headers: { "apns-priority": "10" },
+                            payload: { aps: { sound: "default", badge: 1 } },
+                        },
+                        webpush: {
+                            notification: {
+                                title: "🚨 ASSEMBLY CALL",
+                                body: alertMessage,
+                                icon: "/icon-192x192.png",
+                                badge: "/favicon-32.png",
+                                vibrate: [300, 100, 300, 100, 300, 100, 300],
+                                requireInteraction: true,   // stays on screen until dismissed
+                            },
+                            fcmOptions: { link: "/" },
+                        },
+                        data: { type: "assembly_call", deepLink: "/" },
+                    });
+                    // Prune dead tokens
+                    resp.responses.forEach((r, idx) => {
+                        if (!r.success && (
+                            r.error?.code === "messaging/invalid-registration-token" ||
+                            r.error?.code === "messaging/registration-token-not-registered"
+                        )) {
+                            firestore?.collection("fcm_tokens")
+                                .where("token", "==", batch[idx]).get()
+                                .then(snap => snap.docs.forEach(d => d.ref.delete()))
+                                .catch(() => {});
+                        }
+                    });
+                }
+            }
+
+            // ── Write in-app notification for everyone ───────────────────────
+            await firestore?.collection("notifications").add({
+                type: "assembly_call",
+                message: "🚨 ASSEMBLY CALL",
+                subMessage: alertMessage,
+                actorName: callerName || "Admin",
+                actorPhoto: callerPhoto || "",
+                actorUserId: callerId,
+                targetAudience: "all",
+                readBy: [], deletedBy: [],
+                createdAt: now,
+            });
+
+            return json(200, { success: true, pushed: tokens.length });
+        } catch (e: any) {
+            console.error("Assembly call failed:", e);
+            return json(500, { error: "Failed to send assembly call" });
+        }
+    }
+
+    // GET /assembly-cooldown — check remaining cooldown for UI
+    if (rawPath === "/assembly-cooldown" && method === "GET") {
+        try {
+            const doc = await firestore?.collection("assembly_cooldown").doc("global").get();
+            if (!doc?.exists) return json(200, { remaining: 0 });
+            const lastAt = doc.data()?.lastCalledAt?.toMillis?.() ?? 0;
+            const remaining = Math.max(0, Math.ceil((5 * 60 * 1000 - (Date.now() - lastAt)) / 1000));
+            return json(200, { remaining });
+        } catch { return json(200, { remaining: 0 }); }
+    }
+
     // POST /fcm-token — store FCM push token for a user
     if (rawPath === "/fcm-token" && method === "POST") {
         const { userId, role, token } = body;

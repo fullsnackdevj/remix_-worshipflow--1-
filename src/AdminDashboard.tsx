@@ -5,6 +5,7 @@ import { Member, ScheduleMember, Schedule } from "./types";
 import VerseOfTheDay from "./VerseOfTheDay";
 import BirthdayCard from "./BirthdayCard";
 import BirthdayBanner from "./BirthdayBanner";
+import AssemblyBell from "./AssemblyBell";
 import {
     Music, Users, Calendar, NotepadText, ChevronRight, Clock,
     Bug, Lightbulb, CheckCircle2, AlertCircle, Shield, Bell, UserCheck,
@@ -452,6 +453,15 @@ export default function AdminDashboard({
                             <ListMusic size={15} className={lineupTrackCount > 0 && !isLineupOpen ? "text-white" : ""} />
                             {lineupTrackCount > 0 ? `Listen to Lineup (${lineupTrackCount})` : "Listen to Lineup"}
                         </button>
+                    )}
+
+                    {/* ── Assembly Bell — Admin only ───────────────────────── */}
+                    {userRole === "admin" && userId && (
+                        <AssemblyBell
+                            userId={userId}
+                            userName={userName}
+                            userPhoto={userPhoto || ""}
+                        />
                     )}
 
                     {!loadingExtra && pendingUsers.length > 0 && (
