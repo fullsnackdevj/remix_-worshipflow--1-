@@ -37,10 +37,11 @@ function RoleBadge({ role }: { role: string }) {
 
 // ── Clickable Last Login row — tap to reveal last active section ──────────────
 function LastLoginRow({ u, loginDate, opt, viewInfo }: {
+    key?: any;
     u: any;
     loginDate: Date | null;
     opt: (typeof ROLE_OPTIONS)[number];
-    viewInfo: { label: string; icon: string };
+    viewInfo: { label: string | any; icon: string };
 }) {
     const [expanded, setExpanded] = useState(false);
     return (
@@ -357,16 +358,39 @@ export default function AdminPanel({
         } catch { /* silent */ }
     }, []);
 
+    // ── Push Coverage state ───────────────────────────────────────────────────
+    const [pushStatus, setPushStatus] = useState<any[]>([]);
+    const [pushLoading, setPushLoading] = useState(false);
+
+    const fetchPushStatus = useCallback(async () => {
+        setPushLoading(true);
+        try {
+            const res = await fetch("/api/push-status");
+            const data = await res.json();
+            if (Array.isArray(data)) setPushStatus(data);
+        } catch { /* silent */ }
+        finally { setPushLoading(false); }
+    }, []);
+
     useEffect(() => {
         if (activeTab !== "activity") {
             if (activityIntervalRef.current) clearInterval(activityIntervalRef.current);
             return;
         }
         setActivityLoading(true);
-        fetchActivity().finally(() => setActivityLoading(false));
-        activityIntervalRef.current = setInterval(fetchActivity, 30_000);
+        // Load both in parallel on tab open
+        Promise.all([
+            fetchActivity().finally(() => setActivityLoading(false)),
+            fetchPushStatus(),
+        ]);
+        // Auto-refresh both every 30 seconds
+        activityIntervalRef.current = setInterval(() => {
+            fetchActivity();
+            fetchPushStatus();
+        }, 30_000);
         return () => { if (activityIntervalRef.current) clearInterval(activityIntervalRef.current); };
-    }, [activeTab, fetchActivity]);
+    }, [activeTab, fetchActivity, fetchPushStatus]);
+
 
 
     const approve = async (email: string, role = "member", fromPending = false) => {
@@ -985,7 +1009,7 @@ export default function AdminPanel({
                                             const viewInfo = VIEW_LABEL[u.lastView] ?? { label: u.lastView ?? "Dashboard", icon: "📱" };
                                             return (
                                                 <LastLoginRow
-                                                    key={u.userId}
+                                                    key={`last-login-${u.userId}`}
                                                     u={u}
                                                     loginDate={loginDate}
                                                     opt={opt}
@@ -995,6 +1019,89 @@ export default function AdminPanel({
                                         })}
                                     </ul>
                                 )}
+                            </div>
+                        );
+                    })()}
+
+                    {/* ── Push Coverage Card ─────────────────────────────── */}
+                    {(() => {
+                        const noCoverage = pushStatus.filter(u => u.deviceCount === 0);
+                        const covered    = pushStatus.filter(u => u.deviceCount > 0);
+                        return (
+                            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                                {/* Header */}
+                                <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+                                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                                        <WifiOff size={14} className="text-rose-400" /> Push Coverage
+                                    </h3>
+                                    <button
+                                        onClick={fetchPushStatus}
+                                        title="Refresh push status"
+                                        className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-colors"
+                                    >
+                                        <RefreshCw size={13} className={pushLoading ? "animate-spin" : ""} />
+                                    </button>
+                                </div>
+
+                                {/* Summary stats */}
+                                {pushStatus.length > 0 && (
+                                    <div className="grid grid-cols-2 gap-0 border-b border-gray-100 dark:border-gray-700">
+                                        <div className="px-4 py-3 text-center border-r border-gray-100 dark:border-gray-700">
+                                            <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{covered.length}</p>
+                                            <p className="text-[11px] text-gray-400 mt-0.5">✅ Push enabled</p>
+                                        </div>
+                                        <div className="px-4 py-3 text-center">
+                                            <p className={`text-xl font-bold ${noCoverage.length > 0 ? "text-rose-500" : "text-gray-400"}`}>{noCoverage.length}</p>
+                                            <p className="text-[11px] text-gray-400 mt-0.5">⚠️ No device registered</p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Member list */}
+                                {pushLoading && pushStatus.length === 0 ? (
+                                    <div className="flex justify-center py-8"><Loader2 size={18} className="animate-spin text-gray-400" /></div>
+                                ) : pushStatus.length === 0 ? (
+                                    <div className="text-center py-8 text-sm text-gray-400">No data available.</div>
+                                ) : (
+                                    <ul className="divide-y divide-gray-100 dark:divide-gray-700 max-h-72 overflow-y-auto"
+                                        style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(0,0,0,0.15) transparent" }}>
+                                        {pushStatus.map((u: any) => {
+                                            const opt = ROLE_OPTIONS.find(r => r.value === u.role) ?? ROLE_OPTIONS[0];
+                                            const hasDevices = u.deviceCount > 0;
+                                            return (
+                                                <li key={u.email} className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                                                    {/* Avatar */}
+                                                    {u.photo
+                                                        ? <img src={u.photo} alt={u.name || u.email} className="w-8 h-8 rounded-full object-cover shrink-0" />
+                                                        : <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-500 font-bold text-xs shrink-0">{(u.name || u.email || "?")[0].toUpperCase()}</div>
+                                                    }
+                                                    {/* Name + role */}
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{u.name || u.email}</p>
+                                                        <span className={`inline-flex items-center gap-0.5 text-[10px] font-semibold ${opt.color}`}>{opt.icon} {opt.label}</span>
+                                                    </div>
+                                                    {/* Device count badge */}
+                                                    {hasDevices ? (
+                                                        <span className="flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-[11px] font-bold shrink-0">
+                                                            <Wifi size={11} /> {u.deviceCount} device{u.deviceCount !== 1 ? "s" : ""}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="flex items-center gap-1 px-2 py-1 rounded-full bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 text-[11px] font-bold shrink-0">
+                                                            <WifiOff size={11} /> No device
+                                                        </span>
+                                                    )}
+                                                </li>
+                                            );
+                                        })}
+                                    </ul>
+                                )}
+
+                                {/* Help note at bottom */}
+                                <div className="px-4 py-2.5 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                                    <p className="text-[11px] text-gray-400">
+                                        "No device" means that member has never clicked <strong className="text-gray-500 dark:text-gray-300">"Enable"</strong> on the notification banner — they won't receive Assembly Calls or push alerts.
+                                    </p>
+                                </div>
                             </div>
                         );
                     })()}

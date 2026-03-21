@@ -51,6 +51,9 @@ function vibrateAlert() {
     navigator.vibrate([500, 150, 500, 150, 500, 150, 200, 100, 200, 100, 200]);
 }
 
+// Detect desktop: no touch support and viewport wider than 768px
+const isDesktop = !('ontouchstart' in window) && window.matchMedia('(min-width: 768px)').matches;
+
 export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, members = [] }: Props) {
     const [showConfirm, setShowConfirm] = useState(false);
     const [showAlarm, setShowAlarm] = useState(false);
@@ -466,6 +469,19 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
                             <p className="text-white/60 text-xs font-bold uppercase tracking-widest mb-2 text-center shrink-0">
                                 📞 Quick Call Roster
                             </p>
+
+                            {/* Desktop hint — only shown on non-touch devices */}
+                            {isDesktop && (
+                                <div className="shrink-0 flex items-start gap-2 mb-2 px-3 py-2 rounded-xl bg-amber-400/10 border border-amber-400/30 text-amber-200 text-xs">
+                                    <span className="text-base leading-none mt-0.5">💻</span>
+                                    <span>
+                                        <strong>On a laptop?</strong> Tapping "Call" opens your phone dialer via Handoff,
+                                        which requires your iPhone to be on the <strong>same Wi-Fi</strong>.
+                                        For direct dialing, open WorshipFlow on your <strong>phone</strong> instead.
+                                    </span>
+                                </div>
+                            )}
+
                             <div className="flex-1 min-h-0 overflow-y-auto rounded-2xl bg-black/30 backdrop-blur-sm border border-white/10 divide-y divide-white/10"
                                 style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.2) transparent" }}>
                                 {activeMembers.map(m => {
@@ -553,6 +569,17 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
                             </button>
                         </div>
                     </div>
+                    {/* Desktop hint — floating sheet variant */}
+                    {isDesktop && (
+                        <div className="flex items-start gap-2 px-3 py-2 bg-amber-400/10 border-b border-amber-400/20 text-amber-200 text-[11px]">
+                            <span className="text-sm leading-none mt-0.5">💻</span>
+                            <span>
+                                On a laptop, "Call" needs your iPhone on the
+                                <strong> same Wi-Fi</strong>. Use your <strong>phone</strong> for direct dialing.
+                            </span>
+                        </div>
+                    )}
+
                     {/* Member list */}
                     <div className="max-h-64 overflow-y-auto divide-y divide-white/5"
                         style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.15) transparent" }}>

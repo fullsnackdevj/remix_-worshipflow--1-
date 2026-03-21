@@ -715,6 +715,61 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
         } catch { return json(200, { count: 0 }); }
     }
 
+    // GET /push-status — admin view: cross-reference approved_users with fcm_tokens
+    // Returns each user's email + how many FCM devices they have registered.
+    // Users with 0 devices haven't enabled push notifications anywhere.
+    if (rawPath === "/push-status" && method === "GET") {
+        if (!firestore) return json(500, { error: "DB unavailable" });
+        try {
+            const [usersSnap, tokensSnap] = await Promise.all([
+                firestore.collection("approved_users").get(),
+                firestore.collection("fcm_tokens").get(),
+            ]);
+
+            // Build a map of userId → device count
+            const tokensByUserId: Record<string, number> = {};
+            tokensSnap.docs.forEach(doc => {
+                const uid: string = doc.data().userId || "";
+                if (uid) tokensByUserId[uid] = (tokensByUserId[uid] || 0) + 1;
+            });
+
+            // Also build a map of email → userId from tokens (for matching)
+            // Because approved_users are keyed by email but tokens store userId
+            const emailToUserId: Record<string, string> = {};
+            tokensSnap.docs.forEach(doc => {
+                const d = doc.data();
+                if (d.email && d.userId) emailToUserId[d.email] = d.userId;
+            });
+
+            const results = usersSnap.docs.map(doc => {
+                const d = doc.data();
+                const email: string = d.email || doc.id;
+                const userId: string = d.userId || emailToUserId[email] || "";
+                const deviceCount = userId ? (tokensByUserId[userId] || 0) : 0;
+                return {
+                    email,
+                    userId,
+                    name: d.name || "",
+                    photo: d.photo || "",
+                    role: d.role || "member",
+                    deviceCount,
+                };
+            });
+
+            // Sort: 0-device users first, then alphabetically
+            results.sort((a, b) => {
+                if (a.deviceCount === 0 && b.deviceCount > 0) return -1;
+                if (a.deviceCount > 0 && b.deviceCount === 0) return 1;
+                return a.email.localeCompare(b.email);
+            });
+
+            return json(200, results);
+        } catch (e) {
+            console.error("push-status error:", e);
+            return json(500, { error: "Failed to fetch push status" });
+        }
+    }
+
     // POST /fcm-token — store FCM push token for a user
     // IMPORTANT: each device gets its own document so all devices receive pushes.
     // Doc ID = first 40 chars of token (unique per device) — avoids overwriting
