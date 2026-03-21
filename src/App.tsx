@@ -294,6 +294,25 @@ export default function App() {
   const { showPrompt: showPushPrompt, showForcedModal: showForcedPushModal, requestPushPermission, dismissPrompt: dismissPushPrompt, dismissForcedModal: dismissForcedPushModal } =
     usePushNotifications(user?.uid ?? null, userRole ?? null);
 
+  // 👉 Poke — poll every 5s for incoming pokes from admin
+  const [activePoke, setActivePoke] = useState<{ fromName: string; fromPhoto: string; message: string } | null>(null);
+  useEffect(() => {
+    if (!user?.uid) return;
+    const checkPokes = async () => {
+      try {
+        const res = await fetch(`/api/poke/pending?userId=${user.uid}`);
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          const latest = data[data.length - 1];
+          setActivePoke({ fromName: latest.fromName, fromPhoto: latest.fromPhoto, message: latest.message });
+        }
+      } catch { /* silent */ }
+    };
+    checkPokes();
+    const id = setInterval(checkPokes, 5000);
+    return () => clearInterval(id);
+  }, [user?.uid]);
+
   // 📊 Session tracking — writes presence + session history for Admin Activity Monitor
   useSessionTracking(
     user?.uid ?? null,
@@ -788,6 +807,43 @@ export default function App() {
                 className="w-full text-center text-xs text-gray-400 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-500 transition-colors py-1"
               >
                 Maybe later
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 👉 POKE RECEIVED — funny centered interrupt */}
+      {activePoke && (
+        <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+          <div className="w-full max-w-xs bg-white dark:bg-gray-900 rounded-3xl shadow-2xl overflow-hidden border border-gray-200 dark:border-gray-700 text-center">
+            {/* Rainbow top bar */}
+            <div className="h-2 w-full bg-gradient-to-r from-pink-500 via-yellow-400 to-indigo-500" />
+
+            <div className="px-6 pt-6 pb-7 space-y-4">
+              {/* Bouncing poke finger + sender avatar */}
+              <div className="flex flex-col items-center gap-3">
+                <span className="text-5xl select-none animate-bounce">👉</span>
+                {activePoke.fromPhoto
+                  ? <img src={activePoke.fromPhoto} alt={activePoke.fromName} className="w-14 h-14 rounded-full ring-4 ring-indigo-400 object-cover" />
+                  : <div className="w-14 h-14 rounded-full bg-indigo-200 dark:bg-indigo-800 flex items-center justify-center text-2xl font-bold text-indigo-700 dark:text-indigo-300">{activePoke.fromName?.[0]?.toUpperCase() ?? "?"}</div>
+                }
+              </div>
+
+              {/* Text */}
+              <div>
+                <p className="text-base font-bold text-gray-900 dark:text-white">
+                  {activePoke.fromName} poked you! 😳
+                </p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 leading-snug">{activePoke.message}</p>
+              </div>
+
+              {/* Dismiss */}
+              <button
+                onClick={() => setActivePoke(null)}
+                className="w-full py-3 rounded-2xl bg-gradient-to-r from-pink-500 to-indigo-500 text-white font-bold text-sm shadow-lg active:scale-95 transition-all"
+              >
+                😂 Got it!
               </button>
             </div>
           </div>

@@ -807,6 +807,88 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
         }
     }
 
+    // POST /poke — admin sends a poke to a specific online user
+    // Stores the poke in Firestore AND sends an FCM push to their devices
+    if (rawPath === "/poke" && method === "POST") {
+        if (!firestore) return json(500, { error: "DB unavailable" });
+        const { fromName, fromPhoto, fromId, toUserId, toName, message } = body;
+        if (!fromId || !toUserId) return json(400, { error: "fromId and toUserId required" });
+
+        const pokeMessages = [
+            "👉 Poke! Are you still there?",
+            "👋 Hey, someone's looking for you!",
+            "😄 You just got poked!",
+            "🎉 Surprise! Someone poked you!",
+            "🙃 Wake up! You've been poked!",
+        ];
+        const pokeMsg = message?.trim() || pokeMessages[Math.floor(Math.random() * pokeMessages.length)];
+
+        try {
+            // Store poke in Firestore so the user's app can pick it up via polling
+            await firestore.collection("pokes").add({
+                fromId,
+                fromName: fromName || "Admin",
+                fromPhoto: fromPhoto || "",
+                toUserId,
+                toName: toName || "",
+                message: pokeMsg,
+                seen: false,
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+
+            // Also blast an FCM push to all that user's devices (instant if app is closed)
+            const tokensSnap = await firestore.collection("fcm_tokens")
+                .where("userId", "==", toUserId).get();
+            const tokens: string[] = tokensSnap.docs.map(d => d.data().token).filter(Boolean);
+
+            if (tokens.length > 0) {
+                await admin.messaging().sendEachForMulticast({
+                    tokens,
+                    notification: { title: `👉 ${fromName || "Admin"} poked you!`, body: pokeMsg },
+                    data: { type: "poke", fromId, fromName: fromName || "" },
+                    webpush: {
+                        notification: {
+                            icon: fromPhoto || "/icon-192x192.png",
+                            badge: "/favicon-32.png",
+                            tag: "worshipflow-poke",
+                        },
+                    },
+                });
+            }
+
+            return json(200, { success: true, message: pokeMsg });
+        } catch (e) {
+            console.error("poke error:", e);
+            return json(500, { error: "Failed to send poke" });
+        }
+    }
+
+    // GET /poke/pending?userId= — fetch unseen pokes for a user, then mark them seen
+    if (rawPath === "/poke/pending" && method === "GET") {
+        if (!firestore) return json(500, { error: "DB unavailable" });
+        const uid = event.queryStringParameters?.userId || "";
+        if (!uid) return json(400, { error: "userId required" });
+        try {
+            const snap = await firestore.collection("pokes")
+                .where("toUserId", "==", uid)
+                .where("seen", "==", false)
+                .orderBy("createdAt", "asc")
+                .get();
+            if (snap.empty) return json(200, []);
+
+            const pokes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+            // Mark all as seen in parallel
+            const batch = firestore.batch();
+            snap.docs.forEach(d => batch.update(d.ref, { seen: true }));
+            await batch.commit();
+
+            return json(200, pokes);
+        } catch (e) {
+            return json(200, []); // silent fail — polling is non-critical
+        }
+    }
+
     // POST /fcm-token — store FCM push token for a user
     // IMPORTANT: each device gets its own document so all devices receive pushes.
     // Doc ID = first 40 chars of token (unique per device) — avoids overwriting

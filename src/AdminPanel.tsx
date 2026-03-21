@@ -175,6 +175,64 @@ function BirthdayTab({ members }: { members: any[] }) {
     );
 }
 
+// ── PokeButton — admin-only fun button to poke an online user ─────────────────
+function PokeButton({ targetUserId, targetName, senderId, senderName, senderPhoto }: {
+    targetUserId: string;
+    targetName: string;
+    senderId: string;
+    senderName: string;
+    senderPhoto: string;
+}) {
+    const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+
+    const poke = async () => {
+        if (state === "sending" || state === "sent") return;
+        setState("sending");
+        try {
+            const res = await fetch("/api/poke", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    fromId: senderId,
+                    fromName: senderName,
+                    fromPhoto: senderPhoto,
+                    toUserId: targetUserId,
+                    toName: targetName,
+                }),
+            });
+            if (res.ok) {
+                setState("sent");
+                setTimeout(() => setState("idle"), 3000);
+            } else {
+                setState("error");
+                setTimeout(() => setState("idle"), 2000);
+            }
+        } catch {
+            setState("error");
+            setTimeout(() => setState("idle"), 2000);
+        }
+    };
+
+    if (state === "sent") return (
+        <span className="text-[11px] font-bold text-emerald-500 animate-pulse px-1">✓ Poked!</span>
+    );
+    if (state === "error") return (
+        <span className="text-[11px] font-bold text-rose-500 px-1">Failed</span>
+    );
+
+    return (
+        <button
+            onClick={poke}
+            disabled={state === "sending"}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-full border border-amber-300 dark:border-amber-600 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 text-[11px] font-bold hover:bg-amber-100 dark:hover:bg-amber-900/40 active:scale-95 transition-all disabled:opacity-50 shrink-0"
+            title={`Poke ${targetName}`}
+        >
+            {state === "sending" ? <Loader2 size={11} className="animate-spin" /> : "👉"}
+            Poke
+        </button>
+    );
+}
+
 export default function AdminPanel({
     onToast,
     onConfirm,
@@ -182,7 +240,7 @@ export default function AdminPanel({
     onToast?: (type: "success" | "error" | "info" | "warning", msg: string) => void;
     onConfirm?: (msg: string, onOk: () => void) => void;
 }) {
-    const { isAdmin } = useAuth();
+    const { isAdmin, user } = useAuth();
     const [activeTab, setActiveTab] = useState<"team" | "broadcasts" | "birthdays" | "activity">("team");
     const [members, setMembers] = useState<any[]>([]);
     const [users, setUsers] = useState<ApprovedUser[]>([]);
@@ -952,6 +1010,8 @@ export default function AdminPanel({
                                                 <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{u.name || u.email}</p>
                                                 <p className="text-xs text-gray-400 truncate">{u.email}</p>
                                             </div>
+                                            {/* 👉 Poke button */}
+                                            <PokeButton targetUserId={u.userId} targetName={u.name || u.email} senderId={user?.uid ?? ""} senderName={user?.displayName ?? "Admin"} senderPhoto={user?.photoURL ?? ""} />
                                             <div className="flex flex-col items-end gap-1 shrink-0">
                                                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold capitalize ${opt.bg} ${opt.color}`}>
                                                     {opt.icon} {opt.label}
