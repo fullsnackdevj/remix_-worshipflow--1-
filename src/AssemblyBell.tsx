@@ -63,6 +63,49 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
     const [myTokenCount, setMyTokenCount] = useState<number | null>(null);
     const activeMembers = members.filter(m => m.status !== "inactive");
 
+    // ── Draggable floating sheet state ────────────────────────────────────────
+    // Corner: 0=bottom-right, 1=bottom-left, 2=top-right, 3=top-left
+    const [corner, setCorner] = useState(0);
+    const dragRef = useRef<HTMLDivElement | null>(null);
+    const dragState = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
+
+    const snapToCorner = useCallback((clientX: number, clientY: number) => {
+        const cx = window.innerWidth / 2;
+        const cy = window.innerHeight / 2;
+        const onRight = clientX >= cx;
+        const onBottom = clientY >= cy;
+        if (onRight && onBottom)  setCorner(0); // bottom-right
+        if (!onRight && onBottom) setCorner(1); // bottom-left
+        if (onRight && !onBottom) setCorner(2); // top-right
+        if (!onRight && !onBottom) setCorner(3); // top-left
+    }, []);
+
+    const cornerStyle: Record<number, React.CSSProperties> = {
+        0: { bottom: 16, right: 16, top: "auto", left: "auto" },
+        1: { bottom: 16, left: 16, top: "auto", right: "auto" },
+        2: { top: 16, right: 16, bottom: "auto", left: "auto" },
+        3: { top: 16, left: 16, bottom: "auto", right: "auto" },
+    };
+
+    const onPointerDown = (e: React.PointerEvent) => {
+        // Don't drag when clicking buttons/links inside the card
+        if ((e.target as HTMLElement).closest("a, button")) return;
+        dragState.current = { startX: e.clientX, startY: e.clientY, origX: e.clientX, origY: e.clientY };
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    };
+    const onPointerMove = (e: React.PointerEvent) => {
+        if (!dragState.current || !dragRef.current) return;
+        const dx = e.clientX - dragState.current.startX;
+        const dy = e.clientY - dragState.current.startY;
+        dragRef.current.style.transform = `translate(${dx}px, ${dy}px)`;
+    };
+    const onPointerUp = (e: React.PointerEvent) => {
+        if (!dragState.current || !dragRef.current) return;
+        dragRef.current.style.transform = "";
+        snapToCorner(e.clientX, e.clientY);
+        dragState.current = null;
+    };
+
     const audioCtxRef = useRef<any>(null);
     const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const alarmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -372,40 +415,35 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
                         </p>
                     )}
 
-                    {/* ── Call Roster — horizontal scroll strip ─────── */}
+                    {/* ── Call Roster — compact vertical scroll ─────────── */}
                     {activeMembers.length > 0 && (
-                        <div className="w-full mb-6 px-4">
-                            <p className="text-white/60 text-xs font-bold uppercase tracking-widest mb-3 text-center">
+                        <div className="w-full max-w-xs mx-auto mb-6 px-4">
+                            <p className="text-white/60 text-xs font-bold uppercase tracking-widest mb-2 text-center">
                                 📞 Quick Call Roster
                             </p>
-                            {/* Horizontal scroll container */}
-                            <div className="flex gap-3 overflow-x-auto pb-2"
+                            <div className="max-h-48 overflow-y-auto rounded-2xl bg-black/30 backdrop-blur-sm border border-white/10 divide-y divide-white/10"
                                 style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.2) transparent" }}>
                                 {activeMembers.map(m => {
                                     const initials = (m.name || "?").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
                                     const phone = m.phone?.trim();
-                                    const firstName = m.name?.split(" ")[0] || m.name;
                                     return (
-                                        <div key={m.id} className="flex flex-col items-center gap-2 shrink-0 w-20">
-                                            {/* Avatar */}
+                                        <div key={m.id} className="flex items-center gap-3 px-4 py-2.5">
                                             {m.photo ? (
                                                 <img src={m.photo} alt={m.name}
-                                                    className="w-12 h-12 rounded-full object-cover ring-2 ring-white/30" />
+                                                    className="w-8 h-8 rounded-full object-cover shrink-0 ring-1 ring-white/20" />
                                             ) : (
-                                                <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center text-sm font-bold text-white ring-2 ring-white/20">
+                                                <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-xs font-bold text-white shrink-0">
                                                     {initials}
                                                 </div>
                                             )}
-                                            {/* First name */}
-                                            <span className="text-white/90 text-[11px] font-medium text-center leading-tight w-full truncate">{firstName}</span>
-                                            {/* Call button */}
+                                            <span className="flex-1 text-white text-sm font-medium truncate">{m.name}</span>
                                             {phone ? (
                                                 <a href={`tel:${phone.replace(/\s+/g, "")}`}
-                                                    className="w-full text-center px-2 py-1 rounded-lg bg-emerald-500/80 hover:bg-emerald-400 text-white text-[11px] font-bold transition-all active:scale-95">
+                                                    className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-500/80 hover:bg-emerald-400/90 text-white text-xs font-bold transition-all active:scale-95 shrink-0">
                                                     📞 Call
                                                 </a>
                                             ) : (
-                                                <span className="text-white/25 text-[10px] text-center">no #</span>
+                                                <span className="text-white/25 text-xs shrink-0">no #</span>
                                             )}
                                         </div>
                                     );
@@ -424,22 +462,33 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
                 </div>
             )}
 
-            {/* ── Persistent Floating Call Sheet (after alarm dismissal) ──────── */}
+            {/* ── Persistent Floating Call Sheet — draggable, corner-snapping ── */}
             {showCallSheet && activeMembers.length > 0 && (
-                <div className="fixed bottom-4 right-4 z-[9998] w-80 bg-gray-900/95 backdrop-blur-md border border-red-500/30 rounded-2xl shadow-2xl shadow-red-900/40 overflow-hidden">
-                    {/* Header */}
-                    <div className="flex items-center justify-between px-4 py-3 bg-red-700/40 border-b border-red-500/20">
+                <div
+                    ref={dragRef}
+                    onPointerDown={onPointerDown}
+                    onPointerMove={onPointerMove}
+                    onPointerUp={onPointerUp}
+                    className="fixed z-[9998] w-72 bg-gray-900/95 backdrop-blur-md border border-red-500/30 rounded-2xl shadow-2xl shadow-red-900/40 overflow-hidden select-none"
+                    style={{ ...cornerStyle[corner], cursor: "grab", transition: "top 0.25s, left 0.25s, bottom 0.25s, right 0.25s" }}
+                >
+                    {/* Drag handle / Header */}
+                    <div className="flex items-center justify-between px-4 py-3 bg-red-700/40 border-b border-red-500/20 cursor-grab active:cursor-grabbing">
                         <div className="flex items-center gap-2">
                             <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
-                            <span className="text-white text-sm font-bold">📞 Quick Call Roster</span>
+                            <span className="text-white text-sm font-bold">📞 Call Roster</span>
                         </div>
-                        <button onClick={() => setShowCallSheet(false)}
-                            className="p-1 rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors">
-                            <X size={14} />
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <span className="text-white/30 text-[10px] font-medium">drag me</span>
+                            <button onClick={() => setShowCallSheet(false)}
+                                className="p-1 rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors">
+                                <X size={14} />
+                            </button>
+                        </div>
                     </div>
-                    {/* Member list */}
-                    <div className="max-h-72 overflow-y-auto divide-y divide-white/5">
+                    {/* Member list — vertical scroll */}
+                    <div className="max-h-64 overflow-y-auto divide-y divide-white/5"
+                        style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.15) transparent" }}>
                         {activeMembers.map(m => {
                             const initials = (m.name || "?").split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
                             const phone = m.phone?.trim();
@@ -460,14 +509,14 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
                                             📞 Call
                                         </a>
                                     ) : (
-                                        <span className="text-white/25 text-xs shrink-0">no number</span>
+                                        <span className="text-white/25 text-xs shrink-0">no #</span>
                                     )}
                                 </div>
                             );
                         })}
                     </div>
                     <div className="px-4 py-2 border-t border-white/5 text-center">
-                        <p className="text-white/30 text-[10px]">Tap a name to call via your phone</p>
+                        <p className="text-white/25 text-[10px]">Drag to reposition</p>
                     </div>
                 </div>
             )}
