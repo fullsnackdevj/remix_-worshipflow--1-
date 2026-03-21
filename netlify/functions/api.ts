@@ -597,16 +597,18 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
                         return json(429, { error: `Assembly call on cooldown. Try again in ${remaining}s.`, remaining });
                     }
                 }
-                // Record cooldown timestamp only for real sends
-                await firestore?.collection("assembly_cooldown").doc("global").set({
-                    lastCalledAt: now, callerId, callerName,
-                });
             }
 
-            // ── Resolve target tokens ───────────────────────────────────────
-            // Test mode: only the caller's own token
-            // Live mode: every token in the collection
-            const tokensSnap = await firestore?.collection("fcm_tokens").get();
+            // ── Fetch tokens + write cooldown in parallel (independent ops) ──
+            const [tokensSnap] = await Promise.all([
+                firestore?.collection("fcm_tokens").get(),
+                isTest
+                    ? Promise.resolve()
+                    : firestore?.collection("assembly_cooldown").doc("global").set({
+                          lastCalledAt: now, callerId, callerName,
+                      }),
+            ]);
+
             const tokens: string[] = [];
             tokensSnap?.docs.forEach(doc => {
                 const data = doc.data();
@@ -618,57 +620,57 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
 
             const notifTitle = isTest ? "🧪 TEST — Assembly Call" : "🚨 ASSEMBLY CALL";
 
-            if (tokens.length > 0) {
-                for (let i = 0; i < tokens.length; i += 500) {
-                    const batch = tokens.slice(i, i + 500);
-                    const resp = await admin.messaging().sendEachForMulticast({
-                        tokens: batch,
-                        notification: { title: notifTitle, body: alertMessage },
-                        android: {
-                            priority: "high",
-                            notification: {
-                                channelId: "assembly_call",
-                                priority: "max",
-                                defaultSound: true,
-                                defaultVibrateTimings: true,
+            // ── Fire FCM + write in-app notif in parallel ────────────────────
+            const fcmPromise = tokens.length > 0
+                ? (async () => {
+                    for (let i = 0; i < tokens.length; i += 500) {
+                        const batch = tokens.slice(i, i + 500);
+                        const resp = await admin.messaging().sendEachForMulticast({
+                            tokens: batch,
+                            notification: { title: notifTitle, body: alertMessage },
+                            android: {
+                                priority: "high",
+                                notification: {
+                                    channelId: "assembly_call",
+                                    priority: "max",
+                                    defaultSound: true,
+                                    defaultVibrateTimings: true,
+                                },
                             },
-                        },
-                        apns: {
-                            headers: { "apns-priority": "10" },
-                            payload: { aps: { sound: "default", badge: 1 } },
-                        },
-                        webpush: {
-                            notification: {
-                                title: notifTitle,
-                                body: alertMessage,
-                                icon: "/icon-192x192.png",
-                                badge: "/favicon-32.png",
-                                vibrate: [300, 100, 300, 100, 300, 100, 300],
-                                requireInteraction: true,
+                            apns: {
+                                headers: { "apns-priority": "10" },
+                                payload: { aps: { sound: "default", badge: 1 } },
                             },
-                            fcmOptions: { link: "/" },
-                        },
-                        data: { type: "assembly_call", deepLink: "/" },
-                    });
-                    // Prune dead tokens
-                    resp.responses.forEach((r, idx) => {
-                        if (!r.success && (
-                            r.error?.code === "messaging/invalid-registration-token" ||
-                            r.error?.code === "messaging/registration-token-not-registered"
-                        )) {
-                            firestore?.collection("fcm_tokens")
-                                .where("token", "==", batch[idx]).get()
-                                .then(snap => snap.docs.forEach(d => d.ref.delete()))
-                                .catch(() => {});
-                        }
-                    });
-                }
-            }
+                            webpush: {
+                                notification: {
+                                    title: notifTitle,
+                                    body: alertMessage,
+                                    icon: "/icon-192x192.png",
+                                    badge: "/favicon-32.png",
+                                    vibrate: [300, 100, 300, 100, 300, 100, 300],
+                                    requireInteraction: true,
+                                },
+                                fcmOptions: { link: "/" },
+                            },
+                            data: { type: "assembly_call", deepLink: "/" },
+                        });
+                        // Prune dead tokens (fire-and-forget)
+                        resp.responses.forEach((r, idx) => {
+                            if (!r.success && (
+                                r.error?.code === "messaging/invalid-registration-token" ||
+                                r.error?.code === "messaging/registration-token-not-registered"
+                            )) {
+                                firestore?.collection("fcm_tokens")
+                                    .where("token", "==", batch[idx]).get()
+                                    .then(snap => snap.docs.forEach(d => d.ref.delete()))
+                                    .catch(() => {});
+                            }
+                        });
+                    }
+                })()
+                : Promise.resolve();
 
-            // ── Write in-app notification ────────────────────────────────────
-            // Test mode: write with targetAudience "admin_only" so only
-            // admin sees it in their bell feed.
-            await firestore?.collection("notifications").add({
+            const notifPromise = firestore?.collection("notifications").add({
                 type: "assembly_call",
                 message: notifTitle,
                 subMessage: isTest ? `[TEST] ${alertMessage}` : alertMessage,
@@ -679,6 +681,9 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
                 readBy: [], deletedBy: [],
                 createdAt: now,
             });
+
+            // Both fire simultaneously — respond as soon as both settle
+            await Promise.all([fcmPromise, notifPromise]);
 
             return json(200, { success: true, pushed: tokens.length, testMode: isTest });
         } catch (e: any) {

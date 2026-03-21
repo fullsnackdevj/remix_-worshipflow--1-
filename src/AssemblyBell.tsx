@@ -498,21 +498,22 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
             {showCallSheet && activeMembers.length > 0 && (
                 <div
                     ref={cardDragRef}
-                    onPointerDown={onPointerDown}
-                    onPointerMove={onPointerMove}
-                    onPointerUp={onPointerUp}
-                    onPointerCancel={onPointerCancel}
                     className="fixed z-[9998] w-72 bg-gray-900/95 backdrop-blur-md border border-red-500/30 rounded-2xl shadow-2xl shadow-red-900/40 overflow-hidden select-none"
                     style={{
                         left: cardPos.x,
                         top: cardPos.y,
-                        cursor: cardDragState.current.dragging ? "grabbing" : "grab",
-                        touchAction: "none",
                         transition: cardDragState.current.dragging ? "none" : "left 0.2s, top 0.2s",
                     }}
                 >
-                    {/* Drag handle / Header */}
-                    <div className="flex items-center justify-between px-4 py-3 bg-red-700/40 border-b border-red-500/20 cursor-grab active:cursor-grabbing">
+                    {/* Drag handle — touch-action:none here only so memberlist links still fire */}
+                    <div
+                        onPointerDown={onPointerDown}
+                        onPointerMove={onPointerMove}
+                        onPointerUp={onPointerUp}
+                        onPointerCancel={onPointerCancel}
+                        className="flex items-center justify-between px-4 py-3 bg-red-700/40 border-b border-red-500/20"
+                        style={{ touchAction: "none", cursor: cardDragState.current.dragging ? "grabbing" : "grab" }}
+                    >
                         <div className="flex items-center gap-2">
                             <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
                             <span className="text-white text-sm font-bold">📞 Call Roster</span>
