@@ -196,13 +196,7 @@ function PokeButton({ targetUserId, targetName, senderId, senderName, senderPhot
         "🙏 We need you now!",
     ];
 
-    // Close popover on backdrop click or Escape
-    useEffect(() => {
-        if (state !== "composing") return;
-        const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") setState("idle"); };
-        document.addEventListener("keydown", handleKey);
-        return () => document.removeEventListener("keydown", handleKey);
-    }, [state]);
+    // Modal only closes via ✕ or Cancel — no Escape, no click-outside
 
     // Focus input when popover opens
     useEffect(() => {
@@ -259,7 +253,7 @@ function PokeButton({ targetUserId, targetName, senderId, senderName, senderPhot
 
             {/* Compose modal — fixed so it's never clipped by parent overflow */}
             {state === "composing" && (
-                <div className="fixed inset-0 z-[700] flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm px-4 pb-4 sm:pb-0" ref={popoverRef} onClick={() => setState("idle")}>
+                <div className="fixed inset-0 z-[700] flex items-center justify-center bg-black/40 backdrop-blur-sm px-4" ref={popoverRef}>
                     <div
                         className="w-full max-w-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-2xl shadow-2xl p-4 space-y-3"
                         onClick={e => e.stopPropagation()}
@@ -352,12 +346,7 @@ function PokeAll({ onlineUsers, senderId, senderName, senderPhoto }: {
         if (state === "composing") setTimeout(() => inputRef.current?.focus(), 50);
     }, [state]);
 
-    useEffect(() => {
-        if (state !== "composing") return;
-        const handle = (e: KeyboardEvent) => { if (e.key === "Escape") setState("idle"); };
-        document.addEventListener("keydown", handle);
-        return () => document.removeEventListener("keydown", handle);
-    }, [state]);
+    // Modal only closes via ✕ or Cancel — no Escape, no click-outside
 
     const sendAll = async () => {
         if (state === "sending" || targets.length === 0) return;
@@ -392,7 +381,7 @@ function PokeAll({ onlineUsers, senderId, senderName, senderPhoto }: {
             </button>
 
             {state === "composing" && (
-                <div className="fixed inset-0 z-[700] flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm px-4 pb-4 sm:pb-0" onClick={() => setState("idle")}>
+                <div className="fixed inset-0 z-[700] flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
                     <div className="w-full max-w-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-2xl shadow-2xl p-4 space-y-3" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-between">
                             <p className="text-sm font-bold text-gray-800 dark:text-white">
