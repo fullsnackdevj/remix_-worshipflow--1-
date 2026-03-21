@@ -327,6 +327,110 @@ function PokeButton({ targetUserId, targetName, senderId, senderName, senderPhot
     );
 }
 
+// ── PokeAll — blast a poke to every online user at once ─────────────────────
+function PokeAll({ onlineUsers, senderId, senderName, senderPhoto }: {
+    onlineUsers: any[];
+    senderId: string;
+    senderName: string;
+    senderPhoto: string;
+}) {
+    const [state, setState] = useState<"idle" | "composing" | "sending" | "sent">("idle");
+    const [message, setMessage] = useState("");
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    const targets = onlineUsers.filter(u => u.userId !== senderId);
+
+    const QUICK_MSGS = [
+        "👉 Poke! Are you there?",
+        "🙃 Wake up everyone!",
+        "⚡ Please check the app!",
+        "🎵 We're about to start!",
+        "🙏 We need you all now!",
+    ];
+
+    useEffect(() => {
+        if (state === "composing") setTimeout(() => inputRef.current?.focus(), 50);
+    }, [state]);
+
+    useEffect(() => {
+        if (state !== "composing") return;
+        const handle = (e: KeyboardEvent) => { if (e.key === "Escape") setState("idle"); };
+        document.addEventListener("keydown", handle);
+        return () => document.removeEventListener("keydown", handle);
+    }, [state]);
+
+    const sendAll = async () => {
+        if (state === "sending" || targets.length === 0) return;
+        setState("sending");
+        const msg = message.trim() || "👉 Hey everyone, are you there?";
+        await Promise.allSettled(
+            targets.map(u =>
+                fetch("/api/poke", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ fromId: senderId, fromName: senderName, fromPhoto: senderPhoto, toUserId: u.userId, toName: u.name || u.email, message: msg }),
+                })
+            )
+        );
+        setState("sent");
+        setTimeout(() => setState("idle"), 3000);
+    };
+
+    if (targets.length === 0) return null;
+
+    if (state === "sent") return (
+        <span className="text-[11px] font-bold text-emerald-500 animate-pulse">✓ Poked everyone!</span>
+    );
+
+    return (
+        <>
+            <button
+                onClick={() => { setMessage("👉 Hey everyone, are you there?"); setState("composing"); }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-amber-400 to-orange-500 text-white text-[11px] font-bold shadow hover:from-amber-500 hover:to-orange-600 active:scale-95 transition-all"
+            >
+                👉 Poke All ({targets.length})
+            </button>
+
+            {state === "composing" && (
+                <div className="fixed inset-0 z-[700] flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm px-4 pb-4 sm:pb-0" onClick={() => setState("idle")}>
+                    <div className="w-full max-w-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-2xl shadow-2xl p-4 space-y-3" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between">
+                            <p className="text-sm font-bold text-gray-800 dark:text-white">
+                                👉 Poke <span className="text-amber-500">everyone online</span>
+                                <span className="ml-1 text-xs font-normal text-gray-400">({targets.length} users)</span>
+                            </p>
+                            <button onClick={() => setState("idle")} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1">
+                                <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                            </button>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                            {QUICK_MSGS.map(q => (
+                                <button key={q} onClick={() => setMessage(q)}
+                                    className={`text-[11px] px-2.5 py-1 rounded-full border transition-all ${
+                                        message === q ? "bg-amber-500 text-white border-amber-500" : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-amber-400"
+                                    }`}>{q}</button>
+                            ))}
+                        </div>
+                        <input ref={inputRef} value={message} onChange={e => setMessage(e.target.value)}
+                            onKeyDown={e => { if (e.key === "Enter") sendAll(); }}
+                            placeholder="Or type your own message..."
+                            maxLength={120}
+                            className="w-full text-sm px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        />
+                        <div className="flex gap-2">
+                            <button onClick={() => setState("idle")} className="flex-1 py-2 text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-xl border border-gray-200 dark:border-gray-600">Cancel</button>
+                            <button onClick={sendAll} disabled={!message.trim() || state === "sending"}
+                                className="flex-[2] py-2 text-sm font-bold rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-white hover:from-amber-500 hover:to-orange-600 active:scale-95 transition-all disabled:opacity-40 flex items-center justify-center gap-1.5">
+                                {state === "sending" ? <Loader2 size={14} className="animate-spin" /> : `Send to all ${targets.length} 👉`}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </>
+    );
+}
+
 export default function AdminPanel({
     onToast,
     onConfirm,
@@ -1067,14 +1171,21 @@ export default function AdminPanel({
 
                     {/* 🟢 Live Now */}
                     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                        <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+                        <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between gap-2">
                             <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
                                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse inline-block" />
                                 Live Now
+                                <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full font-bold">
+                                    {activityData.online.length} online
+                                </span>
                             </h3>
-                            <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full font-bold">
-                                {activityData.online.length} online
-                            </span>
+                            {/* 👉 Poke All — blast everyone online (except self) */}
+                            <PokeAll
+                                onlineUsers={activityData.online}
+                                senderId={user?.uid ?? ""}
+                                senderName={user?.displayName ?? "Admin"}
+                                senderPhoto={user?.photoURL ?? ""}
+                            />
                         </div>
 
                         {activityLoading && activityData.online.length === 0 ? (
@@ -1104,8 +1215,10 @@ export default function AdminPanel({
                                                 <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{u.name || u.email}</p>
                                                 <p className="text-xs text-gray-400 truncate">{u.email}</p>
                                             </div>
-                                            {/* 👉 Poke button */}
-                                            <PokeButton targetUserId={u.userId} targetName={u.name || u.email} senderId={user?.uid ?? ""} senderName={user?.displayName ?? "Admin"} senderPhoto={user?.photoURL ?? ""} />
+                                            {/* 👉 Poke button — hidden for self */}
+                                            {u.userId !== user?.uid && (
+                                                <PokeButton targetUserId={u.userId} targetName={u.name || u.email} senderId={user?.uid ?? ""} senderName={user?.displayName ?? "Admin"} senderPhoto={user?.photoURL ?? ""} />
+                                            )}
                                             <div className="flex flex-col items-end gap-1 shrink-0">
                                                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold capitalize ${opt.bg} ${opt.color}`}>
                                                     {opt.icon} {opt.label}
