@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import ReactDOM from "react-dom";
 import { Bell, X, Loader2, AlertTriangle, FlaskConical } from "lucide-react";
 
 interface Member {
@@ -509,14 +510,14 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
                 </div>
             )}
 
-            {/* ── Persistent Floating Call Sheet — draggable, corner-snapping ── */}
-            {showCallSheet && activeMembers.length > 0 && (
+            {/* ── Persistent Floating Call Sheet: portalled to body so position:fixed
+                works correctly regardless of parent transforms/overflow ── */}
+            {showCallSheet && activeMembers.length > 0 && ReactDOM.createPortal(
                 <div
                     ref={cardDragRef}
-                    className="fixed z-[9998] w-72 bg-gray-900/95 backdrop-blur-md border border-red-500/30 rounded-2xl shadow-2xl shadow-red-900/40 overflow-hidden select-none"
+                    className="fixed z-[9999] w-72 bg-gray-900/95 backdrop-blur-md border border-red-500/30 rounded-2xl shadow-2xl shadow-red-900/40 overflow-hidden select-none"
                     style={dragPos
                         ? {
-                            // User has dragged — use exact JS coords
                             left: dragPos.x,
                             top: dragPos.y,
                             right: "auto",
@@ -524,7 +525,6 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
                             transition: cardDragState.current.dragging ? "none" : "left 0.2s, top 0.2s",
                         }
                         : {
-                            // Default: CSS bottom-right, no JS width calc needed
                             right: 16,
                             bottom: 16,
                             left: "auto",
@@ -532,7 +532,7 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
                         }
                     }
                 >
-                    {/* Drag handle — touch-action:none here only so memberlist links still fire */}
+                    {/* Drag handle */}
                     <div
                         onPointerDown={onPointerDown}
                         onPointerMove={onPointerMove}
@@ -553,7 +553,7 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
                             </button>
                         </div>
                     </div>
-                    {/* Member list — vertical scroll */}
+                    {/* Member list */}
                     <div className="max-h-64 overflow-y-auto divide-y divide-white/5"
                         style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.15) transparent" }}>
                         {activeMembers.map(m => {
@@ -585,7 +585,8 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
                     <div className="px-4 py-2 border-t border-white/5 text-center">
                         <p className="text-white/25 text-[10px]">Drag to reposition</p>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </>
     );
