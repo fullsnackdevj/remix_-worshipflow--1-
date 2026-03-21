@@ -123,12 +123,18 @@ export default function MembersView({
 
   // ── Fetch members on mount ─────────────────────────────────────────
   useEffect(() => {
-    // If App.tsx already seeded members from cache, do a silent refresh
     if (allMembers.length > 0) {
+      // App.tsx already seeded from cache — clear any loading state immediately
+      // and do a silent background refresh to pick up any changes.
+      setIsLoadingMembers(false);
       fetchMembers({ background: true });
     } else {
       fetchMembers();
     }
+    // Safety net: if the API hangs for any reason, stop showing skeletons
+    // after 10s so the user isn't stuck on a permanently loading screen.
+    const timeout = setTimeout(() => setIsLoadingMembers(false), 10_000);
+    return () => clearTimeout(timeout);
   }, []);
 
   const filteredMembers = useMemo(() => {
@@ -809,7 +815,8 @@ export default function MembersView({
 
           {/* Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {isLoadingMembers
+            {/* Only show skeletons when actually loading AND no data yet */}
+            {isLoadingMembers && allMembers.length === 0
               ? Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-200 dark:border-gray-700 shadow-sm animate-pulse">
                   <div className="flex items-center gap-3 mb-3">
