@@ -63,49 +63,50 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
     const [myTokenCount, setMyTokenCount] = useState<number | null>(null);
     const activeMembers = members.filter(m => m.status !== "inactive");
 
-    // ── Draggable floating sheet state ────────────────────────────────────────
-    // Corner: 0=bottom-right, 1=bottom-left, 2=top-right, 3=top-left
-    const [corner, setCorner] = useState(0);
-    const dragRef = useRef<HTMLDivElement | null>(null);
-    const dragState = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
+    const CARD_W = 288; // w-72
+    const CARD_H = 300; // approx card height for clamping
+    const initCardPos = () => ({
+        x: Math.max(0, window.innerWidth  - CARD_W - 16),
+        y: Math.max(0, window.innerHeight - CARD_H - 16),
+    });
+    const [cardPos, setCardPos] = useState<{ x: number; y: number }>(initCardPos);
+    const cardDragRef = useRef<HTMLDivElement | null>(null);
+    const cardDragState = useRef<{ dragging: boolean; startPX: number; startPY: number; startX: number; startY: number }>({
+        dragging: false, startPX: 0, startPY: 0, startX: 0, startY: 0,
+    });
 
-    const snapToCorner = useCallback((clientX: number, clientY: number) => {
-        const cx = window.innerWidth / 2;
-        const cy = window.innerHeight / 2;
-        const onRight = clientX >= cx;
-        const onBottom = clientY >= cy;
-        if (onRight && onBottom)  setCorner(0); // bottom-right
-        if (!onRight && onBottom) setCorner(1); // bottom-left
-        if (onRight && !onBottom) setCorner(2); // top-right
-        if (!onRight && !onBottom) setCorner(3); // top-left
-    }, []);
-
-    const cornerStyle: Record<number, React.CSSProperties> = {
-        0: { bottom: 16, right: 16, top: "auto", left: "auto" },
-        1: { bottom: 16, left: 16, top: "auto", right: "auto" },
-        2: { top: 16, right: 16, bottom: "auto", left: "auto" },
-        3: { top: 16, left: 16, bottom: "auto", right: "auto" },
-    };
+    // Reset card position each time the sheet is opened
+    useEffect(() => {
+        if (showCallSheet) setCardPos(initCardPos());
+    }, [showCallSheet]);
 
     const onPointerDown = (e: React.PointerEvent) => {
         if ((e.target as HTMLElement).closest("a, button")) return;
-        e.preventDefault(); // prevent text selection / page scroll start
-        dragState.current = { startX: e.clientX, startY: e.clientY, origX: e.clientX, origY: e.clientY };
-        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        e.preventDefault();
+        e.currentTarget.setPointerCapture(e.pointerId);
+        cardDragState.current = { dragging: true, startPX: e.clientX, startPY: e.clientY, startX: cardPos.x, startY: cardPos.y };
     };
     const onPointerMove = (e: React.PointerEvent) => {
-        if (!dragState.current || !dragRef.current) return;
-        e.preventDefault(); // stop browser treating this as a page scroll
-        const dx = e.clientX - dragState.current.startX;
-        const dy = e.clientY - dragState.current.startY;
-        dragRef.current.style.transform = `translate(${dx}px, ${dy}px)`;
+        if (!cardDragState.current.dragging) return;
+        e.preventDefault();
+        const dx = e.clientX - cardDragState.current.startPX;
+        const dy = e.clientY - cardDragState.current.startPY;
+        const newX = Math.max(0, Math.min(window.innerWidth  - CARD_W, cardDragState.current.startX + dx));
+        const newY = Math.max(0, Math.min(window.innerHeight - CARD_H, cardDragState.current.startY + dy));
+        setCardPos({ x: newX, y: newY });
     };
     const onPointerUp = (e: React.PointerEvent) => {
-        if (!dragState.current || !dragRef.current) return;
-        dragRef.current.style.transform = "";
-        snapToCorner(e.clientX, e.clientY);
-        dragState.current = null;
+        if (!cardDragState.current.dragging) return;
+        cardDragState.current.dragging = false;
+        // Snap to nearest corner
+        const cx = window.innerWidth / 2;
+        const cy = window.innerHeight / 2;
+        setCardPos({
+            x: e.clientX >= cx ? window.innerWidth  - CARD_W - 16 : 16,
+            y: e.clientY >= cy ? window.innerHeight - CARD_H - 16 : 16,
+        });
     };
+    const onPointerCancel = () => { cardDragState.current.dragging = false; };
 
     const audioCtxRef = useRef<any>(null);
     const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -496,12 +497,19 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
             {/* ── Persistent Floating Call Sheet — draggable, corner-snapping ── */}
             {showCallSheet && activeMembers.length > 0 && (
                 <div
-                    ref={dragRef}
+                    ref={cardDragRef}
                     onPointerDown={onPointerDown}
                     onPointerMove={onPointerMove}
                     onPointerUp={onPointerUp}
+                    onPointerCancel={onPointerCancel}
                     className="fixed z-[9998] w-72 bg-gray-900/95 backdrop-blur-md border border-red-500/30 rounded-2xl shadow-2xl shadow-red-900/40 overflow-hidden select-none"
-                    style={{ ...cornerStyle[corner], cursor: "grab", transition: "top 0.25s, left 0.25s, bottom 0.25s, right 0.25s", touchAction: "none" }}
+                    style={{
+                        left: cardPos.x,
+                        top: cardPos.y,
+                        cursor: cardDragState.current.dragging ? "grabbing" : "grab",
+                        touchAction: "none",
+                        transition: cardDragState.current.dragging ? "none" : "left 0.2s, top 0.2s",
+                    }}
                 >
                     {/* Drag handle / Header */}
                     <div className="flex items-center justify-between px-4 py-3 bg-red-700/40 border-b border-red-500/20 cursor-grab active:cursor-grabbing">
