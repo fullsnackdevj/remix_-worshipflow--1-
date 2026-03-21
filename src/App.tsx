@@ -202,7 +202,7 @@ function UserMenu({ simulatedRole, onRoleSwitch }: { simulatedRole: string; onRo
         <ChevronDown size={14} className="text-gray-400 hidden sm:block" />
       </button>
       {open && (
-        <div className="fixed sm:absolute right-2 sm:right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50 py-1 overflow-hidden" style={{ width: "min(256px, calc(100vw - 1rem))", top: "calc(var(--header-h, 64px) + 8px)" }}>
+        <div className="fixed top-[64px] sm:absolute sm:top-full sm:mt-2 right-2 sm:right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50 py-1 overflow-hidden" style={{ width: "min(256px, calc(100vw - 1rem))" }}>
           {/* Identity */}
           <div className="px-3 py-2.5 border-b border-gray-100 dark:border-gray-700">
             <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{user.displayName}</p>
