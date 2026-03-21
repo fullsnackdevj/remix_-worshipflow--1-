@@ -1193,6 +1193,23 @@ BULLET: [...]`;
     }
 
     // ─── BIRTHDAY WISH ───────────────────────────────────────────────────────────
+    // GET /birthday-wish?memberId=&date= — fetch existing wishes for a celebrant
+    if (rawPath === "/birthday-wish" && method === "GET") {
+        const memberId = event.queryStringParameters?.memberId || "";
+        const date = event.queryStringParameters?.date || "";
+        if (!memberId || !date) return json(400, { error: "memberId and date required" });
+        if (!firestore) return json(500, { error: "DB unavailable" });
+        try {
+            const docId = `${memberId}_${date}`;
+            const snap = await firestore.collection("birthday_reactions").doc(docId).get();
+            if (!snap.exists) return json(200, { wishes: [], wishers: [] });
+            const data = snap.data()!;
+            return json(200, { wishes: data.wishes ?? [], wishers: data.wishers ?? [] });
+        } catch (e) {
+            return json(200, { wishes: [], wishers: [] });
+        }
+    }
+
     if (rawPath === "/birthday-wish" && method === "POST") {
         const { memberId, memberName, date, senderUserId, senderName, senderPhoto, message } = body;
         if (!memberId || !date || !senderUserId || !senderName) return json(400, { error: "Missing required fields" });

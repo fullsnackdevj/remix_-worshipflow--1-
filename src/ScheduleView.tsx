@@ -4,7 +4,7 @@ import AutoTextarea from "./AutoTextarea";
 import { Member, ScheduleMember, Schedule, Song, Tag } from "./types";
 import {
   ChevronLeft, ChevronRight, Plus, Calendar, List, X,
-  Copy, Pencil, Lock, Users, Sun, Music, BookOpen, Mail, Eye,
+  Copy, Pencil, Lock, Users, Sun, Music, BookOpen, Mail, Eye, Loader2, Heart,
 } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -105,6 +105,71 @@ const [joyfulSearch, setJoyfulSearch] = useState("");
 const [solemnSearch, setSolemnSearch] = useState("");
 const [editSchedNotes, setEditSchedNotes] = useState("");
 const [schedMemberSearch, setSchedMemberSearch] = useState("");
+
+  // ── Birthday greeting modal state ─────────────────────────────────────────
+  const [bdayModal, setBdayModal] = useState<{
+    member: Member;
+    dateStr: string;
+  } | null>(null);
+  const [bdayMsg, setBdayMsg] = useState("");
+  const [bdaySending, setBdaySending] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [bdayWishes, setBdayWishes] = useState<any[]>([]);
+  const [bdayWishers, setBdayWishers] = useState<string[]>([]);
+  const [bdayLoadingWishes, setBdayLoadingWishes] = useState(false);
+
+  const BDAY_QUICK_MSGS = [
+    "🎂 Happy Birthday! May God bless you abundantly!",
+    "🎉 Wishing you a wonderful birthday filled with joy!",
+    "🙏 God's blessings overflow in your life today!",
+    "🎵 Have an amazing birthday, praise God for you!",
+    "✨ May this birthday bring you closer to your purpose!",
+  ];
+
+  const openBdayModal = async (member: Member, dateStr: string) => {
+    setBdayModal({ member, dateStr });
+    setBdayMsg(BDAY_QUICK_MSGS[0]);
+    setBdaySending("idle");
+    setBdayWishes([]);
+    setBdayWishers([]);
+    setBdayLoadingWishes(true);
+    try {
+      const res = await fetch(`/api/birthday-wish?memberId=${member.id}&date=${dateStr}`);
+      const data = await res.json();
+      setBdayWishes(data.wishes ?? []);
+      setBdayWishers(data.wishers ?? []);
+    } catch { /* silent */ } finally { setBdayLoadingWishes(false); }
+  };
+
+  const sendBdayWish = async () => {
+    if (!bdayModal || bdaySending === "sending") return;
+    const cu = getAuth().currentUser;
+    if (!cu) return;
+    setBdaySending("sending");
+    try {
+      const res = await fetch("/api/birthday-wish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          memberId: bdayModal.member.id,
+          memberName: bdayModal.member.name,
+          date: bdayModal.dateStr,
+          senderUserId: cu.uid,
+          senderName: cu.displayName || cu.email?.split("@")[0] || "A teammate",
+          senderPhoto: cu.photoURL || "",
+          message: bdayMsg.trim() || BDAY_QUICK_MSGS[0],
+        }),
+      });
+      if (res.status === 429) { showToast("info", "You already sent a birthday wish today!"); setBdaySending("idle"); return; }
+      if (!res.ok) throw new Error("Failed");
+      setBdaySending("sent");
+      showToast("success", `🎉 Birthday wish sent to ${bdayModal.member.name.split(" ")[0]}!`);
+      // Refresh wishes list
+      const fresh = await fetch(`/api/birthday-wish?memberId=${bdayModal.member.id}&date=${bdayModal.dateStr}`);
+      const freshData = await fresh.json();
+      setBdayWishes(freshData.wishes ?? []);
+      setBdayWishers(freshData.wishers ?? []);
+    } catch { setBdaySending("error"); setTimeout(() => setBdaySending("idle"), 2000); }
+  };
 
   // ── Schedule cache helpers ────────────────────────────────────────────────
 // ── Schedule helpers ──────────────────────────────────────────────────────
@@ -215,17 +280,20 @@ const openEventById = (eventId: string, dateStr: string) => {
 const openScheduleEditor = (dateStr: string) => {
   const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
   const isPastDate = dateStr < todayStr;
-  setSelectedScheduleDate(dateStr);
   const eventsOnDate = allSchedules.filter(s => s.date === dateStr);
+  const mmdd = dateStr.slice(5);
+  const hasBirthdays = (birthdayMap[mmdd] ?? []).length > 0;
+  setSelectedScheduleDate(dateStr);
   if (eventsOnDate.length === 0) {
-    if (isPastDate) {
-      // Past date with no events — nothing to show, ignore click
+    if (isPastDate && !hasBirthdays) {
+      // Past date with no events and no birthdays — nothing to show
       setSelectedScheduleDate(null);
       return;
     }
-    // Future date, no events yet — open blank form if permitted
+    // Has birthdays or it's a future date — open panel in view mode
     setSchedPanelMode("view");
     setSelectedEventId(null);
+    if (hasBirthdays) onEventPanelOpen?.();
   } else if (eventsOnDate.length === 1) {
     openEventById(eventsOnDate[0].id, dateStr);
     // onEventPanelOpen called inside openEventById
@@ -613,12 +681,13 @@ const handleNotifyTeam = async () => {
         </div>
 
         {/* SIDE PANEL */}
-        {selectedScheduleDate && (selectedDateEvents.length > 0 || schedPanelMode === "edit") && (
+        {selectedScheduleDate && (() => { const _mmdd = selectedScheduleDate.slice(5); const _hasBd = (birthdayMap[_mmdd] ?? []).length > 0; return (selectedDateEvents.length > 0 || schedPanelMode === "edit" || _hasBd); })() && (
           <div className="md:hidden fixed inset-0 bg-black/50 z-40" onClick={closeScheduleEditor} />
         )}
-        {selectedScheduleDate && (selectedDateEvents.length > 0 || schedPanelMode === "edit") && (() => {
+        {selectedScheduleDate && (() => { const _mmdd = selectedScheduleDate.slice(5); const _hasBd = (birthdayMap[_mmdd] ?? []).length > 0; return (selectedDateEvents.length > 0 || schedPanelMode === "edit" || _hasBd); })() && (() => {
           const isDatePast = selectedScheduleDate < todayStr;
-          const showDayView = selectedDateEvents.length >= 1 && !selectedEventId && schedPanelMode !== "edit";
+          const showDayView = (selectedDateEvents.length >= 1 || (birthdayMap[selectedScheduleDate.slice(5)] ?? []).length > 0) && !selectedEventId && schedPanelMode !== "edit";
+          const bdaysOnDate = birthdayMap[selectedScheduleDate.slice(5)] ?? [];
           if (showDayView) {
             const dateLabel = new Date(selectedScheduleDate + "T00:00:00").toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
             return (
@@ -643,6 +712,35 @@ const handleNotifyTeam = async () => {
                         </div>
                         <ChevronRight size={16} className="text-gray-400 shrink-0" />
                       </button>
+                    );
+                  })}
+                  {/* Birthday celebrant cards — clickable when date is not past */}
+                  {bdaysOnDate.map(bm => {
+                    const bdColors = ["bg-pink-500","bg-rose-500","bg-fuchsia-500","bg-violet-500"];
+                    const bdBg = bdColors[bm.name.charCodeAt(0) % bdColors.length];
+                    const canGreet = !isDatePast;
+                    const CardEl = canGreet ? "button" : "div";
+                    return (
+                      <CardEl
+                        key={bm.id}
+                        {...(canGreet ? { onClick: () => openBdayModal(bm, selectedScheduleDate!) } : {})}
+                        className={`w-full flex items-center gap-3 p-3 rounded-xl bg-pink-50 dark:bg-pink-900/20 border border-pink-200 dark:border-pink-800/50 text-left transition-all ${
+                          canGreet ? "hover:bg-pink-100 dark:hover:bg-pink-900/40 hover:border-pink-300 cursor-pointer active:scale-[0.98]" : "select-none"
+                        }`}
+                      >
+                        <div className="relative shrink-0">
+                          {bm.photo
+                            ? <img src={bm.photo} alt={bm.name} className="w-9 h-9 rounded-full object-cover ring-2 ring-pink-300 dark:ring-pink-700" />
+                            : <div className={`w-9 h-9 rounded-full ${bdBg} flex items-center justify-center text-white text-sm font-bold ring-2 ring-pink-300 dark:ring-pink-700`}>{bm.name[0].toUpperCase()}</div>
+                          }
+                          <span className="absolute -bottom-0.5 -right-0.5 text-[11px] leading-none">🎂</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-pink-700 dark:text-pink-300 truncate">{bm.name}</p>
+                          <p className="text-xs text-pink-500 dark:text-pink-400">{canGreet ? "🎉 Tap to send birthday greetings!" : "🎉 It's their birthday!"}</p>
+                        </div>
+                        {canGreet && <Heart size={15} className="text-pink-400 shrink-0" />}
+                      </CardEl>
                     );
                   })}
                 </div>
@@ -894,6 +992,44 @@ const handleNotifyTeam = async () => {
                         <p className="text-center text-[11px] text-gray-400">Next notification available in {Math.ceil(24 - hoursSince)}h</p>
                       )}
 
+                    </div>
+                  );
+                })()}
+                {/* ── Birthday celebrant cards (single-event view) ── */}
+                {(() => {
+                  const bdSingle = birthdayMap[selectedScheduleDate!.slice(5)] ?? [];
+                  if (!bdSingle.length) return null;
+                  const bdColors = ["bg-pink-500","bg-rose-500","bg-fuchsia-500","bg-violet-500"];
+                  return (
+                    <div className="mt-4 space-y-2">
+                      <p className="text-xs font-semibold text-pink-400 uppercase tracking-wider">🎂 Birthday Celebrants</p>
+                      {bdSingle.map(bm => {
+                        const bdBg = bdColors[bm.name.charCodeAt(0) % bdColors.length];
+                        const canGreet = !isDatePast;
+                        const CardEl = canGreet ? "button" : "div";
+                        return (
+                          <CardEl
+                            key={bm.id}
+                            {...(canGreet ? { onClick: () => openBdayModal(bm, selectedScheduleDate!) } : {})}
+                            className={`w-full flex items-center gap-3 p-3 rounded-xl bg-pink-50 dark:bg-pink-900/20 border border-pink-200 dark:border-pink-800/50 text-left transition-all ${
+                              canGreet ? "hover:bg-pink-100 dark:hover:bg-pink-900/40 hover:border-pink-300 cursor-pointer active:scale-[0.98]" : "select-none"
+                            }`}
+                          >
+                            <div className="relative shrink-0">
+                              {bm.photo
+                                ? <img src={bm.photo} alt={bm.name} className="w-9 h-9 rounded-full object-cover ring-2 ring-pink-300 dark:ring-pink-700" />
+                                : <div className={`w-9 h-9 rounded-full ${bdBg} flex items-center justify-center text-white text-sm font-bold ring-2 ring-pink-300 dark:ring-pink-700`}>{bm.name[0].toUpperCase()}</div>
+                              }
+                              <span className="absolute -bottom-0.5 -right-0.5 text-[11px] leading-none">🎂</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-pink-700 dark:text-pink-300 truncate">{bm.name}</p>
+                              <p className="text-xs text-pink-500 dark:text-pink-400">{canGreet ? "🎉 Tap to send birthday greetings!" : "🎉 It's their birthday!"}</p>
+                            </div>
+                            {canGreet && <Heart size={15} className="text-pink-400 shrink-0" />}
+                          </CardEl>
+                        );
+                      })}
                     </div>
                   );
                 })()}
@@ -1459,6 +1595,113 @@ const handleNotifyTeam = async () => {
         </div>
       );
     })()}
+    {/* ── BIRTHDAY GREETING MODAL ──────────────────────────────────────────── */}
+    {bdayModal && (
+      <div className="fixed inset-0 z-[700] flex items-center justify-center bg-black/50 backdrop-blur-sm px-4" onClick={() => setBdayModal(null)}>
+        <div className="w-full max-w-sm bg-white dark:bg-gray-800 border border-pink-200 dark:border-pink-800/60 rounded-2xl shadow-2xl p-5 space-y-4" onClick={e => e.stopPropagation()}>
+
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">🎂</span>
+              <div>
+                <p className="text-sm font-bold text-gray-800 dark:text-white">Birthday Greetings</p>
+                <p className="text-xs text-pink-500 font-medium">{bdayModal.member.name}</p>
+              </div>
+            </div>
+            <button onClick={() => setBdayModal(null)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 transition-colors">
+              <X size={16} />
+            </button>
+          </div>
+
+          {/* Celebrant avatar */}
+          <div className="flex justify-center">
+            {bdayModal.member.photo
+              ? <img src={bdayModal.member.photo} alt={bdayModal.member.name} className="w-16 h-16 rounded-full object-cover ring-4 ring-pink-300 dark:ring-pink-600" />
+              : <div className="w-16 h-16 rounded-full bg-gradient-to-br from-pink-400 to-rose-500 flex items-center justify-center text-white text-2xl font-bold ring-4 ring-pink-300 dark:ring-pink-600">{bdayModal.member.name[0].toUpperCase()}</div>
+            }
+          </div>
+
+          {/* Already wished state */}
+          {bdaySending === "sent" ? (
+            <div className="text-center py-2">
+              <p className="text-2xl mb-1">🎉</p>
+              <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">Wish sent!</p>
+              <p className="text-xs text-gray-500 mt-0.5">Your birthday greeting has been delivered.</p>
+              <button onClick={() => setBdayModal(null)} className="mt-3 px-4 py-1.5 rounded-xl bg-gray-100 dark:bg-gray-700 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">Close</button>
+            </div>
+          ) : (
+            <>
+              {/* Quick-pick messages */}
+              <div className="flex flex-wrap gap-1.5">
+                {BDAY_QUICK_MSGS.map(q => (
+                  <button
+                    key={q}
+                    onClick={() => setBdayMsg(q)}
+                    className={`text-[11px] px-2.5 py-1 rounded-full border transition-all ${
+                      bdayMsg === q
+                        ? "bg-pink-500 text-white border-pink-500"
+                        : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-pink-400"
+                    }`}
+                  >{q}</button>
+                ))}
+              </div>
+
+              {/* Custom message */}
+              <textarea
+                value={bdayMsg}
+                onChange={e => setBdayMsg(e.target.value)}
+                placeholder="Or write your own heartfelt message..."
+                maxLength={200}
+                rows={3}
+                className="w-full text-sm px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-400 resize-none"
+              />
+
+              {/* Actions */}
+              <div className="flex gap-2">
+                <button onClick={() => setBdayModal(null)} className="flex-1 py-2 text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors rounded-xl border border-gray-200 dark:border-gray-600">
+                  Cancel
+                </button>
+                <button
+                  onClick={sendBdayWish}
+                  disabled={!bdayMsg.trim() || bdaySending === "sending"}
+                  className="flex-[2] py-2 text-sm font-bold rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 text-white hover:from-pink-600 hover:to-rose-600 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+                >
+                  {bdaySending === "sending" ? <Loader2 size={14} className="animate-spin" /> : <><Heart size={13} /> Send Greeting</>}
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* Who already wished */}
+          {(bdayLoadingWishes || bdayWishes.length > 0) && bdaySending !== "sent" && (
+            <div className="border-t border-gray-100 dark:border-gray-700 pt-3">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">
+                💖 Wishes sent ({bdayWishes.length})
+              </p>
+              {bdayLoadingWishes ? (
+                <div className="flex justify-center py-2"><Loader2 size={16} className="animate-spin text-pink-400" /></div>
+              ) : (
+                <div className="space-y-1.5 max-h-28 overflow-y-auto">
+                  {bdayWishes.map((w: any, i: number) => (
+                    <div key={i} className="flex items-start gap-2">
+                      {w.photo
+                        ? <img src={w.photo} alt={w.name} className="w-6 h-6 rounded-full object-cover shrink-0 mt-0.5" />
+                        : <div className="w-6 h-6 rounded-full bg-pink-100 dark:bg-pink-900/40 flex items-center justify-center text-pink-600 text-[10px] font-bold shrink-0 mt-0.5">{(w.name||"?")[0].toUpperCase()}</div>
+                      }
+                      <div className="min-w-0">
+                        <span className="text-[11px] font-semibold text-gray-700 dark:text-gray-300">{w.name}: </span>
+                        <span className="text-[11px] text-gray-500 dark:text-gray-400">{w.message || "Happy Birthday!"}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    )}
     </>
   );
 }
