@@ -196,19 +196,12 @@ function PokeButton({ targetUserId, targetName, senderId, senderName, senderPhot
         "🙏 We need you now!",
     ];
 
-    // Close popover on outside click or Escape
+    // Close popover on backdrop click or Escape
     useEffect(() => {
         if (state !== "composing") return;
         const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") setState("idle"); };
-        const handleClick = (e: MouseEvent) => {
-            if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) setState("idle");
-        };
         document.addEventListener("keydown", handleKey);
-        document.addEventListener("mousedown", handleClick);
-        return () => {
-            document.removeEventListener("keydown", handleKey);
-            document.removeEventListener("mousedown", handleClick);
-        };
+        return () => document.removeEventListener("keydown", handleKey);
     }, [state]);
 
     // Focus input when popover opens
@@ -254,7 +247,7 @@ function PokeButton({ targetUserId, targetName, senderId, senderName, senderPhot
     );
 
     return (
-        <div className="relative shrink-0" ref={popoverRef}>
+        <div className="relative shrink-0">
             {/* Poke trigger button */}
             <button
                 onClick={openCompose}
@@ -264,56 +257,69 @@ function PokeButton({ targetUserId, targetName, senderId, senderName, senderPhot
                 👉 Poke
             </button>
 
-            {/* Compose popover */}
+            {/* Compose modal — fixed so it's never clipped by parent overflow */}
             {state === "composing" && (
-                <div className="absolute right-0 top-8 z-50 w-72 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-2xl shadow-2xl p-3 space-y-2.5">
-                    {/* Header */}
-                    <p className="text-xs font-bold text-gray-700 dark:text-gray-200">
-                        👉 Poke <span className="text-indigo-500">{targetName}</span>
-                    </p>
-
-                    {/* Quick-pick messages */}
-                    <div className="flex flex-wrap gap-1">
-                        {QUICK_MSGS.map(q => (
+                <div className="fixed inset-0 z-[700] flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm px-4 pb-4 sm:pb-0" ref={popoverRef} onClick={() => setState("idle")}>
+                    <div
+                        className="w-full max-w-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-2xl shadow-2xl p-4 space-y-3"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        {/* Header */}
+                        <div className="flex items-center justify-between">
+                            <p className="text-sm font-bold text-gray-800 dark:text-white">
+                                👉 Poke <span className="text-amber-500">{targetName}</span>
+                            </p>
                             <button
-                                key={q}
-                                onClick={() => setMessage(q)}
-                                className={`text-[10px] px-2 py-0.5 rounded-full border transition-all ${message === q
-                                    ? "bg-amber-500 text-white border-amber-500"
-                                    : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-amber-400"
-                                    }`}
+                                onClick={() => setState("idle")}
+                                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors p-1"
                             >
-                                {q}
+                                <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
                             </button>
-                        ))}
-                    </div>
+                        </div>
 
-                    {/* Custom message input */}
-                    <input
-                        ref={inputRef}
-                        value={message}
-                        onChange={e => setMessage(e.target.value)}
-                        onKeyDown={e => { if (e.key === "Enter") sendPoke(); }}
-                        placeholder="Or type your own message..."
-                        maxLength={120}
-                        className="w-full text-xs px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-400"
-                    />
+                        {/* Quick-pick messages */}
+                        <div className="flex flex-wrap gap-1.5">
+                            {QUICK_MSGS.map(q => (
+                                <button
+                                    key={q}
+                                    onClick={() => setMessage(q)}
+                                    className={`text-[11px] px-2.5 py-1 rounded-full border transition-all ${message === q
+                                        ? "bg-amber-500 text-white border-amber-500"
+                                        : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-amber-400"
+                                    }`}
+                                >
+                                    {q}
+                                </button>
+                            ))}
+                        </div>
 
-                    {/* Send button */}
-                    <div className="flex gap-2 pt-0.5">
-                        <button
-                            onClick={() => setState("idle")}
-                            className="flex-1 py-1.5 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors rounded-xl"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            onClick={sendPoke}
-                            disabled={!message.trim()}
-                            className="flex-[2] py-1.5 text-xs font-bold rounded-xl bg-gradient-to-r from-amber-400 to-orange-400 text-white hover:from-amber-500 hover:to-orange-500 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                            Send 👉
-                        </button>
+                        {/* Custom message input */}
+                        <input
+                            ref={inputRef}
+                            value={message}
+                            onChange={e => setMessage(e.target.value)}
+                            onKeyDown={e => { if (e.key === "Enter") sendPoke(); }}
+                            placeholder="Or type your own message..."
+                            maxLength={120}
+                            className="w-full text-sm px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        />
+
+                        {/* Actions */}
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setState("idle")}
+                                className="flex-1 py-2 text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors rounded-xl border border-gray-200 dark:border-gray-600"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={sendPoke}
+                                disabled={!message.trim() || state === "sending"}
+                                className="flex-[2] py-2 text-sm font-bold rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-white hover:from-amber-500 hover:to-orange-600 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+                            >
+                                {state === "sending" ? <Loader2 size={14} className="animate-spin" /> : "Send 👉"}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
