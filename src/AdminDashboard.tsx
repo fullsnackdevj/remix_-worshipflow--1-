@@ -10,7 +10,7 @@ import {
     Music, Users, Calendar, NotepadText, ChevronRight, Clock,
     Bug, Lightbulb, CheckCircle2, AlertCircle, Shield, Bell, UserCheck,
     AlertTriangle, CheckCheck, Megaphone, Plus, UserPlus, Zap, BarChart3,
-    TrendingUp, ArrowUpRight, Star, Mic2, BookOpen, Radio, ListMusic,
+    TrendingUp, ArrowUpRight, Star, Mic2, BookOpen, Radio, ListMusic, Headphones,
 } from "lucide-react";
 
 // Member, ScheduleMember, Schedule are imported from ./types
@@ -264,6 +264,97 @@ function NextServiceTile({ ev, songs, members, myMemberId, onClick }: {
                         ].filter(Boolean).length} serving
                     </p>
                 </div>
+            </div>
+        </Tile>
+    );
+}
+
+// ── Top Listeners card ───────────────────────────────────────────────────────
+interface ListenerEntry { userId: string; name: string; photo: string; count: number; }
+
+function TopListenersCard({ currentUserId }: { currentUserId: string }) {
+    const [entries, setEntries] = useState<ListenerEntry[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        fetch("/api/lineup-listens/leaderboard")
+            .then(r => r.json())
+            .then(data => Array.isArray(data) ? setEntries(data.slice(0, 5)) : [])
+            .catch(() => {})
+            .finally(() => setLoading(false));
+    }, []);
+
+    const RANK_STYLES = [
+        "bg-amber-400/20 text-amber-400 border-amber-400/40",   // 🥇 #1
+        "bg-gray-300/20 text-gray-400 border-gray-400/40",      // 🥈 #2
+        "bg-orange-400/20 text-orange-400 border-orange-400/40",// 🥉 #3
+        "bg-gray-100/10 text-gray-500 border-gray-500/20 dark:bg-gray-700/20", // #4
+        "bg-gray-100/10 text-gray-500 border-gray-500/20 dark:bg-gray-700/20", // #5
+    ];
+    const RANK_LABELS = ["🥇", "🥈", "🥉", "4", "5"];
+
+    return (
+        <Tile className="min-h-[260px]">
+            <CardHeader icon={<Headphones size={14} className="text-indigo-500" />} title="Top Listeners 🎧" />
+            {loading ? (
+                <div className="p-5 space-y-3 animate-pulse">
+                    {[1,2,3].map(i => (
+                        <div key={i} className="flex items-center gap-3">
+                            <div className="w-7 h-7 rounded-full bg-gray-200 dark:bg-gray-700" />
+                            <div className="w-7 h-7 rounded-full bg-gray-200 dark:bg-gray-700" />
+                            <div className="flex-1 h-3 bg-gray-200 dark:bg-gray-700 rounded" />
+                            <div className="w-10 h-3 bg-gray-200 dark:bg-gray-700 rounded" />
+                        </div>
+                    ))}
+                </div>
+            ) : entries.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-10 gap-2 text-gray-400">
+                    <Headphones size={24} className="opacity-30" />
+                    <p className="text-sm">No listens recorded yet</p>
+                    <p className="text-xs text-gray-400/70">Finish a song in the Lineup Player to appear here</p>
+                </div>
+            ) : (
+                <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                    {entries.map((e, i) => {
+                        const isMe = e.userId === currentUserId;
+                        const init = (e.name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+                        return (
+                            <div key={e.userId}
+                                className={`flex items-center gap-3 px-5 py-3 transition-colors ${
+                                    isMe ? "bg-indigo-50/60 dark:bg-indigo-900/15" : "hover:bg-gray-50 dark:hover:bg-gray-700/30"
+                                }`}>
+                                {/* Rank badge */}
+                                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-black border shrink-0 ${RANK_STYLES[i]}`}>
+                                    {RANK_LABELS[i]}
+                                </div>
+                                {/* Avatar */}
+                                {e.photo?.startsWith("http") ? (
+                                    <img src={e.photo} alt={e.name}
+                                        className="w-7 h-7 rounded-full object-cover border-2 border-white dark:border-gray-800 shrink-0" />
+                                ) : (
+                                    <div className="w-7 h-7 rounded-full bg-indigo-500 border-2 border-white dark:border-gray-800 flex items-center justify-center text-[9px] font-bold text-white shrink-0">
+                                        {init}
+                                    </div>
+                                )}
+                                {/* Name */}
+                                <div className="flex-1 min-w-0">
+                                    <p className={`text-sm font-semibold truncate ${
+                                        isMe ? "text-indigo-600 dark:text-indigo-400" : "text-gray-900 dark:text-white"
+                                    }`}>
+                                        {isMe ? `${e.name.split(" ")[0]} (You)` : e.name}
+                                    </p>
+                                </div>
+                                {/* Count badge */}
+                                <span className="shrink-0 text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300">
+                                    {e.count} {e.count === 1 ? "song" : "songs"}
+                                </span>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+            <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60">
+                <p className="text-xs text-gray-400">Auto-tracked · updated when songs finish playing</p>
             </div>
         </Tile>
     );
@@ -723,6 +814,9 @@ export default function AdminDashboard({
                         <p className="text-xs text-gray-400">{members.length} total team members</p>
                     </div>
                 </Tile>
+
+                {/* Top Listeners */}
+                <TopListenersCard currentUserId={userId} />
 
                 {/* Open Issues */}
                 <Tile className="min-h-[260px]">

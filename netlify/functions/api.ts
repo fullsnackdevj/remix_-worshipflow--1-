@@ -1084,7 +1084,27 @@ BULLET: [...]`;
         } catch (e) { return json(500, { error: "Failed to fetch listens" }); }
     }
 
-    // ── POST /api/lineup-listens — add or remove a listen entry
+    // ── GET /api/lineup-listens/leaderboard — top listeners across all tracks
+    if (rawPath === "/lineup-listens/leaderboard" && method === "GET") {
+        try {
+            const snap = await firestore?.collection("lineupListens").get();
+            const tally: Record<string, { userId: string; name: string; photo: string; count: number }> = {};
+            (snap?.docs ?? []).forEach(doc => {
+                const listens: any[] = Array.isArray(doc.data()?.listens) ? doc.data().listens : [];
+                listens.forEach((e: any) => {
+                    if (!e?.userId) return;
+                    if (!tally[e.userId]) {
+                        tally[e.userId] = { userId: e.userId, name: e.name || "Team Member", photo: e.photo || "", count: 0 };
+                    }
+                    tally[e.userId].count += 1;
+                });
+            });
+            const sorted = Object.values(tally).sort((a, b) => b.count - a.count).slice(0, 10);
+            return json(200, sorted);
+        } catch (e) { return json(500, { error: "Failed to fetch leaderboard" }); }
+    }
+
+    // ── GET /api/lineup-listens?key=...&key=... — fetch listen data for track keys
     if (rawPath === "/lineup-listens" && method === "POST") {
         const { key, action, entry, songId, songTitle, mood, eventName, eventDate } = body;
         if (!key || !action || !entry?.userId) return json(400, { error: "Missing fields" });
