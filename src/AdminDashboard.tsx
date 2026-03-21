@@ -295,7 +295,7 @@ function TopListenersCard({ currentUserId }: { currentUserId: string }) {
 
     return (
         <Tile className="min-h-[260px]">
-            <CardHeader icon={<Headphones size={14} className="text-indigo-500" />} title="Top Listeners 🎧" />
+            <CardHeader icon={<Headphones size={14} className="text-indigo-500" />} title="Top Song Lineup Listeners 🎧" />
             {loading ? (
                 <div className="p-5 space-y-3 animate-pulse">
                     {[1,2,3].map(i => (
@@ -346,7 +346,7 @@ function TopListenersCard({ currentUserId }: { currentUserId: string }) {
                                 </div>
                                 {/* Count badge */}
                                 <span className="shrink-0 text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300">
-                                    {e.count} {e.count === 1 ? "song" : "songs"}
+                                    {e.count}x listened
                                 </span>
                             </div>
                         );

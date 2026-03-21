@@ -1091,6 +1091,10 @@ BULLET: [...]`;
             "nthlastchild@gmail.com",
             "iclcproject8@gmail.com",
         ]);
+        // Name-based fallback for old records that were written before email was stored
+        const TEST_NAMES = new Set([
+            "mel jun halichic",
+        ]);
         try {
             const snap = await firestore?.collection("lineupListens").get();
             const tally: Record<string, { userId: string; name: string; photo: string; count: number }> = {};
@@ -1098,8 +1102,9 @@ BULLET: [...]`;
                 const listens: any[] = Array.isArray(doc.data()?.listens) ? doc.data().listens : [];
                 listens.forEach((e: any) => {
                     if (!e?.userId) return;
-                    // Skip test accounts (match by email if stored, otherwise skip)
+                    // Skip test accounts — by email (new records) or by name (old records without email)
                     if (e.email && TEST_EMAILS.has(e.email.toLowerCase().trim())) return;
+                    if (!e.email && e.name && TEST_NAMES.has(e.name.toLowerCase().trim())) return;
                     if (!tally[e.userId]) {
                         tally[e.userId] = { userId: e.userId, name: e.name || "Team Member", photo: e.photo || "", count: 0 };
                     }
