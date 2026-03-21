@@ -679,56 +679,8 @@ export default function AdminDashboard({
 
                 {/* ── ROW 1 ─────────────────────────── */}
 
-                {/* What's New */}
-                <Tile className="h-[380px] flex flex-col">
-                    <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 shrink-0">
-                        <div className="flex items-center gap-2 font-semibold text-gray-900 dark:text-white text-base">
-                            <Megaphone size={15} className="text-amber-500" />
-                            {latestBroadcast?.title ?? "What's New in WorshipFlow"}
-                        </div>
-                        <button onClick={() => onNavigate("admin")} className="text-xs text-indigo-500 hover:text-indigo-400 flex items-center gap-1 font-medium">
-                            Manage <ChevronRight size={13} />
-                        </button>
-                    </div>
-                    <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
-                        {loadingExtra ? (
-                            /* Skeleton shimmer while broadcasts are fetching */
-                            <div className="animate-pulse space-y-3 pt-1">
-                                <div className="h-3 w-24 bg-gray-200 dark:bg-gray-700 rounded" />
-                                <div className="h-3 w-full bg-gray-200 dark:bg-gray-700 rounded" />
-                                <div className="h-3 w-5/6 bg-gray-200 dark:bg-gray-700 rounded" />
-                                <div className="space-y-2 pt-2">
-                                    {[1,2,3].map(i => (
-                                        <div key={i} className="flex items-start gap-2">
-                                            <div className="w-2 h-2 rounded-full bg-gray-200 dark:bg-gray-700 mt-1.5 shrink-0" />
-                                            <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded flex-1" />
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        ) : latestBroadcast ? (
-                            <>
-                                {latestBroadcast.createdAt && (
-                                    <span className="text-xs text-gray-400 font-medium block mb-2">Updated: {formatBroadcastDate(latestBroadcast.createdAt)}</span>
-                                )}
-                                <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">{latestBroadcast.message}</p>
-                                <ul className="space-y-2.5">
-                                    {(latestBroadcast.bulletPoints ?? []).filter(Boolean).map((h: string, i: number) => (
-                                        <li key={i} className="flex items-start gap-2.5 text-sm text-gray-700 dark:text-gray-200">
-                                            <span className="w-2 h-2 rounded-full bg-amber-400 mt-1.5 shrink-0" />
-                                            {h}
-                                        </li>
-                                    ))}
-                                </ul>
-                            </>
-                        ) : (
-                            <div className="flex items-center gap-2 text-gray-400 text-sm py-2">
-                                <Megaphone size={16} className="opacity-40" /> No announcements yet
-                            </div>
-                        )}
-                    </div>
-
-                </Tile>
+                {/* Top Song Lineup Listeners — first card in the grid */}
+                <TopListenersCard currentUserId={userId} />
 
                 {/* Church Events — NextServiceTile renders its own Tile with h-full;
                      no outer Tile wrapper needed so h-full correctly fills the grid row */}
@@ -815,8 +767,54 @@ export default function AdminDashboard({
                     </div>
                 </Tile>
 
-                {/* Top Listeners */}
-                <TopListenersCard currentUserId={userId} />
+                {/* What's New */}
+                <Tile className="h-[380px] flex flex-col">
+                    <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 shrink-0">
+                        <div className="flex items-center gap-2 font-semibold text-gray-900 dark:text-white text-base">
+                            <Megaphone size={15} className="text-amber-500" />
+                            {latestBroadcast?.title ?? "What's New in WorshipFlow"}
+                        </div>
+                        <button onClick={() => onNavigate("admin")} className="text-xs text-indigo-500 hover:text-indigo-400 flex items-center gap-1 font-medium">
+                            Manage <ChevronRight size={13} />
+                        </button>
+                    </div>
+                    <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
+                        {loadingExtra ? (
+                            <div className="animate-pulse space-y-3 pt-1">
+                                <div className="h-3 w-24 bg-gray-200 dark:bg-gray-700 rounded" />
+                                <div className="h-3 w-full bg-gray-200 dark:bg-gray-700 rounded" />
+                                <div className="h-3 w-5/6 bg-gray-200 dark:bg-gray-700 rounded" />
+                                <div className="space-y-2 pt-2">
+                                    {[1,2,3].map(i => (
+                                        <div key={i} className="flex items-start gap-2">
+                                            <div className="w-2 h-2 rounded-full bg-gray-200 dark:bg-gray-700 mt-1.5 shrink-0" />
+                                            <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded flex-1" />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : latestBroadcast ? (
+                            <>
+                                {latestBroadcast.createdAt && (
+                                    <span className="text-xs text-gray-400 font-medium block mb-2">Updated: {formatBroadcastDate(latestBroadcast.createdAt)}</span>
+                                )}
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">{latestBroadcast.message}</p>
+                                <ul className="space-y-2.5">
+                                    {(latestBroadcast.bulletPoints ?? []).filter(Boolean).map((h: string, i: number) => (
+                                        <li key={i} className="flex items-start gap-2.5 text-sm text-gray-700 dark:text-gray-200">
+                                            <span className="w-2 h-2 rounded-full bg-amber-400 mt-1.5 shrink-0" />
+                                            {h}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </>
+                        ) : (
+                            <div className="flex items-center gap-2 text-gray-400 text-sm py-2">
+                                <Megaphone size={16} className="opacity-40" /> No announcements yet
+                            </div>
+                        )}
+                    </div>
+                </Tile>
 
                 {/* Open Issues */}
                 <Tile className="min-h-[260px]">
