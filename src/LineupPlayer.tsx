@@ -106,50 +106,57 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
   const isMobile = useRef(/Mobi|Android|iPhone|iPad|iPod|Tablet/i.test(navigator.userAgent)).current;
 
   // ── Drag state (mini mode only) ────────────────────────────────────────────
-  //  pos: { x, y } = left/top in px
+  // null  → CSS default position: right:16, bottom:16 (never cut off)
+  // {x,y} → user has dragged; use left/top px coords
   const MINI_W = 288; // w-72
-  const MINI_H = 220; // approx height — clamping uses this
-  const initPos = () => ({
-    x: Math.max(0, window.innerWidth  - MINI_W - 16),
-    y: Math.max(0, window.innerHeight - MINI_H - 16),
-  });
-  const [pos, setPos] = useState<{ x: number; y: number }>(initPos);
+  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
   const dragRef = useRef<{ dragging: boolean; startPX: number; startPY: number; startX: number; startY: number }>({
     dragging: false, startPX: 0, startPY: 0, startX: 0, startY: 0,
   });
   const miniShellRef = useRef<HTMLDivElement>(null);
 
-  // Re-init position when switching to mini so it doesn't jump to 0,0
+  // Reset to CSS default whenever we switch into mini mode
   const prevMini = useRef(false);
   useEffect(() => {
-    if (mini && !prevMini.current) {
-      setPos(initPos());
-    }
+    if (mini && !prevMini.current) setDragPos(null);
     prevMini.current = mini;
   }, [mini]);
 
+  const vw = () => window.visualViewport?.width  ?? window.innerWidth;
+  const vh = () => window.visualViewport?.height ?? window.innerHeight;
+
   const onDragStart = (e: React.PointerEvent<HTMLDivElement>) => {
-    // Only drag in mini mode
     if (!mini) return;
-    // Don't start drag if user pressed a button or interactive element
     if ((e.target as HTMLElement).closest("button, input, select, textarea, a")) return;
-    // Prevent page scroll on mobile — critical for smooth touch drag
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
-    dragRef.current = { dragging: true, startPX: e.clientX, startPY: e.clientY, startX: pos.x, startY: pos.y };
+    // Read REAL rendered position — works whether in CSS or JS mode
+    const rect = miniShellRef.current?.getBoundingClientRect();
+    const startX = rect?.left ?? (vw() - MINI_W - 16);
+    const startY = rect?.top  ?? (vh() - (rect?.height ?? 260) - 16);
+    dragRef.current = { dragging: true, startPX: e.clientX, startPY: e.clientY, startX, startY };
+    setDragPos({ x: startX, y: startY });
   };
 
   const onDragMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!dragRef.current.dragging) return;
     const dx = e.clientX - dragRef.current.startPX;
     const dy = e.clientY - dragRef.current.startPY;
-    const shellH = miniShellRef.current?.offsetHeight ?? MINI_H;
-    const newX = Math.max(0, Math.min(window.innerWidth  - MINI_W, dragRef.current.startX + dx));
-    const newY = Math.max(0, Math.min(window.innerHeight - shellH,  dragRef.current.startY + dy));
-    setPos({ x: newX, y: newY });
+    const shellH = miniShellRef.current?.offsetHeight ?? 260;
+    const newX = Math.max(0, Math.min(vw() - MINI_W, dragRef.current.startX + dx));
+    const newY = Math.max(0, Math.min(vh() - shellH,  dragRef.current.startY + dy));
+    setDragPos({ x: newX, y: newY });
   };
 
-  const onDragEnd = () => { dragRef.current.dragging = false; };
+  const onDragEnd = (e?: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragRef.current.dragging) return;
+    dragRef.current.dragging = false;
+    // If released in bottom-right quadrant → snap back to CSS default
+    if (e && e.clientX >= vw() / 2 && e.clientY >= vh() / 2) {
+      setDragPos(null);
+    }
+    // otherwise keep current JS pos (already clamped from onDragMove)
+  };
 
   // ── YouTube IFrame API refs ─────────────────────────────────────────────────
   // YouTube IFrame API player ref — this is what gives us onStateChange
@@ -342,13 +349,26 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
         }`}
         style={
           mini
-            ? {
-                left: pos.x, top: pos.y,
-                // touch-action:none is the key fix — tells the browser
-                // "don't scroll / zoom on this element, we handle touch ourselves"
-                touchAction: "none",
-                cursor: dragRef.current.dragging ? "grabbing" : "grab",
-              }
+            ? dragPos
+                ? {
+                    // User dragged — exact JS coords
+                    left: dragPos.x,
+                    top: dragPos.y,
+                    right: "auto",
+                    bottom: "auto",
+                    touchAction: "none",
+                    cursor: dragRef.current.dragging ? "grabbing" : "grab",
+                    transition: dragRef.current.dragging ? "none" : "left 0.15s, top 0.15s",
+                  }
+                : {
+                    // Default: CSS-anchored to bottom-right — never cut off
+                    right: 16,
+                    bottom: 16,
+                    left: "auto",
+                    top: "auto",
+                    touchAction: "none",
+                    cursor: dragRef.current.dragging ? "grabbing" : "grab",
+                  }
             : { top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: "min(95vw, 960px)", maxHeight: "90vh" }
         }
         onPointerDown={onDragStart}
