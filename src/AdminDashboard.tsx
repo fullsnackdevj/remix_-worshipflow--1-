@@ -702,7 +702,8 @@ export default function AdminDashboard({
                         .filter(m => m.birthdate && m.birthdate.length >= 5)
                         .flatMap(m => {
                             const mmdd = m.birthdate!.slice(5); // "MM-DD"
-                            return [now.getFullYear(), now.getFullYear() + (now.getMonth() === 11 ? 1 : 0)].map(yr => {
+                            const years = now.getMonth() === 11 ? [now.getFullYear(), now.getFullYear() + 1] : [now.getFullYear()];
+                            return years.map(yr => {
                                 const iso = `${yr}-${mmdd}`;
                                 try {
                                     const d = new Date(iso + "T00:00:00");
