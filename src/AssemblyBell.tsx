@@ -53,13 +53,15 @@ function vibrateAlert() {
 export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, members = [] }: Props) {
     const [showConfirm, setShowConfirm] = useState(false);
     const [showAlarm, setShowAlarm] = useState(false);
+    const [showCallSheet, setShowCallSheet] = useState(false); // persistent call roster after alarm
     const [customMsg, setCustomMsg] = useState("");
     const [testMode, setTestMode] = useState(true); // ← default ON for safety
     const [sending, setSending] = useState(false);
     const [cooldown, setCooldown] = useState(0);
     const [pushed, setPushed] = useState<number | null>(null);
     const [isTestRun, setIsTestRun] = useState(false);
-    const [myTokenCount, setMyTokenCount] = useState<number | null>(null); // null = not checked yet
+    const [myTokenCount, setMyTokenCount] = useState<number | null>(null);
+    const activeMembers = members.filter(m => m.status !== "inactive");
 
     const audioCtxRef = useRef<any>(null);
     const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -129,10 +131,14 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
             // Test mode: no cooldown (so you can test repeatedly)
             if (!wasTest) startCooldownTick(60);
 
-            alarmTimeoutRef.current = setTimeout(() => {
-                setShowAlarm(false);
-                audioCtxRef.current?.close?.();
-            }, 12000);
+            // Only auto-dismiss if there are NO members to call
+            // If the call roster is visible the admin needs time to make calls → manual dismiss only
+            if (activeMembers.length === 0) {
+                alarmTimeoutRef.current = setTimeout(() => {
+                    setShowAlarm(false);
+                    audioCtxRef.current?.close?.();
+                }, 12000);
+            }
         } catch (e: any) {
             alert(e.message || "Failed to send assembly call.");
         } finally {
@@ -143,7 +149,9 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
     const dismissAlarm = () => {
         setShowAlarm(false);
         audioCtxRef.current?.close?.();
-        if (alarmTimeoutRef.current) clearTimeout(alarmTimeoutRef.current);
+        if (alarmTimeoutRef.current) { clearTimeout(alarmTimeoutRef.current); alarmTimeoutRef.current = null; }
+        // Show the persistent floating call sheet so admin can still call members
+        if (activeMembers.length > 0) setShowCallSheet(true);
     };
 
     const fmtCooldown = (s: number) => {
@@ -410,7 +418,57 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
                         className="flex items-center gap-2 px-8 py-3 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold text-sm backdrop-blur-sm transition-all active:scale-95">
                         <X size={16} /> Dismiss
                     </button>
-                    <p className="absolute bottom-6 text-white/30 text-xs">Auto-dismisses in 12 seconds</p>
+                    <p className="absolute bottom-6 text-white/30 text-xs">
+                        {activeMembers.length > 0 ? "Tap Dismiss when ready — call roster will stay open" : "Auto-dismisses in 12 seconds"}
+                    </p>
+                </div>
+            )}
+
+            {/* ── Persistent Floating Call Sheet (after alarm dismissal) ──────── */}
+            {showCallSheet && activeMembers.length > 0 && (
+                <div className="fixed bottom-4 right-4 z-[9998] w-80 bg-gray-900/95 backdrop-blur-md border border-red-500/30 rounded-2xl shadow-2xl shadow-red-900/40 overflow-hidden">
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-4 py-3 bg-red-700/40 border-b border-red-500/20">
+                        <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
+                            <span className="text-white text-sm font-bold">📞 Quick Call Roster</span>
+                        </div>
+                        <button onClick={() => setShowCallSheet(false)}
+                            className="p-1 rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors">
+                            <X size={14} />
+                        </button>
+                    </div>
+                    {/* Member list */}
+                    <div className="max-h-72 overflow-y-auto divide-y divide-white/5">
+                        {activeMembers.map(m => {
+                            const initials = (m.name || "?").split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+                            const phone = m.phone?.trim();
+                            return (
+                                <div key={m.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-white/5 transition-colors">
+                                    {m.photo ? (
+                                        <img src={m.photo} alt={m.name}
+                                            className="w-8 h-8 rounded-full object-cover shrink-0 ring-1 ring-white/20" />
+                                    ) : (
+                                        <div className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center text-xs font-bold text-white shrink-0">
+                                            {initials}
+                                        </div>
+                                    )}
+                                    <span className="flex-1 text-white text-sm font-medium truncate">{m.name}</span>
+                                    {phone ? (
+                                        <a href={`tel:${phone.replace(/\s+/g, "")}`}
+                                            className="flex items-center gap-1 px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all active:scale-95 shrink-0">
+                                            📞 Call
+                                        </a>
+                                    ) : (
+                                        <span className="text-white/25 text-xs shrink-0">no number</span>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                    <div className="px-4 py-2 border-t border-white/5 text-center">
+                        <p className="text-white/30 text-[10px]">Tap a name to call via your phone</p>
+                    </div>
                 </div>
             )}
         </>
