@@ -330,22 +330,7 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
   const currentKey = trackKey(current);
   const currentEntries = listens[currentKey] ?? [];
 
-  const ListenBtn = ({ track, compact = false }: { track: LineupTrack; compact?: boolean }) => {
-    const key = trackKey(track);
-    const iListened = (listens[key] ?? []).some(e => e.userId === currentUser.uid);
-    const busy = saving[key];
-    return (
-      <button onClick={e => { e.stopPropagation(); toggleListened(track); }} disabled={busy}
-        className={`flex items-center gap-1 rounded-full font-semibold shrink-0 transition-all
-          ${compact ? "text-[10px] px-2 py-0.5" : "text-xs px-2.5 py-1"}
-          ${iListened ? "bg-emerald-600/30 border border-emerald-500/50 text-emerald-400"
-            : "bg-white/8 border border-white/15 text-gray-400 hover:text-white hover:border-white/30"}
-          ${busy ? "opacity-60 cursor-wait" : ""}`}>
-        <Check size={compact ? 9 : 11} />
-        {iListened ? (compact ? "Listened ✓" : "✓ Listened") : (compact ? "Listened?" : "I've Listened")}
-      </button>
-    );
-  };
+  // ListenBtn removed — listening is auto-marked when the song fully ends.
 
   return (
     <>
@@ -463,11 +448,12 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
                   </button>
                 </div>
               </div>
-              {/* I've Listened */}
-              <div className="flex items-center gap-3 pt-1.5 border-t border-white/8">
-                <ListenBtn track={current} compact={mini} />
-                <ListenedBy entries={currentEntries} currentUserId={currentUser.uid} />
-              </div>
+              {/* Listened by — auto-populated when members finish the song */}
+              {currentEntries.length > 0 && (
+                <div className="pt-1.5 border-t border-white/8">
+                  <ListenedBy entries={currentEntries} currentUserId={currentUser.uid} />
+                </div>
+              )}
             </div>
           </div>
 
@@ -501,15 +487,8 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-1 mb-0.5">
+                        <div className="flex items-center gap-1 mb-0.5">
                           <MoodPill mood={t.mood} />
-                          <span role="button" onClick={e => { e.stopPropagation(); toggleListened(t); }}
-                            className={`text-[9px] px-1.5 py-0.5 rounded-full border font-bold transition-all ${
-                              iListened ? "bg-emerald-600/25 border-emerald-500/40 text-emerald-400"
-                                : "border-white/10 text-gray-500 hover:border-white/25 hover:text-gray-300"
-                            }`}>
-                            {iListened ? "✓" : "+"}
-                          </span>
                         </div>
                         <p className={`text-xs font-semibold truncate ${i === currentIdx ? "text-white" : "text-gray-200"}`}>{t.title}</p>
                         {t.artist && <p className="text-[10px] text-gray-500 truncate">{t.artist}</p>}
