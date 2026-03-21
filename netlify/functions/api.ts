@@ -869,23 +869,29 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
         const uid = event.queryStringParameters?.userId || "";
         if (!uid) return json(400, { error: "userId required" });
         try {
+            // Query only on toUserId (auto-indexed single field — no composite index needed).
+            // Filter seen=false in-memory to avoid any index requirements.
             const snap = await firestore.collection("pokes")
                 .where("toUserId", "==", uid)
-                .where("seen", "==", false)
-                .orderBy("createdAt", "asc")
                 .get();
             if (snap.empty) return json(200, []);
 
-            const pokes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            const unseenDocs = snap.docs.filter(d => d.data().seen === false);
+            if (unseenDocs.length === 0) return json(200, []);
 
-            // Mark all as seen in parallel
+            const pokes = unseenDocs
+                .map(d => ({ id: d.id, ...d.data() }))
+                .sort((a: any, b: any) => (a.createdAt?._seconds ?? 0) - (b.createdAt?._seconds ?? 0));
+
+            // Mark all unseen as seen
             const batch = firestore.batch();
-            snap.docs.forEach(d => batch.update(d.ref, { seen: true }));
+            unseenDocs.forEach(d => batch.update(d.ref, { seen: true }));
             await batch.commit();
 
             return json(200, pokes);
         } catch (e) {
-            return json(200, []); // silent fail — polling is non-critical
+            console.error("[poke/pending] error:", e);
+            return json(200, []);
         }
     }
 
