@@ -141,6 +141,24 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
         }, 1000);
     };
 
+    // Lock body scroll while alarm is visible (prevents page scrolling on mobile)
+    useEffect(() => {
+        if (showAlarm) {
+            document.body.style.overflow = "hidden";
+            document.body.style.position = "fixed";
+            document.body.style.width = "100%";
+        } else {
+            document.body.style.overflow = "";
+            document.body.style.position = "";
+            document.body.style.width = "";
+        }
+        return () => {
+            document.body.style.overflow = "";
+            document.body.style.position = "";
+            document.body.style.width = "";
+        };
+    }, [showAlarm]);
+
     const handleSend = useCallback(async () => {
         setSending(true);
         const wasTest = testMode;
@@ -361,7 +379,7 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
 
             {/* ── Full-screen Alarm Overlay ──────────────────────────────────── */}
             {showAlarm && (
-                <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-start overflow-y-auto py-12 px-4"
+                <div className="fixed inset-0 z-[9999] flex flex-col items-center overflow-hidden"
                     style={{
                         background: isTestRun
                             ? "radial-gradient(ellipse at center, #064e3b 0%, #022c22 60%, #000 100%)"
@@ -394,34 +412,34 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
                             style={{ animation: `pulseRing 1.6s ease-out ${delay}s infinite` }} />
                     ))}
 
-                    <div className="relative mb-6">
-                        <div className={`w-28 h-28 rounded-full border-4 flex items-center justify-center ${isTestRun ? "bg-emerald-500/20 border-emerald-400/60" : "bg-red-500/20 border-red-400/60"}`}
-                            style={{ animation: "bellShake 0.5s ease-in-out infinite" }}>
-                            {isTestRun ? <FlaskConical size={46} className="text-white drop-shadow-2xl" /> : <Bell size={52} className="text-white drop-shadow-2xl" />}
+                    {/* Top section — fixed, never scrolls */}
+                    <div className="flex flex-col items-center shrink-0 pt-8 px-4">
+                        <div className="relative mb-4">
+                            <div className={`w-20 h-20 rounded-full border-4 flex items-center justify-center ${isTestRun ? "bg-emerald-500/20 border-emerald-400/60" : "bg-red-500/20 border-red-400/60"}`}
+                                style={{ animation: "bellShake 0.5s ease-in-out infinite" }}>
+                                {isTestRun ? <FlaskConical size={36} className="text-white drop-shadow-2xl" /> : <Bell size={42} className="text-white drop-shadow-2xl" />}
+                            </div>
                         </div>
+                        <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight mb-2 drop-shadow-2xl text-center">
+                            {isTestRun ? "🧪 TEST SENT!" : "🚨 ASSEMBLY CALL"}
+                        </h1>
+                        <p className="text-white/80 text-sm font-semibold text-center px-6 max-w-xs mb-1">
+                            {customMsg.trim() || DEFAULT_MSG}
+                        </p>
+                        {pushed !== null && (
+                            <p className="text-white/50 text-xs font-medium mb-2">
+                                {isTestRun ? "Sent to your device only — check your phone! 📱" : `Sent to ${pushed} device${pushed !== 1 ? "s" : ""}`}
+                            </p>
+                        )}
                     </div>
 
-                    <h1 className="text-3xl sm:text-5xl font-black text-white tracking-tight mb-3 drop-shadow-2xl text-center px-4">
-                        {isTestRun ? "🧪 TEST SENT!" : "🚨 ASSEMBLY CALL"}
-                    </h1>
-                    <p className="text-white/80 text-base sm:text-lg font-semibold text-center px-8 max-w-md mb-2 drop-shadow">
-                        {customMsg.trim() || DEFAULT_MSG}
-                    </p>
-                    {pushed !== null && (
-                        <p className="text-white/50 text-sm font-medium mb-4">
-                            {isTestRun
-                                ? "Sent to your device only — check your phone! 📱"
-                                : `Sent to ${pushed} device${pushed !== 1 ? "s" : ""}`}
-                        </p>
-                    )}
-
-                    {/* ── Call Roster — compact vertical scroll ─────────── */}
+                    {/* ── Call Roster — flex-1 so it fills remaining space and scrolls internally */}
                     {activeMembers.length > 0 && (
-                        <div className="w-full max-w-xs mx-auto mb-6 px-4">
-                            <p className="text-white/60 text-xs font-bold uppercase tracking-widest mb-2 text-center">
+                        <div className="flex flex-col flex-1 min-h-0 w-full max-w-xs mx-auto px-4 pb-2">
+                            <p className="text-white/60 text-xs font-bold uppercase tracking-widest mb-2 text-center shrink-0">
                                 📞 Quick Call Roster
                             </p>
-                            <div className="max-h-48 overflow-y-auto rounded-2xl bg-black/30 backdrop-blur-sm border border-white/10 divide-y divide-white/10"
+                            <div className="flex-1 min-h-0 overflow-y-auto rounded-2xl bg-black/30 backdrop-blur-sm border border-white/10 divide-y divide-white/10"
                                 style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.2) transparent" }}>
                                 {activeMembers.map(m => {
                                     const initials = (m.name || "?").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
@@ -452,13 +470,16 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
                         </div>
                     )}
 
-                    <button onClick={dismissAlarm}
-                        className="flex items-center gap-2 px-8 py-3 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold text-sm backdrop-blur-sm transition-all active:scale-95">
-                        <X size={16} /> Dismiss
-                    </button>
-                    <p className="absolute bottom-6 text-white/30 text-xs">
-                        {activeMembers.length > 0 ? "Tap Dismiss when ready — call roster will stay open" : "Auto-dismisses in 12 seconds"}
-                    </p>
+                    {/* Bottom — dismiss button, always visible */}
+                    <div className="shrink-0 flex flex-col items-center gap-1 py-4">
+                        <button onClick={dismissAlarm}
+                            className="flex items-center gap-2 px-8 py-3 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold text-sm backdrop-blur-sm transition-all active:scale-95">
+                            <X size={16} /> Dismiss
+                        </button>
+                        <p className="text-white/30 text-xs">
+                            {activeMembers.length > 0 ? "Call roster stays open after dismiss" : "Auto-dismisses in 12 seconds"}
+                        </p>
+                    </div>
                 </div>
             )}
 
