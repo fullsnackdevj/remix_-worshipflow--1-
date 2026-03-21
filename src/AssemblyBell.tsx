@@ -88,13 +88,14 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
     };
 
     const onPointerDown = (e: React.PointerEvent) => {
-        // Don't drag when clicking buttons/links inside the card
         if ((e.target as HTMLElement).closest("a, button")) return;
+        e.preventDefault(); // prevent text selection / page scroll start
         dragState.current = { startX: e.clientX, startY: e.clientY, origX: e.clientX, origY: e.clientY };
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     };
     const onPointerMove = (e: React.PointerEvent) => {
         if (!dragState.current || !dragRef.current) return;
+        e.preventDefault(); // stop browser treating this as a page scroll
         const dx = e.clientX - dragState.current.startX;
         const dy = e.clientY - dragState.current.startY;
         dragRef.current.style.transform = `translate(${dx}px, ${dy}px)`;
@@ -141,21 +142,28 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
         }, 1000);
     };
 
-    // Lock body scroll while alarm is visible (prevents page scrolling on mobile)
+    // Lock body scroll while alarm is visible (prevents page scrolling on mobile / iOS)
     useEffect(() => {
+        const html = document.documentElement;
         if (showAlarm) {
+            html.style.overflow = "hidden";
             document.body.style.overflow = "hidden";
             document.body.style.position = "fixed";
             document.body.style.width = "100%";
+            document.body.style.top = "0";
         } else {
+            html.style.overflow = "";
             document.body.style.overflow = "";
             document.body.style.position = "";
             document.body.style.width = "";
+            document.body.style.top = "";
         }
         return () => {
+            html.style.overflow = "";
             document.body.style.overflow = "";
             document.body.style.position = "";
             document.body.style.width = "";
+            document.body.style.top = "";
         };
     }, [showAlarm]);
 
@@ -385,6 +393,8 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
                             ? "radial-gradient(ellipse at center, #064e3b 0%, #022c22 60%, #000 100%)"
                             : "radial-gradient(ellipse at center, #7f1d1d 0%, #450a0a 60%, #1a0000 100%)",
                         animation: `alarmFlash${isTestRun ? "Green" : "Red"} 0.5s ease-in-out infinite alternate`,
+                        touchAction: "none",      // ← stops iOS rubber-band scroll on the overlay
+                        overscrollBehavior: "none",
                     }}>
                     <style>{`
                         @keyframes alarmFlashRed {
@@ -491,7 +501,7 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
                     onPointerMove={onPointerMove}
                     onPointerUp={onPointerUp}
                     className="fixed z-[9998] w-72 bg-gray-900/95 backdrop-blur-md border border-red-500/30 rounded-2xl shadow-2xl shadow-red-900/40 overflow-hidden select-none"
-                    style={{ ...cornerStyle[corner], cursor: "grab", transition: "top 0.25s, left 0.25s, bottom 0.25s, right 0.25s" }}
+                    style={{ ...cornerStyle[corner], cursor: "grab", transition: "top 0.25s, left 0.25s, bottom 0.25s, right 0.25s", touchAction: "none" }}
                 >
                     {/* Drag handle / Header */}
                     <div className="flex items-center justify-between px-4 py-3 bg-red-700/40 border-b border-red-500/20 cursor-grab active:cursor-grabbing">
