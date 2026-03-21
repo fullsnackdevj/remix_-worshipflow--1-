@@ -463,6 +463,7 @@ export default function AdminDashboard({
                             userId={userId}
                             userName={userName}
                             userPhoto={userPhoto || ""}
+                            members={members}
                             fullWidth
                         />
                     )}

@@ -1,11 +1,20 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Bell, X, Loader2, AlertTriangle, FlaskConical } from "lucide-react";
 
+interface Member {
+    id: string;
+    name: string;
+    phone?: string;
+    photo?: string;
+    status?: string;
+}
+
 interface Props {
     userId: string;
     userName: string;
     userPhoto: string;
     fullWidth?: boolean;
+    members?: Member[];
 }
 
 const DEFAULT_MSG = "Guys, we're starting practice now. Where are you? Please go to the worship hall already!";
@@ -41,7 +50,7 @@ function vibrateAlert() {
     navigator.vibrate([500, 150, 500, 150, 500, 150, 200, 100, 200, 100, 200]);
 }
 
-export default function AssemblyBell({ userId, userName, userPhoto, fullWidth }: Props) {
+export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, members = [] }: Props) {
     const [showConfirm, setShowConfirm] = useState(false);
     const [showAlarm, setShowAlarm] = useState(false);
     const [customMsg, setCustomMsg] = useState("");
@@ -301,7 +310,7 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth }:
 
             {/* ── Full-screen Alarm Overlay ──────────────────────────────────── */}
             {showAlarm && (
-                <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center"
+                <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-start overflow-y-auto py-12 px-4"
                     style={{
                         background: isTestRun
                             ? "radial-gradient(ellipse at center, #064e3b 0%, #022c22 60%, #000 100%)"
@@ -348,15 +357,57 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth }:
                         {customMsg.trim() || DEFAULT_MSG}
                     </p>
                     {pushed !== null && (
-                        <p className="text-white/50 text-sm font-medium mb-8">
+                        <p className="text-white/50 text-sm font-medium mb-4">
                             {isTestRun
                                 ? "Sent to your device only — check your phone! 📱"
                                 : `Sent to ${pushed} device${pushed !== 1 ? "s" : ""}`}
                         </p>
                     )}
 
+                    {/* ── Call Roster ─────────────────────────────── */}
+                    {!isTestRun && members.filter(m => m.status !== "inactive").length > 0 && (
+                        <div className="w-full max-w-sm mx-auto mb-6 px-4">
+                            <p className="text-white/60 text-xs font-bold uppercase tracking-widest mb-2 text-center">
+                                📞 Quick Call Roster
+                            </p>
+                            <div className="bg-black/30 backdrop-blur-sm rounded-2xl border border-white/10 overflow-hidden divide-y divide-white/10">
+                                {members
+                                    .filter(m => m.status !== "inactive")
+                                    .map(m => {
+                                        const initials = (m.name || "?").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+                                        const phone = m.phone?.trim();
+                                        return (
+                                            <div key={m.id} className="flex items-center gap-3 px-4 py-2.5">
+                                                {/* Avatar */}
+                                                {m.photo ? (
+                                                    <img src={m.photo} alt={m.name}
+                                                        className="w-8 h-8 rounded-full object-cover shrink-0 ring-1 ring-white/20" />
+                                                ) : (
+                                                    <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-xs font-bold text-white shrink-0">
+                                                        {initials}
+                                                    </div>
+                                                )}
+                                                {/* Name */}
+                                                <span className="flex-1 text-white text-sm font-medium truncate">{m.name}</span>
+                                                {/* Call button */}
+                                                {phone ? (
+                                                    <a href={`tel:${phone.replace(/\s+/g, "")}`}
+                                                        className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-500/80 hover:bg-emerald-400/90 text-white text-xs font-bold transition-all active:scale-95 shrink-0"
+                                                    >
+                                                        📞 Call
+                                                    </a>
+                                                ) : (
+                                                    <span className="text-white/25 text-xs shrink-0">no number</span>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                            </div>
+                        </div>
+                    )}
+
                     <button onClick={dismissAlarm}
-                        className="mt-2 flex items-center gap-2 px-8 py-3 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold text-sm backdrop-blur-sm transition-all active:scale-95">
+                        className="flex items-center gap-2 px-8 py-3 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold text-sm backdrop-blur-sm transition-all active:scale-95">
                         <X size={16} /> Dismiss
                     </button>
                     <p className="absolute bottom-6 text-white/30 text-xs">Auto-dismisses in 12 seconds</p>
