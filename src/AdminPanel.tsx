@@ -1186,7 +1186,11 @@ export default function AdminPanel({
                             </div>
                         ) : (
                             <ul className="divide-y divide-gray-100 dark:divide-gray-700">
-                                {activityData.online.map((u: any) => {
+                                {[...activityData.online].sort((a: any, b: any) => {
+                                    if (a.userId === user?.uid) return -1;
+                                    if (b.userId === user?.uid) return 1;
+                                    return 0;
+                                }).map((u: any) => {
                                     const elapsedMs = u.sessionStart ? Date.now() - new Date(u.sessionStart).getTime() : 0;
                                     const elapsedMin = Math.floor(elapsedMs / 60_000);
                                     const elapsedStr = elapsedMin < 1 ? "Just joined" : elapsedMin < 60 ? `${elapsedMin}m` : `${Math.floor(elapsedMin / 60)}h ${elapsedMin % 60}m`;
