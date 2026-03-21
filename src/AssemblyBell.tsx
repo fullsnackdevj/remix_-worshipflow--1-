@@ -372,44 +372,44 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
                         </p>
                     )}
 
-                    {/* ── Call Roster ─────────────────────────────── */}
-                    {members.filter(m => m.status !== "inactive").length > 0 && (
-                        <div className="w-full max-w-sm mx-auto mb-6 px-4">
-                            <p className="text-white/60 text-xs font-bold uppercase tracking-widest mb-2 text-center">
+                    {/* ── Call Roster — horizontal scroll strip ─────── */}
+                    {activeMembers.length > 0 && (
+                        <div className="w-full mb-6 px-4">
+                            <p className="text-white/60 text-xs font-bold uppercase tracking-widest mb-3 text-center">
                                 📞 Quick Call Roster
                             </p>
-                            <div className="bg-black/30 backdrop-blur-sm rounded-2xl border border-white/10 overflow-hidden divide-y divide-white/10">
-                                {members
-                                    .filter(m => m.status !== "inactive")
-                                    .map(m => {
-                                        const initials = (m.name || "?").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
-                                        const phone = m.phone?.trim();
-                                        return (
-                                            <div key={m.id} className="flex items-center gap-3 px-4 py-2.5">
-                                                {/* Avatar */}
-                                                {m.photo ? (
-                                                    <img src={m.photo} alt={m.name}
-                                                        className="w-8 h-8 rounded-full object-cover shrink-0 ring-1 ring-white/20" />
-                                                ) : (
-                                                    <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-xs font-bold text-white shrink-0">
-                                                        {initials}
-                                                    </div>
-                                                )}
-                                                {/* Name */}
-                                                <span className="flex-1 text-white text-sm font-medium truncate">{m.name}</span>
-                                                {/* Call button */}
-                                                {phone ? (
-                                                    <a href={`tel:${phone.replace(/\s+/g, "")}`}
-                                                        className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-500/80 hover:bg-emerald-400/90 text-white text-xs font-bold transition-all active:scale-95 shrink-0"
-                                                    >
-                                                        📞 Call
-                                                    </a>
-                                                ) : (
-                                                    <span className="text-white/25 text-xs shrink-0">no number</span>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
+                            {/* Horizontal scroll container */}
+                            <div className="flex gap-3 overflow-x-auto pb-2"
+                                style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.2) transparent" }}>
+                                {activeMembers.map(m => {
+                                    const initials = (m.name || "?").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+                                    const phone = m.phone?.trim();
+                                    const firstName = m.name?.split(" ")[0] || m.name;
+                                    return (
+                                        <div key={m.id} className="flex flex-col items-center gap-2 shrink-0 w-20">
+                                            {/* Avatar */}
+                                            {m.photo ? (
+                                                <img src={m.photo} alt={m.name}
+                                                    className="w-12 h-12 rounded-full object-cover ring-2 ring-white/30" />
+                                            ) : (
+                                                <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center text-sm font-bold text-white ring-2 ring-white/20">
+                                                    {initials}
+                                                </div>
+                                            )}
+                                            {/* First name */}
+                                            <span className="text-white/90 text-[11px] font-medium text-center leading-tight w-full truncate">{firstName}</span>
+                                            {/* Call button */}
+                                            {phone ? (
+                                                <a href={`tel:${phone.replace(/\s+/g, "")}`}
+                                                    className="w-full text-center px-2 py-1 rounded-lg bg-emerald-500/80 hover:bg-emerald-400 text-white text-[11px] font-bold transition-all active:scale-95">
+                                                    📞 Call
+                                                </a>
+                                            ) : (
+                                                <span className="text-white/25 text-[10px] text-center">no #</span>
+                                            )}
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </div>
                     )}
