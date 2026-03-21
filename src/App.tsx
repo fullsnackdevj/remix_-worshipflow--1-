@@ -970,12 +970,48 @@ export default function App() {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header */}
         <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 py-4 px-4 sm:px-6 flex items-center gap-4 h-16 shrink-0" style={{ ["--header-h" as any]: "64px" }}>
-          <button
-            className="lg:hidden p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
-            onClick={() => setIsMobileMenuOpen(true)}
-          >
-            <Menu size={20} />
-          </button>
+          {/* Mobile hamburger — hide when back button is shown (any non-dashboard view on mobile) */}
+          {currentView === "dashboard" && (
+            <button
+              className="lg:hidden p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
+              onClick={() => setIsMobileMenuOpen(true)}
+            >
+              <Menu size={20} />
+            </button>
+          )}
+
+          {/* ← Back button
+              Mobile  : show on ALL views except dashboard (sidebar is hidden on mobile)
+              Desktop : show only on "detached" views where the sidebar feels less natural
+                        – rehearsal (full-focus mode), admin, playground, team-notes        */}
+          {currentView !== "dashboard" && (
+            <button
+              onClick={() => setCurrentView("dashboard")}
+              className={[
+                // Always visible on mobile (lg:hidden parent already gone); on desktop only for detached views
+                currentView === "songs" || currentView === "members" || currentView === "schedule"
+                  ? "lg:hidden"   // mobile only for sidebar-accessible views
+                  : "",           // always visible for detached views
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold",
+                "text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400",
+                "hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all active:scale-95",
+              ].join(" ")}
+              title="Back to Dashboard"
+            >
+              <ChevronLeft size={16} />
+              <span className="hidden sm:inline">Back</span>
+            </button>
+          )}
+
+          {/* Mobile hamburger for sidebar-accessible views on mobile (Back button replaces it for others) */}
+          {(currentView === "songs" || currentView === "members" || currentView === "schedule") && (
+            <button
+              className="lg:hidden p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
+              onClick={() => setIsMobileMenuOpen(true)}
+            >
+              <Menu size={20} />
+            </button>
+          )}
 
           <div className="flex-1 flex items-center">
             <h1 className="text-base sm:text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap">
