@@ -365,7 +365,7 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
                     )}
 
                     {/* ── Call Roster ─────────────────────────────── */}
-                    {!isTestRun && members.filter(m => m.status !== "inactive").length > 0 && (
+                    {members.filter(m => m.status !== "inactive").length > 0 && (
                         <div className="w-full max-w-sm mx-auto mb-6 px-4">
                             <p className="text-white/60 text-xs font-bold uppercase tracking-widest mb-2 text-center">
                                 📞 Quick Call Roster
