@@ -311,6 +311,21 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
     }
   }, [listens, currentUser, fetchListens]);
 
+  // Keep autoMarkListenedRef in sync with the latest toggleListened + listens state.
+  // The YT onStateChange closure is created once on mount, so it reads this ref
+  // every time a song ends. Without this, it was always calling the initial no-op.
+  // "Add-only" — never removes, so finishing a song can't accidentally un-listen.
+  useEffect(() => {
+    autoMarkListenedRef.current = (track: LineupTrack | undefined) => {
+      if (!track) return;
+      const key = trackKey(track);
+      const existing = listens[key] ?? [];
+      // Skip if the user already has a listen entry for this track
+      if (existing.some(e => e.userId === currentUser.uid)) return;
+      toggleListened(track);
+    };
+  }, [toggleListened, listens, currentUser.uid]);
+
   if (!current) return null;
   const currentKey = trackKey(current);
   const currentEntries = listens[currentKey] ?? [];
