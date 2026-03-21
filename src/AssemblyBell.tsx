@@ -49,6 +49,7 @@ export default function AssemblyBell({ userId, userName, userPhoto }: Props) {
     const [cooldown, setCooldown] = useState(0);
     const [pushed, setPushed] = useState<number | null>(null);
     const [isTestRun, setIsTestRun] = useState(false);
+    const [myTokenCount, setMyTokenCount] = useState<number | null>(null); // null = not checked yet
 
     const audioCtxRef = useRef<any>(null);
     const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -64,6 +65,15 @@ export default function AssemblyBell({ userId, userName, userPhoto }: Props) {
             if (alarmTimeoutRef.current) clearTimeout(alarmTimeoutRef.current);
         };
     }, []);
+
+    // Check how many FCM tokens exist for this user when modal opens
+    useEffect(() => {
+        if (!showConfirm || !userId) return;
+        fetch(`/api/assembly-token-check?userId=${encodeURIComponent(userId)}`)
+            .then(r => r.json())
+            .then(d => setMyTokenCount(d.count ?? 0))
+            .catch(() => setMyTokenCount(0));
+    }, [showConfirm, userId]);
 
     const startCooldownTick = (seconds: number) => {
         setCooldown(seconds);
@@ -184,7 +194,7 @@ export default function AssemblyBell({ userId, userName, userPhoto }: Props) {
                             <button
                                 onClick={() => setTestMode(p => !p)}
                                 className={[
-                                    "w-full flex items-center gap-3 px-4 py-3 rounded-2xl border-2 mb-5 transition-all",
+                                    "w-full flex items-center gap-3 px-4 py-3 rounded-2xl border-2 mb-3 transition-all",
                                     testMode
                                         ? "border-emerald-400 bg-emerald-50 dark:bg-emerald-900/20"
                                         : "border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 hover:border-gray-300"
@@ -211,6 +221,34 @@ export default function AssemblyBell({ userId, userName, userPhoto }: Props) {
                                     <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${testMode ? "translate-x-5" : "translate-x-0.5"}`} />
                                 </div>
                             </button>
+
+                            {/* ── Device token status (test mode) ──────────────── */}
+                            {testMode && (
+                                <div className={`mb-5 px-3 py-2.5 rounded-xl border text-xs flex items-start gap-2 ${
+                                    myTokenCount === null
+                                        ? "border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-400"
+                                        : myTokenCount === 0
+                                            ? "border-red-300 bg-red-50 dark:bg-red-900/20 dark:border-red-800/50 text-red-700 dark:text-red-300"
+                                            : "border-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-800/50 text-emerald-700 dark:text-emerald-300"
+                                }`}>
+                                    <span className="text-base leading-none mt-0.5">
+                                        {myTokenCount === null ? "⏳" : myTokenCount === 0 ? "⚠️" : "📱"}
+                                    </span>
+                                    <div>
+                                        {myTokenCount === null && "Checking your registered devices…"}
+                                        {myTokenCount === 0 && (
+                                            <>
+                                                <strong>No registered device found for your account.</strong>
+                                                <br />
+                                                Open WorshipFlow on your phone → tap <strong>"Enable"</strong> on the notification banner → then come back and try again.
+                                            </>
+                                        )}
+                                        {myTokenCount !== null && myTokenCount > 0 && (
+                                            <><strong>{myTokenCount} device{myTokenCount > 1 ? "s" : ""} registered</strong> — push will go to {myTokenCount > 1 ? "all of them" : "it"}.</>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Message */}
                             <div className="mb-5">

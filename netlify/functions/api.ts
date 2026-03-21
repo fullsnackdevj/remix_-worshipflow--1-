@@ -687,18 +687,40 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
         }
     }
 
+    // GET /assembly-token-check?userId=... — count how many FCM tokens exist for a specific user
+    // Used by the Assembly Bell diagnostic panel so admins can confirm their phone is registered.
+    if (rawPath === "/assembly-token-check" && method === "GET") {
+        const uid = event.queryStringParameters?.userId || "";
+        if (!uid) return json(400, { error: "userId required" });
+        try {
+            const snap = await firestore?.collection("fcm_tokens")
+                .where("userId", "==", uid).get();
+            return json(200, { count: snap?.size ?? 0 });
+        } catch { return json(200, { count: 0 }); }
+    }
+
     // POST /fcm-token — store FCM push token for a user
+    // IMPORTANT: each device gets its own document so all devices receive pushes.
+    // Doc ID = first 40 chars of token (unique per device) — avoids overwriting
+    // the previous device's token when a new one registers.
     if (rawPath === "/fcm-token" && method === "POST") {
         const { userId, role, token } = body;
         if (!userId || !token) return json(400, { error: "userId and token required" });
         try {
-            await firestore?.collection("fcm_tokens").doc(userId).set({
-                userId, role: role || "member", token,
+            // Use a stable slice of the token as the doc key so:
+            //   • Same device re-registering → updates (upserts) → no duplicates
+            //   • Different device of same user → separate doc → multiple devices ✅
+            const docId = `${userId}_${token.slice(-20)}`;
+            await firestore?.collection("fcm_tokens").doc(docId).set({
+                userId,
+                role: role || "member",
+                token,
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             });
             return json(200, { success: true });
         } catch (e) { return json(500, { error: "Failed to store token" }); }
     }
+
 
     // GET /api/user-flags — cross-device user flags stored in Firestore
     if (rawPath === "/user-flags" && method === "GET") {
