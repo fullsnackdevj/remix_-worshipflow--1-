@@ -104,7 +104,7 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth }:
             });
             const data = await res.json();
             if (res.status === 429) {
-                startCooldownTick(data.remaining ?? 300);
+                startCooldownTick(data.remaining ?? 60);
                 setShowConfirm(false);
                 return;
             }
@@ -118,7 +118,7 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth }:
             audioCtxRef.current = playSiren(8000);
 
             // Test mode: no cooldown (so you can test repeatedly)
-            if (!wasTest) startCooldownTick(300);
+            if (!wasTest) startCooldownTick(60);
 
             alarmTimeoutRef.current = setTimeout(() => {
                 setShowAlarm(false);
@@ -215,7 +215,7 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth }:
                                     <p className="text-xs text-gray-400 mt-0.5">
                                         {testMode
                                             ? "Send only to your own device. No cooldown applied."
-                                            : "Sends to every registered device. 5-min cooldown."}
+                                            : "Sends to every registered device. 1-min cooldown."}
                                     </p>
                                 </div>
                                 {/* Toggle pill */}

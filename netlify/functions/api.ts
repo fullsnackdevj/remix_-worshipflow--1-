@@ -592,8 +592,8 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
                 if (cooldownDoc?.exists) {
                     const lastAt = cooldownDoc.data()?.lastCalledAt?.toMillis?.() ?? 0;
                     const diffMs = Date.now() - lastAt;
-                    if (diffMs < 5 * 60 * 1000) {
-                        const remaining = Math.ceil((5 * 60 * 1000 - diffMs) / 1000);
+                    if (diffMs < 1 * 60 * 1000) {
+                        const remaining = Math.ceil((1 * 60 * 1000 - diffMs) / 1000);
                         return json(429, { error: `Assembly call on cooldown. Try again in ${remaining}s.`, remaining });
                     }
                 }
@@ -685,6 +685,17 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
             console.error("Assembly call failed:", e);
             return json(500, { error: "Failed to send assembly call" });
         }
+    }
+
+    // GET /assembly-cooldown — check remaining cooldown seconds for the UI countdown
+    if (rawPath === "/assembly-cooldown" && method === "GET") {
+        try {
+            const doc = await firestore?.collection("assembly_cooldown").doc("global").get();
+            if (!doc?.exists) return json(200, { remaining: 0 });
+            const lastAt = doc.data()?.lastCalledAt?.toMillis?.() ?? 0;
+            const remaining = Math.max(0, Math.ceil((1 * 60 * 1000 - (Date.now() - lastAt)) / 1000));
+            return json(200, { remaining });
+        } catch { return json(200, { remaining: 0 }); }
     }
 
     // GET /assembly-token-check?userId=... — count how many FCM tokens exist for a specific user
