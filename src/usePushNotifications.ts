@@ -7,45 +7,73 @@ import { messaging, getToken, onMessage, VAPID_KEY } from "./firebase";
  * iOS Safari REQUIRES that Notification.requestPermission() is called from
  * a user gesture (tap/click). Auto-calling it on page load is silently blocked.
  *
- * Solution: expose a `requestPushPermission` function + `showPrompt` flag.
- * The App UI renders a banner with an "Enable" button — when tapped, it calls
- * `requestPushPermission()` which satisfies the iOS user-gesture requirement.
+ * Strategy:
+ *   - First 2 dismissals → show a gentle top banner (re-shows after 3 days)
+ *   - 3rd+ open          → show a full-screen blocking modal every session
+ *     until they actually enable (or the browser hard-blocks) notifications
  */
 export function usePushNotifications(userId: string | null, userRole: string | null) {
     const [showPrompt, setShowPrompt] = useState(false);
+    const [showForcedModal, setShowForcedModal] = useState(false);
     const [pushEnabled, setPushEnabled] = useState(false);
-    // Guard: only register the FCM token once per mount, not on every userId/userRole change.
-    // Without this, re-renders (e.g. role loaded async) cause repeated token registrations.
+    // Guard: only register the FCM token once per mount
     const registeredRef = useRef(false);
 
-    // Determine if we should show the prompt
+    const getSkipCount = () => {
+        try { return parseInt(localStorage.getItem("pushSkipCount") || "0", 10); } catch { return 0; }
+    };
+    const bumpSkipCount = () => {
+        try { localStorage.setItem("pushSkipCount", String(getSkipCount() + 1)); } catch { /* noop */ }
+    };
+
+    // Determine which prompt to show
     useEffect(() => {
         if (!userId || !userRole) return;
-        if (!("Notification" in window)) return; // browser doesn't support it
+        if (!("Notification" in window)) return;
         if (!("serviceWorker" in navigator)) return;
 
         if (Notification.permission === "granted") {
             if (!registeredRef.current) {
-                // Already granted — register silently once (covers re-login scenario)
                 registeredRef.current = true;
                 registerAndStoreToken(userId, userRole).catch(() => { });
             }
             setPushEnabled(true);
-        } else if (Notification.permission === "default") {
-            // Not yet asked — show our in-app banner after 2 seconds
-            const t = setTimeout(() => setShowPrompt(true), 2000);
+            return;
+        }
+
+        if (Notification.permission === "denied") return; // respect hard block
+
+        // permission === "default" — user hasn't decided yet
+        const skipCount = getSkipCount();
+
+        if (skipCount >= 2) {
+            // Persistent: show blocking modal every session after 2 skips
+            const t = setTimeout(() => setShowForcedModal(true), 1500);
             return () => clearTimeout(t);
         }
-        // If "denied" — do nothing, respect user's choice
+
+        // Gentle banner — re-show after 3 days if dismissed
+        const cooldownMs = 3 * 24 * 60 * 60 * 1000;
+        const dismissed = localStorage.getItem("pushPromptDismissed");
+        if (dismissed && Date.now() - Number(dismissed) < cooldownMs) return;
+
+        const t = setTimeout(() => setShowPrompt(true), 2000);
+        return () => clearTimeout(t);
     }, [userId, userRole]);
 
-    // Called when user taps "Enable" in our banner — iOS user gesture satisfied ✅
+    // Called when user taps "Enable" in either the banner or the forced modal ✅
     const requestPushPermission = useCallback(async () => {
         setShowPrompt(false);
+        setShowForcedModal(false);
         try {
             const permission = await Notification.requestPermission();
             if (permission === "granted") {
                 setPushEnabled(true);
+                // Clear all skip/dismiss tracking on success
+                try {
+                    localStorage.removeItem("pushSkipCount");
+                    localStorage.removeItem("pushPromptDismissed");
+                } catch { /* noop */ }
                 await registerAndStoreToken(userId!, userRole!);
             }
         } catch (err) {
@@ -53,24 +81,20 @@ export function usePushNotifications(userId: string | null, userRole: string | n
         }
     }, [userId, userRole]);
 
+    // "Skip for now" — gentle banner dismiss, tracks skip count
     const dismissPrompt = useCallback(() => {
         setShowPrompt(false);
-        // Re-show after 24 hours via localStorage
-        localStorage.setItem("pushPromptDismissed", String(Date.now()));
+        bumpSkipCount();
+        try { localStorage.setItem("pushPromptDismissed", String(Date.now())); } catch { /* noop */ }
     }, []);
 
-    // Don't re-show if dismissed within last 24 hours
-    useEffect(() => {
-        const dismissed = localStorage.getItem("pushPromptDismissed");
-        if (dismissed && Date.now() - Number(dismissed) < 86400000) {
-            setShowPrompt(false);
-        }
+    // "Maybe later" — forced modal dismiss (no bump needed, already at 2+)
+    const dismissForcedModal = useCallback(() => {
+        setShowForcedModal(false);
     }, []);
 
     // Listen for foreground messages (app open)
-    // IMPORTANT: Use reg.showNotification() with the same `tag` as the service worker
-    // so that if the SW also fires (ambiguous foreground/background state), the OS
-    // deduplicates them and the user only ever sees ONE notification.
+    // Use reg.showNotification() with same `tag` as service worker → deduplication
     useEffect(() => {
         if (!userId || !pushEnabled) return;
         const unsubscribe = onMessage(messaging, async (payload) => {
@@ -79,17 +103,15 @@ export function usePushNotifications(userId: string | null, userRole: string | n
             try {
                 const reg = await navigator.serviceWorker.getRegistration("/");
                 if (reg) {
-                    // Show via the SW registration so `tag` deduplication applies
                     reg.showNotification(title, {
                         body: body || "",
                         icon: "/icon-192x192.png",
                         badge: "/favicon-32.png",
-                        tag: "worshipflow-notif",  // same tag as firebase-messaging-sw.js
+                        tag: "worshipflow-notif",
                         renotify: true,
                         data: payload.data || {},
                     } as NotificationOptions);
                 } else {
-                    // Fallback: no SW available
                     new Notification(title, { body: body || "", icon: "/icon-192x192.png" });
                 }
             } catch {
@@ -99,7 +121,7 @@ export function usePushNotifications(userId: string | null, userRole: string | n
         return () => unsubscribe();
     }, [userId, pushEnabled]);
 
-    return { showPrompt, pushEnabled, requestPushPermission, dismissPrompt };
+    return { showPrompt, showForcedModal, pushEnabled, requestPushPermission, dismissPrompt, dismissForcedModal };
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

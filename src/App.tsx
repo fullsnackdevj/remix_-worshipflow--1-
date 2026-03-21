@@ -291,7 +291,7 @@ export default function App() {
   const effectiveRole = canSimulateRoles ? simulatedRole : userRole;
 
   // 🔔 Push notifications — iOS-safe: user must tap "Enable" button
-  const { showPrompt: showPushPrompt, requestPushPermission, dismissPrompt: dismissPushPrompt } =
+  const { showPrompt: showPushPrompt, showForcedModal: showForcedPushModal, requestPushPermission, dismissPrompt: dismissPushPrompt, dismissForcedModal: dismissForcedPushModal } =
     usePushNotifications(user?.uid ?? null, userRole ?? null);
 
   // 📊 Session tracking — writes presence + session history for Admin Activity Monitor
@@ -730,6 +730,64 @@ export default function App() {
                 aria-label="Dismiss"
               >
                 <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" /></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🔔 Forced Push Notification Modal — shows after 2 skips, every session until enabled */}
+      {showForcedPushModal && (
+        <div className="fixed inset-0 z-[500] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm px-4 pb-4 sm:pb-0">
+          <div className="w-full max-w-sm bg-white dark:bg-gray-900 rounded-3xl shadow-2xl overflow-hidden border border-gray-200 dark:border-gray-700">
+            {/* Top gradient strip */}
+            <div className="h-1.5 w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" />
+
+            <div className="px-6 pt-6 pb-7 space-y-5">
+              {/* Icon + heading */}
+              <div className="flex flex-col items-center text-center gap-3">
+                <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                  <Bell size={30} className="text-white" />
+                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 border-2 border-white dark:border-gray-900 animate-pulse" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900 dark:text-white">Enable Notifications</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 leading-snug">
+                    Stay in sync with your team — don't miss a beat.
+                  </p>
+                </div>
+              </div>
+
+              {/* Benefit bullets */}
+              <ul className="space-y-2.5">
+                {[
+                  { icon: "📣", text: "Get instant alerts when an Assembly Call is triggered" },
+                  { icon: "🎵", text: "Know when new songs or setlists are added" },
+                  { icon: "📅", text: "Never miss schedule updates or event changes" },
+                  { icon: "📬", text: "Receive team broadcasts even when the app is closed" },
+                ].map(({ icon, text }) => (
+                  <li key={text} className="flex items-start gap-2.5">
+                    <span className="text-base shrink-0 mt-0.5">{icon}</span>
+                    <span className="text-sm text-gray-600 dark:text-gray-300 leading-snug">{text}</span>
+                  </li>
+                ))}
+              </ul>
+
+              {/* CTA */}
+              <button
+                onClick={requestPushPermission}
+                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold text-sm shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+              >
+                <Bell size={16} />
+                Enable Notifications
+              </button>
+
+              {/* Low-key skip */}
+              <button
+                onClick={dismissForcedPushModal}
+                className="w-full text-center text-xs text-gray-400 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-500 transition-colors py-1"
+              >
+                Maybe later
               </button>
             </div>
           </div>
