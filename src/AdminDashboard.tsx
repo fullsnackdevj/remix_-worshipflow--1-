@@ -390,24 +390,26 @@ export default function AdminDashboard({
     const birthdayRef = useRef<HTMLDivElement>(null);
 
     // Modal: auto-open ONCE per birthday day, but ONLY if the user hasn't already
-    // sent a greeting to every celebrant. Stored in localStorage so it survives
-    // app restarts — unlike sessionStorage which resets every tab/close.
+    // sent a greeting to every celebrant. Both keys live in localStorage so they
+    // survive app restarts AND mobile tab-discard events (sessionStorage is wiped
+    // by iOS/Android whenever the OS kills the browser tab to free memory).
     const [birthdayModalOpen, setBirthdayModalOpen] = useState(() => false);
     useEffect(() => {
         if (celebrants.length === 0 || !userId) return;
         const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+
         // Check if the user has greeted ALL celebrants today
         const allGreeted = celebrants.every(c =>
             localStorage.getItem(`wf_bday_sent_${userId}_${c.id}_${today}`) === "1"
         );
-        if (!allGreeted) {
-            // Also only pop once per calendar day per session (prevent re-open when
-            // switching views back to dashboard after partial greetings)
-            const sessionKey = `wf_bday_modal_session_${today}`;
-            if (!sessionStorage.getItem(sessionKey)) {
-                setBirthdayModalOpen(true);
-                sessionStorage.setItem(sessionKey, "1");
-            }
+        if (allGreeted) return; // already greeted everyone — never open
+
+        // Only pop once per calendar day (prevent re-open when switching views).
+        // Using localStorage (not sessionStorage) so it survives mobile tab-discard.
+        const shownKey = `wf_bday_modal_shown_${userId}_${today}`;
+        if (!localStorage.getItem(shownKey)) {
+            setBirthdayModalOpen(true);
+            try { localStorage.setItem(shownKey, "1"); } catch { /* quota — ignore */ }
         }
     }, [celebrants.length, userId]);
 
