@@ -5,6 +5,7 @@ interface Props {
     userId: string;
     userName: string;
     userPhoto: string;
+    fullWidth?: boolean;
 }
 
 const DEFAULT_MSG = "Guys, we're starting practice now. Where are you? Please go to the worship hall already!";
@@ -40,7 +41,7 @@ function vibrateAlert() {
     navigator.vibrate([500, 150, 500, 150, 500, 150, 200, 100, 200, 100, 200]);
 }
 
-export default function AssemblyBell({ userId, userName, userPhoto }: Props) {
+export default function AssemblyBell({ userId, userName, userPhoto, fullWidth }: Props) {
     const [showConfirm, setShowConfirm] = useState(false);
     const [showAlarm, setShowAlarm] = useState(false);
     const [customMsg, setCustomMsg] = useState("");
@@ -154,6 +155,7 @@ export default function AssemblyBell({ userId, userName, userPhoto }: Props) {
                     : "Send Assembly Call to all members"}
                 className={[
                     "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all",
+                    fullWidth ? "w-full justify-center" : "",
                     effectiveCooldown > 0
                         ? "bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed"
                         : "bg-gradient-to-r from-red-600 to-rose-500 hover:from-red-500 hover:to-rose-400 text-white shadow-lg shadow-red-500/30 hover:shadow-red-500/50 active:scale-95"

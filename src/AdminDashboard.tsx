@@ -437,7 +437,7 @@ export default function AdminDashboard({
                         <button
                             onClick={isLineupOpen ? undefined : onOpenLineup}
                             disabled={lineupTrackCount === 0 || isLineupOpen}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+                            className={`w-full flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
                                 isLineupOpen
                                     ? "bg-gray-100 dark:bg-gray-700/60 text-gray-400 dark:text-gray-500 cursor-not-allowed pointer-events-none"
                                     : lineupTrackCount > 0
@@ -463,6 +463,7 @@ export default function AdminDashboard({
                             userId={userId}
                             userName={userName}
                             userPhoto={userPhoto || ""}
+                            fullWidth
                         />
                     )}
 
