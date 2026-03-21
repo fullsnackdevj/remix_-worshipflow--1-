@@ -65,46 +65,61 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
 
     const CARD_W = 288; // w-72
     const CARD_H = 300; // approx card height for clamping
-    const initCardPos = () => ({
-        x: Math.max(0, window.innerWidth  - CARD_W - 16),
-        y: Math.max(0, window.innerHeight - CARD_H - 16),
-    });
-    const [cardPos, setCardPos] = useState<{ x: number; y: number }>(initCardPos);
+
+    // null = default CSS position (right:16, bottom:16)
+    // {x,y} = user has dragged, use left/top px
+    const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
     const cardDragRef = useRef<HTMLDivElement | null>(null);
     const cardDragState = useRef<{ dragging: boolean; startPX: number; startPY: number; startX: number; startY: number }>({
         dragging: false, startPX: 0, startPY: 0, startX: 0, startY: 0,
     });
 
-    // Reset card position each time the sheet is opened
+    // Reset to CSS default every time the sheet opens
     useEffect(() => {
-        if (showCallSheet) setCardPos(initCardPos());
+        if (showCallSheet) setDragPos(null);
     }, [showCallSheet]);
+
+    const vw = () => window.visualViewport?.width  ?? window.innerWidth;
+    const vh = () => window.visualViewport?.height ?? window.innerHeight;
 
     const onPointerDown = (e: React.PointerEvent) => {
         if ((e.target as HTMLElement).closest("a, button")) return;
         e.preventDefault();
         e.currentTarget.setPointerCapture(e.pointerId);
-        cardDragState.current = { dragging: true, startPX: e.clientX, startPY: e.clientY, startX: cardPos.x, startY: cardPos.y };
+        // Snapshot current rendered position so drag begins from real coords
+        const rect = cardDragRef.current?.getBoundingClientRect();
+        const startX = rect?.left ?? (vw() - CARD_W - 16);
+        const startY = rect?.top  ?? (vh() - CARD_H - 16);
+        cardDragState.current = { dragging: true, startPX: e.clientX, startPY: e.clientY, startX, startY };
+        // Switch from CSS to JS-driven positioning immediately
+        setDragPos({ x: startX, y: startY });
     };
     const onPointerMove = (e: React.PointerEvent) => {
         if (!cardDragState.current.dragging) return;
         e.preventDefault();
         const dx = e.clientX - cardDragState.current.startPX;
         const dy = e.clientY - cardDragState.current.startPY;
-        const newX = Math.max(0, Math.min(window.innerWidth  - CARD_W, cardDragState.current.startX + dx));
-        const newY = Math.max(0, Math.min(window.innerHeight - CARD_H, cardDragState.current.startY + dy));
-        setCardPos({ x: newX, y: newY });
+        const newX = Math.max(0, Math.min(vw() - CARD_W, cardDragState.current.startX + dx));
+        const newY = Math.max(0, Math.min(vh() - CARD_H, cardDragState.current.startY + dy));
+        setDragPos({ x: newX, y: newY });
     };
     const onPointerUp = (e: React.PointerEvent) => {
         if (!cardDragState.current.dragging) return;
         cardDragState.current.dragging = false;
         // Snap to nearest corner
-        const cx = window.innerWidth / 2;
-        const cy = window.innerHeight / 2;
-        setCardPos({
-            x: e.clientX >= cx ? window.innerWidth  - CARD_W - 16 : 16,
-            y: e.clientY >= cy ? window.innerHeight - CARD_H - 16 : 16,
-        });
+        const cx = vw() / 2;
+        const cy = vh() / 2;
+        const snapRight  = e.clientX >= cx;
+        const snapBottom = e.clientY >= cy;
+        if (snapRight && snapBottom) {
+            // Bottom-right = CSS default, go back to null so no JS width dependency
+            setDragPos(null);
+        } else {
+            setDragPos({
+                x: snapRight  ? vw() - CARD_W - 16 : 16,
+                y: snapBottom ? vh() - CARD_H - 16 : 16,
+            });
+        }
     };
     const onPointerCancel = () => { cardDragState.current.dragging = false; };
 
@@ -499,11 +514,23 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
                 <div
                     ref={cardDragRef}
                     className="fixed z-[9998] w-72 bg-gray-900/95 backdrop-blur-md border border-red-500/30 rounded-2xl shadow-2xl shadow-red-900/40 overflow-hidden select-none"
-                    style={{
-                        left: cardPos.x,
-                        top: cardPos.y,
-                        transition: cardDragState.current.dragging ? "none" : "left 0.2s, top 0.2s",
-                    }}
+                    style={dragPos
+                        ? {
+                            // User has dragged — use exact JS coords
+                            left: dragPos.x,
+                            top: dragPos.y,
+                            right: "auto",
+                            bottom: "auto",
+                            transition: cardDragState.current.dragging ? "none" : "left 0.2s, top 0.2s",
+                        }
+                        : {
+                            // Default: CSS bottom-right, no JS width calc needed
+                            right: 16,
+                            bottom: 16,
+                            left: "auto",
+                            top: "auto",
+                        }
+                    }
                 >
                     {/* Drag handle — touch-action:none here only so memberlist links still fire */}
                     <div
