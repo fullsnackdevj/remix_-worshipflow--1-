@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { X, NotepadText, Trash2, ImagePlus, Loader2, Bug, Lightbulb, MessageSquare, Pencil, Check, CheckCircle2, ChevronDown, Film, RotateCcw, Archive, Eye, Search, Code2, Wrench, XCircle, ThumbsUp } from "lucide-react";
+import { X, NotepadText, Trash2, ImagePlus, Loader2, Bug, Lightbulb, MessageSquare, Pencil, Check, CheckCircle2, ChevronDown, Film, RotateCcw, Archive, Eye, Search, Code2, Wrench, XCircle, ThumbsUp, Maximize2, Play } from "lucide-react";
 import AutoTextarea from "./AutoTextarea";
 import { useRealtimeNotes } from "./useRealtimeNotes";
 
@@ -144,7 +144,8 @@ interface NoteCardProps {
 }
 
 function NoteCard({ note, userId, userRole, onEdit, onDelete, onReact, onResolve, onRetype }: NoteCardProps) {
-    const [imgExpanded, setImgExpanded] = useState(false);
+    // Media lightbox state — null = closed, otherwise holds type + src
+    const [lightbox, setLightbox] = useState<{ type: "image" | "video"; src: string } | null>(null);
     // ── Reactions: own local state (same pattern as VerseOfTheDay) so onSnapshot can never overwrite a mid-click reaction ──
     const [reactions, setReactions] = useState<Record<string, string[]>>(note.reactions ?? {});
     // Sync from parent ONLY when the note id changes (different note) — not on every re-render
@@ -155,6 +156,14 @@ function NoteCard({ note, userId, userRole, onEdit, onDelete, onReact, onResolve
             setReactions(note.reactions ?? {});
         }
     }, [note.id, note.reactions]);
+
+    // Close lightbox on Escape
+    useEffect(() => {
+        if (!lightbox) return;
+        const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setLightbox(null); };
+        window.addEventListener("keydown", handler);
+        return () => window.removeEventListener("keydown", handler);
+    }, [lightbox]);
 
     const toggleReaction = (emoji: string) => {
         const updated = { ...reactions };
@@ -173,6 +182,7 @@ function NoteCard({ note, userId, userRole, onEdit, onDelete, onReact, onResolve
     const totalReactions = (Object.values(reactions) as string[][]).reduce((s, arr) => s + arr.length, 0);
 
     return (
+        <>
         <div className={`rounded-2xl border p-4 transition-all ${note.resolved ? "border-green-500/20 bg-green-500/5 dark:bg-green-900/5 opacity-80" : "border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/50"}`}>
             {/* Header row */}
             <div className="flex items-start justify-between gap-2 mb-3">
@@ -206,24 +216,52 @@ function NoteCard({ note, userId, userRole, onEdit, onDelete, onReact, onResolve
             {/* Content */}
             <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words leading-relaxed mb-3">{note.content}</p>
 
-            {/* Image */}
+            {/* Image — click to open lightbox */}
             {note.imageData && (
                 <div className="mb-3">
-                    <img
-                        src={note.imageData}
-                        alt="attachment"
-                        onClick={() => setImgExpanded(v => !v)}
-                        className={`rounded-xl border border-gray-200 dark:border-gray-700 cursor-pointer transition-all object-cover w-full ${imgExpanded ? "max-h-none" : "max-h-40 object-top"}`}
-                    />
-                    {!imgExpanded && <p className="text-[10px] text-gray-400 mt-1 text-center">Tap image to expand</p>}
+                    <div
+                        className="relative group cursor-pointer rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700"
+                        onClick={() => setLightbox({ type: "image", src: note.imageData! })}
+                    >
+                        <img
+                            src={note.imageData}
+                            alt="attachment"
+                            className="w-full max-h-48 object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+                        />
+                        {/* Hover overlay */}
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center">
+                            <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 rounded-full p-2">
+                                <Maximize2 size={18} className="text-white" />
+                            </div>
+                        </div>
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-1 text-center">Tap to view full size</p>
                 </div>
             )}
 
-            {/* Screen recording video */}
+            {/* Screen recording video — thumbnail + play overlay → opens lightbox */}
             {note.videoData && (
                 <div className="mb-3">
-                    <video controls src={note.videoData} className="rounded-xl border border-gray-200 dark:border-gray-700 w-full max-h-48 bg-black" />
-                    <p className="text-[10px] text-gray-400 mt-1 text-center">🎬 Screen recording</p>
+                    <div
+                        className="relative group cursor-pointer rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-black"
+                        onClick={() => setLightbox({ type: "video", src: note.videoData! })}
+                    >
+                        {/* Video element used as thumbnail (no controls, muted, first-frame) */}
+                        <video
+                            src={note.videoData}
+                            className="w-full max-h-48 object-contain"
+                            muted
+                            playsInline
+                            preload="metadata"
+                        />
+                        {/* Play button overlay */}
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/50 transition-all">
+                            <div className="w-14 h-14 rounded-full bg-white/90 dark:bg-gray-900/90 flex items-center justify-center shadow-xl group-hover:scale-110 transition-transform">
+                                <Play size={22} className="text-indigo-600 ml-1" fill="currentColor" />
+                            </div>
+                        </div>
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-1 text-center">🎬 Tap to play screen recording</p>
                 </div>
             )}
 
@@ -299,6 +337,45 @@ function NoteCard({ note, userId, userRole, onEdit, onDelete, onReact, onResolve
                 </div>
             </div>
         </div>
+
+        {/* ── Media Lightbox ── */}
+        {lightbox && (
+            <div
+                className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-sm"
+                onClick={() => setLightbox(null)}
+            >
+                {/* Close button */}
+                <button
+                    onClick={() => setLightbox(null)}
+                    className="absolute top-4 right-4 z-10 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-all"
+                >
+                    <X size={20} />
+                </button>
+
+                {lightbox.type === "image" ? (
+                    <img
+                        src={lightbox.src}
+                        alt="Full size attachment"
+                        className="max-w-[92vw] max-h-[88vh] object-contain rounded-xl shadow-2xl"
+                        onClick={e => e.stopPropagation()}
+                    />
+                ) : (
+                    <div
+                        className="w-full max-w-3xl mx-4"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <video
+                            src={lightbox.src}
+                            controls
+                            autoPlay
+                            className="w-full max-h-[80vh] rounded-xl shadow-2xl bg-black object-contain"
+                        />
+                        <p className="text-center text-white/50 text-xs mt-2">🎬 Screen recording</p>
+                    </div>
+                )}
+            </div>
+        )}
+        </>
     );
 }
 
