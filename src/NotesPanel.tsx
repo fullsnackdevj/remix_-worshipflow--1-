@@ -728,8 +728,8 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
             {/* Panel — centered, responsive */}
             {open && (
                 <div
-                    className={`fixed inset-x-0 top-[64px] bottom-0 sm:bottom-auto sm:inset-x-auto sm:absolute sm:top-full sm:mt-2 sm:left-auto sm:right-0 z-[200] bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700/60 sm:border sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden ${
-                        showForm ? "sm:w-[680px] sm:max-h-[760px]" : "sm:w-[520px] sm:max-h-[600px]"
+                    className={`fixed inset-x-0 top-[64px] bottom-0 lg:bottom-auto lg:inset-x-auto lg:absolute lg:top-full lg:mt-2 lg:left-auto lg:right-0 z-[200] bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700/60 lg:border lg:rounded-2xl shadow-2xl flex flex-col overflow-hidden ${
+                        showForm ? "lg:w-[680px] lg:max-h-[760px]" : "lg:w-[520px] lg:max-h-[600px]"
                     }`}
                 >
                     {/* ── Header ── */}
