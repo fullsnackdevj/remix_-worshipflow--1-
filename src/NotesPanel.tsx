@@ -626,7 +626,7 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
         setNotes(prev => prev.map(n => n.id === id ? { ...n, resolved, resolvedBy: resolved ? userId : null } : n));
         fetch(`/api/notes/${id}/resolve`, {
             method: "PATCH", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userId, resolved }),
+            body: JSON.stringify({ userId, resolved, resolverName: userName, resolverPhoto: userPhoto }),
         }).then(r => {
             if (!r.ok) {
                 setNotes(prev => prev.map(n => n.id === id ? { ...n, resolved: !resolved } : n));
@@ -693,6 +693,16 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
             localStorage.setItem(SEEN_KEY, now);
         }
     }, [open]);
+
+    // Auto-open when a note_resolved bell notification is clicked
+    useEffect(() => {
+        const handler = () => {
+            setOpen(true);
+            setStatusTab("resolved");
+        };
+        window.addEventListener("wf:open-notes-panel", handler);
+        return () => window.removeEventListener("wf:open-notes-panel", handler);
+    }, []);
 
     // (60s poll removed — Firestore onSnapshot handles real-time updates)
 

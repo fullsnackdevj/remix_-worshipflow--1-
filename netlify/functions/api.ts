@@ -354,7 +354,7 @@ async function sendPush(firestore: FirebaseFirestore.Firestore | null, payload: 
 async function writeNotif(firestore: FirebaseFirestore.Firestore | null, payload: {
     type: string; message: string; subMessage: string;
     actorName: string; actorPhoto: string; actorUserId?: string; targetAudience: string;
-    resourceId?: string; resourceType?: string; resourceDate?: string;
+    targetUserId?: string; resourceId?: string; resourceType?: string; resourceDate?: string;
 }) {
     if (!firestore) return;
     try {
@@ -511,6 +511,8 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
             const filtered = all.filter(n => {
                 if (userId && n["actorUserId"] === userId) return false; // self-exclusion
                 if (n["_deletedBy"].includes(userId)) return false; // soft-deleted
+                // Personal notifications — only visible to the target user
+                if (n["targetUserId"]) return n["targetUserId"] === userId;
                 if (n["targetAudience"] === "all") return true;
                 if (n["targetAudience"] === "admin_only") return role === "admin";
                 if (n["targetAudience"] === "non_member") return role !== "member";
@@ -2123,13 +2125,33 @@ Rules:
     const resolveMatch = rawPath.match(/^\/notes\/([^/]+)\/resolve$/);
     if (resolveMatch && method === "PATCH") {
         const nid = resolveMatch[1];
-        const { userId, resolved } = body;
+        const { userId, resolved, resolverName, resolverPhoto } = body;
         if (!userId) return json(400, { error: "Missing userId" });
         try {
             const ref = firestore?.collection("team_notes").doc(nid);
             const doc = await ref?.get();
             if (!doc?.exists) return json(404, { error: "Note not found" });
+            const noteData = doc.data() as Record<string, any>;
             await ref?.update({ resolved: !!resolved, resolvedBy: resolved ? userId : null });
+
+            // ── Notify the note author when their report is resolved ──────────
+            // Skip: if the author is resolving their own note, or if unresolving
+            if (resolved && noteData.authorId && noteData.authorId !== userId) {
+                const preview = (noteData.content as string || "").slice(0, 60);
+                const typeLabel = noteData.type === "bug" ? "bug report" : noteData.type === "feature" ? "feature request" : "note";
+                writeNotif(firestore, {
+                    type: "note_resolved",
+                    message: `Your ${typeLabel} has been resolved ✅`,
+                    subMessage: preview ? `"${preview}${preview.length === 60 ? "…" : ""}"` : "Your feedback has been marked as resolved.",
+                    actorName: resolverName || "A team member",
+                    actorPhoto: resolverPhoto || "",
+                    actorUserId: userId,
+                    targetUserId: noteData.authorId,   // personal — only the author sees it
+                    targetAudience: "all",              // fallback (overridden by targetUserId check)
+                    resourceId: nid,
+                });
+            }
+
             return json(200, { success: true });
         } catch (e) { return json(500, { error: "Failed to resolve" }); }
     }
