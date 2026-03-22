@@ -514,7 +514,7 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
                 // Personal notifications — only visible to the target user
                 if (n["targetUserId"]) return n["targetUserId"] === userId;
                 if (n["targetAudience"] === "all") return true;
-                if (n["targetAudience"] === "admin_only") return role === "admin";
+                if (n["targetAudience"] === "admin_only") return ["admin", "leader", "planning_lead", "qa_specialist"].includes(role);
                 if (n["targetAudience"] === "non_member") return role !== "member";
                 return false;
             });
@@ -2009,7 +2009,19 @@ Rules:
                 updatedAt: null,
             });
 
-// Bell notification skipped for team notes — not critical enough for team-wide alert
+            // Notify admins & leaders that a new feedback note was submitted
+            const typeLabel = (type === "bug") ? "Bug Report" : (type === "feature") ? "Feature Request" : "General Note";
+            const preview = content.trim().slice(0, 80);
+            writeNotif(firestore, {
+                type: "team_note",
+                message: `New ${typeLabel} from ${authorName || "a team member"}`,
+                subMessage: preview + (preview.length === 80 ? "…" : ""),
+                actorName: authorName || "Team Member",
+                actorPhoto: authorPhoto || "",
+                actorUserId: authorId,
+                targetAudience: "admin_only",
+                resourceId: ref?.id,
+            });
             return json(201, { id: ref?.id });
         } catch (e) { return json(500, { error: "Failed to create note" }); }
     }
