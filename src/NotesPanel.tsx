@@ -938,9 +938,9 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
                                 value={fContent}
                                 onChange={e => setFContent(e.target.value)}
                                 placeholder="Describe the bug, feature idea, or general note… (paste images here)"
-                                minRows={5}
+                                minRows={10}
                                 className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 pretty-scrollbar"
-                                style={{ maxHeight: '192px', overflow: 'auto' }}
+                                style={{ maxHeight: '360px', overflow: 'auto' }}
                             />
 
                             {/* Attachments preview row */}
