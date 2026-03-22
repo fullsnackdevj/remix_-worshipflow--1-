@@ -2061,12 +2061,14 @@ Rules:
     if (noteMatch) {
         const nid = noteMatch[1];
         if (method === "PUT") {
-            const { authorId, content, type, imageData, videoData } = body;
+            const { authorId, userRole, content, type, imageData, videoData } = body;
             if (!authorId || !content?.trim()) return json(400, { error: "Missing required fields" });
+            // Only Admin, Leader, or QA Specialist can edit notes
+            const isPrivileged = userRole === "admin" || userRole === "leader" || userRole === "qa_specialist";
+            if (!isPrivileged) return json(403, { error: "Only admins and QA specialists can edit notes" });
             try {
                 const doc = await firestore?.collection("team_notes").doc(nid).get();
                 if (!doc?.exists) return json(404, { error: "Note not found" });
-                if (doc.data()?.authorId !== authorId) return json(403, { error: "Not your note" });
                 await firestore?.collection("team_notes").doc(nid).update({
                     content: content.trim(), type: type || "general",
                     imageData: imageData ?? doc.data()?.imageData ?? null,
@@ -2083,8 +2085,9 @@ Rules:
             try {
                 const doc = await firestore?.collection("team_notes").doc(nid).get();
                 if (!doc?.exists) return json(404, { error: "Note not found" });
-                const isAdmin = userRole === "admin" || userRole === "leader";
-                if (doc.data()?.authorId !== authorId && !isAdmin) return json(403, { error: "Not your note" });
+                // Allow: own note (any role) OR privileged role (admin / leader / QA)
+                const isPrivileged = userRole === "admin" || userRole === "leader" || userRole === "qa_specialist";
+                if (doc.data()?.authorId !== authorId && !isPrivileged) return json(403, { error: "Not your note" });
                 await firestore?.collection("team_notes").doc(nid).update({
                     deletedAt: admin.firestore.FieldValue.serverTimestamp(),
                     deletedBy: authorId,

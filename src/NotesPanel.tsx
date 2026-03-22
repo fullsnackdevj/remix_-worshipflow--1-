@@ -178,7 +178,9 @@ function NoteCard({ note, userId, userRole, onEdit, onDelete, onReact, onResolve
     const cfg = typeConfig(note.type);
     const isAuthor = note.authorId === userId;
     const isAdmin = userRole === "admin" || userRole === "leader";
-    const canResolve = (isAuthor || isAdmin) && (note.type === "bug" || note.type === "feature");
+    /** Admin, Leader, or QA Specialist — can edit/delete any note */
+    const isPrivileged = isAdmin || userRole === "qa_specialist";
+    const canResolve = (isAuthor || isPrivileged) && (note.type === "bug" || note.type === "feature");
     const totalReactions = (Object.values(reactions) as string[][]).reduce((s, arr) => s + arr.length, 0);
 
     return (
@@ -324,12 +326,14 @@ function NoteCard({ note, userId, userRole, onEdit, onDelete, onReact, onResolve
                             <CheckCircle2 size={14} />
                         </button>
                     )}
-                    {isAuthor && !note.resolved && (
+                    {/* Edit — only Admin / Leader / QA Specialist can edit notes (regular members cannot) */}
+                    {isPrivileged && !note.resolved && (
                         <button onClick={() => onEdit(note)} title="Edit" className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-all">
                             <Pencil size={13} />
                         </button>
                     )}
-                    {(isAuthor || isAdmin) && (
+                    {/* Delete — own note (any role) OR any note (privileged only) */}
+                    {(isAuthor || isPrivileged) && (
                         <button onClick={() => onDelete(note.id)} title="Delete" className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all">
                             <Trash2 size={13} />
                         </button>
@@ -634,7 +638,7 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
             closeForm();
             fetch(`/api/notes/${editing.id}`, {
                 method: "PUT", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ authorId: userId, content: fContent, type: fType, imageData: fImage, videoData: fVideoData }),
+                body: JSON.stringify({ authorId: userId, userRole, content: fContent, type: fType, imageData: fImage, videoData: fVideoData }),
             }).then(res => {
                 if (!res.ok) throw new Error();
                 onToast?.("success", "Note updated.");
