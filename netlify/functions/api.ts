@@ -514,7 +514,7 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
                 // Personal notifications — only visible to the target user
                 if (n["targetUserId"]) return n["targetUserId"] === userId;
                 if (n["targetAudience"] === "all") return true;
-                if (n["targetAudience"] === "admin_only") return ["admin", "leader", "planning_lead", "qa_specialist"].includes(role);
+                if (n["targetAudience"] === "admin_only") return role === "admin";
                 if (n["targetAudience"] === "non_member") return role !== "member";
                 return false;
             });
