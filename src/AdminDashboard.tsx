@@ -295,7 +295,7 @@ function TopListenersCard({ currentUserId }: { currentUserId: string }) {
 
     return (
         <Tile className="min-h-[260px]">
-            <CardHeader icon={<Headphones size={14} className="text-indigo-500" />} title="Top Song Lineup Listeners 🎧" />
+            <CardHeader icon={<Headphones size={14} className="text-indigo-500" />} title="Top Song Lineup Listeners" />
             {loading ? (
                 <div className="p-5 space-y-3 animate-pulse">
                     {[1,2,3].map(i => (
