@@ -362,7 +362,7 @@ async function writeNotif(firestore: FirebaseFirestore.Firestore | null, payload
             ...payload, readBy: [], deletedBy: [],
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
         });
-        sendPush(firestore, { title: payload.message, body: payload.subMessage, actorUserId: payload.actorUserId, targetAudience: payload.targetAudience, type: payload.type, resourceId: payload.resourceId, resourceDate: payload.resourceDate });
+        await sendPush(firestore, { title: payload.message, body: payload.subMessage, actorUserId: payload.actorUserId, targetAudience: payload.targetAudience, type: payload.type, resourceId: payload.resourceId, resourceDate: payload.resourceDate });
     } catch (e) { console.error("notif write failed", e); }
 }
 
@@ -2009,10 +2009,10 @@ Rules:
                 updatedAt: null,
             });
 
-            // Notify admins & leaders that a new feedback note was submitted
+            // Notify admins that a new feedback note was submitted
             const typeLabel = (type === "bug") ? "Bug Report" : (type === "feature") ? "Feature Request" : "General Note";
             const preview = content.trim().slice(0, 80);
-            writeNotif(firestore, {
+            await writeNotif(firestore, {
                 type: "team_note",
                 message: `New ${typeLabel} from ${authorName || "a team member"}`,
                 subMessage: preview + (preview.length === 80 ? "…" : ""),
@@ -2154,15 +2154,15 @@ Rules:
             if (resolved && noteData.authorId && noteData.authorId !== userId) {
                 const preview = (noteData.content as string || "").slice(0, 60);
                 const typeLabel = noteData.type === "bug" ? "bug report" : noteData.type === "feature" ? "feature request" : "note";
-                writeNotif(firestore, {
+                await writeNotif(firestore, {
                     type: "note_resolved",
                     message: `Your ${typeLabel} has been resolved ✅`,
                     subMessage: preview ? `"${preview}${preview.length === 60 ? "…" : ""}"` : "Your feedback has been marked as resolved.",
                     actorName: resolverName || "A team member",
                     actorPhoto: resolverPhoto || "",
                     actorUserId: userId,
-                    targetUserId: noteData.authorId,   // personal — only the author sees it
-                    targetAudience: "all",              // fallback (overridden by targetUserId check)
+                    targetUserId: noteData.authorId,
+                    targetAudience: "all",
                     resourceId: nid,
                 });
             }
