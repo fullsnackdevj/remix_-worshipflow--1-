@@ -610,7 +610,7 @@ export default function RehearsalView({
         const edit = isLyrics ? lyricsEdit : chordsEdit;
 
         return (
-            <div className="flex flex-col min-w-0 overflow-x-hidden">
+            <div className="flex flex-col min-w-0">
                 <div className="flex items-center justify-between px-4 py-2 shrink-0 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
                     <span className={`text-[11px] font-bold uppercase tracking-widest ${accent}`}>{label}</span>
                     <div className="flex items-center gap-1">
@@ -631,7 +631,7 @@ export default function RehearsalView({
                         )}
                     </div>
                 </div>
-                <div className="min-w-0 overflow-x-hidden">
+                <div className="min-w-0">
                     {columnContent(col)}
                 </div>
             </div>
