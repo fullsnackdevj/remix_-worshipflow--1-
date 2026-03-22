@@ -326,8 +326,8 @@ function NoteCard({ note, userId, userRole, onEdit, onDelete, onReact, onResolve
                             <CheckCircle2 size={14} />
                         </button>
                     )}
-                    {/* Edit — only Admin / Leader / QA Specialist can edit notes (regular members cannot) */}
-                    {isPrivileged && !note.resolved && (
+                    {/* Edit — own note (any role) OR any note (privileged only) */}
+                    {(isAuthor || isPrivileged) && !note.resolved && (
                         <button onClick={() => onEdit(note)} title="Edit" className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-all">
                             <Pencil size={13} />
                         </button>

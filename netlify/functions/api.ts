@@ -2063,12 +2063,12 @@ Rules:
         if (method === "PUT") {
             const { authorId, userRole, content, type, imageData, videoData } = body;
             if (!authorId || !content?.trim()) return json(400, { error: "Missing required fields" });
-            // Only Admin, Leader, or QA Specialist can edit notes
+            // Only the note's author OR a privileged role (Admin/Leader/QA) can edit
             const isPrivileged = userRole === "admin" || userRole === "leader" || userRole === "qa_specialist";
-            if (!isPrivileged) return json(403, { error: "Only admins and QA specialists can edit notes" });
             try {
                 const doc = await firestore?.collection("team_notes").doc(nid).get();
                 if (!doc?.exists) return json(404, { error: "Note not found" });
+                if (doc.data()?.authorId !== authorId && !isPrivileged) return json(403, { error: "Not your note" });
                 await firestore?.collection("team_notes").doc(nid).update({
                     content: content.trim(), type: type || "general",
                     imageData: imageData ?? doc.data()?.imageData ?? null,
