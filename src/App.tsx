@@ -258,6 +258,10 @@ export default function App() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "playground" | "admin" | "team-notes" | "rehearsal">("dashboard");
+  /** True when SongsView is displaying a song detail panel (not the list) */
+  const [isSongDetailOpen, setIsSongDetailOpen] = useState(false);
+  /** Incrementing this tells SongsView to clear its selectedSong */
+  const [clearSelectionSignal, setClearSelectionSignal] = useState(0);
   const { isAdmin, userRole, user, status: authStatus } = useAuth();
 
 
@@ -1110,7 +1114,14 @@ export default function App() {
                         — sidebar handles navigation for songs / members / schedule       */}
           {currentView !== "dashboard" && (
             <button
-              onClick={() => setCurrentView("dashboard")}
+              onClick={() => {
+                // If we're on songs and a song detail is open, go BACK to the song list
+                if (currentView === "songs" && isSongDetailOpen) {
+                  setClearSelectionSignal(s => s + 1);
+                } else {
+                  setCurrentView("dashboard");
+                }
+              }}
               className={[
                 currentView === "songs" || currentView === "members" || currentView === "schedule"
                   ? "lg:hidden"   // desktop sidebar-accessible views — mobile only
@@ -1119,7 +1130,7 @@ export default function App() {
                 "text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400",
                 "hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all active:scale-95",
               ].join(" ")}
-              title="Back to Dashboard"
+              title={currentView === "songs" && isSongDetailOpen ? "Back to Song List" : "Back to Dashboard"}
             >
               <ChevronLeft size={22} strokeWidth={2.5} />
               <span className="hidden sm:inline text-sm">Back</span>
@@ -1388,6 +1399,8 @@ export default function App() {
                   pendingNavSongId={pendingNavSongId}
                   onPendingNavHandled={() => setPendingNavSongId(null)}
                   onOpenVideo={openVideo}
+                  onSelectedSongChange={(hasSong) => setIsSongDetailOpen(hasSong)}
+                  clearSelectionSignal={clearSelectionSignal}
                 />
               ) : currentView === "rehearsal" ? (
                 <RehearsalView

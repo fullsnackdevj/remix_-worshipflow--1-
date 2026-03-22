@@ -67,6 +67,10 @@ export interface SongsViewProps {
   pendingNavSongId?: string | null;
   onPendingNavHandled?: () => void;
   onOpenVideo?: (url: string) => void;
+  /** Called whenever a song is opened/closed so App.tsx can track detail-panel state */
+  onSelectedSongChange?: (hasSong: boolean) => void;
+  /** Increment this number from App.tsx to tell SongsView to clear the selected song */
+  clearSelectionSignal?: number;
 }
 
 export default function SongsView({
@@ -89,6 +93,8 @@ export default function SongsView({
   pendingNavSongId,
   onPendingNavHandled,
   onOpenVideo,
+  onSelectedSongChange,
+  clearSelectionSignal,
 }: SongsViewProps) {
 
   // ── Songs search & filter ─────────────────────────────────────────────────
@@ -397,6 +403,12 @@ export default function SongsView({
   useEffect(() => { setCurrentPage(1); }, [debouncedQuery, selectedTagIds]);
   // Reset transposer when switching songs
   useEffect(() => { setTransposeSteps(0); }, [selectedSong?.id]);
+  // Notify parent whenever the song detail panel opens or closes
+  useEffect(() => { onSelectedSongChange?.(!!selectedSong); }, [selectedSong, onSelectedSongChange]);
+  // When App.tsx increments clearSelectionSignal (via global Back button), close the detail panel
+  useEffect(() => {
+    if (clearSelectionSignal) setSelectedSong(null);
+  }, [clearSelectionSignal]);
 
 
   // ── Songs handlers ────────────────────────────────────────────────────────
