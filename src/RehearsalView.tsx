@@ -542,7 +542,7 @@ export default function RehearsalView({
 
         if (readValue?.trim()) {
             return (
-                <pre className="font-mono text-sm leading-7 text-gray-800 dark:text-gray-200 px-5 py-4 whitespace-pre-wrap break-words">
+                <pre className="font-mono text-sm leading-7 text-gray-800 dark:text-gray-200 px-5 py-4 whitespace-pre-wrap break-words overflow-x-hidden w-full">
                     {readValue}
                 </pre>
             );
@@ -610,7 +610,7 @@ export default function RehearsalView({
         const edit = isLyrics ? lyricsEdit : chordsEdit;
 
         return (
-            <div className="flex flex-col overflow-hidden" style={{ flex: 1 }}>
+            <div className="flex flex-col overflow-hidden min-w-0" style={{ flex: 1 }}>
                 <div className="flex items-center justify-between px-4 py-2 shrink-0 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
                     <span className={`text-[11px] font-bold uppercase tracking-widest ${accent}`}>{label}</span>
                     <div className="flex items-center gap-1">
@@ -631,7 +631,7 @@ export default function RehearsalView({
                         )}
                     </div>
                 </div>
-                <div className={`flex flex-1 flex-col ${edit.isEditing ? "overflow-hidden" : "overflow-y-auto"}`}>
+                <div className={`flex flex-1 flex-col min-w-0 overflow-x-hidden ${edit.isEditing ? "overflow-hidden" : "overflow-y-auto"}`}>
                     {columnContent(col)}
                 </div>
             </div>
