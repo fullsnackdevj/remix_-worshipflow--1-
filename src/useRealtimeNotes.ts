@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, type Dispatch, type SetStateAction, type MutableRefObject } from "react";
 import {
-  collection, query, orderBy, where, onSnapshot,
+  collection, query, orderBy, onSnapshot,
   type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "./firebase";
@@ -82,12 +82,14 @@ export function useRealtimeNotes(_userId: string | null | undefined) {
     setLoading(true);
     setError(null);
 
-    // ── KEY FIX #2: filter out soft-deleted documents at the query level ──
-    // This means the snapshot will NEVER include notes with deletedAt set,
-    // so deleted notes cannot "reappear" from the snapshot.
+    // ── KEY FIX: no compound query — just orderBy, filter deleted client-side ──
+    // A compound (where + orderBy on different fields) requires a Firestore composite
+    // index. If the index doesn't exist onSnapshot immediately errors → users fall
+    // back to 8-second HTTP polling and lose real-time updates.
+    // Filtering deletedAt client-side is safe: soft-deleted docs are rare and the
+    // deletedIdsRef guard already handles the optimistic-delete window.
     const q = query(
       collection(db, "team_notes"),
-      where("deletedAt", "==", null),
       orderBy("createdAt", "desc"),
     );
 
@@ -96,7 +98,7 @@ export function useRealtimeNotes(_userId: string | null | undefined) {
       { includeMetadataChanges: false },
       (snapshot) => {
         const serverNotes: TeamNote[] = snapshot.docs
-          .filter(doc => !deletedIdsRef.current.has(doc.id))
+          .filter(doc => !deletedIdsRef.current.has(doc.id) && !doc.data()["deletedAt"]) // filter soft-deleted client-side
           .map(doc => {
             const data = doc.data() as Record<string, unknown>;
             return {
@@ -177,6 +179,33 @@ export function useRealtimeNotes(_userId: string | null | undefined) {
   const markReactionPending = (noteId: string) => {
     pendingReactionIds.current.add(noteId);
   };
+
+  // ── Always-on HTTP poll: ensures admin and other users see new notes ────────
+  // Runs every 10 s whenever the hook is mounted. This is a safety net for
+  // when Firestore real-time has permission or index issues.
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const res = await fetch("/api/notes");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!Array.isArray(data)) return;
+        setNotes(prev => {
+          // Only update if there are new/changed notes (avoid flicker on match)
+          const filtered = data.filter((n: TeamNote) => !deletedIdsRef.current.has(n.id));
+          const prevIds = new Set(prev.map(n => n.id));
+          const hasNew = filtered.some((n: TeamNote) => !prevIds.has(n.id));
+          if (!hasNew && filtered.length === prev.filter(n => !n.id.startsWith("temp_")).length) return prev;
+          const temps = prev.filter(n => n.id.startsWith("temp_"));
+          try { localStorage.setItem("wf_notes_cache", JSON.stringify({ data: filtered, ts: Date.now() })); } catch { /* noop */ }
+          return [...temps, ...filtered];
+        });
+      } catch { /* noop */ }
+    };
+    poll(); // immediate fetch on mount
+    const timer = setInterval(poll, 10_000);
+    return () => clearInterval(timer);
+  }, []);
 
   return {
     notes,
