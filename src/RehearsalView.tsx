@@ -531,7 +531,7 @@ export default function RehearsalView({
             return (
                 <textarea
                     autoFocus
-                    className="w-full h-full flex-1 font-mono text-sm leading-7 text-gray-800 dark:text-gray-200 bg-transparent resize-none px-5 py-4 outline-none focus:bg-indigo-50/30 dark:focus:bg-indigo-900/10 transition-colors"
+                    className="w-full min-h-[60vh] font-mono text-sm leading-7 text-gray-800 dark:text-gray-200 bg-transparent resize-none px-5 py-4 outline-none focus:bg-indigo-50/30 dark:focus:bg-indigo-900/10 transition-colors"
                     value={edit.draft}
                     onChange={e => edit.onChange(e.target.value)}
                     spellCheck={false}
@@ -610,7 +610,7 @@ export default function RehearsalView({
         const edit = isLyrics ? lyricsEdit : chordsEdit;
 
         return (
-            <div className="flex flex-col overflow-hidden min-w-0" style={{ flex: 1 }}>
+            <div className="flex flex-col min-w-0 overflow-x-hidden">
                 <div className="flex items-center justify-between px-4 py-2 shrink-0 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
                     <span className={`text-[11px] font-bold uppercase tracking-widest ${accent}`}>{label}</span>
                     <div className="flex items-center gap-1">
@@ -631,7 +631,7 @@ export default function RehearsalView({
                         )}
                     </div>
                 </div>
-                <div className={`flex flex-1 flex-col min-w-0 overflow-x-hidden ${edit.isEditing ? "overflow-hidden" : "overflow-y-auto"}`}>
+                <div className="min-w-0 overflow-x-hidden">
                     {columnContent(col)}
                 </div>
             </div>
@@ -640,7 +640,7 @@ export default function RehearsalView({
 
     const mobileLayout = (
         <div
-            className="flex md:hidden flex-col h-full divide-y divide-gray-200 dark:divide-gray-800"
+            className="flex md:hidden flex-col h-full overflow-y-auto divide-y divide-gray-200 dark:divide-gray-800"
             onTouchStart={onTouchStart}
             onTouchEnd={onTouchEnd}
         >
