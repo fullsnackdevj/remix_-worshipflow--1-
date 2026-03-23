@@ -27,16 +27,16 @@ function transposeChords(text: string, steps: number): string {
 
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function getNextEventWithLineup(schedules: Schedule[]): Schedule | null {
+/** Returns ALL upcoming events that have at least one song in their lineup, sorted by date. */
+function getUpcomingEventsWithLineup(schedules: Schedule[]): Schedule[] {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const upcoming = schedules
+    return schedules
         .filter(s => {
             const d = new Date(s.date + "T00:00:00");
             return d >= today && (s.songLineup?.joyful || s.songLineup?.solemn);
         })
         .sort((a, b) => a.date.localeCompare(b.date));
-    return upcoming[0] ?? null;
 }
 
 // ── useEditColumn — per-column edit state with undo/redo stack ────────────────
@@ -165,6 +165,7 @@ export default function RehearsalView({
     currentUser, canEditSong = false, onSongUpdated, showToast,
 }: RehearsalViewProps) {
 
+    const [selectedEventIdx, setSelectedEventIdx] = useState(0);
     const [activeSong, setActiveSong] = useState<"joyful" | "solemn">("joyful");
     const [transpose, setTranspose] = useState<{ joyful: number; solemn: number }>({ joyful: 0, solemn: 0 });
     const [chordsOnTop, setChordsOnTop] = useState<boolean>(() => {
@@ -212,8 +213,12 @@ export default function RehearsalView({
         }
     };
 
+    const upcomingEvents = getUpcomingEventsWithLineup(allSchedules);
+    // Clamp selectedEventIdx so it's never out-of-range after a data refresh
+    const clampedEventIdx = Math.min(selectedEventIdx, Math.max(0, upcomingEvents.length - 1));
+    const event = upcomingEvents[clampedEventIdx] ?? null;
+
     const songs: ("joyful" | "solemn")[] = [];
-    const event = getNextEventWithLineup(allSchedules);
     if (event?.songLineup?.joyful) songs.push("joyful");
     if (event?.songLineup?.solemn) songs.push("solemn");
 
@@ -444,7 +449,7 @@ export default function RehearsalView({
     );
 
     // ── Empty states ──────────────────────────────────────────────────────────
-    if (!event) {
+    if (upcomingEvents.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center h-full py-24 gap-4 text-gray-400">
                 <div className="w-16 h-16 rounded-2xl bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
@@ -462,10 +467,40 @@ export default function RehearsalView({
         return (
             <div className="flex flex-col items-center justify-center h-full py-24 gap-3 text-gray-400">
                 <Music size={32} className="opacity-30" />
-                <p className="text-sm">No songs assigned to the next event's lineup yet.</p>
+                <p className="text-sm">No songs assigned to the selected event's lineup yet.</p>
             </div>
         );
     }
+
+    // ── Event picker (only when multiple events have lineups) ─────────────────
+    const eventPickerBar = upcomingEvents.length > 1 ? (
+        <div className="shrink-0 flex items-center gap-1.5 px-3 py-2 bg-gray-50 dark:bg-gray-900/80 border-b border-gray-200 dark:border-gray-800 overflow-x-auto no-scrollbar">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400 shrink-0 mr-1">Event:</span>
+            {upcomingEvents.map((ev, idx) => {
+                const evName = (ev as any).eventName || (ev.serviceType === "sunday" ? "Sunday Service" : "Midweek Service");
+                const dateLabel = new Date(ev.date + "T00:00:00").toLocaleDateString("en", { month: "short", day: "numeric" });
+                const songCount = [ev.songLineup?.joyful, ev.songLineup?.solemn].filter(Boolean).length;
+                const isActive = idx === clampedEventIdx;
+                return (
+                    <button
+                        key={ev.id ?? idx}
+                        onClick={() => { setSelectedEventIdx(idx); setActiveSong(ev.songLineup?.joyful ? "joyful" : "solemn"); }}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all shrink-0 ${
+                            isActive
+                                ? "bg-indigo-600 text-white shadow-sm"
+                                : "bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 hover:border-indigo-400 hover:text-indigo-500"
+                        }`}
+                    >
+                        <span>{evName}</span>
+                        <span className={`text-[10px] px-1 py-0.5 rounded-full font-bold ${
+                            isActive ? "bg-white/20 text-white" : "bg-gray-100 dark:bg-gray-700 text-gray-500"
+                        }`}>{songCount}</span>
+                        <span className={`text-[10px] opacity-70`}>{dateLabel}</span>
+                    </button>
+                );
+            })}
+        </div>
+    ) : null;
 
     // ── Song navigator header ─────────────────────────────────────────────────
     const songNavBar = (
@@ -663,10 +698,16 @@ export default function RehearsalView({
             {/* Event label */}
             <div className="shrink-0 px-4 py-2 bg-indigo-600 dark:bg-indigo-700 text-white">
                 <p className="text-xs font-semibold opacity-80 uppercase tracking-wider">
-                    🎵 {event.eventName ?? "Worship Service"} &middot;{" "}
+                    🎵 {(event as any).eventName ?? "Worship Service"} &middot;{" "}
                     {new Date(event.date + "T00:00:00").toLocaleDateString("en", { weekday: "short", month: "short", day: "numeric" })}
+                    {upcomingEvents.length > 1 && (
+                        <span className="ml-2 opacity-70">· {clampedEventIdx + 1} of {upcomingEvents.length} events</span>
+                    )}
                 </p>
             </div>
+
+            {/* Event picker — shown when multiple events have song lineups */}
+            {eventPickerBar}
 
             {/* Song navigator */}
             {songNavBar}
