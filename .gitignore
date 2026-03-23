@@ -9,3 +9,9 @@ coverage/
 
 # Local Netlify folder
 .netlify
+
+# Local env (Firebase config for dev — Netlify uses dashboard env vars)
+.env.local
+
+# Generated service worker (rebuilt at deploy time)
+public/firebase-messaging-sw.js

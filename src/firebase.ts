@@ -3,14 +3,15 @@ import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getMessaging, getToken, onMessage } from "firebase/messaging";
 import { getFirestore } from "firebase/firestore";
 
-// Firebase client config — safe to expose (restricted by authorized domains)
+// Firebase client config — loaded from environment variables.
+// Safe to expose publicly (restricted by Firebase authorized domains).
 const firebaseConfig = {
-    apiKey: "AIzaSyDiFuHQ3qUTdvZ7qppCqJRlCBgxJM3vhw0",
-    authDomain: "worshipflow-1fbe0.firebaseapp.com",
-    projectId: "worshipflow-1fbe0",
-    storageBucket: "worshipflow-1fbe0.firebasestorage.app",
-    messagingSenderId: "1007052719455",
-    appId: "1:1007052719455:web:e0d6c338a503cdefcfe2ea",
+    apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
+    authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId:             import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
 const app = initializeApp(firebaseConfig);
@@ -27,4 +28,4 @@ export const messaging = getMessaging(app);
 export { getToken, onMessage };
 
 // VAPID key for web push
-export const VAPID_KEY = "BAg369pso0CcSa_8hXoSf3Ff3eUPPRQEb50Jl8CRfXAuIR1UpGzqVq4GG1qcyO8Sttya_PeqJQmyoeQxolnyYtE";
+export const VAPID_KEY = import.meta.env.VITE_VAPID_KEY;
