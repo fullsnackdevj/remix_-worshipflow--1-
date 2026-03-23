@@ -1910,19 +1910,32 @@ Rules:
             const alreadyAcked = acksNow.some((a: any) => a.userId === userId);
 
             if (alreadyAcked) {
-                // Remove ack (un-heart) — no notification
+                // Remove ack (un-heart) — never sends a notification
                 const existingEntry = acksNow.find((a: any) => a.userId === userId);
                 await docRef.update({ lineupAcks: admin.firestore.FieldValue.arrayRemove(existingEntry) });
                 return json(200, { lineupAcks: acksNow.filter((a: any) => a.userId !== userId), acked: false });
             } else {
-                // Add ack (heart) — notify the event creator
+                // Add ack (heart)
                 const ackEntry = { userId, userName, photo };
-                await docRef.update({ lineupAcks: admin.firestore.FieldValue.arrayUnion(ackEntry) });
+                // notifiedAckUserIds is a persistent set — once a userId is in it,
+                // we know they've already triggered a notification for this event.
+                // This prevents spam even if someone toggles ack on/off many times.
+                const notifiedSet: string[] = sched.notifiedAckUserIds ?? [];
+                const alreadyNotified = notifiedSet.includes(userId);
+
+                const updatePayload: any = {
+                    lineupAcks: admin.firestore.FieldValue.arrayUnion(ackEntry),
+                };
+                // Mark this user as notified (one-time, permanent)
+                if (!alreadyNotified) {
+                    updatePayload.notifiedAckUserIds = admin.firestore.FieldValue.arrayUnion(userId);
+                }
+                await docRef.update(updatePayload);
                 const updated = [...acksNow, ackEntry];
 
-                // Send targeted bell notification to creator only (skip self-ack)
+                // Send bell notification ONLY on first-ever ack from this user
                 const creatorUid: string = sched.created_by_uid ?? "";
-                if (creatorUid && creatorUid !== userId) {
+                if (!alreadyNotified && creatorUid && creatorUid !== userId) {
                     const evName = sched.eventName || (sched.serviceType === "sunday" ? "Sunday Service" : "Midweek Service");
                     const dateLabel = new Date((sched.date as string) + "T00:00:00").toLocaleDateString("en", {
                         weekday: "long", month: "long", day: "numeric", year: "numeric",
@@ -1930,7 +1943,7 @@ Rules:
                     await writeNotif(firestore, {
                         type: "lineup_ack",
                         message: `${userName} acknowledged your lineup`,
-                        subMessage: `\ud83d\udc97 ${evName} \u2014 ${dateLabel}`,
+                        subMessage: `💗 ${evName} — ${dateLabel}`,
                         actorName: userName,
                         actorPhoto: photo,
                         actorUserId: userId,
