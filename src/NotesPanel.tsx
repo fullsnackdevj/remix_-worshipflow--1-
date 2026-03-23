@@ -181,8 +181,8 @@ function NoteCard({ note, userId, userRole, highlighted, onEdit, onDelete, onRea
     const isAuthor = note.authorId === userId;
     /** Only true Admin and QA Specialist can edit/delete/resolve OTHER people’s notes */
     const isPrivileged = userRole === "admin" || userRole === "qa_specialist";
-    /** canResolve: only privileged users can action others’ notes; any user can action their own */
-    const canResolve = isAuthor || isPrivileged;
+    /** canResolve: ONLY Admin/QA can click Resolve/Done/Acknowledge — users see the status badge instead */
+    const canResolve = isPrivileged;
     const totalReactions = (Object.values(reactions) as string[][]).reduce((s, arr) => s + arr.length, 0);
 
     // Type-specific resolve button config
