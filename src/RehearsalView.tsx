@@ -222,22 +222,29 @@ export default function RehearsalView({
     if (event?.songLineup?.joyful) songs.push("joyful");
     if (event?.songLineup?.solemn) songs.push("solemn");
 
+    // ── Fix: if activeSong ("joyful") isn't available for this event (e.g. Midweek
+    // only has "solemn"), fall back to the first song the event actually has.
+    // This prevents showing "No lyrics/chords" on first load without any tab navigation.
+    const safeActiveSong: "joyful" | "solemn" = songs.includes(activeSong)
+        ? activeSong
+        : (songs[0] ?? "joyful");
+
     const joyfulSong = event?.songLineup?.joyful ? allSongs.find(s => s.id === event.songLineup!.joyful) : null;
     const solemnSong = event?.songLineup?.solemn ? allSongs.find(s => s.id === event.songLineup!.solemn) : null;
-    const currentSong = activeSong === "joyful" ? joyfulSong : solemnSong;
+    const currentSong = safeActiveSong === "joyful" ? joyfulSong : solemnSong;
 
-    const canPrev = songs.indexOf(activeSong) > 0;
-    const canNext = songs.indexOf(activeSong) < songs.length - 1;
+    const canPrev = songs.indexOf(safeActiveSong) > 0;
+    const canNext = songs.indexOf(safeActiveSong) < songs.length - 1;
 
     const goNext = useCallback(() => {
-        const idx = songs.indexOf(activeSong);
+        const idx = songs.indexOf(safeActiveSong);
         if (idx < songs.length - 1) setActiveSong(songs[idx + 1]);
-    }, [activeSong, songs]);
+    }, [safeActiveSong, songs]);
 
     const goPrev = useCallback(() => {
-        const idx = songs.indexOf(activeSong);
+        const idx = songs.indexOf(safeActiveSong);
         if (idx > 0) setActiveSong(songs[idx - 1]);
-    }, [activeSong, songs]);
+    }, [safeActiveSong, songs]);
 
     const onTouchStart = (e: React.TouchEvent) => {
         touchStartX.current = e.touches[0].clientX;
@@ -260,16 +267,16 @@ export default function RehearsalView({
     };
 
     const adjustTranspose = (delta: number) => {
-        setTranspose(prev => ({ ...prev, [activeSong]: prev[activeSong] + delta }));
+        setTranspose(prev => ({ ...prev, [safeActiveSong]: prev[safeActiveSong] + delta }));
     };
     const resetTranspose = () => {
-        setTranspose(prev => ({ ...prev, [activeSong]: 0 }));
+        setTranspose(prev => ({ ...prev, [safeActiveSong]: 0 }));
     };
 
     const transposedChords = currentSong?.chords
-        ? transposeChords(currentSong.chords, transpose[activeSong])
+        ? transposeChords(currentSong.chords, transpose[safeActiveSong])
         : "";
-    const currentTranspose = transpose[activeSong];
+    const currentTranspose = transpose[safeActiveSong];
 
     // ── Per-column edit state ─────────────────────────────────────────────────
     const lyricsEdit = useEditColumn(currentSong?.lyrics ?? "");
@@ -513,7 +520,7 @@ export default function RehearsalView({
             <div className="flex-1 flex items-center justify-center gap-2 overflow-hidden">
                 {songs.map(key => {
                     const song = key === "joyful" ? joyfulSong : solemnSong;
-                    const isActive = activeSong === key;
+                    const isActive = safeActiveSong === key;
                     return (
                         <button
                             key={key}
