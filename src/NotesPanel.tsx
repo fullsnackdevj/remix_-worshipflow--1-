@@ -279,32 +279,49 @@ function NoteCard({ note, userId, userRole, highlighted, onEdit, onDelete, onRea
                 </div>
             )}
 
-            {/* Status Reactions */}
+            {/* Status Reactions — clickable by Admin/QA only; read-only status indicators for everyone else */}
             <div className="flex flex-wrap items-center gap-1.5 mt-2">
                 {STATUS_REACTIONS.map(({ key, label, icon, activeColor }) => {
                     const users = reactions[key] || [];
                     const reacted = users.includes(userId);
-                    const tooltip = reacted
-                        ? `Remove "${label}" reaction${users.length > 1 ? ` · ${users.length} people` : ""}`
-                        : `${label}${users.length > 0 ? ` · ${users.length} person${users.length !== 1 ? "s" : ""}` : ""}`;
+                    // Only show reactions that have been clicked (for non-privileged) OR all reactions (for privileged)
+                    if (!isPrivileged && users.length === 0) return null;
+
+                    const activeClass = `${activeColor} scale-105 shadow-sm`;
+                    const inactiveClass = "bg-gray-100 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400";
+
+                    if (isPrivileged) {
+                        // Admin / QA — fully interactive
+                        const tooltip = reacted
+                            ? `Remove "${label}"${users.length > 1 ? ` · ${users.length} people` : ""}`
+                            : `${label}${users.length > 0 ? ` · ${users.length} people` : ""}`;
+                        return (
+                            <button
+                                key={key}
+                                onClick={() => toggleReaction(key)}
+                                title={tooltip}
+                                aria-label={tooltip}
+                                className={`group relative flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border transition-all select-none active:scale-95 ${reacted ? activeClass : `${inactiveClass} hover:bg-gray-200 dark:hover:bg-gray-700`}`}
+                            >
+                                {icon}
+                                {users.length > 0 && <span className="font-semibold tabular-nums">{users.length}</span>}
+                                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-[10px] px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity z-10 shadow-lg">
+                                    {label}
+                                </span>
+                            </button>
+                        );
+                    }
+
+                    // Non-privileged — read-only status indicator (only shown if admin has clicked it)
                     return (
-                        <button
+                        <span
                             key={key}
-                            onClick={() => toggleReaction(key)}
-                            title={tooltip}
-                            aria-label={tooltip}
-                            className={`group relative flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border transition-all select-none active:scale-95 ${reacted
-                                ? `${activeColor} scale-105 shadow-sm`
-                                : "bg-gray-100 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
-                                }`}
+                            title={`${label} · ${users.length} person${users.length !== 1 ? "s" : ""}`}
+                            className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border cursor-default select-none ${reacted ? activeClass : activeClass}`}
                         >
                             {icon}
                             {users.length > 0 && <span className="font-semibold tabular-nums">{users.length}</span>}
-                            {/* Tooltip */}
-                            <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-[10px] px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-10 shadow-lg">
-                                {label}
-                            </span>
-                        </button>
+                        </span>
                     );
                 })}
 
