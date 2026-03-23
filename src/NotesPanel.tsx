@@ -179,10 +179,10 @@ function NoteCard({ note, userId, userRole, highlighted, onEdit, onDelete, onRea
 
     const cfg = typeConfig(note.type);
     const isAuthor = note.authorId === userId;
-    const isAdmin = userRole === "admin" || userRole === "leader";
-    /** Admin, Leader, or QA Specialist — can edit/delete any note */
-    const isPrivileged = isAdmin || userRole === "qa_specialist";
-    const canResolve = (isAuthor || isPrivileged); // all types can be resolved/done/acknowledged
+    /** Only true Admin and QA Specialist can edit/delete/resolve OTHER people’s notes */
+    const isPrivileged = userRole === "admin" || userRole === "qa_specialist";
+    /** canResolve: only privileged users can action others’ notes; any user can action their own */
+    const canResolve = isAuthor || isPrivileged;
     const totalReactions = (Object.values(reactions) as string[][]).reduce((s, arr) => s + arr.length, 0);
 
     // Type-specific resolve button config
@@ -310,8 +310,8 @@ function NoteCard({ note, userId, userRole, highlighted, onEdit, onDelete, onRea
 
                 {/* Action buttons */}
                 <div className="ml-auto flex items-center gap-1">
-                    {/* Admin-only: reclassify note type */}
-                    {isAdmin && (
+                    {/* Admin/QA-only: reclassify note type */}
+                    {isPrivileged && (
                         <div className="flex items-center gap-0.5 mr-1 border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
                             {NOTE_TYPES.map(t => (
                                 <button
@@ -796,10 +796,9 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
     const [lastSeen, setLastSeen] = useState<string>(() => localStorage.getItem(SEEN_KEY) ?? new Date(0).toISOString());
     const unreadNotes = notes.filter(n => !n.resolved && n.createdAt > lastSeen && n.authorId !== userId).length;
 
-    // Mark as seen when panel CLOSES (not on open) so the badge persists
-    // while the panel is open — same behaviour as the bell notification badge
+    // Mark as seen when panel opens
     useEffect(() => {
-        if (!open) {
+        if (open) {
             const now = new Date().toISOString();
             setLastSeen(now);
             localStorage.setItem(SEEN_KEY, now);
@@ -862,9 +861,9 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
                 className={`relative p-2 rounded-xl transition-all active:scale-90 ${open ? "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400" : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
             >
                 <NotepadText size={18} />
-                {unreadNotes > 0 && (
-                    <span className="absolute -top-0.5 -right-0.5 min-w-[17px] h-[17px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-0.5 shadow-md animate-pulse">
-                        {unreadNotes > 9 ? "9+" : unreadNotes}
+                {activeCount > 0 && (
+                    <span className={`absolute -top-0.5 -right-0.5 min-w-[17px] h-[17px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-0.5 shadow-md ${open ? "opacity-60" : "animate-pulse"}`}>
+                        {activeCount > 9 ? "9+" : activeCount}
                     </span>
                 )}
             </button>
