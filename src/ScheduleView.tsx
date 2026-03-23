@@ -664,71 +664,131 @@ const handleLineupAck = async (scheduleId: string) => {
             </div>
           ) : (
             /* LIST VIEW */
-            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-              {monthSchedules.length === 0 ? (
-                <div className="text-center py-16 text-gray-400">
-                  <Calendar size={40} className="mx-auto mb-3 opacity-40" />
-                  <p className="font-semibold">No events this month</p>
-                  <p className="text-sm mt-1">Click a date on the calendar to add one.</p>
-                </div>
-              ) : (
-                <div className={`grid gap-px bg-gray-100 dark:bg-gray-700 ${selectedScheduleDate ? "grid-cols-1 md:grid-cols-1 lg:grid-cols-2" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"}`}>
-                  {monthSchedules.sort((a, b) => a.date.localeCompare(b.date)).map(s => {
-                    const d = new Date(s.date + "T00:00:00");
-                    const isPast = s.date < todayStr;
-                    const evName = (s as any).eventName || (s.serviceType === "sunday" ? "Sunday Service" : "Midweek Service");
-                    return (
-                      <div key={s.id} className={`relative flex items-center gap-4 p-4 cursor-pointer group transition-colors ${selectedEventId === s.id ? "bg-indigo-50 dark:bg-indigo-900/30 border-l-4 border-indigo-500" : "bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50 border-l-4 border-transparent"}`} onClick={() => openEventById(s.id, s.date)}>
-                        {/* Date badge */}
-                        <div className={`shrink-0 rounded-xl px-3 py-2 text-center min-w-[52px] ${isPast ? "bg-gray-100 dark:bg-gray-700" : "bg-indigo-50 dark:bg-indigo-900/30"}`}>
-                          <div className={`text-xs font-semibold uppercase ${isPast ? "text-gray-400" : "text-indigo-500"}`}>{d.toLocaleDateString("en", { month: "short" })}</div>
-                          <div className={`text-xl font-bold leading-none ${isPast ? "text-gray-400 dark:text-gray-500" : "text-indigo-700 dark:text-indigo-300"}`}>{d.getDate()}</div>
-                          <div className={`text-[10px] ${isPast ? "text-gray-400" : "text-indigo-400"}`}>{d.toLocaleDateString("en", { weekday: "short" })}</div>
-                        </div>
-                        {/* Event info */}
-                        <div className="flex-1 min-w-0 pr-7">
-                          <p className="font-semibold text-gray-900 dark:text-white text-sm">{eventEmoji(evName)} {evName}</p>
-                          {s.worshipLeader && <p className="text-xs text-gray-500 mt-0.5">{s.worshipLeader.name}</p>}
-                          {s.notes && <p className="text-xs text-gray-400 truncate mt-0.5">{s.notes}</p>}
-                        </div>
-                        {/* Copy button */}
-                        <button
-                          type="button"
-                          title="Copy event details"
-                          onClick={e => {
-                            e.stopPropagation();
-                            const dateLabel = d.toLocaleDateString("en", { month: "long", day: "numeric", year: "numeric" });
-                            const isServiceEvt = ["sunday service", "midweek service"].includes(evName.toLowerCase());
-                            const lines: string[] = [evName, dateLabel];
-                            if (isServiceEvt) {
-                              if (s.worshipLeader) { lines.push(""); lines.push(`Worship Leader: ${s.worshipLeader.name}`); }
-                              const bs = (s.backupSingers || []);
-                              if (bs.length > 0) { lines.push(""); lines.push(`Backup Singers: ${bs.map((b: any) => b.name).join(", ")}`); }
-                              const mu = (s.musicians || []);
-                              if (mu.length > 0) { lines.push(""); lines.push(`Musicians / Instruments: ${mu.map((m: any) => `${m.name} (${m.role})`).join(", ")}`); }
-                              const jSong = allSongs.find(sg => sg.id === s.songLineup?.joyful);
-                              const sSong = allSongs.find(sg => sg.id === s.songLineup?.solemn);
-                              if (jSong || sSong) {
-                                lines.push(""); lines.push("Song Line-up:");
-                                if (jSong) { lines.push(`Joyful: ${jSong.title}${jSong.artist ? ` - ${jSong.artist}` : ""}`); if (jSong.video_url) lines.push(`Link: ${jSong.video_url}`); }
-                                if (sSong) { lines.push(""); lines.push(`Solemn: ${sSong.title}${sSong.artist ? ` - ${sSong.artist}` : ""}`); if (sSong.video_url) lines.push(`Link: ${sSong.video_url}`); }
+            (() => {
+              // Merge schedule events + birthday celebrants into one date-sorted list
+              type ListItem =
+                | { kind: "event"; date: string; data: typeof monthSchedules[0] }
+                | { kind: "bday";  date: string; members: typeof allMembers };
+
+              const items: ListItem[] = [];
+
+              monthSchedules.forEach(s => items.push({ kind: "event", date: s.date, data: s }));
+
+              // Add birthday rows for each day in the current month that has celebrants
+              Array.from({ length: daysInMonth }).forEach((_, i) => {
+                const day = i + 1;
+                const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                const mmdd = dateStr.slice(5);
+                const bdays = birthdayMap[mmdd] ?? [];
+                if (bdays.length > 0) items.push({ kind: "bday", date: dateStr, members: bdays });
+              });
+
+              items.sort((a, b) => a.date.localeCompare(b.date));
+
+              if (items.length === 0) {
+                return (
+                  <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 text-center py-16 text-gray-400">
+                    <Calendar size={40} className="mx-auto mb-3 opacity-40" />
+                    <p className="font-semibold">No events or birthdays this month</p>
+                    <p className="text-sm mt-1">Click a date on the calendar to add one.</p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                  <div className={`grid gap-px bg-gray-100 dark:bg-gray-700 ${selectedScheduleDate ? "grid-cols-1 md:grid-cols-1 lg:grid-cols-2" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"}`}>
+                    {items.map((item, idx) => {
+                      const d = new Date(item.date + "T00:00:00");
+                      const isPast = item.date < todayStr;
+
+                      if (item.kind === "bday") {
+                        // ── Birthday row ──────────────────────────────────────
+                        return (
+                          <div key={`bday-${item.date}`} className="relative flex items-center gap-4 p-4 bg-white dark:bg-gray-800 border-l-4 border-pink-400 dark:border-pink-600">
+                            {/* Date badge — pink theme */}
+                            <div className={`shrink-0 rounded-xl px-3 py-2 text-center min-w-[52px] ${isPast ? "bg-gray-100 dark:bg-gray-700" : "bg-pink-50 dark:bg-pink-900/30"}`}>
+                              <div className={`text-xs font-semibold uppercase ${isPast ? "text-gray-400" : "text-pink-500"}`}>{d.toLocaleDateString("en", { month: "short" })}</div>
+                              <div className={`text-xl font-bold leading-none ${isPast ? "text-gray-400 dark:text-gray-500" : "text-pink-700 dark:text-pink-300"}`}>{d.getDate()}</div>
+                              <div className={`text-[10px] ${isPast ? "text-gray-400" : "text-pink-400"}`}>{d.toLocaleDateString("en", { weekday: "short" })}</div>
+                            </div>
+                            {/* Celebrant info */}
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-pink-600 dark:text-pink-400 text-sm flex items-center gap-1.5">
+                                🎂 Birthday Celebration
+                              </p>
+                              <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                                {item.members.map(bm => (
+                                  <div key={bm.id} className="flex items-center gap-1 bg-pink-50 dark:bg-pink-900/20 rounded-full pl-0.5 pr-2 py-0.5">
+                                    {bm.photo
+                                      ? <img src={bm.photo} alt={bm.name} className="w-5 h-5 rounded-full object-cover ring-1 ring-pink-300" />
+                                      : <div className="w-5 h-5 rounded-full bg-pink-500 flex items-center justify-center text-white text-[9px] font-bold">{bm.name[0]}</div>
+                                    }
+                                    <span className="text-xs font-medium text-pink-700 dark:text-pink-300">{bm.name.split(" ")[0]}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      // ── Schedule event row ────────────────────────────────
+                      const s = item.data;
+                      const evName = (s as any).eventName || (s.serviceType === "sunday" ? "Sunday Service" : "Midweek Service");
+                      return (
+                        <div key={s.id} className={`relative flex items-center gap-4 p-4 cursor-pointer group transition-colors ${selectedEventId === s.id ? "bg-indigo-50 dark:bg-indigo-900/30 border-l-4 border-indigo-500" : "bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50 border-l-4 border-transparent"}`} onClick={() => openEventById(s.id, s.date)}>
+                          {/* Date badge */}
+                          <div className={`shrink-0 rounded-xl px-3 py-2 text-center min-w-[52px] ${isPast ? "bg-gray-100 dark:bg-gray-700" : "bg-indigo-50 dark:bg-indigo-900/30"}`}>
+                            <div className={`text-xs font-semibold uppercase ${isPast ? "text-gray-400" : "text-indigo-500"}`}>{d.toLocaleDateString("en", { month: "short" })}</div>
+                            <div className={`text-xl font-bold leading-none ${isPast ? "text-gray-400 dark:text-gray-500" : "text-indigo-700 dark:text-indigo-300"}`}>{d.getDate()}</div>
+                            <div className={`text-[10px] ${isPast ? "text-gray-400" : "text-indigo-400"}`}>{d.toLocaleDateString("en", { weekday: "short" })}</div>
+                          </div>
+                          {/* Event info */}
+                          <div className="flex-1 min-w-0 pr-7">
+                            <p className="font-semibold text-gray-900 dark:text-white text-sm">{eventEmoji(evName)} {evName}</p>
+                            {s.worshipLeader && <p className="text-xs text-gray-500 mt-0.5">{s.worshipLeader.name}</p>}
+                            {s.notes && <p className="text-xs text-gray-400 truncate mt-0.5">{s.notes}</p>}
+                          </div>
+                          {/* Copy button */}
+                          <button
+                            type="button"
+                            title="Copy event details"
+                            onClick={e => {
+                              e.stopPropagation();
+                              const dateLabel = d.toLocaleDateString("en", { month: "long", day: "numeric", year: "numeric" });
+                              const isServiceEvt = ["sunday service", "midweek service"].includes(evName.toLowerCase());
+                              const lines: string[] = [evName, dateLabel];
+                              if (isServiceEvt) {
+                                if (s.worshipLeader) { lines.push(""); lines.push(`Worship Leader: ${s.worshipLeader.name}`); }
+                                const bs = (s.backupSingers || []);
+                                if (bs.length > 0) { lines.push(""); lines.push(`Backup Singers: ${bs.map((b: any) => b.name).join(", ")}`); }
+                                const mu = (s.musicians || []);
+                                if (mu.length > 0) { lines.push(""); lines.push(`Musicians / Instruments: ${mu.map((m: any) => `${m.name} (${m.role})`).join(", ")}`); }
+                                const jSong = allSongs.find(sg => sg.id === s.songLineup?.joyful);
+                                const sSong = allSongs.find(sg => sg.id === s.songLineup?.solemn);
+                                if (jSong || sSong) {
+                                  lines.push(""); lines.push("Song Line-up:");
+                                  if (jSong) { lines.push(`Joyful: ${jSong.title}${jSong.artist ? ` - ${jSong.artist}` : ""}`); if (jSong.video_url) lines.push(`Link: ${jSong.video_url}`); }
+                                  if (sSong) { lines.push(""); lines.push(`Solemn: ${sSong.title}${sSong.artist ? ` - ${sSong.artist}` : ""}`); if (sSong.video_url) lines.push(`Link: ${sSong.video_url}`); }
+                                }
+                              } else {
+                                (s.assignments || []).forEach((a: any) => { lines.push(""); lines.push(`${a.role}: ${(a.members || []).map((m: any) => m.name).join(", ") || "(none)"}`); });
                               }
-                            } else {
-                              (s.assignments || []).forEach((a: any) => { lines.push(""); lines.push(`${a.role}: ${(a.members || []).map((m: any) => m.name).join(", ") || "(none)"}`); });
-                            }
-                            if (s.notes) { lines.push(""); lines.push("*Notes:"); lines.push(s.notes); }
-                            navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", "Copied!"));
-                          }}
-                          className="absolute top-3 right-3 p-1.5 text-gray-400 dark:text-gray-500 hover:text-indigo-500 dark:hover:text-indigo-400 opacity-40 sm:opacity-0 sm:group-hover:opacity-100 transition-all rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
-                        >
-                          <Copy size={14} />
-                        </button>
-                      </div>
-                    );
-                  })}
+                              if (s.notes) { lines.push(""); lines.push("*Notes:"); lines.push(s.notes); }
+                              navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", "Copied!"));
+                            }}
+                            className="absolute top-3 right-3 p-1.5 text-gray-400 dark:text-gray-500 hover:text-indigo-500 dark:hover:text-indigo-400 opacity-40 sm:opacity-0 sm:group-hover:opacity-100 transition-all rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
+                          >
+                            <Copy size={14} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              )}
-            </div>
+              );
+            })()
           )}
         </div>
 
