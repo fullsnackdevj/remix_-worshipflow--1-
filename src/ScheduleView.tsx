@@ -863,8 +863,8 @@ const handleLineupAck = async (scheduleId: string) => {
                             : "text-gray-400 hover:text-pink-500 hover:bg-pink-50 dark:hover:bg-pink-900/20"
                         }`}
                       >
-                        <Heart size={13} className={iHaveAcked ? "fill-pink-500 text-pink-500" : ""} />
-                        {ackCount > 0 && <span>{ackCount}</span>}
+                        <Heart size={16} className={iHaveAcked ? "fill-pink-500 text-pink-500" : ""} />
+                        {ackCount > 0 && <span className="text-sm">{ackCount}</span>}
                       </button>
                     )}
                   </div>
@@ -906,34 +906,7 @@ const handleLineupAck = async (scheduleId: string) => {
                       <Pencil size={16} />
                     </button>
                   )}
-                  {/* Heart ack — shown in header when it's a single-event day
-                      (multi-event day shows it in the "All events" row above) */}
-                  {schedPanelMode === "view" && editingExisting && !isDatePast && selectedDateEvents.length <= 1 && (() => {
-                    const cu = getAuth().currentUser;
-                    const myUid = cu?.uid ?? "";
-                    const acksForThisEvent = editingExisting.lineupAcks ?? [];
-                    const iHaveAcked = acksForThisEvent.some(a => a.userId === myUid);
-                    const ackCount = acksForThisEvent.length;
-                    const ackTooltip = acksForThisEvent.length === 0
-                      ? "Acknowledge this lineup"
-                      : acksForThisEvent.slice(0, 5).map(a => a.userName).join(", ") +
-                        (acksForThisEvent.length > 5 ? ` +${acksForThisEvent.length - 5} more` : "");
-                    return (
-                      <button
-                        onClick={() => handleLineupAck(editingExisting.id)}
-                        disabled={isAcking}
-                        title={ackTooltip}
-                        className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold transition-all ${
-                          iHaveAcked
-                            ? "bg-pink-100 dark:bg-pink-900/40 text-pink-600 dark:text-pink-400"
-                            : "text-gray-400 hover:text-pink-500 hover:bg-pink-50 dark:hover:bg-pink-900/20"
-                        }`}
-                      >
-                        <Heart size={13} className={iHaveAcked ? "fill-pink-500 text-pink-500" : ""} />
-                        {ackCount > 0 && <span>{ackCount}</span>}
-                      </button>
-                    );
-                  })()}
+
                   {editingExisting && (
                     <button onClick={() => {
                       const label = editSchedEventName || "Event";
