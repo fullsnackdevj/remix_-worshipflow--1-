@@ -2189,12 +2189,14 @@ Rules:
             if (!doc?.exists) return json(404, { error: "Note not found" });
             const noteData = doc.data() as Record<string, any>;
 
-            // Throttle: max one follow-up per 30 minutes per note
+            // Throttle: max one follow-up per 24 hours per note
             const lastFollowUp = noteData.lastFollowUpAt;
             if (lastFollowUp) {
                 const lastMs = lastFollowUp.toDate ? lastFollowUp.toDate().getTime() : lastFollowUp;
-                if (Date.now() - lastMs < 30 * 60 * 1000) {
-                    return json(429, { error: "You can only follow up once every 30 minutes." });
+                const COOLDOWN = 24 * 60 * 60 * 1000; // 24 hours
+                if (Date.now() - lastMs < COOLDOWN) {
+                    const nextAvailableAt = new Date(lastMs + COOLDOWN).toISOString();
+                    return json(429, { error: "You can only follow up once per day.", nextAvailableAt });
                 }
             }
 

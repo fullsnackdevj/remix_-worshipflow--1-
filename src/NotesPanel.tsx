@@ -19,6 +19,7 @@ export interface TeamNote {
     resolved?: boolean;
     resolvedBy?: string | null;
     reactions?: Record<string, string[]>;
+    lastFollowUpAt?: string | null; // ISO string or Firestore Timestamp
 }
 
 interface NotesPanelProps {
@@ -361,16 +362,39 @@ function NoteCard({ note, userId, userRole, highlighted, onEdit, onDelete, onRea
                         </button>
                     )}
                     {/* Follow Up — only for note author who is not privileged, and only when not resolved */}
-                    {isAuthor && !isPrivileged && !note.resolved && (
-                        <button
-                            onClick={() => onFollowUp(note.id)}
-                            title="Notify admin you're following up"
-                            className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-all"
-                        >
-                            <MessageSquare size={12} />
-                            <span className="text-[10px]">Follow Up</span>
-                        </button>
-                    )}
+                    {isAuthor && !isPrivileged && !note.resolved && (() => {
+                        const COOLDOWN_MS = 24 * 60 * 60 * 1000;
+                        const lastFollowUpRaw = (note as any).lastFollowUpAt;
+                        const lastFollowUpMs = lastFollowUpRaw
+                            ? (typeof lastFollowUpRaw === "object" && lastFollowUpRaw.toDate
+                                ? lastFollowUpRaw.toDate().getTime()
+                                : new Date(lastFollowUpRaw).getTime())
+                            : 0;
+                        const remaining = lastFollowUpMs + COOLDOWN_MS - Date.now();
+                        const onCooldown = remaining > 0;
+                        const cooldownLabel = onCooldown
+                            ? remaining > 3600_000
+                                ? `in ${Math.ceil(remaining / 3600_000)}h`
+                                : `in ${Math.ceil(remaining / 60_000)}m`
+                            : null;
+                        return (
+                            <button
+                                onClick={() => !onCooldown && onFollowUp(note.id)}
+                                disabled={onCooldown}
+                                title={onCooldown ? `You can follow up again ${cooldownLabel}` : "Notify admin you're following up"}
+                                className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-all ${
+                                    onCooldown
+                                        ? "text-gray-400 dark:text-gray-600 cursor-not-allowed opacity-60"
+                                        : "text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                                }`}
+                            >
+                                <MessageSquare size={12} />
+                                <span className="text-[10px]">
+                                    {onCooldown ? `Follow Up ${cooldownLabel}` : "Follow Up"}
+                                </span>
+                            </button>
+                        );
+                    })()}
                     {/* Edit — OWN note ONLY (no one can edit someone else's words, not even admin) */}
                     {isAuthor && !note.resolved && (
                         <button onClick={() => onEdit(note)} title="Edit" className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-all">
@@ -829,7 +853,11 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
             body: JSON.stringify({ userId, userName, userPhoto }),
         });
         if (res.status === 429) {
-            onToast?.("info", "You already sent a follow-up recently. Please wait 30 minutes.");
+            const data = await res.json().catch(() => ({}));
+            const nextAvailableAt = data.nextAvailableAt
+                ? new Date(data.nextAvailableAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                : "tomorrow";
+            onToast?.("info", `You can only follow up once per day. Try again at ${nextAvailableAt}.`);
         } else if (!res.ok) {
             onToast?.("error", "Failed to send follow-up.");
         } else {
