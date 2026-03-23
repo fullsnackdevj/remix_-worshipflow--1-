@@ -60,5 +60,7 @@ export interface Schedule {
   notes?: string;
   created_by_name?: string;
   created_by_photo?: string;
+  created_by_uid?: string;
+  lineupAcks?: { userId: string; userName: string; photo?: string }[];
 }
 

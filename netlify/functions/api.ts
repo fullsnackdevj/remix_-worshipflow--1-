@@ -1839,6 +1839,8 @@ Rules:
                 notes: notes || "",
                 created_by_name: aN1,
                 created_by_photo: aP1,
+                created_by_uid: aU1,          // ── new: needed for ack notifications
+                lineupAcks: [],               // ── new: empty on creation
                 created_at: admin.firestore.FieldValue.serverTimestamp(),
                 updated_at: admin.firestore.FieldValue.serverTimestamp(),
             });
@@ -1890,6 +1892,60 @@ Rules:
                 console.error(err);
                 return json(500, { error: "Failed to delete schedule" });
             }
+        }
+    }
+
+    // ── POST /schedules/:id/ack — toggle heart acknowledgment on a lineup ──────
+    const ackMatch = rawPath.match(/^\/schedules\/([^/]+)\/ack$/);
+    if (ackMatch && method === "POST") {
+        const id = ackMatch[1];
+        const { userId, userName, photo = "" } = body;
+        if (!userId || !userName) return json(400, { error: "userId and userName are required" });
+        try {
+            const docRef = firestore.collection("schedules").doc(id);
+            const snap = await docRef.get();
+            if (!snap.exists) return json(404, { error: "Schedule not found" });
+            const sched = snap.data() as any;
+            const acksNow: any[] = sched.lineupAcks ?? [];
+            const alreadyAcked = acksNow.some((a: any) => a.userId === userId);
+
+            if (alreadyAcked) {
+                // Remove ack (un-heart) — no notification
+                const existingEntry = acksNow.find((a: any) => a.userId === userId);
+                await docRef.update({ lineupAcks: admin.firestore.FieldValue.arrayRemove(existingEntry) });
+                return json(200, { lineupAcks: acksNow.filter((a: any) => a.userId !== userId), acked: false });
+            } else {
+                // Add ack (heart) — notify the event creator
+                const ackEntry = { userId, userName, photo };
+                await docRef.update({ lineupAcks: admin.firestore.FieldValue.arrayUnion(ackEntry) });
+                const updated = [...acksNow, ackEntry];
+
+                // Send targeted bell notification to creator only (skip self-ack)
+                const creatorUid: string = sched.created_by_uid ?? "";
+                if (creatorUid && creatorUid !== userId) {
+                    const evName = sched.eventName || (sched.serviceType === "sunday" ? "Sunday Service" : "Midweek Service");
+                    const dateLabel = new Date((sched.date as string) + "T00:00:00").toLocaleDateString("en", {
+                        weekday: "long", month: "long", day: "numeric", year: "numeric",
+                    });
+                    await writeNotif(firestore, {
+                        type: "lineup_ack",
+                        message: `${userName} acknowledged your lineup`,
+                        subMessage: `\ud83d\udc97 ${evName} \u2014 ${dateLabel}`,
+                        actorName: userName,
+                        actorPhoto: photo,
+                        actorUserId: userId,
+                        targetAudience: "all",
+                        targetUserId: creatorUid,
+                        resourceId: id,
+                        resourceType: "event",
+                        resourceDate: sched.date,
+                    });
+                }
+                return json(200, { lineupAcks: updated, acked: true });
+            }
+        } catch (err) {
+            console.error(err);
+            return json(500, { error: "Failed to toggle ack" });
         }
     }
 

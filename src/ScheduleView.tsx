@@ -83,6 +83,7 @@ const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
 const [schedPanelMode, setSchedPanelMode] = useState<"view" | "edit">("view");
 const [isSavingSchedule, setIsSavingSchedule] = useState(false);
 const [isNotifying, setIsNotifying] = useState(false);
+const [isAcking, setIsAcking] = useState(false);
 const [showEmailPreview, setShowEmailPreview] = useState(false);
 const [scheduleView, setScheduleView] = useState<"month" | "list">("month");
 const [calendarMonth, setCalendarMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
@@ -428,7 +429,50 @@ const handleNotifyTeam = async () => {
   }
 };
 
-  // ── Fetch schedules on mount ──────────────────────────────────────────────
+// \u2500\u2500 Lineup acknowledgment (heart) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+const handleLineupAck = async (scheduleId: string) => {
+  if (isAcking) return;
+  const cu = getAuth().currentUser;
+  if (!cu) { showToast("error", "You must be signed in to acknowledge."); return; }
+  const userId = cu.uid;
+  const userName = cu.displayName || cu.email?.split("@")[0] || "Team Member";
+  const photo = cu.photoURL || "";
+  setIsAcking(true);
+
+  // Optimistic update
+  const existing = allSchedules.find(s => s.id === scheduleId);
+  const acksNow = existing?.lineupAcks ?? [];
+  const alreadyAcked = acksNow.some(a => a.userId === userId);
+  const optimisticAcks = alreadyAcked
+    ? acksNow.filter(a => a.userId !== userId)
+    : [...acksNow, { userId, userName, photo }];
+  setAllSchedules(prev => prev.map(s =>
+    s.id === scheduleId ? { ...s, lineupAcks: optimisticAcks } : s
+  ));
+
+  try {
+    const res = await fetch(`/api/schedules/${scheduleId}/ack`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, userName, photo }),
+    });
+    if (!res.ok) throw new Error("ack failed");
+    const data = await res.json();
+    setAllSchedules(prev => prev.map(s =>
+      s.id === scheduleId ? { ...s, lineupAcks: data.lineupAcks ?? optimisticAcks } : s
+    ));
+  } catch {
+    // Revert on error
+    setAllSchedules(prev => prev.map(s =>
+      s.id === scheduleId ? { ...s, lineupAcks: acksNow } : s
+    ));
+    showToast("error", "Could not save acknowledgment. Try again.");
+  } finally {
+    setIsAcking(false);
+  }
+};
+
+
   useEffect(() => {
     if (allSchedules.length > 0) {
       // Data already seeded from App.tsx cache — silent background refresh
@@ -788,12 +832,44 @@ const handleNotifyTeam = async () => {
               )}
 
 
-              {selectedDateEvents.length >= 1 && selectedEventId && (
-                <button onClick={() => { setSelectedEventId(null); setSchedPanelMode("view"); }}
-                  className="flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium mb-3 transition-colors">
-                  <ChevronLeft size={14} /> All events this day
-                </button>
-              )}
+              {selectedDateEvents.length >= 1 && selectedEventId && (() => {
+                // Heart pill vars — computed here so both the row and header can use them
+                const cu = getAuth().currentUser;
+                const myUid = cu?.uid ?? "";
+                const acksForThisEvent = editingExisting?.lineupAcks ?? [];
+                const iHaveAcked = acksForThisEvent.some(a => a.userId === myUid);
+                const ackCount = acksForThisEvent.length;
+                const ackTooltip = acksForThisEvent.length === 0
+                  ? "Be the first to acknowledge this lineup"
+                  : acksForThisEvent.slice(0, 5).map(a => a.userName).join(", ") +
+                    (acksForThisEvent.length > 5 ? ` +${acksForThisEvent.length - 5} more` : "");
+                return (
+                  <div className="flex items-center justify-between mb-3">
+                    <button
+                      onClick={() => { setSelectedEventId(null); setSchedPanelMode("view"); }}
+                      className="flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium transition-colors"
+                    >
+                      <ChevronLeft size={14} /> All events this day
+                    </button>
+                    {/* Heart ack — only in view mode for upcoming events */}
+                    {schedPanelMode === "view" && editingExisting && !isDatePast && (
+                      <button
+                        onClick={() => handleLineupAck(editingExisting.id)}
+                        disabled={isAcking}
+                        title={ackTooltip}
+                        className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold transition-all ${
+                          iHaveAcked
+                            ? "bg-pink-100 dark:bg-pink-900/40 text-pink-600 dark:text-pink-400"
+                            : "text-gray-400 hover:text-pink-500 hover:bg-pink-50 dark:hover:bg-pink-900/20"
+                        }`}
+                      >
+                        <Heart size={13} className={iHaveAcked ? "fill-pink-500 text-pink-500" : ""} />
+                        {ackCount > 0 && <span>{ackCount}</span>}
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="font-bold text-gray-900 dark:text-white text-base">
@@ -809,8 +885,7 @@ const handleNotifyTeam = async () => {
                   {schedPanelMode === "view" && editingExisting && !isDatePast && (canWriteSchedule || leaderCanEditEvent) && (
                     <button
                       onClick={() => {
-                        // ── Bug fix: always reload form from latest editingExisting data ──
-                        // Prevents editing stale values if the event was updated elsewhere
+                        // Bug fix: always reload form from latest editingExisting data
                         const ev = editingExisting;
                         setEditSchedEventName((ev as any).eventName || (ev.serviceType === "sunday" ? "Sunday Service" : "Midweek Service"));
                         setEditSchedServiceType((ev.serviceType as any) || "sunday");
@@ -831,6 +906,34 @@ const handleNotifyTeam = async () => {
                       <Pencil size={16} />
                     </button>
                   )}
+                  {/* Heart ack — shown in header when it's a single-event day
+                      (multi-event day shows it in the "All events" row above) */}
+                  {schedPanelMode === "view" && editingExisting && !isDatePast && selectedDateEvents.length <= 1 && (() => {
+                    const cu = getAuth().currentUser;
+                    const myUid = cu?.uid ?? "";
+                    const acksForThisEvent = editingExisting.lineupAcks ?? [];
+                    const iHaveAcked = acksForThisEvent.some(a => a.userId === myUid);
+                    const ackCount = acksForThisEvent.length;
+                    const ackTooltip = acksForThisEvent.length === 0
+                      ? "Acknowledge this lineup"
+                      : acksForThisEvent.slice(0, 5).map(a => a.userName).join(", ") +
+                        (acksForThisEvent.length > 5 ? ` +${acksForThisEvent.length - 5} more` : "");
+                    return (
+                      <button
+                        onClick={() => handleLineupAck(editingExisting.id)}
+                        disabled={isAcking}
+                        title={ackTooltip}
+                        className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold transition-all ${
+                          iHaveAcked
+                            ? "bg-pink-100 dark:bg-pink-900/40 text-pink-600 dark:text-pink-400"
+                            : "text-gray-400 hover:text-pink-500 hover:bg-pink-50 dark:hover:bg-pink-900/20"
+                        }`}
+                      >
+                        <Heart size={13} className={iHaveAcked ? "fill-pink-500 text-pink-500" : ""} />
+                        {ackCount > 0 && <span>{ackCount}</span>}
+                      </button>
+                    );
+                  })()}
                   {editingExisting && (
                     <button onClick={() => {
                       const label = editSchedEventName || "Event";
