@@ -351,14 +351,13 @@ function NoteCard({ note, userId, userRole, highlighted, onEdit, onDelete, onRea
                         <button
                             onClick={() => onResolve(note.id, !note.resolved)}
                             title={resolveConfig.buttonLabel}
-                            className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-all ${
+                            className={`p-1.5 rounded-lg transition-all ${
                                 note.resolved
                                     ? "text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20"
                                     : "text-gray-400 hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20"
                             }`}
                         >
-                            <CheckCircle2 size={13} />
-                            <span className="text-[10px]">{resolveConfig.buttonLabel}</span>
+                            <CheckCircle2 size={14} />
                         </button>
                     )}
                     {/* Follow Up — only for note author who is not privileged, and only when not resolved */}
