@@ -840,7 +840,7 @@ const handleLineupAck = async (scheduleId: string) => {
                 const iHaveAcked = acksForThisEvent.some(a => a.userId === myUid);
                 const ackCount = acksForThisEvent.length;
                 const ackTooltip = acksForThisEvent.length === 0
-                  ? "Be the first to acknowledge this lineup"
+                  ? "Be the first to acknowledge this event"
                   : acksForThisEvent.slice(0, 5).map(a => a.userName).join(", ") +
                     (acksForThisEvent.length > 5 ? ` +${acksForThisEvent.length - 5} more` : "");
                 return (
