@@ -371,8 +371,8 @@ function NoteCard({ note, userId, userRole, highlighted, onEdit, onDelete, onRea
                             <span className="text-[10px]">Follow Up</span>
                         </button>
                     )}
-                    {/* Edit — own note (any role) OR any note (privileged only) */}
-                    {(isAuthor || isPrivileged) && !note.resolved && (
+                    {/* Edit — OWN note ONLY (no one can edit someone else's words, not even admin) */}
+                    {isAuthor && !note.resolved && (
                         <button onClick={() => onEdit(note)} title="Edit" className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-all">
                             <Pencil size={13} />
                         </button>

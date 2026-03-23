@@ -2073,14 +2073,13 @@ Rules:
     if (noteMatch) {
         const nid = noteMatch[1];
         if (method === "PUT") {
-            const { authorId, userRole, content, type, imageData, videoData } = body;
+            const { authorId, content, type, imageData, videoData } = body;
             if (!authorId || !content?.trim()) return json(400, { error: "Missing required fields" });
-            // Only the note's author OR a privileged role (Admin/Leader/QA) can edit
-            const isPrivileged = userRole === "admin" || userRole === "leader" || userRole === "qa_specialist";
+            // Only the note's own author can edit — not even admin can rewrite someone else's words
             try {
                 const doc = await firestore?.collection("team_notes").doc(nid).get();
                 if (!doc?.exists) return json(404, { error: "Note not found" });
-                if (doc.data()?.authorId !== authorId && !isPrivileged) return json(403, { error: "Not your note" });
+                if (doc.data()?.authorId !== authorId) return json(403, { error: "You can only edit your own notes" });
                 await firestore?.collection("team_notes").doc(nid).update({
                     content: content.trim(), type: type || "general",
                     imageData: imageData ?? doc.data()?.imageData ?? null,
