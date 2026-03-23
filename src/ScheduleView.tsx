@@ -350,16 +350,24 @@ const handleSaveSchedule = async () => {
     if (!res.ok) { const err = await res.json(); throw new Error(err.error || "Save failed"); }
     const saved = await res.json();
     if (editingExisting) {
-      setAllSchedules(prev => prev.map(s => s.id === editingExisting.id ? { ...s, ...payload, id: editingExisting.id } : s));
+      // ── Bug fix: compute updated list BEFORE setState so cache gets fresh data ──
+      const updatedSchedules = allSchedules.map(s =>
+        s.id === editingExisting.id ? { ...s, ...payload, id: editingExisting.id } : s
+      );
+      setAllSchedules(updatedSchedules);
+      writeSchedulesCache(updatedSchedules); // ← fresh data, not stale closure
       showToast("success", "Event updated!");
     } else {
       const newEv: Schedule = { id: saved.id, ...payload };
-      setAllSchedules(prev => [...prev, newEv]);
+      const updatedSchedules = [...allSchedules, newEv];
+      setAllSchedules(updatedSchedules);
+      writeSchedulesCache(updatedSchedules); // ← fresh data, not stale closure
       setSelectedEventId(saved.id);
       showToast("success", "Event saved!");
     }
     setSchedPanelMode("view");
-    writeSchedulesCache(allSchedules);
+    // ── Background re-sync with Firestore so local state == server state ──
+    fetchSchedules({ background: true });
   } catch (err: any) {
     showToast("error", err.message || "Could not save event.");
   } finally {
@@ -799,7 +807,29 @@ const handleNotifyTeam = async () => {
                 </div>
                 <div className="flex items-center gap-1">
                   {schedPanelMode === "view" && editingExisting && !isDatePast && (canWriteSchedule || leaderCanEditEvent) && (
-                    <button onClick={() => setSchedPanelMode("edit")} className="p-1.5 text-gray-400 hover:text-indigo-500 rounded-lg transition-colors"><Pencil size={16} /></button>
+                    <button
+                      onClick={() => {
+                        // ── Bug fix: always reload form from latest editingExisting data ──
+                        // Prevents editing stale values if the event was updated elsewhere
+                        const ev = editingExisting;
+                        setEditSchedEventName((ev as any).eventName || (ev.serviceType === "sunday" ? "Sunday Service" : "Midweek Service"));
+                        setEditSchedServiceType((ev.serviceType as any) || "sunday");
+                        setEditSchedWorshipLeader(ev.worshipLeader ?? null);
+                        setEditSchedBackupSingers(ev.backupSingers ?? []);
+                        setEditSchedMusicians(ev.musicians ?? []);
+                        setEditSchedAssignments(((ev as any).assignments ?? []).map((a: any) => ({ ...a, search: "" })));
+                        setEditSchedSongLineup(ev.songLineup ?? {});
+                        setEditSchedNotes(ev.notes ?? "");
+                        setSchedMemberSearch("");
+                        setJoyfulSearch("");
+                        setSolemnSearch("");
+                        setPendingRolePick(null);
+                        setSchedPanelMode("edit");
+                      }}
+                      className="p-1.5 text-gray-400 hover:text-indigo-500 rounded-lg transition-colors"
+                    >
+                      <Pencil size={16} />
+                    </button>
                   )}
                   {editingExisting && (
                     <button onClick={() => {
