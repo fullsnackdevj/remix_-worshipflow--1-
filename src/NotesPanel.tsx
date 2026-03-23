@@ -136,14 +136,16 @@ interface NoteCardProps {
     note: TeamNote;
     userId: string;
     userRole?: string;
+    highlighted?: boolean;
     onEdit: (note: TeamNote) => void;
     onDelete: (id: string) => void;
     onReact: (id: string, emoji: string, updatedReactions: Record<string, string[]>) => void;
     onResolve: (id: string, resolved: boolean) => void;
     onRetype: (id: string, newType: string) => void;
+    onFollowUp: (id: string) => void;
 }
 
-function NoteCard({ note, userId, userRole, onEdit, onDelete, onReact, onResolve, onRetype }: NoteCardProps) {
+function NoteCard({ note, userId, userRole, highlighted, onEdit, onDelete, onReact, onResolve, onRetype, onFollowUp }: NoteCardProps) {
     // Media lightbox state — null = closed, otherwise holds type + src
     const [lightbox, setLightbox] = useState<{ type: "image" | "video"; src: string } | null>(null);
     // ── Reactions: own local state (same pattern as VerseOfTheDay) so onSnapshot can never overwrite a mid-click reaction ──
@@ -180,12 +182,22 @@ function NoteCard({ note, userId, userRole, onEdit, onDelete, onReact, onResolve
     const isAdmin = userRole === "admin" || userRole === "leader";
     /** Admin, Leader, or QA Specialist — can edit/delete any note */
     const isPrivileged = isAdmin || userRole === "qa_specialist";
-    const canResolve = (isAuthor || isPrivileged) && (note.type === "bug" || note.type === "feature");
+    const canResolve = (isAuthor || isPrivileged); // all types can be resolved/done/acknowledged
     const totalReactions = (Object.values(reactions) as string[][]).reduce((s, arr) => s + arr.length, 0);
+
+    // Type-specific resolve button config
+    const resolveConfig = note.type === "bug"
+        ? { buttonLabel: note.resolved ? "Reopen" : "Resolve",       doneLabel: "Fixed",   doneColor: "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800" }
+        : note.type === "feature"
+        ? { buttonLabel: note.resolved ? "Reopen" : "Mark as Done",  doneLabel: "Done",    doneColor: "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800" }
+        : { buttonLabel: note.resolved ? "Un-acknowledge" : "Acknowledge", doneLabel: "Noted", doneColor: "bg-sky-100 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400 border-sky-200 dark:border-sky-800" };
 
     return (
         <>
-        <div className={`rounded-2xl border p-4 transition-all ${note.resolved ? "border-green-500/20 bg-green-500/5 dark:bg-green-900/5 opacity-80" : "border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/50"}`}>
+        <div
+            id={`note-card-${note.id}`}
+            className={`rounded-2xl border p-4 transition-all ${highlighted ? "ring-2 ring-indigo-500 shadow-lg shadow-indigo-500/20" : ""} ${note.resolved ? "border-green-500/20 bg-green-500/5 dark:bg-green-900/5 opacity-80" : "border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/50"}`}
+        >
             {/* Header row */}
             <div className="flex items-start justify-between gap-2 mb-3">
                 <div className="flex items-center gap-2.5 min-w-0">
@@ -205,8 +217,8 @@ function NoteCard({ note, userId, userRole, onEdit, onDelete, onReact, onResolve
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                     {note.resolved && (
-                        <span className="flex items-center gap-1 text-[10px] font-semibold bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 px-2 py-0.5 rounded-full border border-green-200 dark:border-green-800">
-                            <CheckCircle2 size={10} /> Resolved
+                        <span className={`flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${resolveConfig.doneColor}`}>
+                            <CheckCircle2 size={10} /> {resolveConfig.doneLabel}
                         </span>
                     )}
                     <span className={`flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${cfg.cls}`}>
@@ -320,10 +332,26 @@ function NoteCard({ note, userId, userRole, onEdit, onDelete, onReact, onResolve
                     {canResolve && (
                         <button
                             onClick={() => onResolve(note.id, !note.resolved)}
-                            title={note.resolved ? "Reopen" : "Mark resolved"}
-                            className={`p-1.5 rounded-lg text-xs transition-all ${note.resolved ? "text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20" : "text-gray-400 hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20"}`}
+                            title={resolveConfig.buttonLabel}
+                            className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-all ${
+                                note.resolved
+                                    ? "text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20"
+                                    : "text-gray-400 hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20"
+                            }`}
                         >
-                            <CheckCircle2 size={14} />
+                            <CheckCircle2 size={13} />
+                            <span className="text-[10px]">{resolveConfig.buttonLabel}</span>
+                        </button>
+                    )}
+                    {/* Follow Up — only for note author who is not privileged, and only when not resolved */}
+                    {isAuthor && !isPrivileged && !note.resolved && (
+                        <button
+                            onClick={() => onFollowUp(note.id)}
+                            title="Notify admin you're following up"
+                            className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-all"
+                        >
+                            <MessageSquare size={12} />
+                            <span className="text-[10px]">Follow Up</span>
                         </button>
                     )}
                     {/* Edit — own note (any role) OR any note (privileged only) */}
@@ -416,6 +444,8 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
     const [typeFilter, setTypeFilter] = useState<string>("all");
     const [sort, setSort] = useState<SortMode>("newest");
     const [showSort, setShowSort] = useState(false);
+    // highlighted note id (from bell notification deep-link)
+    const [highlightId, setHighlightId] = useState<string | null>(null);
 
     const fileRef = useRef<HTMLInputElement>(null);
     const videoRef = useRef<HTMLInputElement>(null);
@@ -775,11 +805,43 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
         }
     }, [open]);
 
-    // Auto-open when a note_resolved bell notification is clicked
+    // ── Follow Up — author notifies admin they need a response ──────────────
+    const followUpNote = async (id: string) => {
+        const res = await fetch(`/api/notes/${id}/follow-up`, {
+            method: "PATCH", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId, userName, userPhoto }),
+        });
+        if (res.status === 429) {
+            onToast?.("info", "You already sent a follow-up recently. Please wait 30 minutes.");
+        } else if (!res.ok) {
+            onToast?.("error", "Failed to send follow-up.");
+        } else {
+            onToast?.("success", "Follow-up sent! The admin has been notified. 📣");
+        }
+    };
+
+    // ── Auto-open when a note bell notification is clicked ──────────────
     useEffect(() => {
-        const handler = () => {
+        const handler = (e: Event) => {
+            const { noteId, type } = (e as CustomEvent).detail || {};
             setOpen(true);
-            setStatusTab("resolved");
+            // Switch to the right tab based on notification type
+            if (type === "note_resolved" || type === "note_done" || type === "note_acknowledged") {
+                setStatusTab("resolved");
+            } else {
+                setStatusTab("active");
+            }
+            setTypeFilter("all"); // show all types so the note is always visible
+            // Scroll to + highlight the specific note after the panel renders
+            if (noteId) {
+                setHighlightId(noteId);
+                setTimeout(() => {
+                    const el = document.getElementById(`note-card-${noteId}`);
+                    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+                }, 350);
+                // Clear highlight after 3 seconds
+                setTimeout(() => setHighlightId(null), 3500);
+            }
         };
         window.addEventListener("wf:open-notes-panel", handler);
         return () => window.removeEventListener("wf:open-notes-panel", handler);
@@ -1051,11 +1113,13 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
                                     note={note}
                                     userId={userId}
                                     userRole={userRole}
+                                    highlighted={note.id === highlightId}
                                     onEdit={openForm}
                                     onDelete={deleteNote}
                                     onReact={reactToNote}
                                     onResolve={resolveNote}
                                     onRetype={retypeNote}
+                                    onFollowUp={followUpNote}
                                 />
                                 </React.Fragment>
                             ))

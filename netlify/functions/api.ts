@@ -2149,15 +2149,22 @@ Rules:
             const noteData = doc.data() as Record<string, any>;
             await ref?.update({ resolved: !!resolved, resolvedBy: resolved ? userId : null });
 
-            // ── Notify the note author when their report is resolved ──────────
+            // ── Notify the note author when their report is actioned ────────────
             // Skip: if the author is resolving their own note, or if unresolving
             if (resolved && noteData.authorId && noteData.authorId !== userId) {
+                const noteType = noteData.type as string;
+                // Type-specific notification content
+                const notifType  = noteType === "bug"     ? "note_resolved"
+                                 : noteType === "feature" ? "note_done"
+                                 : "note_acknowledged";
+                const message    = noteType === "bug"     ? "Your bug report has been fixed ✅"
+                                 : noteType === "feature" ? "Your feature request has been implemented ✅"
+                                 : "Your feedback has been acknowledged 💬";
                 const preview = (noteData.content as string || "").slice(0, 60);
-                const typeLabel = noteData.type === "bug" ? "bug report" : noteData.type === "feature" ? "feature request" : "note";
                 await writeNotif(firestore, {
-                    type: "note_resolved",
-                    message: `Your ${typeLabel} has been resolved ✅`,
-                    subMessage: preview ? `"${preview}${preview.length === 60 ? "…" : ""}"` : "Your feedback has been marked as resolved.",
+                    type: notifType,
+                    message,
+                    subMessage: preview ? `"${preview}${preview.length === 60 ? "…" : ""}"` : "Check your feedback in the panel.",
                     actorName: resolverName || "A team member",
                     actorPhoto: resolverPhoto || "",
                     actorUserId: userId,
@@ -2169,6 +2176,46 @@ Rules:
 
             return json(200, { success: true });
         } catch (e) { return json(500, { error: "Failed to resolve" }); }
+    }
+
+    // PATCH /notes/:id/follow-up — non-admin users notify admin they need an update
+    const followUpMatch = rawPath.match(/^\/notes\/([^/]+)\/follow-up$/);
+    if (followUpMatch && method === "PATCH") {
+        const nid = followUpMatch[1];
+        const { userId, userName, userPhoto } = body;
+        if (!userId) return json(400, { error: "Missing userId" });
+        try {
+            const ref = firestore?.collection("team_notes").doc(nid);
+            const doc = await ref?.get();
+            if (!doc?.exists) return json(404, { error: "Note not found" });
+            const noteData = doc.data() as Record<string, any>;
+
+            // Throttle: max one follow-up per 30 minutes per note
+            const lastFollowUp = noteData.lastFollowUpAt;
+            if (lastFollowUp) {
+                const lastMs = lastFollowUp.toDate ? lastFollowUp.toDate().getTime() : lastFollowUp;
+                if (Date.now() - lastMs < 30 * 60 * 1000) {
+                    return json(429, { error: "You can only follow up once every 30 minutes." });
+                }
+            }
+
+            await ref?.update({ lastFollowUpAt: admin.firestore.FieldValue.serverTimestamp() });
+
+            const typeLabel = noteData.type === "bug" ? "bug report" : noteData.type === "feature" ? "feature request" : "general note";
+            const preview   = (noteData.content as string || "").slice(0, 60);
+            await writeNotif(firestore, {
+                type: "note_followup",
+                message: `📣 ${userName || "A user"} is following up on their ${typeLabel}`,
+                subMessage: preview ? `"${preview}${preview.length === 60 ? "…" : ""}"` : "They are waiting for a response.",
+                actorName: userName || "Team member",
+                actorPhoto: userPhoto || "",
+                actorUserId: userId,
+                targetAudience: "admin_only",
+                resourceId: nid,
+            });
+
+            return json(200, { success: true });
+        } catch (e) { return json(500, { error: "Failed to send follow-up" }); }
     }
 
     // PATCH /notes/:id/retype  — Admin / Leader only
