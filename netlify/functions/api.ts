@@ -1942,8 +1942,8 @@ Rules:
                     });
                     await writeNotif(firestore, {
                         type: "lineup_ack",
-                        message: `${userName} acknowledged your lineup`,
-                        subMessage: `💗 ${evName} — ${dateLabel}`,
+                        message: `${userName} acknowledged your ${evName} event`,
+                        subMessage: `💗 ${dateLabel}`,
                         actorName: userName,
                         actorPhoto: photo,
                         actorUserId: userId,
