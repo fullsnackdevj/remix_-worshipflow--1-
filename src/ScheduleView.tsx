@@ -1646,8 +1646,8 @@ const handleLineupAck = async (scheduleId: string) => {
     {showEmailPreview && editingExisting && (() => {
       const _ev = editingExisting as any;
       const dateLabel = new Date(_ev.date + "T00:00:00").toLocaleDateString("en", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
-      const st = _ev.serviceType || "sunday";
-      const serviceLabel = st === "sunday" ? "Sunday Service" : st === "special" ? "Special Event" : st === "midweek" ? "Mid-Week Service" : st.charAt(0).toUpperCase() + st.slice(1);
+      const st = _ev.serviceType || "";
+      const serviceLabel = st === "sunday" ? "Sunday Service" : st === "special" ? "Special Event" : st === "midweek" ? "Mid-Week Service" : st ? st.charAt(0).toUpperCase() + st.slice(1) : (editSchedEventName || "Event");
       const jSong = allSongs.find(sg => sg.id === editSchedSongLineup.joyful);
       const sSong = allSongs.find(sg => sg.id === editSchedSongLineup.solemn);
       return (

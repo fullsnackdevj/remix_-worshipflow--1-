@@ -57,7 +57,8 @@ async function sendScheduleEmail(
         const serviceLabel = opts.serviceType === "sunday" ? "Sunday Service" :
             opts.serviceType === "special" ? "Special Event" :
             opts.serviceType === "midweek" ? "Mid-Week Service" :
-            opts.serviceType.charAt(0).toUpperCase() + opts.serviceType.slice(1);
+            opts.serviceType ? opts.serviceType.charAt(0).toUpperCase() + opts.serviceType.slice(1) :
+            opts.eventName || "Event"; // fallback: use event name for custom events
         const actionLabel = opts.action === "created" ? "New Event Scheduled" : "Event Updated";
         const emoji = opts.action === "created" ? "🎉" : "📝";
 
@@ -2012,7 +2013,7 @@ Rules:
                 action: "created",
                 eventName: ev.eventName || "",
                 date: ev.date,
-                serviceType: ev.serviceType || "sunday",
+                serviceType: ev.serviceType || "", // never default to 'sunday' — respect the actual event type
                 worshipLeader: ev.worshipLeader ?? null,
                 backupSingers: ev.backupSingers ?? [],
                 musicians: ev.musicians ?? [],
