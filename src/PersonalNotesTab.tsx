@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   Plus, X, Pin, PinOff, Trash2, Pencil, Check, ChevronDown,
-  Lock, BookOpen, Bell, Heart, FileText, Loader2, Search, NotebookPen,
+  Lock, BookOpen, Bell, Heart, FileText, Loader2, Search, NotebookPen, Copy,
 } from "lucide-react";
 import AutoTextarea from "./AutoTextarea";
 
@@ -19,6 +20,7 @@ export interface PersonalNoteEntry {
 interface Props {
   userId: string;
   onToast?: (type: "success" | "error" | "info" | "warning", message: string) => void;
+  openTrigger?: number; // increment to programmatically open the new-note form
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -49,20 +51,118 @@ function relTime(iso: string) {
   return new Date(iso).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" });
 }
 
+// ── Full Note Modal ────────────────────────────────────────────────────────────
+function PersonalNoteViewModal({
+  note, onClose, onEdit, onDelete, onPin,
+}: {
+  note: PersonalNoteEntry;
+  onClose: () => void;
+  onEdit: (n: PersonalNoteEntry) => void;
+  onDelete: (id: string) => void;
+  onPin: (id: string, pinned: boolean) => void;
+}) {
+  const cfg = catConfig(note.category);
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handler);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", handler);
+    };
+  }, [onClose]);
+  const [copied, setCopied] = useState(false);
+  const modal = (
+    <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-lg bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-white/10 overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-white/10">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className={`flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border shrink-0 ${cfg.cls}`}>
+              {cfg.icon} {cfg.label}
+            </span>
+            {note.pinned && (
+              <span className="flex items-center gap-1 text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 border border-amber-200 dark:border-amber-700 px-2 py-0.5 rounded-full shrink-0">
+                <Pin size={9} /> Pinned
+              </span>
+            )}
+            <span className="text-[10px] text-gray-400 ml-1 shrink-0">
+              {relTime(note.createdAt)}{note.updatedAt && (new Date(note.updatedAt).getTime() - new Date(note.createdAt).getTime() > 2000) ? " · edited" : ""}
+            </span>
+          </div>
+          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-white rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-all shrink-0 ml-2" title="Close">
+            <X size={15} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-5 py-4 overflow-y-auto max-h-[60vh]" style={{ scrollbarWidth: "thin" }}>
+          <h2 className="text-base font-bold text-gray-900 dark:text-white mb-3 leading-snug">{note.title}</h2>
+          <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words leading-relaxed">{note.body}</p>
+        </div>
+
+        {/* Footer actions */}
+        <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 dark:border-white/10 bg-gray-50 dark:bg-white/5">
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => { onPin(note.id, !note.pinned); onClose(); }} title={note.pinned ? "Unpin" : "Pin to top"}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-xl transition-all border border-gray-200 dark:border-gray-700">
+              {note.pinned ? <PinOff size={12} /> : <Pin size={12} />}
+              {note.pinned ? "Unpin" : "Pin"}
+            </button>
+            {/* Copy */}
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(`${note.title}\n\n${note.body}`);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              }}
+              title="Copy note"
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl border transition-all ${
+                copied
+                  ? "text-green-600 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800"
+                  : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/10 border-gray-200 dark:border-gray-700"
+              }`}
+            >
+              <Copy size={12} />
+              {copied ? "Copied!" : "Copy"}
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => { onDelete(note.id); onClose(); }} title="Delete"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all border border-red-200 dark:border-red-800">
+              <Trash2 size={12} /> Delete
+            </button>
+            <button onClick={() => { onClose(); onEdit(note); }} title="Edit Note"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-xl transition-all border border-gray-200 dark:border-gray-700">
+              <Pencil size={12} /> Edit Note
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+  return createPortal(modal, document.body);
+}
+
 // ── NoteCard ──────────────────────────────────────────────────────────────────
 function PersonalNoteCard({
-  note, onEdit, onDelete, onPin,
+  note, onEdit, onDelete, onPin, onView,
 }: {
   key?: React.Key;
   note: PersonalNoteEntry;
   onEdit: (n: PersonalNoteEntry) => void;
   onDelete: (id: string) => Promise<void> | void;
   onPin: (id: string, pinned: boolean) => Promise<void> | void;
+  onView: (n: PersonalNoteEntry) => void;
 }) {
   const cfg = catConfig(note.category);
   const [expanded, setExpanded] = useState(false);
   const bodyRef = useRef<HTMLParagraphElement>(null);
   const [isOverflowing, setIsOverflowing] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     const el = bodyRef.current;
@@ -98,27 +198,59 @@ function PersonalNoteCard({
           </span>
         </div>
 
-        {/* Title */}
-        <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-1.5 leading-snug">{note.title}</h3>
+        {/* Title — clickable to open full view */}
+        <h3
+          className="text-sm font-bold text-gray-900 dark:text-white mb-1.5 leading-snug cursor-pointer hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
+          onClick={() => onView(note)}
+          title="Click to view full note"
+        >
+          {note.title}
+        </h3>
 
-        {/* Body */}
+        {/* Body — clickable to open full view */}
         <p
           ref={bodyRef}
-          className={`text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap break-words leading-relaxed transition-all ${
-            expanded ? "overflow-y-auto max-h-96" : "overflow-hidden max-h-48"
+          className={`text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap break-words leading-relaxed transition-all cursor-pointer ${
+            expanded ? "overflow-y-auto max-h-96" : "overflow-hidden max-h-24"
           }`}
           style={{ scrollbarWidth: "thin" }}
+          onClick={() => !expanded && onView(note)}
+          title={!expanded ? "Click to view full note" : undefined}
         >
           {note.body}
         </p>
         {(isOverflowing || expanded) && (
-          <button onClick={() => setExpanded(v => !v)} className="mt-1.5 text-xs font-semibold text-amber-500 hover:text-amber-700 dark:hover:text-amber-300 transition-colors">
+          <button
+            onClick={e => { e.stopPropagation(); setExpanded(v => !v); }}
+            className="mt-1.5 text-xs font-semibold text-amber-500 hover:text-amber-700 dark:hover:text-amber-300 transition-colors"
+          >
             {expanded ? "Show less ↑" : "Show more ↓"}
           </button>
         )}
 
-        {/* Action row */}
-        <div className="flex items-center justify-end gap-1 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700/50 opacity-0 group-hover:opacity-100 transition-opacity">
+        {/* Action row — ALWAYS visible */}
+        <div className="flex items-center justify-end gap-1 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700/50">
+          {/* Copy */}
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(`${note.title}\n\n${note.body}`);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            }}
+            title="Copy note"
+            className={`p-1.5 rounded-lg transition-all ${
+              copied
+                ? "text-green-500 bg-green-50 dark:bg-green-900/20"
+                : "text-gray-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+            }`}
+          >
+            <Copy size={13} />
+          </button>
+          {/* View full note */}
+          <button onClick={() => onView(note)} title="View full note"
+            className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-all" >
+            <NotebookPen size={13} />
+          </button>
           <button onClick={() => onPin(note.id, !note.pinned)} title={note.pinned ? "Unpin" : "Pin to top"}
             className="p-1.5 text-gray-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-lg transition-all">
             {note.pinned ? <PinOff size={13} /> : <Pin size={13} />}
@@ -146,6 +278,12 @@ function PersonalNoteFormModal({
   onClose: () => void;
   saving: boolean;
 }) {
+  // Lock body scroll while form is open
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
+
   const seedDraft = !initial
     ? (() => { try { const d = localStorage.getItem(PERSONAL_DRAFT_KEY); return d ? JSON.parse(d) : null; } catch { return null; } })()
     : null;
@@ -189,7 +327,7 @@ function PersonalNoteFormModal({
   const valid = title.trim().length > 0 && body.trim().length > 0;
   const hasDraftBanner = !initial && !!seedDraft && (seedDraft.title || seedDraft.body);
 
-  return (
+  return createPortal((
     <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="w-full max-w-lg bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-white/10 overflow-hidden">
 
@@ -295,20 +433,32 @@ function PersonalNoteFormModal({
         </div>
       </div>
     </div>
-  );
+  ), document.body);
 }
 
 // ── Main Personal Notes Tab ───────────────────────────────────────────────────
-export default function PersonalNotesTab({ userId, onToast }: Props) {
+export default function PersonalNotesTab({ userId, onToast, openTrigger = 0 }: Props) {
   const [notes,    setNotes]    = useState<PersonalNoteEntry[]>([]);
   const [loading,  setLoading]  = useState(true);
   const [saving,   setSaving]   = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editing,  setEditing]  = useState<PersonalNoteEntry | null>(null);
+  const [viewing,  setViewing]  = useState<PersonalNoteEntry | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [search,   setSearch]   = useState("");
   const [catFilter, setCatFilter] = useState<CategoryValue | "all">("all");
   const [showCatMenu, setShowCatMenu] = useState(false);
   const catMenuRef = useRef<HTMLDivElement>(null);
+
+  // Open new note form when parent increments the trigger
+  const prevTrigger = useRef(openTrigger);
+  useEffect(() => {
+    if (openTrigger > 0 && openTrigger !== prevTrigger.current) {
+      prevTrigger.current = openTrigger;
+      setEditing(null);
+      setShowForm(true);
+    }
+  }, [openTrigger]);
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchNotes = useCallback(async () => {
@@ -390,8 +540,15 @@ export default function PersonalNotesTab({ userId, onToast }: Props) {
     }
   };
 
-  // ── Delete ─────────────────────────────────────────────────────────────────
+  // ── Delete (with confirmation) ─────────────────────────────────────────────
   const handleDelete = async (id: string) => {
+    setDeleteConfirm(id);
+  };
+
+  const confirmDelete = async () => {
+    const id = deleteConfirm;
+    if (!id) return;
+    setDeleteConfirm(null);
     setNotes(prev => prev.filter(n => n.id !== id));
     try {
       const res = await fetch(`/api/personal-notes/${id}`, {
@@ -421,12 +578,6 @@ export default function PersonalNotesTab({ userId, onToast }: Props) {
 
   return (
     <div>
-      {/* ── Privacy notice bar ── */}
-      <div className="flex items-center gap-2 mb-5 px-4 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-900/15 border border-amber-100 dark:border-amber-800/30 text-xs text-amber-700 dark:text-amber-400">
-        <Lock size={12} className="shrink-0" />
-        <span>These notes are <strong>only visible to you</strong>. No other team member can read, search, or access your personal notes.</span>
-      </div>
-
       {/* ── Filters bar ── */}
       <div className="flex items-center gap-2 mb-5 flex-wrap">
         <div className="relative flex-1 min-w-[180px]">
@@ -490,9 +641,21 @@ export default function PersonalNotesTab({ userId, onToast }: Props) {
               onEdit={n => { setEditing(n); setShowForm(true); }}
               onDelete={handleDelete}
               onPin={handlePin}
+              onView={n => setViewing(n)}
             />
           ))}
         </div>
+      )}
+
+      {/* ── Full Note View Modal ── */}
+      {viewing && (
+        <PersonalNoteViewModal
+          note={viewing}
+          onClose={() => setViewing(null)}
+          onEdit={n => { setViewing(null); setEditing(n); setShowForm(true); }}
+          onDelete={id => { setViewing(null); handleDelete(id); }}
+          onPin={handlePin}
+        />
       )}
 
       {/* ── Form Modal ── */}
@@ -503,6 +666,43 @@ export default function PersonalNotesTab({ userId, onToast }: Props) {
           onClose={() => { setShowForm(false); setEditing(null); }}
           saving={saving}
         />
+      )}
+
+      {/* ── Delete Confirmation (portaled to body) ── */}
+      {deleteConfirm && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-white/10 overflow-hidden">
+            <div className="px-6 py-5">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center shrink-0">
+                  <Trash2 size={18} className="text-red-500" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-gray-900 dark:text-white">Delete this note?</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">This action cannot be undone.</p>
+                </div>
+              </div>
+              <p className="text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-white/5 rounded-xl px-3 py-2 mt-2">
+                The note will be permanently removed from your private notes.
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-6 pb-5">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/10 rounded-xl transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="px-4 py-2 text-sm font-semibold text-white bg-red-500 hover:bg-red-400 rounded-xl transition-all"
+              >
+                Yes, Delete
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

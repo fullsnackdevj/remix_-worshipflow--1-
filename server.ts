@@ -1261,6 +1261,161 @@ app.patch("/api/notes/:id/resolve", async (req, res) => {
   } catch (e) { res.status(500).json({ error: "Failed to resolve" }); }
 });
 
+// ── PERSONAL NOTES ───────────────────────────────────────────────────────────
+// Stored in users/{userId}/personalNotes subcollection — structurally private.
+
+// GET /api/personal-notes?userId=...
+app.get("/api/personal-notes", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const userId = req.query.userId as string;
+  if (!userId) return res.status(400).json({ error: "userId required" });
+  try {
+    const snap = await firestore.collection("users").doc(userId)
+      .collection("personalNotes").orderBy("createdAt", "desc").limit(200).get();
+    const notes = snap.docs.filter(d => !d.data().deletedAt).map(d => ({ id: d.id, ...d.data() }));
+    res.json(notes);
+  } catch (e) { res.status(500).json({ error: "Failed to fetch personal notes" }); }
+});
+
+// POST /api/personal-notes
+app.post("/api/personal-notes", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { userId, title, body: noteBody, category } = req.body;
+  if (!userId || !title || !noteBody) return res.status(400).json({ error: "Missing fields" });
+  try {
+    const ref = await firestore.collection("users").doc(userId)
+      .collection("personalNotes").add({
+        title, body: noteBody,
+        category: category || "personal",
+        pinned: false,
+        createdAt: new Date().toISOString(),
+      });
+    res.status(200).json({ id: ref.id });
+  } catch (e) { res.status(500).json({ error: "Failed to create personal note" }); }
+});
+
+// PUT /api/personal-notes/:id
+app.put("/api/personal-notes/:id", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { userId, title, body: noteBody, category } = req.body;
+  if (!userId || !title || !noteBody) return res.status(400).json({ error: "Missing fields" });
+  try {
+    await firestore.collection("users").doc(userId)
+      .collection("personalNotes").doc(req.params.id)
+      .update({ title, body: noteBody, category: category || "personal", updatedAt: new Date().toISOString() });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: "Failed to update personal note" }); }
+});
+
+// DELETE /api/personal-notes/:id
+app.delete("/api/personal-notes/:id", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ error: "userId required" });
+  try {
+    await firestore.collection("users").doc(userId)
+      .collection("personalNotes").doc(req.params.id).delete();
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: "Failed to delete personal note" }); }
+});
+
+// PATCH /api/personal-notes/:id/pin
+app.patch("/api/personal-notes/:id/pin", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { userId, pinned } = req.body;
+  if (!userId) return res.status(400).json({ error: "userId required" });
+  try {
+    await firestore.collection("users").doc(userId)
+      .collection("personalNotes").doc(req.params.id)
+      .update({ pinned: !!pinned });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: "Failed to pin/unpin personal note" }); }
+});
+
+// ── TEAM NOTES (meeting recaps) ───────────────────────────────────────────────
+
+// GET /api/team-notes
+app.get("/api/team-notes", async (_req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  try {
+    const snap = await firestore.collection("teamNotes").orderBy("createdAt", "desc").limit(100).get();
+    const notes = snap.docs.filter(d => !d.data().deletedAt).map(d => ({ id: d.id, ...d.data() }));
+    res.json(notes);
+  } catch (e) { res.status(500).json({ error: "Failed to fetch team notes" }); }
+});
+
+// POST /api/team-notes
+app.post("/api/team-notes", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { authorId, authorName, authorPhoto, title, body: noteBody, category } = req.body;
+  if (!authorId || !title || !noteBody) return res.status(400).json({ error: "Missing fields" });
+  try {
+    const ref = await firestore.collection("teamNotes").add({
+      authorId, authorName: authorName || "Unknown", authorPhoto: authorPhoto || "",
+      title, body: noteBody, category: category || "general",
+      pinned: false, createdAt: new Date().toISOString(),
+    });
+    res.status(200).json({ id: ref.id });
+  } catch (e) { res.status(500).json({ error: "Failed to create team note" }); }
+});
+
+// PUT /api/team-notes/:id
+app.put("/api/team-notes/:id", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { title, body: noteBody, category } = req.body;
+  if (!title || !noteBody) return res.status(400).json({ error: "Missing fields" });
+  try {
+    await firestore.collection("teamNotes").doc(req.params.id)
+      .update({ title, body: noteBody, category: category || "general", updatedAt: new Date().toISOString() });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: "Failed to update team note" }); }
+});
+
+// DELETE /api/team-notes/:id
+app.delete("/api/team-notes/:id", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  try {
+    await firestore.collection("teamNotes").doc(req.params.id).delete();
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: "Failed to delete team note" }); }
+});
+
+// PATCH /api/team-notes/:id/pin
+app.patch("/api/team-notes/:id/pin", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { pinned } = req.body;
+  try {
+    await firestore.collection("teamNotes").doc(req.params.id).update({ pinned: !!pinned });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: "Failed to pin/unpin team note" }); }
+});
+
+// PATCH /api/team-notes/:id/like
+app.patch("/api/team-notes/:id/like", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { userId, liked } = req.body;
+  if (!userId) return res.status(400).json({ error: "userId required" });
+  try {
+    const admin = await import("firebase-admin");
+    const update = liked
+      ? { likes: admin.firestore.FieldValue.arrayUnion(userId) }
+      : { likes: admin.firestore.FieldValue.arrayRemove(userId) };
+    await firestore.collection("teamNotes").doc(req.params.id).update(update);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: "Failed to update like" }); }
+});
+
 app.post("/api/ocr", async (req, res) => {
   try {
     const { base64Data, mimeType, type } = req.body;

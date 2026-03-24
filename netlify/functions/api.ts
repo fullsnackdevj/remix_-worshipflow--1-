@@ -2476,6 +2476,21 @@ Rules:
         } catch (e) { return json(500, { error: "Failed to pin/unpin note" }); }
     }
 
+    // PATCH /team-notes/:id/like
+    const teamNoteLikeMatch = rawPath.match(/^\/team-notes\/([^/]+)\/like$/);
+    if (teamNoteLikeMatch && method === "PATCH") {
+        const id = teamNoteLikeMatch[1];
+        try {
+            const { userId: likeUserId, liked } = body || {};
+            if (!likeUserId) return json(400, { error: "userId required" });
+            const update = liked
+                ? { likes: admin.firestore.FieldValue.arrayUnion(likeUserId) }
+                : { likes: admin.firestore.FieldValue.arrayRemove(likeUserId) };
+            await firestore.collection("teamNotes").doc(id).update(update);
+            return json(200, { success: true });
+        } catch (e) { return json(500, { error: "Failed to update like" }); }
+    }
+
     // ─── VERSE OF THE DAY ────────────────────────────────────────────────────────
 
     // GET /verse-of-day?date=YYYY-MM-DD

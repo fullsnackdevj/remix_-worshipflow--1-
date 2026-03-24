@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   Plus, X, Pin, PinOff, Trash2, Pencil, Check, ChevronDown,
-  FileText, Users, Megaphone, NotebookPen, Loader2, Search, Lock,
+  FileText, Users, Megaphone, NotebookPen, Loader2, Search, Lock, Heart, Copy,
 } from "lucide-react";
 import AutoTextarea from "./AutoTextarea";
 import PersonalNotesTab from "./PersonalNotesTab";
@@ -18,6 +19,7 @@ export interface TeamNoteEntry {
   pinned: boolean;
   createdAt: string;
   updatedAt?: string | null;
+  likes?: string[]; // array of userIds who liked this note
 }
 
 interface TeamNotesViewProps {
@@ -55,9 +57,153 @@ function relTime(iso: string) {
   return new Date(iso).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" });
 }
 
+function likesText(likes: string[] | undefined, userId: string, userName: string): string {
+  if (!likes || likes.length === 0) return "";
+  const iLiked = likes.includes(userId);
+  const othersCount = likes.length - (iLiked ? 1 : 0);
+  if (iLiked && othersCount === 0) return "You like this";
+  if (iLiked && othersCount === 1) return `You and 1 other like this`;
+  if (iLiked && othersCount > 1)  return `You and ${othersCount} others like this`;
+  if (!iLiked && likes.length === 1) return `${userName ? userName.split(" ")[0] : "Someone"} likes this`;
+  return `${likes.length} people like this`;
+}
+
+// ── Full Note View Modal ──────────────────────────────────────────────────────────
+function TeamNoteViewModal({
+  note, userId, userRole, onClose, onEdit, onDelete, onPin, onLike,
+}: {
+  note: TeamNoteEntry;
+  userId: string;
+  userRole?: string;
+  onClose: () => void;
+  onEdit: (n: TeamNoteEntry) => void;
+  onDelete: (id: string) => void;
+  onPin: (id: string, pinned: boolean) => void;
+  onLike: (id: string, liked: boolean) => void;
+}) {
+  const cfg      = catConfig(note.category);
+  const isAuthor = note.authorId === userId;
+  const isAdmin  = userRole === "admin" || userRole === "leader";
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handler);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", handler);
+    };
+  }, [onClose]);
+  const [copied, setCopied] = useState(false);
+  const modal = (
+    <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="w-full max-w-lg bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-white/10 overflow-hidden" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-white/10">
+          <div className="flex items-center gap-2.5 min-w-0">
+            {note.authorPhoto ? (
+              <img src={note.authorPhoto} className="w-7 h-7 rounded-full object-cover shrink-0 border-2 border-indigo-400/30" alt="" />
+            ) : (
+              <div className="w-7 h-7 rounded-full shrink-0 bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold">
+                {note.authorName?.[0]?.toUpperCase()}
+              </div>
+            )}
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-gray-900 dark:text-white truncate">{note.authorName}</p>
+              <p className="text-[10px] text-gray-400">{relTime(note.createdAt)}{note.updatedAt && (new Date(note.updatedAt).getTime() - new Date(note.createdAt).getTime() > 2000) ? " · edited" : ""}</p>
+            </div>
+            <span className={`ml-2 flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border shrink-0 ${cfg.cls}`}>
+              {cfg.icon} {cfg.label}
+            </span>
+            {note.pinned && (
+              <span className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900/50 border border-indigo-200 dark:border-indigo-700 px-2 py-0.5 rounded-full shrink-0">
+                <Pin size={9} /> Pinned
+              </span>
+            )}
+          </div>
+          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-white rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-all shrink-0 ml-2" title="Close">
+            <X size={15} />
+          </button>
+        </div>
+        {/* Body */}
+        <div className="px-5 py-4 overflow-y-auto max-h-[60vh]" style={{ scrollbarWidth: "thin" }}>
+          <h2 className="text-base font-bold text-gray-900 dark:text-white mb-3 leading-snug">{note.title}</h2>
+          <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words leading-relaxed">{note.body}</p>
+        </div>
+        {/* Footer — single row: [❤️ Like + text] [spacer] [Pin] [Delete] */}
+        <div className="flex items-center gap-3 px-5 py-3 border-t border-gray-100 dark:border-white/10 bg-gray-50 dark:bg-white/5">
+          {/* Left: Like button + likes text */}
+          <button
+            onClick={() => onLike(note.id, !(note.likes ?? []).includes(userId))}
+            title={(note.likes ?? []).includes(userId) ? "Unlike" : "Like this note"}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all shrink-0 ${
+              (note.likes ?? []).includes(userId)
+                ? "text-rose-600 bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-800"
+                : "text-gray-500 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 border-gray-200 dark:border-gray-700"
+            }`}
+          >
+            <Heart size={13} className={(note.likes ?? []).includes(userId) ? "fill-rose-500 text-rose-500" : ""} />
+            {(note.likes ?? []).includes(userId) ? "Liked" : "Like"}
+            {(note.likes ?? []).length > 0 && (
+              <span className="ml-0.5 font-bold">{(note.likes ?? []).length}</span>
+            )}
+          </button>
+          {likesText(note.likes, userId, note.authorName) && (
+            <span className="text-[10px] text-gray-400">
+              {likesText(note.likes, userId, note.authorName)}
+            </span>
+          )}
+          {/* Copy — available to everyone */}
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(`${note.title}\n\n${note.body}`);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            }}
+            title="Copy note"
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl border transition-all shrink-0 ${
+              copied
+                ? "text-green-600 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800"
+                : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/10 border-gray-200 dark:border-gray-700"
+            }`}
+          >
+            <Copy size={12} />
+            {copied ? "Copied!" : "Copy"}
+          </button>
+          {/* Spacer */}
+          <div className="flex-1" />
+          {/* Right: Pin + Delete (author/admin only) */}
+          {(isAuthor || isAdmin) && (
+            <button onClick={() => { onPin(note.id, !note.pinned); onClose(); }}
+              title={note.pinned ? "Unpin" : "Pin to top"}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-xl transition-all border border-gray-200 dark:border-gray-700 shrink-0">
+              {note.pinned ? <PinOff size={12} /> : <Pin size={12} />}
+              {note.pinned ? "Unpin" : "Pin"}
+            </button>
+          )}
+          {(isAuthor || isAdmin) && (
+            <button onClick={() => { onClose(); onEdit(note); }}
+              title="Edit Note"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-xl transition-all border border-gray-200 dark:border-gray-700 shrink-0">
+              <Pencil size={12} /> Edit
+            </button>
+          )}
+          {(isAuthor || isAdmin) && (
+            <button onClick={() => { onDelete(note.id); onClose(); }}
+              title="Delete"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all border border-red-200 dark:border-red-800 shrink-0">
+              <Trash2 size={12} /> Delete
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+  return createPortal(modal, document.body);
+}
+
 // ── NoteCard ──────────────────────────────────────────────────────────────────
 function NoteCard({
-  note, userId, userRole, onEdit, onDelete, onPin,
+  note, userId, userRole, onEdit, onDelete, onPin, onView, onLike,
 }: {
   key?: React.Key;
   note: TeamNoteEntry;
@@ -66,6 +212,8 @@ function NoteCard({
   onEdit: (n: TeamNoteEntry) => void;
   onDelete: (id: string) => Promise<void> | void;
   onPin: (id: string, pinned: boolean) => Promise<void> | void;
+  onView: (n: TeamNoteEntry) => void;
+  onLike: (id: string, liked: boolean) => void;
 }) {
   const isAuthor = note.authorId === userId;
   const isAdmin  = userRole === "admin" || userRole === "leader";
@@ -73,6 +221,7 @@ function NoteCard({
   const [expanded, setExpanded] = useState(false);
   const bodyRef = React.useRef<HTMLParagraphElement>(null);
   const [isOverflowing, setIsOverflowing] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   // Check if text overflows the collapsed max-height — run inside rAF so the
   // browser has fully painted the capped height before we measure
@@ -122,58 +271,103 @@ function NoteCard({
           </div>
         </div>
 
-        {/* Title */}
-        <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-1.5 leading-snug">{note.title}</h3>
+        {/* Title — clickable to open full view */}
+        <h3
+          className="text-sm font-bold text-gray-900 dark:text-white mb-1.5 leading-snug cursor-pointer hover:text-indigo-500 dark:hover:text-indigo-400 transition-colors"
+          onClick={() => onView(note)}
+          title="Click to view full note"
+        >
+          {note.title}
+        </h3>
 
-        {/* Body */}
+        {/* Body — click to view if collapsed */}
         <p
           ref={bodyRef}
-          className={`text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap break-words leading-relaxed transition-all ${
-            expanded ? "overflow-y-auto max-h-96" : "overflow-hidden max-h-48"
+          className={`text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap break-words leading-relaxed transition-all cursor-pointer ${
+            expanded ? "overflow-y-auto max-h-96" : "overflow-hidden max-h-24"
           }`}
           style={{ scrollbarWidth: "thin" }}
+          onClick={() => !expanded && onView(note)}
+          title={!expanded ? "Click to view full note" : undefined}
         >
           {note.body}
         </p>
         {/* Show more / less toggle */}
         {(isOverflowing || expanded) && (
           <button
-            onClick={() => setExpanded(v => !v)}
+            onClick={e => { e.stopPropagation(); setExpanded(v => !v); }}
             className="mt-1.5 text-xs font-semibold text-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
           >
             {expanded ? "Show less ↑" : "Show more ↓"}
           </button>
         )}
 
-        {/* Action row */}
-        <div className="flex items-center justify-end gap-1 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700/50 opacity-0 group-hover:opacity-100 transition-opacity">
-          {(isAuthor || isAdmin) && (
+        {/* Action row — ALWAYS visible: [❤️ like] [spacer] [view] [pin] [edit] [delete] */}
+        <div className="flex items-center justify-between gap-1 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700/50">
+          {/* Left: like button */}
+          <div className="flex items-center gap-1.5">
             <button
-              onClick={() => onPin(note.id, !note.pinned)}
-              title={note.pinned ? "Unpin" : "Pin to top"}
-              className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-all"
+              onClick={() => onLike(note.id, !(note.likes ?? []).includes(userId))}
+              title={(note.likes ?? []).includes(userId) ? "Unlike" : "Like this note"}
+              className={`flex items-center gap-1 p-1.5 rounded-lg transition-all text-xs ${
+                (note.likes ?? []).includes(userId)
+                  ? "text-rose-500"
+                  : "text-gray-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20"
+              }`}
             >
-              {note.pinned ? <PinOff size={13} /> : <Pin size={13} />}
+              <Heart size={13} className={(note.likes ?? []).includes(userId) ? "fill-rose-500" : ""} />
+              {(note.likes ?? []).length > 0 && (
+                <span className="text-[10px] font-semibold">{(note.likes ?? []).length}</span>
+              )}
             </button>
-          )}
-          {isAuthor && (
+            {likesText(note.likes, userId, note.authorName) && (
+              <span className="text-[10px] text-gray-400 truncate max-w-[120px]">
+                {likesText(note.likes, userId, note.authorName)}
+              </span>
+            )}
+          </div>
+          {/* Right: actions */}
+          <div className="flex items-center gap-1">
+            {/* Copy */}
             <button
-              onClick={() => onEdit(note)}
-              title="Edit"
-              className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-all"
+              onClick={() => {
+                navigator.clipboard.writeText(`${note.title}\n\n${note.body}`);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              }}
+              title="Copy note"
+              className={`p-1.5 rounded-lg transition-all ${
+                copied
+                  ? "text-green-500 bg-green-50 dark:bg-green-900/20"
+                  : "text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
+              }`}
             >
-              <Pencil size={13} />
+              <Copy size={13} />
             </button>
-          )}
-          {(isAuthor || isAdmin) && (
-            <button
-              onClick={() => onDelete(note.id)}
-              title="Delete"
-              className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
-            >
-              <Trash2 size={13} />
+            {/* View full note */}
+            <button onClick={() => onView(note)} title="View full note"
+              className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-all">
+              <NotebookPen size={13} />
             </button>
-          )}
+            {(isAuthor || isAdmin) && (
+              <button onClick={() => onPin(note.id, !note.pinned)} title={note.pinned ? "Unpin" : "Pin to top"}
+                className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-all">
+                {note.pinned ? <PinOff size={13} /> : <Pin size={13} />}
+              </button>
+            )}
+            {(isAuthor || isAdmin) && (
+              <button onClick={() => onEdit(note)} title="Edit"
+                className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-all">
+                <Pencil size={13} />
+              </button>
+            )}
+            {(isAuthor || isAdmin) && (
+              <button onClick={() => onDelete(note.id)} title="Delete"
+                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all">
+                <Trash2 size={13} />
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -184,33 +378,57 @@ function NoteCard({
 const DRAFT_KEY = "wf_team_note_draft";
 
 function NoteFormModal({
-  initial, onSave, onClose, saving,
+  initial,
+  onSave,
+  onClose,
+  saving,
 }: {
   initial?: TeamNoteEntry | null;
   onSave: (data: { title: string; body: string; category: CategoryValue }) => void;
   onClose: () => void;
   saving: boolean;
 }) {
+  // Lock body scroll
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, []);
   // Seed from draft only for NEW notes (not edits) — so a crashed edit
   // doesn't wrongly restore a stale draft
   const seedDraft = !initial
-    ? (() => { try { const d = localStorage.getItem(DRAFT_KEY); return d ? JSON.parse(d) : null; } catch { return null; } })()
+    ? (() => {
+        try {
+          const d = localStorage.getItem(DRAFT_KEY);
+          return d ? JSON.parse(d) : null;
+        } catch {
+          return null;
+        }
+      })()
     : null;
 
-  const [title,    setTitle]    = useState(initial?.title    ?? seedDraft?.title    ?? "");
-  const [body,     setBody]     = useState(initial?.body     ?? seedDraft?.body     ?? "");
-  const [category, setCategory] = useState<CategoryValue>(initial?.category ?? seedDraft?.category ?? "meeting");
+  const [title, setTitle] = useState(initial?.title ?? seedDraft?.title ?? "");
+  const [body, setBody] = useState(initial?.body ?? seedDraft?.body ?? "");
+  const [category, setCategory] = useState<CategoryValue>(
+    initial?.category ?? seedDraft?.category ?? "meeting"
+  );
   const [showDiscard, setShowDiscard] = useState(false);
 
   // "Dirty" — user has typed something that differs from whatever we started with
-  const isDirty = title.trim() !== (initial?.title ?? "").trim()
-    || body.trim() !== (initial?.body ?? "").trim();
+  const isDirty =
+    title.trim() !== (initial?.title ?? "").trim() ||
+    body.trim() !== (initial?.body ?? "").trim();
 
   // ── Auto-save draft every 500 ms (new notes only) ──────────────────────────
   useEffect(() => {
     if (initial) return; // Don't auto-save drafts for edit mode
     const timer = setTimeout(() => {
-      try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ title, body, category })); } catch { /* noop */ }
+      try {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({ title, body, category }));
+      } catch {
+        /* noop */
+      }
     }, 500);
     return () => clearTimeout(timer);
   }, [title, body, category, initial]);
@@ -218,7 +436,11 @@ function NoteFormModal({
   // Clear draft once the note is successfully saved
   const handleSave = () => {
     if (!title.trim() || !body.trim()) return;
-    try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
+    try {
+      localStorage.removeItem(DRAFT_KEY);
+    } catch {
+      /* noop */
+    }
     onSave({ title: title.trim(), body: body.trim(), category });
   };
 
@@ -228,24 +450,34 @@ function NoteFormModal({
       setShowDiscard(true);
     } else {
       // Nothing typed — also clear any stale draft and close immediately
-      if (!initial) { try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ } }
+      if (!initial) {
+        try {
+          localStorage.removeItem(DRAFT_KEY);
+        } catch {
+          /* noop */
+        }
+      }
       onClose();
     }
   };
 
   const handleConfirmDiscard = () => {
-    try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
+    try {
+      localStorage.removeItem(DRAFT_KEY);
+    } catch {
+      /* noop */
+    }
     onClose();
   };
 
   const valid = title.trim().length > 0 && body.trim().length > 0;
-  const hasDraftBanner = !initial && !!seedDraft && (seedDraft.title || seedDraft.body);
+  const hasDraftBanner =
+    !initial && !!seedDraft && (seedDraft.title || seedDraft.body);
 
-  return (
+  return createPortal(
     // ⚠️  Backdrop does NOT call onClose — prevents accidental loss of typed content
     <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="w-full max-w-lg bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-white/10 overflow-hidden">
-
         {/* ── Discard confirmation banner ────────────────────────────────── */}
         {showDiscard && (
           <div className="flex items-center justify-between gap-3 px-5 py-3 bg-amber-50 dark:bg-amber-900/30 border-b border-amber-200 dark:border-amber-700/50">
@@ -276,7 +508,16 @@ function NoteFormModal({
               📝 Draft restored from your last session
             </p>
             <button
-              onClick={() => { setTitle(""); setBody(""); setCategory("meeting"); try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ } }}
+              onClick={() => {
+                setTitle("");
+                setBody("");
+                setCategory("meeting");
+                try {
+                  localStorage.removeItem(DRAFT_KEY);
+                } catch {
+                  /* noop */
+                }
+              }}
               className="text-[10px] font-semibold text-indigo-500 hover:text-red-500 transition-colors"
             >
               Clear
@@ -293,7 +534,10 @@ function NoteFormModal({
             </span>
             {/* Dirty indicator dot */}
             {isDirty && (
-              <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" title="Unsaved changes" />
+              <span
+                className="w-2 h-2 rounded-full bg-amber-400 shrink-0"
+                title="Unsaved changes"
+              />
             )}
           </div>
           <button
@@ -309,7 +553,7 @@ function NoteFormModal({
         <div className="p-5 space-y-4">
           {/* Category pills */}
           <div className="flex flex-wrap gap-2">
-            {CATEGORIES.map(c => (
+            {CATEGORIES.map((c) => (
               <button
                 key={c.value}
                 onClick={() => setCategory(c.value)}
@@ -326,10 +570,15 @@ function NoteFormModal({
 
           {/* Title */}
           <div>
-            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Title</label>
+            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+              Title
+            </label>
             <input
               value={title}
-              onChange={e => { setTitle(e.target.value); setShowDiscard(false); }}
+              onChange={(e) => {
+                setTitle(e.target.value);
+                setShowDiscard(false);
+              }}
               placeholder="e.g. Sunday Service Recap — Mar 16"
               className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition"
             />
@@ -337,10 +586,15 @@ function NoteFormModal({
 
           {/* Body */}
           <div>
-            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Content</label>
+            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+              Content
+            </label>
             <AutoTextarea
               value={body}
-              onChange={e => { setBody(e.target.value); setShowDiscard(false); }}
+              onChange={(e) => {
+                setBody(e.target.value);
+                setShowDiscard(false);
+              }}
               minRows={5}
               placeholder="Write your meeting recap, decisions, or announcements here…"
               className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition resize-none"
@@ -367,41 +621,62 @@ function NoteFormModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
 // ── Main View ─────────────────────────────────────────────────────────────────
-export default function TeamNotesView({ userId, userName, userPhoto, userRole, onToast, initialTab = "personal" }: TeamNotesViewProps) {
+export default function TeamNotesView({
+  userId,
+  userName,
+  userPhoto,
+  userRole,
+  onToast,
+  initialTab = "personal",
+}: TeamNotesViewProps) {
   const [activeTab, setActiveTab] = useState<"personal" | "team">(initialTab);
-  const [notes,    setNotes]    = useState<TeamNoteEntry[]>([]);
-  const [loading,  setLoading]  = useState(true);
-  const [saving,   setSaving]   = useState(false);
+  const [notes, setNotes] = useState<TeamNoteEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [editing,  setEditing]  = useState<TeamNoteEntry | null>(null);
-  const [search,   setSearch]   = useState("");
+  const [editing, setEditing] = useState<TeamNoteEntry | null>(null);
+  const [viewing, setViewing] = useState<TeamNoteEntry | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null); // id to delete
+  const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState<CategoryValue | "all">("all");
   const [showCatMenu, setShowCatMenu] = useState(false);
   const catMenuRef = useRef<HTMLDivElement>(null);
+  // Trigger for Personal Notes tab to open its own form
+  const [personalNewTrigger, setPersonalNewTrigger] = useState(0);
 
   const isAdmin = userRole === "admin" || userRole === "leader";
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchNotes = useCallback(async () => {
     try {
-      const res  = await fetch("/api/team-notes");
+      const res = await fetch("/api/team-notes");
       const data = await res.json();
       if (Array.isArray(data)) setNotes(data);
-    } catch { /* keep existing */ }
-    finally { setLoading(false); }
+    } catch {
+      /* keep existing */
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  useEffect(() => { fetchNotes(); }, [fetchNotes]);
+  useEffect(() => {
+    fetchNotes();
+  }, [fetchNotes]);
 
   // Close cat menu on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (showCatMenu && catMenuRef.current && !catMenuRef.current.contains(e.target as Node)) {
+      if (
+        showCatMenu &&
+        catMenuRef.current &&
+        !catMenuRef.current.contains(e.target as Node)
+      ) {
         setShowCatMenu(false);
       }
     };
@@ -410,13 +685,20 @@ export default function TeamNotesView({ userId, userName, userPhoto, userRole, o
   }, [showCatMenu]);
 
   // ── Create / Edit ──────────────────────────────────────────────────────────
-  const handleSave = async (data: { title: string; body: string; category: CategoryValue }) => {
+  const handleSave = async (
+    data: { title: string; body: string; category: CategoryValue }
+  ) => {
     setSaving(true);
     if (editing) {
       // Optimistic update
-      const updated: TeamNoteEntry = { ...editing, ...data, updatedAt: new Date().toISOString() };
-      setNotes(prev => prev.map(n => n.id === editing.id ? updated : n));
-      setShowForm(false); setEditing(null);
+      const updated: TeamNoteEntry = {
+        ...editing,
+        ...data,
+        updatedAt: new Date().toISOString(),
+      };
+      setNotes((prev) => prev.map((n) => (n.id === editing.id ? updated : n)));
+      setShowForm(false);
+      setEditing(null);
       try {
         const res = await fetch(`/api/team-notes/${editing.id}`, {
           method: "PUT",
@@ -432,21 +714,31 @@ export default function TeamNotesView({ userId, userName, userPhoto, userRole, o
     } else {
       const tempId = `temp_${Date.now()}`;
       const tempNote: TeamNoteEntry = {
-        id: tempId, ...data, authorId: userId, authorName: userName,
-        authorPhoto: userPhoto, pinned: false, createdAt: new Date().toISOString(),
+        id: tempId,
+        ...data,
+        authorId: userId,
+        authorName: userName,
+        authorPhoto: userPhoto,
+        pinned: false,
+        createdAt: new Date().toISOString(),
       };
-      setNotes(prev => [tempNote, ...prev]);
+      setNotes((prev) => [tempNote, ...prev]);
       setShowForm(false);
       try {
         const res = await fetch("/api/team-notes", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ authorId: userId, authorName: userName, authorPhoto: userPhoto, ...data }),
+          body: JSON.stringify({
+            authorId: userId,
+            authorName: userName,
+            authorPhoto: userPhoto,
+            ...data,
+          }),
         });
         const { id } = await res.json();
-        if (id) setNotes(prev => prev.map(n => n.id === tempId ? { ...n, id } : n));
+        if (id) setNotes((prev) => prev.map((n) => (n.id === tempId ? { ...n, id } : n)));
       } catch {
-        setNotes(prev => prev.filter(n => n.id !== tempId));
+        setNotes((prev) => prev.filter((n) => n.id !== tempId));
         onToast?.("error", "Failed to save note. Try again.");
       }
     }
@@ -455,7 +747,7 @@ export default function TeamNotesView({ userId, userName, userPhoto, userRole, o
 
   // ── Pin ────────────────────────────────────────────────────────────────────
   const handlePin = async (id: string, pinned: boolean) => {
-    setNotes(prev => prev.map(n => n.id === id ? { ...n, pinned } : n));
+    setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, pinned } : n)));
     try {
       await fetch(`/api/team-notes/${id}/pin`, {
         method: "PATCH",
@@ -463,14 +755,21 @@ export default function TeamNotesView({ userId, userName, userPhoto, userRole, o
         body: JSON.stringify({ pinned }),
       });
     } catch {
-      setNotes(prev => prev.map(n => n.id === id ? { ...n, pinned: !pinned } : n));
+      setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, pinned: !pinned } : n)));
       onToast?.("error", "Failed to update pin.");
     }
   };
 
-  // ── Delete ─────────────────────────────────────────────────────────────────
+  // ── Delete (with confirmation) ─────────────────────────────────────────────
   const handleDelete = async (id: string) => {
-    setNotes(prev => prev.filter(n => n.id !== id));
+    setDeleteConfirm(id);
+  };
+
+  const confirmDelete = async () => {
+    const id = deleteConfirm;
+    if (!id) return;
+    setDeleteConfirm(null);
+    setNotes((prev) => prev.filter((n) => n.id !== id));
     try {
       const res = await fetch(`/api/team-notes/${id}`, {
         method: "DELETE",
@@ -485,17 +784,53 @@ export default function TeamNotesView({ userId, userName, userPhoto, userRole, o
     }
   };
 
+  // ── Like toggle ───────────────────────────────────────────────────────
+  const handleLike = async (id: string, liked: boolean) => {
+    // Optimistic update
+    setNotes(prev => prev.map(n => {
+      if (n.id !== id) return n;
+      const existing = n.likes ?? [];
+      const updated  = liked
+        ? [...existing.filter(u => u !== userId), userId]
+        : existing.filter(u => u !== userId);
+      return { ...n, likes: updated };
+    }));
+    // Also update viewing state if open
+    setViewing(prev => {
+      if (!prev || prev.id !== id) return prev;
+      const existing = prev.likes ?? [];
+      const updated  = liked
+        ? [...existing.filter(u => u !== userId), userId]
+        : existing.filter(u => u !== userId);
+      return { ...prev, likes: updated };
+    });
+    try {
+      await fetch(`/api/team-notes/${id}/like`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, liked }),
+      });
+    } catch {
+      onToast?.("error", "Failed to update like.");
+      fetchNotes();
+    }
+  };
+
   // ── Filter + sort ──────────────────────────────────────────────────────────
   const q = search.trim().toLowerCase();
   const filtered = notes
-    .filter(n => catFilter === "all" || n.category === catFilter)
-    .filter(n => !q || n.title.toLowerCase().includes(q) || n.body.toLowerCase().includes(q))
+    .filter((n) => catFilter === "all" || n.category === catFilter)
+    .filter(
+      (n) =>
+        !q || n.title.toLowerCase().includes(q) || n.body.toLowerCase().includes(q)
+    )
     .sort((a, b) => {
       if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
 
-  const currentCatLabel = catFilter === "all" ? "All Categories" : catConfig(catFilter).label;
+  const currentCatLabel =
+    catFilter === "all" ? "All Categories" : catConfig(catFilter).label;
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -505,13 +840,22 @@ export default function TeamNotesView({ userId, userName, userPhoto, userRole, o
           <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <NotebookPen size={20} className="text-indigo-500" /> Notes
           </h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-            {activeTab === "personal" ? "Private notes visible only to you" : "Meeting recaps, decisions, and team announcements"}
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5 max-w-[220px] leading-snug">
+            {activeTab === "personal"
+              ? "Private notes only visible to you."
+              : "Meeting recaps, decisions, and team announcements."}
           </p>
         </div>
-        {/* New Note button — adapts to active tab */}
+        {/* New Note button — routes to correct tab's form */}
         <button
-          onClick={() => { setEditing(null); setShowForm(true); }}
+          onClick={() => {
+            if (activeTab === "personal") {
+              setPersonalNewTrigger((v) => v + 1);
+            } else {
+              setEditing(null);
+              setShowForm(true);
+            }
+          }}
           className={`flex items-center gap-2 px-4 py-2 text-white text-sm font-semibold rounded-xl transition-all shadow-sm ${
             activeTab === "personal"
               ? "bg-amber-500 hover:bg-amber-400"
@@ -548,100 +892,180 @@ export default function TeamNotesView({ userId, userName, userPhoto, userRole, o
 
       {/* ── Personal Notes Tab ── */}
       {activeTab === "personal" && (
-        <PersonalNotesTab userId={userId} onToast={onToast} />
+        <PersonalNotesTab userId={userId} onToast={onToast} openTrigger={personalNewTrigger} />
       )}
 
       {/* ── Team Notes Tab ── */}
-      {activeTab === "team" && <>
+      {activeTab === "team" && (
+        <>
+          {/* ── Filters bar ── */}
+          <div className="flex items-center gap-2 mb-5 flex-wrap">
+            {/* Search */}
+            <div className="relative flex-1 min-w-[180px]">
+              <Search
+                size={14}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search notes…"
+                className="w-full pl-8 pr-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition"
+              />
+            </div>
 
-      {/* ── Filters bar ── */}
-      <div className="flex items-center gap-2 mb-5 flex-wrap">
-        {/* Search */}
-        <div className="relative flex-1 min-w-[180px]">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search notes…"
-            className="w-full pl-8 pr-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition"
-          />
-        </div>
+            {/* Category filter */}
+            <div className="relative" ref={catMenuRef}>
+              <button
+                onClick={() => setShowCatMenu((v) => !v)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all"
+              >
+                {currentCatLabel}{" "}
+                <ChevronDown
+                  size={13}
+                  className={`transition-transform ${showCatMenu ? "rotate-180" : ""}`}
+                />
+              </button>
+              {showCatMenu && (
+                <div className="absolute right-0 top-full mt-1 w-44 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-20 overflow-hidden">
+                  {[
+                    { value: "all", label: "All Categories" },
+                    ...CATEGORIES.map((c) => ({ value: c.value, label: c.label })),
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => {
+                        setCatFilter(opt.value as CategoryValue | "all");
+                        setShowCatMenu(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+                        catFilter === opt.value
+                          ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-semibold"
+                          : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
 
-        {/* Category filter */}
-        <div className="relative" ref={catMenuRef}>
-          <button
-            onClick={() => setShowCatMenu(v => !v)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all"
-          >
-            {currentCatLabel} <ChevronDown size={13} className={`transition-transform ${showCatMenu ? "rotate-180" : ""}`} />
-          </button>
-          {showCatMenu && (
-            <div className="absolute right-0 top-full mt-1 w-44 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-20 overflow-hidden">
-              {[{ value: "all", label: "All Categories" }, ...CATEGORIES.map(c => ({ value: c.value, label: c.label }))].map(opt => (
+          {/* ── Notes List ── */}
+          {loading ? (
+            <div className="flex items-center justify-center py-20 text-gray-400">
+              <Loader2 size={24} className="animate-spin mr-3" /> Loading notes…
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="w-16 h-16 rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center mb-4">
+                <NotebookPen size={28} className="text-indigo-400" />
+              </div>
+              <p className="text-base font-semibold text-gray-700 dark:text-gray-300">
+                {q || catFilter !== "all" ? "No notes match your search" : "No notes yet"}
+              </p>
+              <p className="text-sm text-gray-400 mt-1">
+                {q || catFilter !== "all"
+                  ? "Try a different search or category"
+                  : "Post your first meeting recap or announcement!"}
+              </p>
+              {!q && catFilter === "all" && (
                 <button
-                  key={opt.value}
-                  onClick={() => { setCatFilter(opt.value as CategoryValue | "all"); setShowCatMenu(false); }}
-                  className={`w-full text-left px-3 py-2 text-sm transition-colors ${catFilter === opt.value ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-semibold" : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"}`}
+                  onClick={() => {
+                    setEditing(null);
+                    setShowForm(true);
+                  }}
+                  className="mt-4 flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl transition-all"
                 >
-                  {opt.label}
+                  <Plus size={15} /> Create your first note
                 </button>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {filtered.map((note) => (
+                <NoteCard
+                  key={note.id}
+                  note={note}
+                  userId={userId}
+                  userRole={userRole}
+                  onEdit={(n) => { setEditing(n); setShowForm(true); }}
+                  onDelete={handleDelete}
+                  onPin={handlePin}
+                  onLike={handleLike}
+                  onView={(n) => setViewing(n)}
+                />
               ))}
             </div>
           )}
-        </div>
-      </div>
 
-      {/* ── Notes List ── */}
-      {loading ? (
-        <div className="flex items-center justify-center py-20 text-gray-400">
-          <Loader2 size={24} className="animate-spin mr-3" /> Loading notes…
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center mb-4">
-            <NotebookPen size={28} className="text-indigo-400" />
-          </div>
-          <p className="text-base font-semibold text-gray-700 dark:text-gray-300">
-            {q || catFilter !== "all" ? "No notes match your search" : "No notes yet"}
-          </p>
-          <p className="text-sm text-gray-400 mt-1">
-            {q || catFilter !== "all" ? "Try a different search or category" : "Post your first meeting recap or announcement!"}
-          </p>
-          {!q && catFilter === "all" && (
-            <button
-              onClick={() => { setEditing(null); setShowForm(true); }}
-              className="mt-4 flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl transition-all"
-            >
-              <Plus size={15} /> Create your first note
-            </button>
+          {/* ── Form Modal (portaled) ── */}
+          {showForm && (
+            <NoteFormModal
+              initial={editing}
+              onSave={handleSave}
+              onClose={() => {
+                setShowForm(false);
+                setEditing(null);
+              }}
+              saving={saving}
+            />
           )}
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {filtered.map(note => (
-            <NoteCard
-              key={note.id}
-              note={note}
+
+          {/* ── Full Note View Modal (portaled) ── */}
+          {viewing && (
+            <TeamNoteViewModal
+              note={viewing}
               userId={userId}
               userRole={userRole}
-              onEdit={n => { setEditing(n); setShowForm(true); }}
-              onDelete={handleDelete}
+              onClose={() => setViewing(null)}
+              onEdit={(n) => { setViewing(null); setEditing(n); setShowForm(true); }}
+              onDelete={(id) => { setViewing(null); handleDelete(id); }}
               onPin={handlePin}
+              onLike={handleLike}
             />
-          ))}
-        </div>
+          )}
+        </>
       )}
 
-      {/* ── Form Modal ── */}
-      {showForm && (
-        <NoteFormModal
-          initial={editing}
-          onSave={handleSave}
-          onClose={() => { setShowForm(false); setEditing(null); }}
-          saving={saving}
-        />
+      {/* ── Delete Confirmation (portaled to body to escape parent clipping) ── */}
+      {deleteConfirm && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-white/10 overflow-hidden">
+            <div className="px-6 py-5">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center shrink-0">
+                  <Trash2 size={18} className="text-red-500" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-gray-900 dark:text-white">Delete this note?</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">This action cannot be undone.</p>
+                </div>
+              </div>
+              <p className="text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-white/5 rounded-xl px-3 py-2 mt-2">
+                The note will be permanently removed and cannot be recovered.
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-6 pb-5">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/10 rounded-xl transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="px-4 py-2 text-sm font-semibold text-white bg-red-500 hover:bg-red-400 rounded-xl transition-all"
+              >
+                Yes, Delete
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
-      </>}
     </div>
   );
 }
+
