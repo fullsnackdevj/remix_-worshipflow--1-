@@ -313,7 +313,7 @@ export default function App() {
       } catch { /* silent */ }
     };
     checkPokes();
-    const id = setInterval(checkPokes, 5000);
+    const id = setInterval(checkPokes, 15_000); // Reduced from 5s → 15s (66% fewer invocations)
     return () => clearInterval(id);
   }, [user?.uid]);
 

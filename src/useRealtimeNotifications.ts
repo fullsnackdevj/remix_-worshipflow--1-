@@ -64,9 +64,10 @@ export function useRealtimeNotifications(
     fetchNotifications();
   }, [fetchNotifications]);
 
-  // ── Background 10s poll — always running, ~10s latency max ───────────────
+  // ── Background 60s poll — tab focus/visibility listeners give instant updates on switch ──
+  // Reduced from 10s to 60s to cut Netlify function invocations by ~83%
   useEffect(() => {
-    const id = setInterval(fetchNotifications, 10_000);
+    const id = setInterval(fetchNotifications, 60_000);
     return () => clearInterval(id);
   }, [fetchNotifications]);
 

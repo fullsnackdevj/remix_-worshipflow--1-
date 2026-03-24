@@ -1697,6 +1697,23 @@ const handleLineupAck = async (scheduleId: string) => {
                         <div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>📅 Date</div>
                         <div style={{ color: "#1e293b", fontSize: 14, fontWeight: 600, marginTop: 4 }}>{dateLabel}</div>
                       </div>
+                      {/* Lead Facilitators — non-service events only */}
+                      {editSchedAssignments.length > 0 && (
+                        <div style={{ paddingTop: 10, paddingBottom: 10, borderTop: "1px solid #e2e8f0" }}>
+                          <div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>👥 Lead Facilitators</div>
+                          {editSchedAssignments.map((asgn, gi) => (
+                            <div key={gi} style={{ marginTop: 8 }}>
+                              <div style={{ color: "#6d28d9", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 3 }}>{asgn.role}</div>
+                              {asgn.members.length > 0
+                                ? asgn.members.map((m, mi) => (
+                                    <div key={mi} style={{ color: "#1e293b", fontSize: 13, fontWeight: 500, marginTop: 2 }}>{m.name}</div>
+                                  ))
+                                : <div style={{ color: "#94a3b8", fontSize: 12, fontStyle: "italic" }}>No members assigned</div>
+                              }
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       {/* Worship Leader */}
                       {editSchedWorshipLeader && (
                         <div style={{ paddingTop: 10, paddingBottom: 10, borderTop: "1px solid #e2e8f0" }}>
@@ -1742,6 +1759,13 @@ const handleLineupAck = async (scheduleId: string) => {
                               {jSong.title}
                             </div>
                           )}
+                        </div>
+                      )}
+                      {/* Notes */}
+                      {editSchedNotes?.trim() && (
+                        <div style={{ paddingTop: 10, paddingBottom: 10, borderTop: "1px solid #e2e8f0" }}>
+                          <div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>📝 Notes</div>
+                          <div style={{ color: "#475569", fontSize: 13, lineHeight: 1.6, marginTop: 5, whiteSpace: "pre-wrap" }}>{editSchedNotes.trim()}</div>
                         </div>
                       )}
                     </div>

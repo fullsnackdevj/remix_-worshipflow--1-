@@ -31,6 +31,8 @@ async function sendScheduleEmail(
         backupSingers?: { name: string; role?: string }[];
         musicians?: { name: string; role?: string }[];
         songLineup?: { joyful?: string; solemn?: string } | null;
+        notes?: string;
+        assignments?: { role: string; members: { name: string; role?: string }[] }[];
         actorName: string;
         scheduleId: string;
     }
@@ -91,10 +93,12 @@ async function sendScheduleEmail(
                       <p style="margin:4px 0 0;color:#1e293b;font-size:15px;font-weight:600;">${dateLabel}</p>
                     </td>
                   </tr>
+                  ${opts.assignments && opts.assignments.length > 0 ? `<tr><td style="padding:10px 0;border-top:1px solid #e2e8f0;"><span style="color:#94a3b8;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">👥 Lead Facilitators</span>${opts.assignments.map(a => `<div style="margin-top:8px;"><p style="margin:0;color:#6d28d9;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">${a.role}</p>${a.members.map(m => `<p style="margin:3px 0 0;color:#1e293b;font-size:13px;font-weight:500;">${m.name}</p>`).join('')}</div>`).join('')}</td></tr>` : ""}
                   ${opts.worshipLeader ? `<tr><td style="padding:10px 0;border-top:1px solid #e2e8f0;"><span style="color:#94a3b8;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">🎤 Worship Leader</span><p style="margin:4px 0 0;color:#1e293b;font-size:15px;font-weight:600;">${opts.worshipLeader.name}</p></td></tr>` : ""}
                   ${opts.backupSingers && opts.backupSingers.length > 0 ? `<tr><td style="padding:10px 0;border-top:1px solid #e2e8f0;"><span style="color:#94a3b8;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">🎙️ Backup Singers</span>${opts.backupSingers.map(m => `<p style="margin:4px 0 0;color:#1e293b;font-size:14px;font-weight:500;">${m.name}${m.role ? ` <span style="color:#7c3aed;font-size:12px;font-weight:600;">(${m.role})</span>` : ""}</p>`).join("")}</td></tr>` : ""}
                   ${opts.musicians && opts.musicians.length > 0 ? `<tr><td style="padding:10px 0;border-top:1px solid #e2e8f0;"><span style="color:#94a3b8;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">🎸 Musicians</span>${opts.musicians.map(m => `<p style="margin:4px 0 0;color:#1e293b;font-size:14px;font-weight:500;">${m.name}${m.role ? ` <span style="color:#0891b2;font-size:12px;font-weight:600;">(${m.role})</span>` : ""}</p>`).join("")}</td></tr>` : ""}
                   ${opts.songLineup && (opts.songLineup.solemn || opts.songLineup.joyful) ? `<tr><td style="padding:10px 0;border-top:1px solid #e2e8f0;"><span style="color:#94a3b8;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">🎵 Song Lineup</span>${opts.songLineup.solemn ? `<p style="margin:6px 0 0;color:#1e293b;font-size:14px;font-weight:500;"><span style="display:inline-block;background:#ede9fe;color:#6d28d9;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;padding:2px 7px;border-radius:4px;margin-right:6px;">Solemn</span>${opts.songLineup.solemn}</p>` : ""}${opts.songLineup.joyful ? `<p style="margin:6px 0 0;color:#1e293b;font-size:14px;font-weight:500;"><span style="display:inline-block;background:#dcfce7;color:#166534;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;padding:2px 7px;border-radius:4px;margin-right:6px;">Joyful</span>${opts.songLineup.joyful}</p>` : ""}</td></tr>` : ""}
+                  ${opts.notes?.trim() ? `<tr><td style="padding:10px 0;border-top:1px solid #e2e8f0;"><span style="color:#94a3b8;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">📝 Notes</span><p style="margin:6px 0 0;color:#475569;font-size:14px;line-height:1.6;white-space:pre-wrap;">${opts.notes.trim()}</p></td></tr>` : ""}
                 </table>
               </td></tr>
             </table>
@@ -2013,6 +2017,8 @@ Rules:
                 backupSingers: ev.backupSingers ?? [],
                 musicians: ev.musicians ?? [],
                 songLineup: resolvedSongLineup,
+                notes: ev.notes || "",
+                assignments: ev.assignments ?? [],
                 actorName,
                 scheduleId: id,
             });

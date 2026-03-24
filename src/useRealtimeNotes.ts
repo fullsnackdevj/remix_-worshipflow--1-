@@ -180,9 +180,9 @@ export function useRealtimeNotes(_userId: string | null | undefined) {
     pendingReactionIds.current.add(noteId);
   };
 
-  // ── Always-on HTTP poll: ensures admin and other users see new notes ────────
-  // Runs every 10 s whenever the hook is mounted. This is a safety net for
-  // when Firestore real-time has permission or index issues.
+  // ── HTTP safety-net poll: backup for when Firestore real-time has issues ────
+  // Firestore onSnapshot (above) delivers changes in ~200ms via WebSocket.
+  // This poll is purely a fallback — reduced from 10s to 60s to cut Netlify costs.
   useEffect(() => {
     const poll = async () => {
       try {
@@ -203,7 +203,7 @@ export function useRealtimeNotes(_userId: string | null | undefined) {
       } catch { /* noop */ }
     };
     poll(); // immediate fetch on mount
-    const timer = setInterval(poll, 10_000);
+    const timer = setInterval(poll, 60_000); // Reduced from 10s → 60s (Firestore handles real-time)
     return () => clearInterval(timer);
   }, []);
 
@@ -248,5 +248,5 @@ function fallbackPoll(
     } catch { /* noop */ }
   };
   poll();
-  fallbackTimer = setInterval(poll, 8_000);
+  fallbackTimer = setInterval(poll, 60_000); // Reduced from 8s → 60s (emergency fallback only)
 }

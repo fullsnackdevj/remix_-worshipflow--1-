@@ -30,6 +30,10 @@ export function useSessionTracking(
         const sessionId = sessionIdRef.current;
 
         const ping = (action: "start" | "ping" | "end") => {
+            // Don't ping when tab is hidden (user minimized browser or switched apps)
+            // This eliminates costs during long mini-player listening sessions
+            if (action === "ping" && document.visibilityState === "hidden") return;
+
             const payload = {
                 userId,
                 sessionId,
@@ -60,8 +64,9 @@ export function useSessionTracking(
             ping("start");
         }
 
-        // Heartbeat every 2 minutes (120 s) — halves Netlify function invocations vs 60 s
-        const interval = setInterval(() => ping("ping"), 120_000);
+        // Heartbeat every 5 minutes — reduced from 2 min to cut Netlify invocations by ~60%
+        // Tab-hidden guard above means zero cost while mini-player runs in background
+        const interval = setInterval(() => ping("ping"), 300_000);
 
         // End session on cleanup / tab close
         const handleUnload = () => ping("end");

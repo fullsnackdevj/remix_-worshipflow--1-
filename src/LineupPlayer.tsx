@@ -274,7 +274,7 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
 
   useEffect(() => {
     fetchListens();
-    const timer = setInterval(fetchListens, 15000);
+    const timer = setInterval(fetchListens, 60_000); // Reduced from 15s → 60s
     return () => clearInterval(timer);
   }, [fetchListens]);
 
