@@ -384,79 +384,80 @@ function NoteCard({ note, userId, userRole, highlighted, onEdit, onDelete, onRea
 
 
 
-                {/* Spacer */}
-                <div className="flex-1" />
+                {/* ── Action group: always wraps together as one unit ── */}
+                <div className="flex items-center gap-0.5 ml-auto shrink-0">
+                    {/* Retype dropdown (privileged only) */}
+                    {isPrivileged && (
+                        <RetypeDropdown
+                            note={note}
+                            noteTypes={NOTE_TYPES}
+                            onRetype={onRetype}
+                        />
+                    )}
 
-                {/* Retype dropdown (privileged only) */}
-                {isPrivileged && (
-                    <RetypeDropdown
-                        note={note}
-                        noteTypes={NOTE_TYPES}
-                        onRetype={onRetype}
-                    />
-                )}
-
-                {/* Resolve */}
-                {canResolve && (
-                    <button
-                        onClick={() => onResolve(note.id, !note.resolved)}
-                        title={resolveConfig.buttonLabel}
-                        className={`p-1.5 rounded-lg transition-all ${
-                            note.resolved
-                                ? "text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20"
-                                : "text-gray-400 hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20"
-                        }`}
-                    >
-                        <CheckCircle2 size={14} />
-                    </button>
-                )}
-
-                {/* Follow Up (author only, non-privileged, unresolved) */}
-                {isAuthor && !isPrivileged && !note.resolved && (() => {
-                    const COOLDOWN_MS = 24 * 60 * 60 * 1000;
-                    const lastFollowUpRaw = (note as any).lastFollowUpAt;
-                    const lastFollowUpMs = lastFollowUpRaw
-                        ? (typeof lastFollowUpRaw === "object" && lastFollowUpRaw.toDate
-                            ? lastFollowUpRaw.toDate().getTime()
-                            : new Date(lastFollowUpRaw).getTime())
-                        : 0;
-                    const remaining = lastFollowUpMs + COOLDOWN_MS - Date.now();
-                    const onCooldown = remaining > 0;
-                    const cooldownLabel = onCooldown
-                        ? remaining > 3600_000
-                            ? `in ${Math.ceil(remaining / 3600_000)}h`
-                            : `in ${Math.ceil(remaining / 60_000)}m`
-                        : null;
-                    return (
+                    {/* Resolve */}
+                    {canResolve && (
                         <button
-                            onClick={() => !onCooldown && onFollowUp(note.id)}
-                            disabled={onCooldown}
-                            title={onCooldown ? `Follow up again ${cooldownLabel}` : "Notify admin you're following up"}
+                            onClick={() => onResolve(note.id, !note.resolved)}
+                            title={resolveConfig.buttonLabel}
                             className={`p-1.5 rounded-lg transition-all ${
-                                onCooldown
-                                    ? "text-gray-400 dark:text-gray-600 cursor-not-allowed opacity-60"
-                                    : "text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                                note.resolved
+                                    ? "text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20"
+                                    : "text-gray-400 hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20"
                             }`}
                         >
-                            <MessageSquare size={13} />
+                            <CheckCircle2 size={14} />
                         </button>
-                    );
-                })()}
+                    )}
 
-                {/* Edit */}
-                {isAuthor && !note.resolved && (
-                    <button onClick={() => onEdit(note)} title="Edit" className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-all">
-                        <Pencil size={13} />
-                    </button>
-                )}
+                    {/* Follow Up (author only, non-privileged, unresolved) */}
+                    {isAuthor && !isPrivileged && !note.resolved && (() => {
+                        const COOLDOWN_MS = 24 * 60 * 60 * 1000;
+                        const lastFollowUpRaw = (note as any).lastFollowUpAt;
+                        const lastFollowUpMs = lastFollowUpRaw
+                            ? (typeof lastFollowUpRaw === "object" && lastFollowUpRaw.toDate
+                                ? lastFollowUpRaw.toDate().getTime()
+                                : new Date(lastFollowUpRaw).getTime())
+                            : 0;
+                        const remaining = lastFollowUpMs + COOLDOWN_MS - Date.now();
+                        const onCooldown = remaining > 0;
+                        const cooldownLabel = onCooldown
+                            ? remaining > 3600_000
+                                ? `in ${Math.ceil(remaining / 3600_000)}h`
+                                : `in ${Math.ceil(remaining / 60_000)}m`
+                            : null;
+                        return (
+                            <button
+                                onClick={() => !onCooldown && onFollowUp(note.id)}
+                                disabled={onCooldown}
+                                title={onCooldown ? `Follow up again ${cooldownLabel}` : "Notify admin you're following up"}
+                                className={`p-1.5 rounded-lg transition-all ${
+                                    onCooldown
+                                        ? "text-gray-400 dark:text-gray-600 cursor-not-allowed opacity-60"
+                                        : "text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                                }`}
+                            >
+                                <MessageSquare size={13} />
+                            </button>
+                        );
+                    })()}
 
-                {/* Delete */}
-                {(isAuthor || isPrivileged) && (
-                    <button onClick={() => onDelete(note.id)} title="Delete" className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all">
-                        <Trash2 size={13} />
-                    </button>
-                )}
+                    {/* Edit */}
+                    {isAuthor && !note.resolved && (
+                        <button onClick={() => onEdit(note)} title="Edit" className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-all">
+                            <Pencil size={13} />
+                        </button>
+                    )}
+
+                    {/* Delete */}
+                    {(isAuthor || isPrivileged) && (
+                        <button onClick={() => onDelete(note.id)} title="Delete" className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all">
+                            <Trash2 size={13} />
+                        </button>
+                    )}
+                </div>
             </div>
+
         </div>
 
         {/* ── Media Lightbox ── */}
