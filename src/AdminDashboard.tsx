@@ -138,17 +138,18 @@ function NextServiceTile({ ev, songs, members, myMemberId, onClick }: {
     // Resolve the best available photo for a ScheduleMember.
     // Priority: directPhoto (stored on record) → by Firestore doc ID → by full name → by first name
     const resolvePhoto = useCallback((m: { memberId?: string; name?: string; photo?: string }): string => {
-        const direct = m.photo?.startsWith("http") ? m.photo : "";
+        const isValidPhoto = (p?: string) => !!p && (p.startsWith("http") || p.startsWith("data:image"));
+        const direct = isValidPhoto(m.photo) ? m.photo! : "";
         if (direct) return direct;
         const byId   = m.memberId ? members.find(mem => mem.id === m.memberId) : undefined;
-        if (byId?.photo?.startsWith("http")) return byId.photo;
+        if (isValidPhoto(byId?.photo)) return byId!.photo!;
         const lower  = (m.name ?? "").toLowerCase().trim();
         const byFull = members.find(mem => mem.name?.toLowerCase().trim() === lower);
-        if (byFull?.photo?.startsWith("http")) return byFull.photo;
+        if (isValidPhoto(byFull?.photo)) return byFull!.photo!;
         // Partial: match by first word of name (less reliable but better than nothing)
         const first  = lower.split(" ")[0];
         const byFirst = first ? members.find(mem => mem.name?.toLowerCase().startsWith(first)) : undefined;
-        if (byFirst?.photo?.startsWith("http")) return byFirst.photo;
+        if (isValidPhoto(byFirst?.photo)) return byFirst!.photo!;
         return "";
     }, [members]);
 
@@ -548,8 +549,8 @@ export default function AdminDashboard({
                         </button>
                     )}
 
-                    {/* ── Assembly Bell — Admin only ───────────────────────── */}
-                    {userRole === "admin" && userId && (
+                    {/* ── Assembly Bell — temporarily hidden globally (re-enable when ready) ── */}
+                    {false && userRole === "admin" && userId && (
                         <AssemblyBell
                             userId={userId}
                             userName={userName}

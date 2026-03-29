@@ -904,7 +904,7 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
 
     // POST /fcm-token — store FCM push token for a user
     // IMPORTANT: each device gets its own document so all devices receive pushes.
-    // Doc ID = first 40 chars of token (unique per device) — avoids overwriting
+    // Doc ID = last 20 chars of token (unique per device) — avoids overwriting
     // the previous device's token when a new one registers.
     if (rawPath === "/fcm-token" && method === "POST") {
         const { userId, role, token } = body;
@@ -920,9 +920,28 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
                 token,
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             });
+
+            // Proactively prune stale tokens for this user (60-day TTL, fire-and-forget).
+            // Prevents token accumulation where a user can end up with many old docs
+            // causing them to receive N push notifications instead of 1.
+            const cutoff = admin.firestore.Timestamp.fromMillis(Date.now() - 60 * 24 * 60 * 60 * 1000);
+            firestore?.collection("fcm_tokens")
+                .where("userId", "==", userId)
+                .where("updatedAt", "<", cutoff)
+                .get()
+                .then(snap => {
+                    if (!snap.empty) {
+                        const pruneBatch = firestore!.batch();
+                        snap.docs.forEach(d => pruneBatch.delete(d.ref));
+                        return pruneBatch.commit();
+                    }
+                })
+                .catch(() => { /* non-critical — silent */ });
+
             return json(200, { success: true });
         } catch (e) { return json(500, { error: "Failed to store token" }); }
     }
+
 
 
     // GET /api/user-flags — cross-device user flags stored in Firestore
@@ -2300,7 +2319,7 @@ Rules:
     if (retypeMatch && method === "PATCH") {
         const nid = retypeMatch[1];
         const { userId, userRole, newType } = body;
-        const isAdmin = userRole === "admin" || userRole === "leader";
+        const isAdmin = userRole === "admin" || userRole === "leader" || userRole === "qa_specialist";
         if (!isAdmin) return json(403, { error: "Only admins can reclassify notes" });
         if (!["bug", "feature", "general"].includes(newType)) return json(400, { error: "Invalid note type" });
         try {

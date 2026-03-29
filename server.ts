@@ -1261,7 +1261,23 @@ app.patch("/api/notes/:id/resolve", async (req, res) => {
   } catch (e) { res.status(500).json({ error: "Failed to resolve" }); }
 });
 
-// ── PERSONAL NOTES ───────────────────────────────────────────────────────────
+// PATCH /api/notes/:id/retype — admin/leader/qa can reclassify note type
+app.patch("/api/notes/:id/retype", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { userRole, newType } = req.body;
+  const isPrivileged = userRole === "admin" || userRole === "leader" || userRole === "qa_specialist";
+  if (!isPrivileged) return res.status(403).json({ error: "Only admins can reclassify notes" });
+  if (!["bug", "feature", "general"].includes(newType)) return res.status(400).json({ error: "Invalid note type" });
+  try {
+    const ref = firestore.collection("team_notes").doc(req.params.id);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).json({ error: "Note not found" });
+    await ref.update({ type: newType });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: "Failed to reclassify note" }); }
+});
+
 // Stored in users/{userId}/personalNotes subcollection — structurally private.
 
 // GET /api/personal-notes?userId=...

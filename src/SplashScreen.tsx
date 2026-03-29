@@ -1,30 +1,12 @@
 import { useEffect, useState } from "react";
 
 export default function SplashScreen() {
-    const [progress, setProgress] = useState(0);
-    const [phase, setPhase] = useState<"logo" | "text" | "bar">("logo");
+    const [showText, setShowText] = useState(false);
 
-    // Drive the visual sequence
     useEffect(() => {
-        // Logo appears immediately (CSS handles entrance)
-        const t1 = setTimeout(() => setPhase("text"), 400);   // text fades in
-        const t2 = setTimeout(() => setPhase("bar"), 700);    // bar starts
-        return () => { clearTimeout(t1); clearTimeout(t2); };
+        const t = setTimeout(() => setShowText(true), 350); // text fades in after logo
+        return () => clearTimeout(t);
     }, []);
-
-    // Animate the progress bar — fills slowly over ~4.5s to match 5s splash
-    useEffect(() => {
-        if (phase !== "bar") return;
-        let p = 0;
-        const interval = setInterval(() => {
-            // Slows down as it approaches 90% (natural loading feel)
-            const remaining = 90 - p;
-            p += Math.random() * (remaining * 0.12) + 1.5;
-            if (p >= 90) { p = 90; clearInterval(interval); } // hold at 90% until app is ready
-            setProgress(p);
-        }, 150);
-        return () => clearInterval(interval);
-    }, [phase]);
 
     return (
         <div
@@ -56,7 +38,6 @@ export default function SplashScreen() {
                         opacity: 0,
                     }}
                 >
-                    {/* Outer ring */}
                     <div
                         className="relative flex items-center justify-center rounded-3xl"
                         style={{
@@ -78,7 +59,7 @@ export default function SplashScreen() {
                 <div
                     className="text-center flex flex-col items-center gap-1.5"
                     style={{
-                        animation: phase === "text" || phase === "bar"
+                        animation: showText
                             ? "splashTextIn 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards"
                             : "none",
                         opacity: 0,
@@ -111,27 +92,11 @@ export default function SplashScreen() {
                 </div>
             </div>
 
-            {/* Bottom: copyright + progress bar */}
+            {/* Bottom: copyright only — no progress bar */}
             <div
-                className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3"
-                style={{ opacity: phase === "bar" ? 1 : 0, transition: "opacity 0.6s ease" }}
+                className="absolute bottom-8 left-1/2 -translate-x-1/2"
+                style={{ opacity: showText ? 1 : 0, transition: "opacity 0.6s ease" }}
             >
-                {/* Progress bar */}
-                <div
-                    className="rounded-full overflow-hidden"
-                    style={{ width: "160px", height: "2px", background: "rgba(255,255,255,0.08)" }}
-                >
-                    <div
-                        className="h-full rounded-full"
-                        style={{
-                            width: `${progress}%`,
-                            transition: "width 0.2s ease-out",
-                            background: "linear-gradient(90deg, #6366f1, #a855f7)",
-                            boxShadow: "0 0 8px rgba(99,102,241,0.8)",
-                        }}
-                    />
-                </div>
-                {/* Copyright */}
                 <p
                     style={{
                         fontSize: "10px",

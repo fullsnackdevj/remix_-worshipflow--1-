@@ -132,6 +132,62 @@ async function compressImage(file: File): Promise<string> {
     });
 }
 
+// ── RetypeDropdown — compact dropdown to reclassify note type ─────────────────
+function RetypeDropdown({ note, noteTypes, onRetype }: {
+    note: TeamNote;
+    noteTypes: typeof NOTE_TYPES;
+    onRetype: (id: string, newType: string) => void;
+}) {
+    const [open, setOpen] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
+    const cfg = noteTypes.find(t => t.value === note.type) ?? noteTypes[2];
+
+    // Click-outside close
+    useEffect(() => {
+        if (!open) return;
+        const handler = (e: MouseEvent) => {
+            if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+        };
+        document.addEventListener("mousedown", handler);
+        return () => document.removeEventListener("mousedown", handler);
+    }, [open]);
+
+    return (
+        <div ref={ref} className="relative">
+            <button
+                onClick={() => setOpen(v => !v)}
+                title={`Type: ${cfg.label} — click to change`}
+                className={`flex items-center gap-1 px-1.5 py-1 rounded-lg text-[11px] font-semibold border transition-all ${cfg.cls} hover:opacity-80`}
+            >
+                {cfg.icon}
+                <ChevronDown size={10} className={`transition-transform ${open ? "rotate-180" : ""}`} />
+            </button>
+            {open && (
+                <div className="absolute bottom-full mb-1 left-0 z-20 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl overflow-hidden min-w-[110px]">
+                    {noteTypes.map(t => (
+                        <button
+                            key={t.value}
+                        onClick={() => {
+                            if (note.type === t.value) { setOpen(false); return; }
+                            onRetype(note.id, t.value);
+                            setOpen(false);
+                        }}
+                            className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold transition-all ${
+                                note.type === t.value
+                                    ? t.cls + " cursor-default"
+                                    : "text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                            }`}
+                        >
+                            {t.icon} {t.label}
+                            {note.type === t.value && <Check size={10} className="ml-auto" />}
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ── NoteCard ─────────────────────────────────────────────────────────────────
 interface NoteCardProps {
     note: TeamNote;
@@ -280,19 +336,20 @@ function NoteCard({ note, userId, userRole, highlighted, onEdit, onDelete, onRea
                 </div>
             )}
 
-            {/* Status Reactions — clickable by Admin/QA only; read-only status indicators for everyone else */}
-            <div className="flex flex-wrap items-center gap-1.5 mt-2">
+            {/* Note footer — single row: reactions | spacer | retype dropdown | resolve | edit | delete */}
+            <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                {/* Status Reactions */}
                 {STATUS_REACTIONS.map(({ key, label, icon, activeColor }) => {
                     const users = reactions[key] || [];
                     const reacted = users.includes(userId);
-                    // Only show reactions that have been clicked (for non-privileged) OR all reactions (for privileged)
                     if (!isPrivileged && users.length === 0) return null;
 
                     const activeClass = `${activeColor} scale-105 shadow-sm`;
                     const inactiveClass = "bg-gray-100 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400";
+                    // Shared pill sizing — py-1 + min-h ensures icon-only pills are same height as icon+count pills
+                    const pillBase = "group relative flex items-center justify-center gap-1 text-xs px-2.5 py-1 min-h-[26px] rounded-full border transition-all select-none active:scale-95";
 
                     if (isPrivileged) {
-                        // Admin / QA — fully interactive
                         const tooltip = reacted
                             ? `Remove "${label}"${users.length > 1 ? ` · ${users.length} people` : ""}`
                             : `${label}${users.length > 0 ? ` · ${users.length} people` : ""}`;
@@ -302,7 +359,7 @@ function NoteCard({ note, userId, userRole, highlighted, onEdit, onDelete, onRea
                                 onClick={() => toggleReaction(key)}
                                 title={tooltip}
                                 aria-label={tooltip}
-                                className={`group relative flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border transition-all select-none active:scale-95 ${reacted ? activeClass : `${inactiveClass} hover:bg-gray-200 dark:hover:bg-gray-700`}`}
+                                className={`${pillBase} ${reacted ? activeClass : `${inactiveClass} hover:bg-gray-200 dark:hover:bg-gray-700`}`}
                             >
                                 {icon}
                                 {users.length > 0 && <span className="font-semibold tabular-nums">{users.length}</span>}
@@ -313,12 +370,11 @@ function NoteCard({ note, userId, userRole, highlighted, onEdit, onDelete, onRea
                         );
                     }
 
-                    // Non-privileged — read-only status indicator (only shown if admin has clicked it)
                     return (
                         <span
                             key={key}
                             title={`${label} · ${users.length} person${users.length !== 1 ? "s" : ""}`}
-                            className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border cursor-default select-none ${reacted ? activeClass : activeClass}`}
+                            className={`${pillBase} cursor-default ${activeClass}`}
                         >
                             {icon}
                             {users.length > 0 && <span className="font-semibold tabular-nums">{users.length}</span>}
@@ -326,87 +382,80 @@ function NoteCard({ note, userId, userRole, highlighted, onEdit, onDelete, onRea
                     );
                 })}
 
-                {/* Action buttons */}
-                <div className="ml-auto flex items-center gap-1">
-                    {/* Admin/QA-only: reclassify note type */}
-                    {isPrivileged && (
-                        <div className="flex items-center gap-0.5 mr-1 border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
-                            {NOTE_TYPES.map(t => (
-                                <button
-                                    key={t.value}
-                                    onClick={() => note.type !== t.value && onRetype(note.id, t.value)}
-                                    title={note.type === t.value ? `Type: ${t.label}` : `Move to ${t.label}`}
-                                    className={`flex items-center gap-1 px-1.5 py-1 text-[10px] font-semibold transition-all ${
-                                        note.type === t.value
-                                            ? `${t.cls} cursor-default`
-                                            : "text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                                    }`}
-                                >
-                                    {t.icon}
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                    {canResolve && (
+
+
+                {/* Spacer */}
+                <div className="flex-1" />
+
+                {/* Retype dropdown (privileged only) */}
+                {isPrivileged && (
+                    <RetypeDropdown
+                        note={note}
+                        noteTypes={NOTE_TYPES}
+                        onRetype={onRetype}
+                    />
+                )}
+
+                {/* Resolve */}
+                {canResolve && (
+                    <button
+                        onClick={() => onResolve(note.id, !note.resolved)}
+                        title={resolveConfig.buttonLabel}
+                        className={`p-1.5 rounded-lg transition-all ${
+                            note.resolved
+                                ? "text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20"
+                                : "text-gray-400 hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20"
+                        }`}
+                    >
+                        <CheckCircle2 size={14} />
+                    </button>
+                )}
+
+                {/* Follow Up (author only, non-privileged, unresolved) */}
+                {isAuthor && !isPrivileged && !note.resolved && (() => {
+                    const COOLDOWN_MS = 24 * 60 * 60 * 1000;
+                    const lastFollowUpRaw = (note as any).lastFollowUpAt;
+                    const lastFollowUpMs = lastFollowUpRaw
+                        ? (typeof lastFollowUpRaw === "object" && lastFollowUpRaw.toDate
+                            ? lastFollowUpRaw.toDate().getTime()
+                            : new Date(lastFollowUpRaw).getTime())
+                        : 0;
+                    const remaining = lastFollowUpMs + COOLDOWN_MS - Date.now();
+                    const onCooldown = remaining > 0;
+                    const cooldownLabel = onCooldown
+                        ? remaining > 3600_000
+                            ? `in ${Math.ceil(remaining / 3600_000)}h`
+                            : `in ${Math.ceil(remaining / 60_000)}m`
+                        : null;
+                    return (
                         <button
-                            onClick={() => onResolve(note.id, !note.resolved)}
-                            title={resolveConfig.buttonLabel}
+                            onClick={() => !onCooldown && onFollowUp(note.id)}
+                            disabled={onCooldown}
+                            title={onCooldown ? `Follow up again ${cooldownLabel}` : "Notify admin you're following up"}
                             className={`p-1.5 rounded-lg transition-all ${
-                                note.resolved
-                                    ? "text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20"
-                                    : "text-gray-400 hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20"
+                                onCooldown
+                                    ? "text-gray-400 dark:text-gray-600 cursor-not-allowed opacity-60"
+                                    : "text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20"
                             }`}
                         >
-                            <CheckCircle2 size={14} />
+                            <MessageSquare size={13} />
                         </button>
-                    )}
-                    {/* Follow Up — only for note author who is not privileged, and only when not resolved */}
-                    {isAuthor && !isPrivileged && !note.resolved && (() => {
-                        const COOLDOWN_MS = 24 * 60 * 60 * 1000;
-                        const lastFollowUpRaw = (note as any).lastFollowUpAt;
-                        const lastFollowUpMs = lastFollowUpRaw
-                            ? (typeof lastFollowUpRaw === "object" && lastFollowUpRaw.toDate
-                                ? lastFollowUpRaw.toDate().getTime()
-                                : new Date(lastFollowUpRaw).getTime())
-                            : 0;
-                        const remaining = lastFollowUpMs + COOLDOWN_MS - Date.now();
-                        const onCooldown = remaining > 0;
-                        const cooldownLabel = onCooldown
-                            ? remaining > 3600_000
-                                ? `in ${Math.ceil(remaining / 3600_000)}h`
-                                : `in ${Math.ceil(remaining / 60_000)}m`
-                            : null;
-                        return (
-                            <button
-                                onClick={() => !onCooldown && onFollowUp(note.id)}
-                                disabled={onCooldown}
-                                title={onCooldown ? `You can follow up again ${cooldownLabel}` : "Notify admin you're following up"}
-                                className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-all ${
-                                    onCooldown
-                                        ? "text-gray-400 dark:text-gray-600 cursor-not-allowed opacity-60"
-                                        : "text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20"
-                                }`}
-                            >
-                                <MessageSquare size={12} />
-                                <span className="text-[10px]">
-                                    {onCooldown ? `Follow Up ${cooldownLabel}` : "Follow Up"}
-                                </span>
-                            </button>
-                        );
-                    })()}
-                    {/* Edit — OWN note ONLY (no one can edit someone else's words, not even admin) */}
-                    {isAuthor && !note.resolved && (
-                        <button onClick={() => onEdit(note)} title="Edit" className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-all">
-                            <Pencil size={13} />
-                        </button>
-                    )}
-                    {/* Delete — own note (any role) OR any note (privileged only) */}
-                    {(isAuthor || isPrivileged) && (
-                        <button onClick={() => onDelete(note.id)} title="Delete" className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all">
-                            <Trash2 size={13} />
-                        </button>
-                    )}
-                </div>
+                    );
+                })()}
+
+                {/* Edit */}
+                {isAuthor && !note.resolved && (
+                    <button onClick={() => onEdit(note)} title="Edit" className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-all">
+                        <Pencil size={13} />
+                    </button>
+                )}
+
+                {/* Delete */}
+                {(isAuthor || isPrivileged) && (
+                    <button onClick={() => onDelete(note.id)} title="Delete" className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all">
+                        <Trash2 size={13} />
+                    </button>
+                )}
             </div>
         </div>
 

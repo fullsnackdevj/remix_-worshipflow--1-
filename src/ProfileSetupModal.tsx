@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import DatePicker from "./DatePicker";
 import { ROLE_CATEGORIES, getRoleStyle } from "./constants";
 import { CheckCircle, ChevronDown } from "lucide-react";
@@ -22,7 +22,10 @@ export default function ProfileSetupModal({ user, onSuccess }: ProfileSetupModal
   const [saving,     setSaving]     = useState(false);
   const [done,       setDone]       = useState(false);
 
-  const email    = user.email    || "";
+  /** Ref-based guard prevents double-submission on rapid taps before re-render */
+  const submittedRef = useRef(false);
+
+  const email    = (user.email    || "").trim().toLowerCase();
   const photoURL = user.photoURL || "";
   const firstName_ = firstName.trim();
   const today = new Date().toISOString().split("T")[0];
@@ -42,8 +45,11 @@ export default function ProfileSetupModal({ user, onSuccess }: ProfileSetupModal
   };
 
   const handleSubmit = async () => {
+    // Guard: bail immediately if already submitted (prevents double-tap duplicates)
+    if (submittedRef.current || saving) return;
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
+    submittedRef.current = true;
     setSaving(true);
     setErrors({});
     const submittedPayload = {
@@ -72,6 +78,7 @@ export default function ProfileSetupModal({ user, onSuccess }: ProfileSetupModal
       // Pass the FULL record (with email) back so App.tsx can resolve myMemberProfile immediately
       setTimeout(() => onSuccess({ id, ...submittedPayload }), 1500);
     } catch {
+      submittedRef.current = false; // allow retry on failure
       setErrors({ submit: "Something went wrong. Please try again." });
     } finally {
       setSaving(false);

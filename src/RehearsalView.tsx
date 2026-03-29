@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
     ChevronLeft, ChevronRight, Music, ArrowUpDown, Headphones,
-    Minus, Plus, Pencil, Check, X, Undo2, Redo2, Loader2, ImagePlus
+    Minus, Plus, Pencil, Check, X, Undo2, Redo2, Loader2, ImagePlus,
+    ZoomIn, ZoomOut,
 } from "lucide-react";
 import { Song, Schedule } from "./types";
 import { LineupTrack } from "./LineupPlayer";
@@ -171,6 +172,34 @@ export default function RehearsalView({
     const [chordsOnTop, setChordsOnTop] = useState<boolean>(() => {
         try { return localStorage.getItem("wf_rehearsal_row_order") === "chords_top"; } catch { return false; }
     });
+
+    // ── Font-size zoom (11 → 24 px, step 1, persisted) ───────────────────────
+    const FONT_SIZES = [11, 12, 13, 14, 15, 16, 18, 20, 22, 24];
+    const [fontSizeIdx, setFontSizeIdx] = useState<number>(() => {
+        try {
+            const saved = Number(localStorage.getItem("wf_rehearsal_font_idx"));
+            if (!isNaN(saved) && saved >= 0 && saved < FONT_SIZES.length) return saved;
+        } catch { /* noop */ }
+        return 3; // default → 14px
+    });
+    const fontSize = FONT_SIZES[fontSizeIdx];
+
+    const zoomIn  = () => setFontSizeIdx(prev => { const next = Math.min(FONT_SIZES.length - 1, prev + 1); try { localStorage.setItem("wf_rehearsal_font_idx", String(next)); } catch { /* noop */ } return next; });
+    const zoomOut = () => setFontSizeIdx(prev => { const next = Math.max(0, prev - 1); try { localStorage.setItem("wf_rehearsal_font_idx", String(next)); } catch { /* noop */ } return next; });
+
+    const zoomControls = (
+        <div className="flex items-center gap-0.5">
+            <button onClick={zoomOut} disabled={fontSizeIdx === 0} title="Decrease text size"
+                className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 disabled:opacity-20 disabled:cursor-not-allowed transition-all">
+                <ZoomOut size={14} />
+            </button>
+            <span className="min-w-[28px] text-center text-[10px] font-bold text-gray-400 tabular-nums select-none">{fontSize}px</span>
+            <button onClick={zoomIn} disabled={fontSizeIdx === FONT_SIZES.length - 1} title="Increase text size"
+                className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 disabled:opacity-20 disabled:cursor-not-allowed transition-all">
+                <ZoomIn size={14} />
+            </button>
+        </div>
+    );
 
     // Swipe gesture tracking
     const touchStartX = useRef<number>(0);
@@ -573,7 +602,8 @@ export default function RehearsalView({
             return (
                 <textarea
                     autoFocus
-                    className="w-full min-h-[60vh] font-mono text-sm leading-7 text-gray-800 dark:text-gray-200 bg-transparent resize-none px-5 py-4 outline-none focus:bg-indigo-50/30 dark:focus:bg-indigo-900/10 transition-colors"
+                    className="w-full min-h-[60vh] font-mono leading-[1.75] text-gray-800 dark:text-gray-200 bg-transparent resize-none px-5 py-4 outline-none focus:bg-indigo-50/30 dark:focus:bg-indigo-900/10 transition-colors"
+                    style={{ fontSize }}
                     value={edit.draft}
                     onChange={e => edit.onChange(e.target.value)}
                     spellCheck={false}
@@ -584,7 +614,10 @@ export default function RehearsalView({
 
         if (readValue?.trim()) {
             return (
-                <pre className="font-mono text-sm leading-7 text-gray-800 dark:text-gray-200 px-5 py-4 whitespace-pre-wrap break-words overflow-x-hidden w-full">
+                <pre
+                    className="font-mono leading-[1.75] text-gray-800 dark:text-gray-200 px-5 py-4 whitespace-pre-wrap break-words overflow-x-hidden w-full transition-[font-size] duration-150"
+                    style={{ fontSize }}
+                >
                     {readValue}
                 </pre>
             );
@@ -609,7 +642,11 @@ export default function RehearsalView({
             <div className="flex items-center shrink-0 border-b border-gray-200 dark:border-gray-800">
                 {/* Lyrics header */}
                 <div className="flex-1 flex items-center justify-between px-4 py-2">
-                    <span className="text-[11px] font-bold uppercase tracking-widest text-rose-500">Lyrics</span>
+                    <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-bold uppercase tracking-widest text-rose-500">Lyrics</span>
+                        {/* Zoom controls — shown in Lyrics header on desktop */}
+                        {!lyricsEdit.isEditing && !chordsEdit.isEditing && zoomControls}
+                    </div>
                     <div className="flex items-center gap-1">
                         {lyricsEdit.isEditing ? editToolbar("lyrics") : pencilBtn("lyrics")}
                     </div>
@@ -618,7 +655,7 @@ export default function RehearsalView({
                 <div className="w-px self-stretch bg-gray-200 dark:bg-gray-800 shrink-0" />
                 {/* Chords header */}
                 <div className="flex-1 flex items-center justify-between px-4 py-2">
-                <span className="text-[11px] font-bold uppercase tracking-widest text-indigo-500">Chords</span>
+                    <span className="text-[11px] font-bold uppercase tracking-widest text-indigo-500">Chords</span>
                     <div className="flex items-center gap-1">
                         {chordsEdit.isEditing ? editToolbar("chords") : (
                             <div className="flex items-center gap-1">
@@ -654,7 +691,11 @@ export default function RehearsalView({
         return (
             <div className="flex flex-col min-w-0">
                 <div className="flex items-center justify-between px-4 py-2 shrink-0 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
-                    <span className={`text-[11px] font-bold uppercase tracking-widest ${accent}`}>{label}</span>
+                    <div className="flex items-center gap-2">
+                        <span className={`text-[11px] font-bold uppercase tracking-widest ${accent}`}>{label}</span>
+                        {/* Zoom controls — shown in the top row header on mobile */}
+                        {isTop && !edit.isEditing && zoomControls}
+                    </div>
                     <div className="flex items-center gap-1">
                         {edit.isEditing ? editToolbar(col) : (
                             <>

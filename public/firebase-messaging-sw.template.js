@@ -26,12 +26,16 @@ messaging.onBackgroundMessage((payload) => {
     const notificationTitle = title || "WorshipFlow";
 
     // Pass FCM data payload into the notification so we can read it on tap
+    // Use a type-scoped tag so:
+    //   • Same-type notifications replace each other (no stacking of identical events)
+    //   • Different types (new_event, assembly_call, new_song) show independently
+    const notifType = payload.data?.type || "notif";
     const notificationOptions = {
         body: body || "",
         icon: icon || "/icon-192x192.png",
         badge: "/favicon-32.png",
         data: payload.data || {},   // ← deep-link data lives here
-        tag: "worshipflow-notif",   // replaces previous notification (no stacking)
+        tag: `worshipflow-${notifType}`,
         renotify: true,
         vibrate: [200, 100, 200],
     };

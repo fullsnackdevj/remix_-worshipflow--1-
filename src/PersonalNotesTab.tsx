@@ -104,42 +104,48 @@ function PersonalNoteViewModal({
           <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words leading-relaxed">{note.body}</p>
         </div>
 
-        {/* Footer actions */}
-        <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 dark:border-white/10 bg-gray-50 dark:bg-white/5">
-          <div className="flex items-center gap-1.5">
-            <button onClick={() => { onPin(note.id, !note.pinned); onClose(); }} title={note.pinned ? "Unpin" : "Pin to top"}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-xl transition-all border border-gray-200 dark:border-gray-700">
-              {note.pinned ? <PinOff size={12} /> : <Pin size={12} />}
-              {note.pinned ? "Unpin" : "Pin"}
-            </button>
-            {/* Copy */}
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(`${note.title}\n\n${note.body}`);
-                setCopied(true);
-                setTimeout(() => setCopied(false), 2000);
-              }}
-              title="Copy note"
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl border transition-all ${
-                copied
-                  ? "text-green-600 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800"
-                  : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/10 border-gray-200 dark:border-gray-700"
-              }`}
-            >
-              <Copy size={12} />
-              {copied ? "Copied!" : "Copy"}
-            </button>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => { onDelete(note.id); onClose(); }} title="Delete"
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all border border-red-200 dark:border-red-800">
-              <Trash2 size={12} /> Delete
-            </button>
-            <button onClick={() => { onClose(); onEdit(note); }} title="Edit Note"
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-xl transition-all border border-gray-200 dark:border-gray-700">
-              <Pencil size={12} /> Edit Note
-            </button>
-          </div>
+        {/* Footer — icon-only, equally spaced */}
+        <div className="flex items-center justify-around px-4 py-3 border-t border-gray-100 dark:border-white/10 bg-gray-50 dark:bg-white/5">
+          {/* Pin / Unpin */}
+          <button
+            onClick={() => { onPin(note.id, !note.pinned); onClose(); }}
+            title={note.pinned ? "Unpin" : "Pin to top"}
+            className="flex-1 flex items-center justify-center p-2.5 text-gray-500 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-xl transition-all"
+          >
+            {note.pinned ? <PinOff size={16} /> : <Pin size={16} />}
+          </button>
+          {/* Copy */}
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(`${note.title}\n\n${note.body}`);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            }}
+            title={copied ? "Copied!" : "Copy note"}
+            className={`flex-1 flex items-center justify-center p-2.5 rounded-xl transition-all ${
+              copied
+                ? "text-green-500 bg-green-50 dark:bg-green-900/20"
+                : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/10"
+            }`}
+          >
+            <Copy size={16} />
+          </button>
+          {/* Edit */}
+          <button
+            onClick={() => { onClose(); onEdit(note); }}
+            title="Edit Note"
+            className="flex-1 flex items-center justify-center p-2.5 text-gray-500 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-xl transition-all"
+          >
+            <Pencil size={16} />
+          </button>
+          {/* Delete */}
+          <button
+            onClick={() => { onDelete(note.id); onClose(); }}
+            title="Delete"
+            className="flex-1 flex items-center justify-center p-2.5 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all"
+          >
+            <Trash2 size={16} />
+          </button>
         </div>
       </div>
     </div>

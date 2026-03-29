@@ -830,7 +830,8 @@ const handleLineupAck = async (scheduleId: string) => {
                   {bdaysOnDate.map(bm => {
                     const bdColors = ["bg-pink-500","bg-rose-500","bg-fuchsia-500","bg-violet-500"];
                     const bdBg = bdColors[bm.name.charCodeAt(0) % bdColors.length];
-                    const canGreet = !isDatePast;
+                    // Only allow greeting on the celebrant's actual birthday (today)
+                    const canGreet = selectedScheduleDate === todayStr;
                     const CardEl = canGreet ? "button" : "div";
                     return (
                       <CardEl
@@ -1171,7 +1172,8 @@ const handleLineupAck = async (scheduleId: string) => {
                       <p className="text-xs font-semibold text-pink-400 uppercase tracking-wider">🎂 Birthday Celebrants</p>
                       {bdSingle.map(bm => {
                         const bdBg = bdColors[bm.name.charCodeAt(0) % bdColors.length];
-                        const canGreet = !isDatePast;
+                        // Only allow greeting on the celebrant's actual birthday (today)
+                        const canGreet = selectedScheduleDate === todayStr;
                         const CardEl = canGreet ? "button" : "div";
                         return (
                           <CardEl

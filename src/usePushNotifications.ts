@@ -44,7 +44,13 @@ export function usePushNotifications(userId: string | null, userRole: string | n
         if (Notification.permission === "granted") {
             if (!registeredRef.current) {
                 registeredRef.current = true;
-                registerAndStoreToken(userId, userRole).catch(() => { });
+                // sessionStorage guard: only register the token once per browser session
+                // (prevents duplicate token docs from re-registration on every mount/page-load)
+                const sessionKey = `wf_fcm_registered_${userId}`;
+                if (!sessionStorage.getItem(sessionKey)) {
+                    sessionStorage.setItem(sessionKey, "1");
+                    registerAndStoreToken(userId, userRole).catch(() => { });
+                }
             }
             setPushEnabled(true);
             return;
@@ -134,15 +140,18 @@ export function usePushNotifications(userId: string | null, userRole: string | n
                         body: body || "",
                         icon: "/icon-192x192.png",
                         badge: "/favicon-32.png",
-                        tag: "worshipflow-notif",
+                        // Use a type-scoped tag so different event types don't overwrite each other
+                        // while still preventing same-type duplicates from stacking
+                        tag: `worshipflow-${payload.data?.type || "notif"}`,
                         renotify: true,
                         data: payload.data || {},
                     } as NotificationOptions);
                 } else {
-                    new Notification(title, { body: body || "", icon: "/icon-192x192.png" });
+                    // Must include tag so OS deduplicates these raw fallback notifications
+                    new Notification(title, { body: body || "", icon: "/icon-192x192.png", tag: `worshipflow-${payload.data?.type || "notif"}` });
                 }
             } catch {
-                new Notification(title, { body: body || "", icon: "/icon-192x192.png" });
+                new Notification(title, { body: body || "", icon: "/icon-192x192.png", tag: `worshipflow-${(payload as any).data?.type || "notif"}` });
             }
         });
         return () => unsubscribe();

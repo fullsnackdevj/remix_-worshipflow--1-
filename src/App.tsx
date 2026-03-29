@@ -256,6 +256,16 @@ function UserMenu({ simulatedRole, onRoleSwitch }: { simulatedRole: string; onRo
 export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Bug fix: sidebar should NEVER be collapsed on mobile — reset state when below lg breakpoint
+  useEffect(() => {
+    const checkMobile = () => {
+      if (window.innerWidth < 1024) setIsSidebarCollapsed(false);
+    };
+    checkMobile(); // run on mount
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "playground" | "admin" | "team-notes" | "rehearsal">("dashboard");
   /** True when SongsView is displaying a song detail panel (not the list) */

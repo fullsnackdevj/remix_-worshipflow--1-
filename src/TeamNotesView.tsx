@@ -97,30 +97,40 @@ function TeamNoteViewModal({
   const modal = (
     <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
       <div className="w-full max-w-lg bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-white/10 overflow-hidden" onClick={e => e.stopPropagation()}>
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-white/10">
-          <div className="flex items-center gap-2.5 min-w-0">
-            {note.authorPhoto ? (
-              <img src={note.authorPhoto} className="w-7 h-7 rounded-full object-cover shrink-0 border-2 border-indigo-400/30" alt="" />
-            ) : (
-              <div className="w-7 h-7 rounded-full shrink-0 bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold">
-                {note.authorName?.[0]?.toUpperCase()}
-              </div>
-            )}
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-gray-900 dark:text-white truncate">{note.authorName}</p>
-              <p className="text-[10px] text-gray-400">{relTime(note.createdAt)}{note.updatedAt && (new Date(note.updatedAt).getTime() - new Date(note.createdAt).getTime() > 2000) ? " · edited" : ""}</p>
+        {/* Header — single row: [avatar][name+date][spacer][tags][X] */}
+        <div className="flex items-center gap-2.5 px-5 py-4 border-b border-gray-100 dark:border-white/10">
+          {/* Avatar */}
+          {note.authorPhoto ? (
+            <img src={note.authorPhoto} className="w-9 h-9 rounded-full object-cover shrink-0 border-2 border-indigo-400/30" alt="" />
+          ) : (
+            <div className="w-9 h-9 rounded-full shrink-0 bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold">
+              {note.authorName?.[0]?.toUpperCase()}
             </div>
-            <span className={`ml-2 flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border shrink-0 ${cfg.cls}`}>
-              {cfg.icon} {cfg.label}
+          )}
+
+          {/* Name + date — takes remaining space, truncate on narrow screens */}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-gray-900 dark:text-white leading-tight truncate">{note.authorName}</p>
+            <p className="text-[11px] text-gray-400 mt-0.5 truncate">
+              {relTime(note.createdAt)}
+              {note.updatedAt && (new Date(note.updatedAt).getTime() - new Date(note.createdAt).getTime() > 2000) ? " · edited" : ""}
+            </p>
+          </div>
+
+          {/* Tags — icon-only pills, pushed right */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span title={cfg.label} className={`shrink-0 aspect-square flex items-center justify-center w-7 h-7 rounded-full border ${cfg.cls}`}>
+              {cfg.icon}
             </span>
             {note.pinned && (
-              <span className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900/50 border border-indigo-200 dark:border-indigo-700 px-2 py-0.5 rounded-full shrink-0">
-                <Pin size={9} /> Pinned
+              <span title="Pinned" className="shrink-0 aspect-square flex items-center justify-center w-7 h-7 rounded-full text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900/50 border border-indigo-200 dark:border-indigo-700">
+                <Pin size={12} />
               </span>
             )}
           </div>
-          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-white rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-all shrink-0 ml-2" title="Close">
+
+          {/* Close — breathing space from tags */}
+          <button onClick={onClose} className="ml-2 p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-white rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-all shrink-0" title="Close">
             <X size={15} />
           </button>
         </div>
@@ -129,72 +139,66 @@ function TeamNoteViewModal({
           <h2 className="text-base font-bold text-gray-900 dark:text-white mb-3 leading-snug">{note.title}</h2>
           <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words leading-relaxed">{note.body}</p>
         </div>
-        {/* Footer — single row: [❤️ Like + text] [spacer] [Pin] [Delete] */}
-        <div className="flex items-center gap-3 px-5 py-3 border-t border-gray-100 dark:border-white/10 bg-gray-50 dark:bg-white/5">
-          {/* Left: Like button + likes text */}
+        {/* Footer — icon-only, bigger on mobile: [❤️ count] spacer [copy][pin][edit][delete] */}
+        <div className="flex items-center gap-1 px-4 py-3 border-t border-gray-100 dark:border-white/10 bg-gray-50 dark:bg-white/5">
+          {/* Like button — icon + count only, no text */}
           <button
             onClick={() => onLike(note.id, !(note.likes ?? []).includes(userId))}
             title={(note.likes ?? []).includes(userId) ? "Unlike" : "Like this note"}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all shrink-0 ${
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border transition-all shrink-0 ${
               (note.likes ?? []).includes(userId)
                 ? "text-rose-600 bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-800"
                 : "text-gray-500 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 border-gray-200 dark:border-gray-700"
             }`}
           >
-            <Heart size={13} className={(note.likes ?? []).includes(userId) ? "fill-rose-500 text-rose-500" : ""} />
-            {(note.likes ?? []).includes(userId) ? "Liked" : "Like"}
+            <Heart size={18} className={(note.likes ?? []).includes(userId) ? "fill-rose-500 text-rose-500" : ""} />
             {(note.likes ?? []).length > 0 && (
-              <span className="ml-0.5 font-bold">{(note.likes ?? []).length}</span>
+              <span className="text-sm font-bold">{(note.likes ?? []).length}</span>
             )}
           </button>
-          {likesText(note.likes, userId, note.authorName) && (
-            <span className="text-[10px] text-gray-400">
-              {likesText(note.likes, userId, note.authorName)}
-            </span>
-          )}
-          {/* Copy — available to everyone */}
+          <div className="flex-1" />
+          {/* Copy */}
           <button
             onClick={() => {
               navigator.clipboard.writeText(`${note.title}\n\n${note.body}`);
               setCopied(true);
               setTimeout(() => setCopied(false), 2000);
             }}
-            title="Copy note"
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl border transition-all shrink-0 ${
+            title={copied ? "Copied!" : "Copy note"}
+            className={`p-2 rounded-xl transition-all ${
               copied
-                ? "text-green-600 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800"
-                : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/10 border-gray-200 dark:border-gray-700"
+                ? "text-green-500 bg-green-50 dark:bg-green-900/20"
+                : "text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-white/10"
             }`}
           >
-            <Copy size={12} />
-            {copied ? "Copied!" : "Copy"}
+            <Copy size={18} />
           </button>
-          {/* Spacer */}
-          <div className="flex-1" />
-          {/* Right: Pin + Delete (author/admin only) */}
+          {/* Pin/Unpin */}
           {(isAuthor || isAdmin) && (
             <button onClick={() => { onPin(note.id, !note.pinned); onClose(); }}
               title={note.pinned ? "Unpin" : "Pin to top"}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-xl transition-all border border-gray-200 dark:border-gray-700 shrink-0">
-              {note.pinned ? <PinOff size={12} /> : <Pin size={12} />}
-              {note.pinned ? "Unpin" : "Pin"}
+              className="p-2 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-xl transition-all">
+              {note.pinned ? <PinOff size={18} /> : <Pin size={18} />}
             </button>
           )}
+          {/* Edit */}
           {(isAuthor || isAdmin) && (
             <button onClick={() => { onClose(); onEdit(note); }}
-              title="Edit Note"
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-xl transition-all border border-gray-200 dark:border-gray-700 shrink-0">
-              <Pencil size={12} /> Edit
+              title="Edit"
+              className="p-2 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-xl transition-all">
+              <Pencil size={18} />
             </button>
           )}
+          {/* Delete */}
           {(isAuthor || isAdmin) && (
             <button onClick={() => { onDelete(note.id); onClose(); }}
               title="Delete"
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all border border-red-200 dark:border-red-800 shrink-0">
-              <Trash2 size={12} /> Delete
+              className="p-2 text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all">
+              <Trash2 size={18} />
             </button>
           )}
         </div>
+
       </div>
     </div>
   );
@@ -239,35 +243,34 @@ function NoteCard({
         ? "border-indigo-300 dark:border-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/10"
         : "border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/50"
     }`}>
-      {note.pinned && (
-        <span className="absolute -top-2 left-4 flex items-center gap-1 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900/50 border border-indigo-200 dark:border-indigo-700 px-2 py-0.5 rounded-full">
-          <Pin size={9} /> Pinned
-        </span>
-      )}
-
-      <div className="p-4 pt-5">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-2 mb-3">
-          <div className="flex items-center gap-2.5 min-w-0">
-            {note.authorPhoto ? (
-              <img src={note.authorPhoto} className="w-8 h-8 rounded-full object-cover shrink-0 border-2 border-indigo-400/30" alt="" />
-            ) : (
-              <div className="w-8 h-8 rounded-full shrink-0 bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold">
-                {note.authorName?.[0]?.toUpperCase()}
-              </div>
-            )}
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-gray-900 dark:text-white truncate">{note.authorName}</p>
-              <p className="text-[10px] text-gray-400">
-                {relTime(note.createdAt)}{note.updatedAt && (new Date(note.updatedAt).getTime() - new Date(note.createdAt).getTime() > 2000) ? " · edited" : ""}
-              </p>
+      <div className="p-4">
+        {/* Header: [avatar][name+date flex-1][category badge][pinned badge?] */}
+        <div className="flex items-center gap-2 mb-3">
+          {note.authorPhoto ? (
+            <img src={note.authorPhoto} className="w-8 h-8 rounded-full object-cover shrink-0 border-2 border-indigo-400/30" alt="" />
+          ) : (
+            <div className="w-8 h-8 rounded-full shrink-0 bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold">
+              {note.authorName?.[0]?.toUpperCase()}
             </div>
+          )}
+          {/* Name + date */}
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-gray-900 dark:text-white truncate">{note.authorName}</p>
+            <p className="text-[10px] text-gray-400">
+              {relTime(note.createdAt)}{note.updatedAt && (new Date(note.updatedAt).getTime() - new Date(note.createdAt).getTime() > 2000) ? " · edited" : ""}
+            </p>
           </div>
-
-          <div className="flex items-center gap-1 shrink-0">
+          {/* Badges — right side: category (icon+text always), Pinned (icon-only mobile / icon+text sm+) */}
+          <div className="flex items-center gap-1.5 shrink-0">
             <span className={`flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${cfg.cls}`}>
               {cfg.icon} {cfg.label}
             </span>
+            {note.pinned && (
+              <span className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900/50 border border-indigo-200 dark:border-indigo-700 px-2 py-0.5 rounded-full">
+                <Pin size={9} />
+                <span className="hidden sm:inline">Pinned</span>
+              </span>
+            )}
           </div>
         </div>
 
@@ -302,72 +305,72 @@ function NoteCard({
           </button>
         )}
 
-        {/* Action row — ALWAYS visible: [❤️ like] [spacer] [view] [pin] [edit] [delete] */}
-        <div className="flex items-center justify-between gap-1 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700/50">
-          {/* Left: like button */}
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => onLike(note.id, !(note.likes ?? []).includes(userId))}
-              title={(note.likes ?? []).includes(userId) ? "Unlike" : "Like this note"}
-              className={`flex items-center gap-1 p-1.5 rounded-lg transition-all text-xs ${
-                (note.likes ?? []).includes(userId)
-                  ? "text-rose-500"
-                  : "text-gray-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20"
-              }`}
-            >
-              <Heart size={13} className={(note.likes ?? []).includes(userId) ? "fill-rose-500" : ""} />
-              {(note.likes ?? []).length > 0 && (
-                <span className="text-[10px] font-semibold">{(note.likes ?? []).length}</span>
-              )}
-            </button>
-            {likesText(note.likes, userId, note.authorName) && (
-              <span className="text-[10px] text-gray-400 truncate max-w-[120px]">
-                {likesText(note.likes, userId, note.authorName)}
-              </span>
+        {/* Footer: [❤️ count] spacer [copy][pin][edit][delete] — all icons only */}
+        <div className="flex items-center gap-1 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700/50">
+          {/* Like button */}
+          <button
+            onClick={() => onLike(note.id, !(note.likes ?? []).includes(userId))}
+            title={(note.likes ?? []).includes(userId) ? "Unlike" : "Like this note"}
+            className={`flex items-center gap-1 p-1.5 rounded-lg transition-all text-xs ${
+              (note.likes ?? []).includes(userId)
+                ? "text-rose-500"
+                : "text-gray-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20"
+            }`}
+          >
+            <Heart size={13} className={(note.likes ?? []).includes(userId) ? "fill-rose-500" : ""} />
+            {(note.likes ?? []).length > 0 && (
+              <span className="text-[10px] font-semibold">{(note.likes ?? []).length}</span>
             )}
-          </div>
-          {/* Right: actions */}
-          <div className="flex items-center gap-1">
-            {/* Copy */}
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(`${note.title}\n\n${note.body}`);
-                setCopied(true);
-                setTimeout(() => setCopied(false), 2000);
-              }}
-              title="Copy note"
-              className={`p-1.5 rounded-lg transition-all ${
-                copied
-                  ? "text-green-500 bg-green-50 dark:bg-green-900/20"
-                  : "text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
-              }`}
-            >
-              <Copy size={13} />
-            </button>
-            {/* View full note */}
-            <button onClick={() => onView(note)} title="View full note"
+          </button>
+
+          <div className="flex-1" />
+
+          {/* Copy */}
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(`${note.title}\n\n${note.body}`);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            }}
+            title={copied ? "Copied!" : "Copy note"}
+            className={`p-1.5 rounded-lg transition-all ${
+              copied
+                ? "text-green-500 bg-green-50 dark:bg-green-900/20"
+                : "text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
+            }`}
+          >
+            <Copy size={13} />
+          </button>
+
+          {/* Full view */}
+          <button onClick={() => onView(note)} title="View full note"
+            className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-all">
+            <NotebookPen size={13} />
+          </button>
+
+          {/* Pin/Unpin */}
+          {(isAuthor || isAdmin) && (
+            <button onClick={() => onPin(note.id, !note.pinned)} title={note.pinned ? "Unpin" : "Pin to top"}
               className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-all">
-              <NotebookPen size={13} />
+              {note.pinned ? <PinOff size={13} /> : <Pin size={13} />}
             </button>
-            {(isAuthor || isAdmin) && (
-              <button onClick={() => onPin(note.id, !note.pinned)} title={note.pinned ? "Unpin" : "Pin to top"}
-                className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-all">
-                {note.pinned ? <PinOff size={13} /> : <Pin size={13} />}
-              </button>
-            )}
-            {(isAuthor || isAdmin) && (
-              <button onClick={() => onEdit(note)} title="Edit"
-                className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-all">
-                <Pencil size={13} />
-              </button>
-            )}
-            {(isAuthor || isAdmin) && (
-              <button onClick={() => onDelete(note.id)} title="Delete"
-                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all">
-                <Trash2 size={13} />
-              </button>
-            )}
-          </div>
+          )}
+
+          {/* Edit */}
+          {(isAuthor || isAdmin) && (
+            <button onClick={() => onEdit(note)} title="Edit"
+              className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-all">
+              <Pencil size={13} />
+            </button>
+          )}
+
+          {/* Delete */}
+          {(isAuthor || isAdmin) && (
+            <button onClick={() => onDelete(note.id)} title="Delete"
+              className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all">
+              <Trash2 size={13} />
+            </button>
+          )}
         </div>
       </div>
     </div>
