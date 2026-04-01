@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "./AuthContext";
 import { UserPlus, Trash2, Shield, Users, Loader2, Check, X, Clock, UserCheck, Pencil, ShieldCheck, ShieldAlert, Megaphone, Plus, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, Eye, Sparkles, User, Guitar, Mic2, ClipboardList, Sliders, Wrench, ThumbsUp, FlaskConical, Mail, Activity, Wifi, WifiOff, Timer, RefreshCw } from "lucide-react";
 import AutoTextarea from "./AutoTextarea";
+import DateTimePicker from "./DateTimePicker";
 
 interface ApprovedUser {
     email: string;
@@ -458,6 +459,8 @@ export default function AdminPanel({
     const [bAutoGenerating, setBAutoGenerating] = useState(false);
     const [previewBroadcast, setPreviewBroadcast] = useState<any | null>(null);
     const [editingBroadcastId, setEditingBroadcastId] = useState<string | null>(null);
+    const [bScheduleStart, setBScheduleStart] = useState(""); // ISO datetime-local string
+    const [bScheduleEnd, setBScheduleEnd]     = useState(""); // ISO datetime-local string
 
     const autoGenerate = async () => {
         setBAutoGenerating(true);
@@ -535,22 +538,26 @@ export default function AdminPanel({
         const targetEmails = bTargetAll ? ["__all__"] : bSelected;
         if (!bTargetAll && targetEmails.length === 0) { setBCreating(false); return; }
         const bulletPoints = bBullets.filter(b => b.trim());
+        const schedulePayload: Record<string, string> = {};
+        if (bScheduleStart) schedulePayload.scheduledStart = new Date(bScheduleStart).toISOString();
+        if (bScheduleEnd)   schedulePayload.scheduledEnd   = new Date(bScheduleEnd).toISOString();
         try {
             if (editingBroadcastId) {
                 await fetch(`/api/broadcasts/${editingBroadcastId}`, {
                     method: "PUT", headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ type: bType, title: bTitle, message: bMessage, bulletPoints, targetEmails }),
+                    body: JSON.stringify({ type: bType, title: bTitle, message: bMessage, bulletPoints, targetEmails, ...schedulePayload }),
                 });
                 onToast?.("success", "Broadcast updated!");
             } else {
                 await fetch("/api/broadcasts", {
                     method: "POST", headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ type: bType, title: bTitle, message: bMessage, bulletPoints, targetEmails }),
+                    body: JSON.stringify({ type: bType, title: bTitle, message: bMessage, bulletPoints, targetEmails, ...schedulePayload }),
                 });
                 onToast?.("success", "Broadcast created!");
             }
         } catch { onToast?.("error", "Failed to save broadcast."); }
         setBTitle(""); setBMessage(""); setBBullets(["", "", ""]); setBTargetAll(true); setBSelected([]);
+        setBScheduleStart(""); setBScheduleEnd("");
         setShowForm(false); setBCreating(false); setEditingBroadcastId(null);
         fetchBroadcasts();
     };
@@ -564,6 +571,16 @@ export default function AdminPanel({
         setBBullets(b.bulletPoints?.length ? b.bulletPoints : [""]);
         setBTargetAll(b.targetEmails?.includes("__all__") ?? true);
         setBSelected(b.targetEmails?.includes("__all__") ? [] : (b.targetEmails ?? []));
+        // Pre-fill schedule fields — convert stored UTC ISO → YYYY-MM-DDTHH:mm in local time
+        const toLocal = (iso?: string): string => {
+            if (!iso) return "";
+            const d = new Date(iso);
+            if (isNaN(d.getTime())) return "";
+            const pad = (n: number) => String(n).padStart(2, "0");
+            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        };
+        setBScheduleStart(toLocal(b.scheduledStart));
+        setBScheduleEnd(toLocal(b.scheduledEnd));
         setShowForm(true);
     };
 
@@ -869,11 +886,39 @@ export default function AdminPanel({
                                     </div>
                                 )}
                             </div>
+                            {/* ── Schedule Window (optional) ──────────────────────────── */}
+                            <div className="space-y-2">
+                                <div className="flex items-center gap-2">
+                                    <Clock size={13} className="text-amber-500 shrink-0" />
+                                    <p className="text-xs font-semibold text-gray-600 dark:text-gray-400">Scheduled Window <span className="font-normal text-gray-400">(optional)</span></p>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <DateTimePicker
+                                        label="Start Time"
+                                        value={bScheduleStart}
+                                        onChange={v => setBScheduleStart(v)}
+                                        placeholder="Pick start"
+                                    />
+                                    <DateTimePicker
+                                        label="End Time"
+                                        value={bScheduleEnd}
+                                        onChange={v => setBScheduleEnd(v)}
+                                        min={bScheduleStart || undefined}
+                                        placeholder="Pick end"
+                                    />
+                                </div>
+                                {(bScheduleStart || bScheduleEnd) && (
+                                    <p className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                                        <Clock size={10} /> Broadcast will only be visible within this time window.
+                                        <button onClick={() => { setBScheduleStart(""); setBScheduleEnd(""); }} className="ml-auto text-gray-400 hover:text-red-400 transition-colors">Clear all</button>
+                                    </p>
+                                )}
+                            </div>
 
-                            <div className="flex gap-2 pt-1">
+                            <div className="flex gap-2">
                                 <button onClick={createBroadcast} disabled={bCreating || !bTitle.trim()} className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2">
                                     {bCreating ? <Loader2 size={14} className="animate-spin" /> : <Megaphone size={14} />}
-                                    {editingBroadcastId ? "Save Changes" : "Broadcast Now"}
+                                    {editingBroadcastId ? "Save Changes" : (bScheduleStart ? "Schedule Broadcast" : "Broadcast Now")}
                                 </button>
                                 <button onClick={() => { setShowForm(false); setEditingBroadcastId(null); setBTitle(""); setBMessage(""); setBBullets(["", "", ""]); }} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-xl transition-all">Cancel</button>
                             </div>

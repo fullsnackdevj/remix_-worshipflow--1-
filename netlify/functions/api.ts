@@ -54,11 +54,12 @@ async function sendScheduleEmail(
         const dateLabel = new Date(opts.date + "T00:00:00").toLocaleDateString("en", {
             weekday: "long", year: "numeric", month: "long", day: "numeric"
         });
-        const serviceLabel = opts.serviceType === "sunday" ? "Sunday Service" :
-            opts.serviceType === "special" ? "Special Event" :
-            opts.serviceType === "midweek" ? "Mid-Week Service" :
-            opts.serviceType ? opts.serviceType.charAt(0).toUpperCase() + opts.serviceType.slice(1) :
-            opts.eventName || "Event"; // fallback: use event name for custom events
+        // Custom events show a clean "Event" badge — no redundancy of repeating their name as both badge and title.
+        // Only standard "Sunday Service" / "Midweek Service" events get a specific service-type label.
+        const isStandardService = ["sunday service", "midweek service"].includes((opts.eventName || "").trim().toLowerCase());
+        const serviceLabel = isStandardService
+            ? (opts.serviceType === "sunday" ? "Sunday Service" : opts.serviceType === "midweek" ? "Mid-Week Service" : "Event")
+            : "Event";
         const actionLabel = opts.action === "created" ? "New Event Scheduled" : "Event Updated";
         const emoji = opts.action === "created" ? "🎉" : "📝";
 
@@ -106,7 +107,7 @@ async function sendScheduleEmail(
             <!-- CTA -->
             <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:24px;">
               <tr><td align="center">
-                <a href="https://worshipflow.dev" style="display:inline-block;background:linear-gradient(135deg,#6d28d9,#4f46e5);color:#fff;text-decoration:none;padding:13px 36px;border-radius:10px;font-size:15px;font-weight:700;letter-spacing:0.2px;">View Schedule →</a>
+                <a href="https://worshipflow.dev/?notif=new_event&id=${opts.scheduleId}&date=${opts.date}" style="display:inline-block;background:linear-gradient(135deg,#6d28d9,#4f46e5);color:#fff;text-decoration:none;padding:13px 36px;border-radius:10px;font-size:15px;font-weight:700;letter-spacing:0.2px;">View Schedule →</a>
               </td></tr>
             </table>
           </td>

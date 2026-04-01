@@ -30,19 +30,27 @@ export default function BroadcastOverlay() {
         // Wait until Firebase has resolved the user
         if (user?.email === undefined) return;
         if (!user?.email) {
-            // Still honour the minimum splash time for signed-out users
             const t = setTimeout(() => setIsChecking(false), MIN_LOAD_MS);
             return () => clearTimeout(t);
         }
 
-        const minDelay = new Promise<void>(res => setTimeout(res, MIN_LOAD_MS));
-        const fetchBroadcast = fetch(`/api/broadcasts?email=${encodeURIComponent(user.email)}`)
-            .then(r => r.json())
-            .then(data => { if (data?.id) setBroadcast(data); })
-            .catch(() => {});
+        const email = user.email;
 
-        // Only hide loader when BOTH the fetch AND the 4s timer are done
-        Promise.all([fetchBroadcast, minDelay]).finally(() => setIsChecking(false));
+        const poll = async () => {
+            try {
+                const r = await fetch(`/api/broadcasts?email=${encodeURIComponent(email)}`);
+                const data = await r.json();
+                setBroadcast(data?.id ? data : null);
+            } catch { /* keep existing state on network error */ }
+        };
+
+        // Initial fetch + min splash delay
+        const minDelay = new Promise<void>(res => setTimeout(res, MIN_LOAD_MS));
+        Promise.all([poll(), minDelay]).finally(() => setIsChecking(false));
+
+        // ── Poll every 30 seconds so schedule windows open/close automatically ──
+        const interval = setInterval(poll, 30_000);
+        return () => clearInterval(interval);
     }, [user?.email, isAdmin]);
 
     // ── Still loading: render an opaque overlay so dashboard never flashes ──

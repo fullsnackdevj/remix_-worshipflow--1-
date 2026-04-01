@@ -264,10 +264,15 @@ app.get("/api/broadcasts", async (req, res) => {
     // No composite index needed — filter active only, sort in memory
     const snap = await firestore.collection("broadcasts")
       .where("active", "==", true).get();
+    const now = Date.now();
     const docs = snap.docs
       .map(d => ({ id: d.id, ...d.data() } as any))
       .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
     for (const data of docs) {
+      // ── Schedule window check ──────────────────────────────────────
+      if (data.scheduledStart && new Date(data.scheduledStart).getTime() > now) continue; // not yet started
+      if (data.scheduledEnd   && new Date(data.scheduledEnd).getTime()   < now) continue; // already expired
+      // ── Audience check ────────────────────────────────────────────
       const targets: string[] = data.targetEmails || [];
       const isAll = targets.includes("__all__");
       const isTargeted = targets.includes(email);
@@ -331,12 +336,14 @@ app.get("/api/release-notes", async (_req, res) => {
 app.post("/api/broadcasts", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(503).json({ error: "DB unavailable" });
-  const { type, title, message, bulletPoints, targetEmails } = req.body;
+  const { type, title, message, bulletPoints, targetEmails, scheduledStart, scheduledEnd } = req.body;
   if (!type || !title || !targetEmails) return res.status(400).json({ error: "Missing fields" });
   try {
     const ref = await firestore.collection("broadcasts").add({
       type, title, message: message || "", bulletPoints: bulletPoints || [],
       targetEmails, active: true, dismissedBy: [],
+      ...(scheduledStart ? { scheduledStart } : {}),
+      ...(scheduledEnd   ? { scheduledEnd }   : {}),
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     res.json({ id: ref.id });
@@ -369,14 +376,18 @@ app.delete("/api/broadcasts/:id", async (req, res) => {
 app.put("/api/broadcasts/:id", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(503).json({ error: "DB unavailable" });
-  const { title, message, bulletPoints, targetEmails, type } = req.body;
+  const { title, message, bulletPoints, targetEmails, type, scheduledStart, scheduledEnd } = req.body;
   if (!title?.trim()) return res.status(400).json({ error: "Title is required" });
   try {
-    await firestore.collection("broadcasts").doc(req.params.id).update({
+    const update: Record<string, any> = {
       title: title.trim(), message: message || "", bulletPoints: bulletPoints || [],
       targetEmails: targetEmails || ["__all__"], type: type,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
+    };
+    // Persist schedule fields — use FieldValue.delete() to clear if not provided
+    update.scheduledStart = scheduledStart || admin.firestore.FieldValue.delete();
+    update.scheduledEnd   = scheduledEnd   || admin.firestore.FieldValue.delete();
+    await firestore.collection("broadcasts").doc(req.params.id).update(update);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: "Failed to update broadcast" }); }
 });
@@ -952,7 +963,7 @@ function stripPhoto(member: any) {
 app.post("/api/schedules", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(500).json({ error: "Firebase not configured" });
-  const { date, serviceType, worshipLeader, backupSingers, musicians, songLineup, notes, eventName, customTeamMembers } = req.body;
+  const { date, serviceType, worshipLeader, backupSingers, musicians, songLineup, notes, eventName, customTeamMembers, assignments } = req.body;
   if (!date) return res.status(400).json({ error: "Date is required." });
   try {
     const docRef = await firestore.collection("schedules").add({
@@ -960,6 +971,7 @@ app.post("/api/schedules", async (req, res) => {
       serviceType: serviceType || "sunday",
       eventName: eventName || "",
       customTeamMembers: (customTeamMembers || []).map(stripPhoto),
+      assignments: (assignments || []).map((a: any) => ({ role: a.role, members: (a.members || []).map(stripPhoto) })),
       worshipLeader: stripPhoto(worshipLeader),
       backupSingers: (backupSingers || []).map(stripPhoto),
       musicians: (musicians || []).map(stripPhoto),
@@ -983,7 +995,7 @@ app.post("/api/schedules", async (req, res) => {
       resourceDate: date,
     });
 
-    res.status(201).json({ id: docRef.id, date, serviceType: serviceType || "sunday", eventName: eventName || "", worshipLeader: worshipLeader || null, backupSingers: backupSingers || [], musicians: musicians || [], songLineup: songLineup || { joyful: "", solemn: "" }, notes: notes || "" });
+    res.status(201).json({ id: docRef.id, date, serviceType: serviceType || "sunday", eventName: eventName || "", assignments: assignments || [], worshipLeader: worshipLeader || null, backupSingers: backupSingers || [], musicians: musicians || [], songLineup: songLineup || { joyful: "", solemn: "" }, notes: notes || "" });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to create schedule" });
@@ -994,7 +1006,7 @@ app.put("/api/schedules/:id", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(500).json({ error: "Firebase not configured" });
   const { id } = req.params;
-  const { date, serviceType, worshipLeader, backupSingers, musicians, songLineup, notes, eventName, customTeamMembers } = req.body;
+  const { date, serviceType, worshipLeader, backupSingers, musicians, songLineup, notes, eventName, customTeamMembers, assignments } = req.body;
   if (!date) return res.status(400).json({ error: "Date is required." });
   try {
     await firestore.collection("schedules").doc(id).update({
@@ -1002,6 +1014,7 @@ app.put("/api/schedules/:id", async (req, res) => {
       serviceType: serviceType || "sunday",
       eventName: eventName || "",
       customTeamMembers: (customTeamMembers || []).map(stripPhoto),
+      assignments: (assignments || []).map((a: any) => ({ role: a.role || "", members: (a.members || []).map((m: any) => stripPhoto(m)).filter(Boolean) })),
       worshipLeader: stripPhoto(worshipLeader),
       backupSingers: (backupSingers || []).map(stripPhoto),
       musicians: (musicians || []).map(stripPhoto),
@@ -1028,6 +1041,53 @@ app.put("/api/schedules/:id", async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to update schedule" });
+  }
+});
+
+// POST /api/schedules/:id/notify — "Notify Team" manual email (local dev)
+app.post("/api/schedules/:id/notify", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(500).json({ error: "Firebase not configured" });
+  const { id } = req.params;
+  try {
+    const docSnap = await firestore.collection("schedules").doc(id).get();
+    if (!docSnap.exists) return res.status(404).json({ error: "Schedule not found" });
+    const ev = docSnap.data() as any;
+
+    // 24-hour cooldown guard
+    const lastNotified = ev.lastNotifiedAt?.toDate?.() as Date | undefined;
+    if (lastNotified) {
+      const hoursSince = (Date.now() - lastNotified.getTime()) / 3_600_000;
+      if (hoursSince < 24) {
+        const at = lastNotified.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", hour12: true });
+        return res.status(429).json({ error: `Team was already notified today at ${at}. Please wait 24 hours before notifying again.` });
+      }
+    }
+
+    // Record timestamp to enforce cooldown
+    await firestore.collection("schedules").doc(id).update({
+      lastNotifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    // Note: actual email sending happens via Netlify in production.
+    // In local dev we skip SMTP but still update cooldown + write notification.
+    const { actorName = "Someone" } = req.body;
+    const dateLabel = new Date((ev.date as string) + "T00:00:00").toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+    writeNotification(firestore, {
+      type: "updated_event",
+      message: `${actorName} notified the team`,
+      subMessage: `📅 ${ev.eventName || "Event"} — ${dateLabel}`,
+      actorName, actorPhoto: "", actorUserId: "",
+      targetAudience: "all",
+      resourceId: id,
+      resourceType: "event",
+      resourceDate: ev.date,
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("[notify]", error);
+    res.status(500).json({ error: "Failed to send notification" });
   }
 });
 

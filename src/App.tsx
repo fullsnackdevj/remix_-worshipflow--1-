@@ -33,6 +33,7 @@ import DatePicker from "./DatePicker";
 import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, BookOpen, LayoutGrid, Mic2, Copy, Pencil, Shield, Mail, Bell, Lock, AlertTriangle, CheckCircle, HelpCircle, FlaskConical, NotebookPen } from "lucide-react";
 import { Song, Tag, Member, ScheduleMember, Schedule } from "./types";
 import LineupPlayer, { LineupTrack, CurrentUser } from "./LineupPlayer";
+import SongsLibraryPlayer, { LibraryTrack } from "./SongsLibraryPlayer";
 
 
 // ── Member Role Constants ────────────────────────────────────────────────────
@@ -268,6 +269,7 @@ export default function App() {
   }, []);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "playground" | "admin" | "team-notes" | "rehearsal">("dashboard");
+  const [pendingTeamNoteId, setPendingTeamNoteId] = useState<string | null>(null); // deep-link into Team Notes
   /** True when SongsView is displaying a song detail panel (not the list) */
   const [isSongDetailOpen, setIsSongDetailOpen] = useState(false);
   /** Incrementing this tells SongsView to clear its selectedSong */
@@ -391,8 +393,9 @@ export default function App() {
     } else if (type === "access_request") {
       setCurrentView("admin");
     } else if (["team_note", "note_resolved", "note_done", "note_acknowledged", "note_followup"].includes(type)) {
-      // Open the Feedback panel and deep-link to the specific note
-      window.dispatchEvent(new CustomEvent("wf:open-notes-panel", { detail: { noteId: resourceId, type } }));
+      // Navigate to the Team Notes module and deep-link to the specific note
+      setCurrentView("team-notes");
+      if (resourceId) setPendingTeamNoteId(resourceId);
     }
   };
 
@@ -493,6 +496,38 @@ export default function App() {
 
   // ── Lineup playlist player ────────────────────────────────────────────────
   const [lineupOpen, setLineupOpen] = useState(false);
+
+  // ── Songs Library player (lifted here so it persists across all views) ───
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [libraryStartIndex, setLibraryStartIndex] = useState(0);
+
+  const songsWithVideo = useMemo<LibraryTrack[]>(() =>
+    allSongs
+      .filter(s => !!s.video_url)
+      .map(s => ({ id: s.id, title: s.title, artist: s.artist ?? "", videoUrl: s.video_url! })),
+    [allSongs]
+  );
+
+  const openLibraryPlayer = (songId?: string) => {
+    if (songsWithVideo.length === 0) return;
+    // Conflict guard: lineup player is already open
+    if (lineupOpen) {
+      showToast("warning", "⚠️ Another player is active. Please close the Lineup Player first.");
+      return;
+    }
+    const idx = songId ? songsWithVideo.findIndex(t => t.id === songId) : 0;
+    setLibraryStartIndex(idx >= 0 ? idx : 0);
+    setLibraryOpen(true);
+  };
+
+  const openLineupPlayer = () => {
+    // Conflict guard: library player is already open
+    if (libraryOpen) {
+      showToast("warning", "⚠️ Another player is active. Please close the Song Library Player first.");
+      return;
+    }
+    setLineupOpen(true);
+  };
 
   // All songs assigned to the lineup (joyful + solemn) for the relevant upcoming event.
   // Used for the button count — includes songs even if they have no video_url.
@@ -993,7 +1028,7 @@ export default function App() {
               onClick={() => { setCurrentView("schedule"); setIsMobileMenuOpen(false); }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "schedule"
                 ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
-                : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
+                : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:white"
                 } ${isSidebarCollapsed ? "justify-center" : ""}`}
               title="Scheduling"
             >
@@ -1009,7 +1044,7 @@ export default function App() {
               onClick={() => { setCurrentView("team-notes"); setIsMobileMenuOpen(false); }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "team-notes"
                 ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
-                : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
+                : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:white"
                 } ${isSidebarCollapsed ? "justify-center" : ""}`}
               title="Notes"
             >
@@ -1025,7 +1060,7 @@ export default function App() {
               onClick={() => { setCurrentView("rehearsal"); setIsMobileMenuOpen(false); }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "rehearsal"
                 ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
-                : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
+                : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:white"
                 } ${isSidebarCollapsed ? "justify-center" : ""}`}
               title="Rehearsal"
             >
@@ -1041,7 +1076,7 @@ export default function App() {
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${
                   currentView === "playground"
                     ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
-                    : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
+                    : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:white"
                 } ${isSidebarCollapsed ? "justify-center" : ""}`}
                 title="Playground"
               >
@@ -1311,9 +1346,10 @@ export default function App() {
                   user={user}
                   showToast={showToast}
                   setCurrentView={setCurrentView}
-                  onOpenLineup={() => setLineupOpen(true)}
+                  onOpenLineup={openLineupPlayer}
                   lineupTrackCount={lineupSongCount}
                   isLineupOpen={lineupOpen}
+                  isLibraryOpen={libraryOpen}
                 />
               ) : null}
 
@@ -1364,6 +1400,8 @@ export default function App() {
                   userPhoto={user?.photoURL ?? ""}
                   userRole={userRole}
                   onToast={showToast}
+                  pendingNoteId={pendingTeamNoteId ?? undefined}
+                  onPendingNoteHandled={() => setPendingTeamNoteId(null)}
                 />
               ) : currentView === "admin" ? (
                 <AdminPanel
@@ -1416,14 +1454,18 @@ export default function App() {
                   onOpenVideo={openVideo}
                   onSelectedSongChange={(hasSong) => setIsSongDetailOpen(hasSong)}
                   clearSelectionSignal={clearSelectionSignal}
+                  onOpenLibraryPlayer={openLibraryPlayer}
+                  isLibraryPlayerOpen={libraryOpen}
+                  isLineupOpen={lineupOpen}
                 />
               ) : currentView === "rehearsal" ? (
                 <RehearsalView
                   allSchedules={allSchedules}
                   allSongs={allSongs}
                   lineupTracks={lineupTracks}
-                  onOpenLineup={() => setLineupOpen(true)}
+                  onOpenLineup={openLineupPlayer}
                   isLineupOpen={lineupOpen}
+                  isLibraryOpen={libraryOpen}
                   currentUser={user}
                   canEditSong={canEditSong}
                   showToast={showToast}
@@ -1635,6 +1677,17 @@ export default function App() {
           tracks={lineupTracks}
           currentUser={{ uid: user?.uid ?? "", name: user?.displayName ?? user?.email ?? "Team Member", photo: user?.photoURL ?? "", email: user?.email ?? "" } as CurrentUser}
           onClose={() => setLineupOpen(false)}
+        />
+      )}
+
+      {/* ── Songs Library Player — persists across ALL views ──────────────────
+           Lives at App root so it persists across ALL module navigations.
+      ─────────────────────────────────────────────────────────────────────── */}
+      {libraryOpen && songsWithVideo.length > 0 && (
+        <SongsLibraryPlayer
+          tracks={songsWithVideo}
+          startIndex={libraryStartIndex}
+          onClose={() => setLibraryOpen(false)}
         />
       )}
 

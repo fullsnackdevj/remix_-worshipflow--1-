@@ -6,7 +6,8 @@ import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, ChevronLeft
   ChevronDown, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users,
   Calendar, Phone, UserPlus, Camera, LayoutGrid, List, BookOpen, Mic2, Copy, Pencil,
   Shield, Mail, Guitar, Sliders, Palette, Lock, AlertTriangle, CheckCircle, BookMarked,
-  HandMetal, Headphones, HelpCircle, Undo2, Redo2 } from "lucide-react";
+  HandMetal, Headphones, HelpCircle, Undo2, Redo2, Play } from "lucide-react";
+import SongsLibraryPlayer, { LibraryTrack } from "./SongsLibraryPlayer";
 
 // ── Module-level helpers ──────────────────────────────────────────────────────
 const CustomYoutubeIcon = ({ size = 24, className = "" }: { size?: number, className?: string }) => (
@@ -71,6 +72,12 @@ export interface SongsViewProps {
   onSelectedSongChange?: (hasSong: boolean) => void;
   /** Increment this number from App.tsx to tell SongsView to clear the selected song */
   clearSelectionSignal?: number;
+  /** Lifted: open the library player from App.tsx (persists across navigation) */
+  onOpenLibraryPlayer?: (songId?: string) => void;
+  /** Whether the library player is currently open — used for button state */
+  isLibraryPlayerOpen?: boolean;
+  /** Whether the lineup player is open — disables Play Library button to prevent conflict */
+  isLineupOpen?: boolean;
 }
 
 export default function SongsView({
@@ -95,6 +102,9 @@ export default function SongsView({
   onOpenVideo,
   onSelectedSongChange,
   clearSelectionSignal,
+  onOpenLibraryPlayer,
+  isLibraryPlayerOpen = false,
+  isLineupOpen = false,
 }: SongsViewProps) {
 
   // ── Songs search & filter ─────────────────────────────────────────────────
@@ -128,6 +138,23 @@ export default function SongsView({
   const [copiedField, setCopiedField] = useState<"lyrics" | "chords" | null>(null);
   const [transposeSteps, setTransposeSteps] = useState(0);
   const [formErrors, setFormErrors] = useState<{ title?: string; artist?: string }>({});
+
+  // ── Library mini player — state lifted to App.tsx; local helpers proxy up ──
+  /** Songs that have a YouTube video_url — kept here for count / button display */
+  const songsWithVideo = useMemo<LibraryTrack[]>(() =>
+    allSongs
+      .filter(s => !!s.video_url)
+      .map(s => ({ id: s.id, title: s.title, artist: s.artist || "", videoUrl: s.video_url! })),
+    [allSongs]
+  );
+
+  const openLibraryPlayer = (songId?: string) => {
+    if (songsWithVideo.length === 0) return;
+    const libraryStartIndex = songId ? songsWithVideo.findIndex(s => s.id === songId) : 0;
+    onOpenLibraryPlayer?.(songId);
+  };
+  const libraryPlayerOpen = isLibraryPlayerOpen;
+
 
   // Refs for focusing fields on open
   const songTitleRef = useRef<HTMLInputElement>(null);
@@ -242,9 +269,10 @@ export default function SongsView({
     try { localStorage.setItem("wf_song_view", v); } catch { /* noop */ }
   };
 
-  // Pagination (9 songs per page)
-  const SONGS_PER_PAGE = 9;
-  const [currentPage, setCurrentPage] = useState(1);
+  // Infinite scroll
+  const BATCH_SIZE = 12;
+  const [visibleCount, setVisibleCount] = useState(BATCH_SIZE);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
 
   // ── Toast notifications ──────────────────────────────────────────────
@@ -395,13 +423,26 @@ export default function SongsView({
     return result;
   }, [allSongs, debouncedQuery, selectedTagIds]);
 
-  // Pagination derived values — must come after filteredSongs
-  const totalPages = Math.max(1, Math.ceil(filteredSongs.length / SONGS_PER_PAGE));
-  const paginatedSongs = filteredSongs.slice((currentPage - 1) * SONGS_PER_PAGE, currentPage * SONGS_PER_PAGE);
+  // Visible slice for infinite scroll
+  const visibleSongs = filteredSongs.slice(0, visibleCount);
+  const hasMore = visibleCount < filteredSongs.length;
 
-  // Reset to page 1 when search or filters change
-  useEffect(() => { setCurrentPage(1); }, [debouncedQuery, selectedTagIds]);
-  // Reset transposer when switching songs
+  // Reset visible count when search or filters change
+  useEffect(() => { setVisibleCount(BATCH_SIZE); }, [debouncedQuery, selectedTagIds]);
+
+  // IntersectionObserver: load next batch when sentinel enters view
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting && hasMore) setVisibleCount(c => c + BATCH_SIZE); },
+      { rootMargin: "200px" }
+    );
+    obs.observe(sentinel);
+    return () => obs.disconnect();
+  }, [hasMore]);
+
+
   useEffect(() => { setTransposeSteps(0); }, [selectedSong?.id]);
   // Notify parent whenever the song detail panel opens or closes
   useEffect(() => { onSelectedSongChange?.(!!selectedSong); }, [selectedSong, onSelectedSongChange]);
@@ -1241,6 +1282,7 @@ export default function SongsView({
                     </>
                   ) : (
                     <>
+
                       {canSelectSongs && (
                         <button
                           onClick={() => setIsSelectionMode(true)}
@@ -1267,14 +1309,14 @@ export default function SongsView({
                 </div>
               </div>
 
-              {/* Row 2: Multi-select Filter Dropdown + Total Songs */}
+              {/* Row 2: Filter + Count + Toggle on left | Play Library on right */}
               <div className="flex items-center gap-2 py-3">
-                {/* Left group: Filter + Count + Toggle — always on first line */}
+                {/* Left group: Filter + Count + Toggle */}
                 <div className="flex items-center gap-2 flex-1 min-w-0">
                   <div className="relative flex-shrink-0" ref={filterDropdownRef}>
                     <button
                       onClick={() => setIsFilterOpen(prev => !prev)}
-                      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border transition-all ${selectedTagIds.length > 0
+                      className={`h-9 flex items-center gap-1.5 px-3 rounded-xl text-sm font-medium border transition-all ${selectedTagIds.length > 0
                         ? "bg-indigo-600 text-white border-transparent shadow-sm"
                         : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-indigo-300 hover:text-indigo-600 dark:hover:text-indigo-400"
                         }`}
@@ -1350,14 +1392,14 @@ export default function SongsView({
                     )}
                   </div>
                   {/* Total Songs Count */}
-                  <div className="text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-xl whitespace-nowrap flex-shrink-0">
+                  <div className="h-9 flex items-center text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-3 rounded-xl whitespace-nowrap flex-shrink-0">
                     {debouncedQuery || selectedTagIds.length > 0
                       ? <>{filteredSongs.length}<span className="hidden sm:inline"> of {allSongs.length}</span> <span className="hidden sm:inline">{allSongs.length === 1 ? 'Song' : 'Songs'}</span></>
                       : <>{allSongs.length} <span className="hidden sm:inline">{allSongs.length === 1 ? 'Song' : 'Songs'} Total</span><span className="sm:hidden">Songs</span></>
                     }
                   </div>
                   {/* Grid / List toggle */}
-                  <div className="hidden sm:flex items-center bg-gray-100 dark:bg-gray-800 rounded-xl p-0.5 gap-0.5 flex-shrink-0">
+                  <div className="hidden sm:flex h-9 items-center bg-gray-100 dark:bg-gray-800 rounded-xl p-0.5 gap-0.5 flex-shrink-0">
                     <button
                       onClick={() => toggleSongView("grid")}
                       title="Grid view"
@@ -1381,51 +1423,55 @@ export default function SongsView({
                   </div>
                 </div>
 
-                {/* Pagination — ml-auto on desktop, w-full justify-end on mobile wrap */}
-                {totalPages > 1 && !isLoadingSongs && (
-                  <div className="flex items-center gap-1 ml-auto flex-shrink-0">
+                {/* Play Library — pulsing icon, right side of filter row */}
+                {songsWithVideo.length > 0 && !libraryPlayerOpen && !isLineupOpen && (
+                  <div className="relative group flex-shrink-0">
+                    {/* Pulse rings */}
+                    <span className="absolute inset-0 rounded-full bg-emerald-500/30 animate-ping" />
                     <button
-                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                      disabled={currentPage === 1}
-                      className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      onClick={() => openLibraryPlayer()}
+                      className="relative w-9 h-9 flex items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-lg hover:scale-110 active:scale-95 transition-transform"
                     >
-                      <ChevronLeft size={14} />
+                      <Play size={15} className="fill-white ml-0.5" />
                     </button>
-                    {(() => {
-                      const pages: (number | "…")[] = [];
-                      if (totalPages <= 5) {
-                        for (let i = 1; i <= totalPages; i++) pages.push(i);
-                      } else {
-                        pages.push(1);
-                        if (currentPage > 3) pages.push("…");
-                        for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) pages.push(i);
-                        if (currentPage < totalPages - 2) pages.push("…");
-                        pages.push(totalPages);
-                      }
-                      return pages.map((p, idx) =>
-                        p === "…" ? (
-                          <span key={`el-${idx}`} className="text-[11px] text-gray-400 px-0.5 select-none">…</span>
-                        ) : (
-                          <button
-                            key={p}
-                            onClick={() => setCurrentPage(p as number)}
-                            className={`w-7 h-7 rounded-lg text-xs font-semibold transition-all ${currentPage === p
-                              ? "bg-indigo-600 text-white"
-                              : "text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
-                              }`}
-                          >{p}</button>
-                        )
-                      );
-                    })()}
-                    <button
-                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                      disabled={currentPage === totalPages}
-                      className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                    >
-                      <ChevronRight size={14} />
-                    </button>
+                    {/* Tooltip */}
+                    <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity shadow-xl">
+                      Play Library ({songsWithVideo.length} songs)
+                      <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
+                    </div>
                   </div>
                 )}
+                {/* Blocked by lineup player */}
+                {songsWithVideo.length > 0 && !libraryPlayerOpen && isLineupOpen && (
+                  <div className="relative group flex-shrink-0">
+                    <button
+                      disabled
+                      className="w-9 h-9 flex items-center justify-center rounded-full bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed"
+                    >
+                      <Play size={15} />
+                    </button>
+                    <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity shadow-xl">
+                      Close Lineup Player first
+                      <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
+                    </div>
+                  </div>
+                )}
+                {libraryPlayerOpen && (
+                  <div className="relative group flex-shrink-0">
+                    <button
+                      disabled
+                      className="w-9 h-9 flex items-center justify-center rounded-full bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed"
+                    >
+                      <Play size={15} />
+                    </button>
+                    <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity shadow-xl">
+                      Now Playing
+                      <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
+                    </div>
+                  </div>
+                )}
+
+
               </div>
 
             </div>
@@ -1451,7 +1497,7 @@ export default function SongsView({
                     </div>
                   </div>
                 ))
-              ) : Array.isArray(filteredSongs) && paginatedSongs.map((song) => (
+              ) : Array.isArray(filteredSongs) && visibleSongs.map((song) => (
 
                 <div
                   key={song.id}
@@ -1482,7 +1528,7 @@ export default function SongsView({
                             title="Watch Video"
                             className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors relative group/tooltip"
                           >
-                            <CustomYoutubeIcon size={24} />
+                            <CustomYoutubeIcon size={22} />
                             <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover/tooltip:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">Watch Video</span>
                           </button>
                         )}
@@ -1512,6 +1558,19 @@ export default function SongsView({
                   {debouncedQuery && <button onClick={() => setSearchQuery("")} className="mt-3 px-4 py-2 text-sm text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-xl transition-colors font-medium">Clear search</button>}
                 </div>
               )}
+              {/* Infinite scroll sentinel — grid */}
+              {!isLoadingSongs && hasMore && (
+                <div ref={sentinelRef} className="col-span-full flex justify-center py-6">
+                  <div className="flex gap-1.5 items-center">
+                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
+                </div>
+              )}
+              {!isLoadingSongs && !hasMore && filteredSongs.length > BATCH_SIZE && (
+                <p className="col-span-full text-center text-xs text-gray-400 dark:text-gray-500 py-4">All {filteredSongs.length} songs loaded</p>
+              )}
             </div>
           )}
 
@@ -1539,7 +1598,7 @@ export default function SongsView({
                     <div className="h-3 w-24 bg-gray-100 dark:bg-gray-700 rounded" />
                   </div>
                 ))
-              ) : Array.isArray(filteredSongs) && paginatedSongs.map((song) => (
+              ) : Array.isArray(filteredSongs) && visibleSongs.map((song) => (
 
                 <div
                   key={song.id}
@@ -1584,7 +1643,7 @@ export default function SongsView({
                         title="Watch Video"
                         className="opacity-0 group-hover:opacity-100 transition-opacity"
                       >
-                        <CustomYoutubeIcon size={18} />
+                        <CustomYoutubeIcon size={17} />
                       </button>
                     )}
                   </div>
@@ -1598,6 +1657,19 @@ export default function SongsView({
                   <p className="text-gray-500 dark:text-gray-400">{debouncedQuery ? `No results for "${debouncedQuery}". Try a different search.` : "Try adjusting your search or filter."}</p>
                   {debouncedQuery && <button onClick={() => setSearchQuery("")} className="mt-3 px-4 py-2 text-sm text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-xl transition-colors font-medium">Clear search</button>}
                 </div>
+              )}
+              {/* Infinite scroll sentinel — list */}
+              {!isLoadingSongs && hasMore && (
+                <div ref={sentinelRef} className="flex justify-center py-6">
+                  <div className="flex gap-1.5 items-center">
+                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
+                </div>
+              )}
+              {!isLoadingSongs && !hasMore && filteredSongs.length > BATCH_SIZE && (
+                <p className="text-center text-xs text-gray-400 dark:text-gray-500 py-4">All {filteredSongs.length} songs loaded</p>
               )}
             </div>
           )}

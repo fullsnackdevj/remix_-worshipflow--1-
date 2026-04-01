@@ -154,6 +154,7 @@ interface RehearsalViewProps {
     lineupTracks: LineupTrack[];
     onOpenLineup: () => void;
     isLineupOpen?: boolean;
+    isLibraryOpen?: boolean;
     currentUser?: { displayName?: string | null; photoURL?: string | null } | null;
     canEditSong?: boolean;
     onSongUpdated?: (updatedSong: Song) => void;
@@ -162,7 +163,7 @@ interface RehearsalViewProps {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function RehearsalView({
-    allSchedules, allSongs, lineupTracks, onOpenLineup, isLineupOpen = false,
+    allSchedules, allSongs, lineupTracks, onOpenLineup, isLineupOpen = false, isLibraryOpen = false,
     currentUser, canEditSong = false, onSongUpdated, showToast,
 }: RehearsalViewProps) {
 
@@ -576,17 +577,24 @@ export default function RehearsalView({
             </button>
 
             {lineupTracks.length > 0 && (
-                <button onClick={isLineupOpen ? undefined : onOpenLineup}
-                    disabled={isLineupOpen}
-                    className={`flex items-center gap-1.5 p-2 rounded-xl transition-all ${
-                        isLineupOpen
-                            ? "text-gray-300 dark:text-gray-600 cursor-not-allowed pointer-events-none"
-                            : "text-gray-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20"
-                    }`}
-                    title={isLineupOpen ? "Player is already open" : "Listen to Lineup"}
-                >
-                    <Headphones size={18} />
-                </button>
+                <div className="relative group">
+                    {!isLineupOpen && !isLibraryOpen && <span className="absolute inset-0 rounded-full bg-indigo-500/30 animate-ping" />}
+                    <button
+                        onClick={isLineupOpen || isLibraryOpen ? undefined : onOpenLineup}
+                        disabled={isLineupOpen || isLibraryOpen}
+                        className={`relative w-9 h-9 flex items-center justify-center rounded-full transition-transform ${
+                            isLineupOpen || isLibraryOpen
+                                ? "bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed"
+                                : "bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg hover:scale-110 active:scale-95"
+                        }`}
+                    >
+                        <Headphones size={15} />
+                    </button>
+                    <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity shadow-xl">
+                        {isLineupOpen ? "Now Playing" : isLibraryOpen ? "Close Library Player first" : "Lineup Available"}
+                        <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
+                    </div>
+                </div>
             )}
         </div>
     );

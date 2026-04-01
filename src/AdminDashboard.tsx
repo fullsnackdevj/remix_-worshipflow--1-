@@ -32,6 +32,7 @@ interface Props {
     onOpenLineup?: () => void;
     lineupTrackCount?: number;
     isLineupOpen?: boolean;
+    isLibraryOpen?: boolean;
 }
 
 const ROLE_STYLE: Record<string, { label: string; bg: string; text: string; border: string; glow: string }> = {
@@ -366,7 +367,7 @@ export default function AdminDashboard({
     userName, userEmail, userId = "", userPhoto, songs, members, schedules, notes, onNavigate,
     broadcasts: broadcastsProp, pendingUsers: pendingUsersProp, loadingExtra = false,
     canAddSong, canWriteSchedule, canAddMember, userRole = "admin",
-    onOpenLineup, lineupTrackCount = 0, isLineupOpen = false,
+    onOpenLineup, lineupTrackCount = 0, isLineupOpen = false, isLibraryOpen = false,
 }: Props) {
     const broadcasts = broadcastsProp ?? [];
     const pendingUsers = pendingUsersProp ?? [];
@@ -524,30 +525,30 @@ export default function AdminDashboard({
                     </div>
                 </div>
                 <div className="flex flex-col items-end gap-2 shrink-0">
-                    {/* ── Listen to Lineup button — visible to all roles when lineup tracks exist */}
-                    {onOpenLineup && (
-                        <button
-                            onClick={isLineupOpen ? undefined : onOpenLineup}
-                            disabled={lineupTrackCount === 0 || isLineupOpen}
-                            className={`w-full flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-                                isLineupOpen
-                                    ? "bg-gray-100 dark:bg-gray-700/60 text-gray-400 dark:text-gray-500 cursor-not-allowed pointer-events-none"
-                                    : lineupTrackCount > 0
-                                        ? "bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40"
-                                        : "bg-gray-100 dark:bg-gray-700/60 text-gray-400 dark:text-gray-500 cursor-not-allowed pointer-events-none"
-                            }`}
-                            title={
-                                isLineupOpen
-                                    ? "Player is already open"
-                                    : lineupTrackCount === 0
-                                        ? "No upcoming service with a song lineup this week"
-                                        : `Play ${lineupTrackCount} song${lineupTrackCount !== 1 ? "s" : ""} from this week's lineup`
-                            }
-                        >
-                            <ListMusic size={15} className={lineupTrackCount > 0 && !isLineupOpen ? "text-white" : ""} />
-                            {lineupTrackCount > 0 ? `Listen to Lineup (${lineupTrackCount})` : "Listen to Lineup"}
-                        </button>
+                    {/* ── Listen to Lineup — pulsing circle icon */}
+                    {onOpenLineup && lineupTrackCount > 0 && (
+                        <div className="relative group">
+                            {/* Pulse ring — only when not blocked */}
+                            {!isLineupOpen && !isLibraryOpen && <span className="absolute inset-0 rounded-full bg-indigo-500/30 animate-ping" />}
+                            <button
+                                onClick={isLineupOpen || isLibraryOpen ? undefined : onOpenLineup}
+                                disabled={isLineupOpen || isLibraryOpen}
+                                className={`relative w-9 h-9 flex items-center justify-center rounded-full transition-transform ${
+                                    isLineupOpen || isLibraryOpen
+                                        ? "bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed"
+                                        : "bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg hover:scale-110 active:scale-95"
+                                }`}
+                            >
+                                <ListMusic size={15} />
+                            </button>
+                            {/* Tooltip */}
+                            <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity shadow-xl">
+                                {isLineupOpen ? "Now Playing" : isLibraryOpen ? "Close Library Player first" : "Lineup Available"}
+                                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
+                            </div>
+                        </div>
                     )}
+
 
                     {/* ── Assembly Bell — temporarily hidden globally (re-enable when ready) ── */}
                     {false && userRole === "admin" && userId && (

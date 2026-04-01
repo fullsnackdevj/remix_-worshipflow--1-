@@ -348,8 +348,12 @@ const handleSaveSchedule = async () => {
     } else {
       res = await fetch("/api/schedules", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     }
-    if (!res.ok) { const err = await res.json(); throw new Error(err.error || "Save failed"); }
-    const saved = await res.json();
+    if (!res.ok) {
+      let errMsg = "Save failed. Please try again.";
+      try { const err = await res.json(); errMsg = err.error || errMsg; } catch { /* empty body — keep default message */ }
+      throw new Error(errMsg);
+    }
+    const saved = await res.json().catch(() => ({}));
     if (editingExisting) {
       // ── Bug fix: compute updated list BEFORE setState so cache gets fresh data ──
       const updatedSchedules = allSchedules.map(s =>
@@ -415,8 +419,9 @@ const handleNotifyTeam = async () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ actorName }),
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Failed to notify");
+    let data: any = {};
+    try { data = await res.json(); } catch { /* empty body */ }
+    if (!res.ok) throw new Error(data.error || `Server error ${res.status}`);
     // Update local state so cooldown shows immediately
     setAllSchedules(prev => prev.map(s =>
       s.id === editingExisting.id ? { ...s, lastNotifiedAt: new Date().toISOString() } as any : s
@@ -1649,7 +1654,12 @@ const handleLineupAck = async (scheduleId: string) => {
       const _ev = editingExisting as any;
       const dateLabel = new Date(_ev.date + "T00:00:00").toLocaleDateString("en", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
       const st = _ev.serviceType || "";
-      const serviceLabel = st === "sunday" ? "Sunday Service" : st === "special" ? "Special Event" : st === "midweek" ? "Mid-Week Service" : st ? st.charAt(0).toUpperCase() + st.slice(1) : (editSchedEventName || "Event");
+      const _evName = editSchedEventName || "";
+      const _isStandardSvc = ["sunday service", "midweek service"].includes(_evName.trim().toLowerCase());
+      // Redundancy fix: custom events just say "Event" — no need to repeat the event name as the badge
+      const serviceLabel = _isStandardSvc
+        ? (st === "sunday" ? "Sunday Service" : st === "midweek" ? "Mid-Week Service" : "Event")
+        : "Event";
       const jSong = allSongs.find(sg => sg.id === editSchedSongLineup.joyful);
       const sSong = allSongs.find(sg => sg.id === editSchedSongLineup.solemn);
       return (

@@ -29,6 +29,9 @@ interface TeamNotesViewProps {
   userRole?: string;
   onToast?: (type: "success" | "error" | "info" | "warning", message: string) => void;
   initialTab?: "personal" | "team";
+  /** If set, auto-navigate to this note's view modal (from notification deep-link) */
+  pendingNoteId?: string;
+  onPendingNoteHandled?: () => void;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -637,6 +640,8 @@ export default function TeamNotesView({
   userRole,
   onToast,
   initialTab = "personal",
+  pendingNoteId,
+  onPendingNoteHandled,
 }: TeamNotesViewProps) {
   const [activeTab, setActiveTab] = useState<"personal" | "team">(initialTab);
   const [notes, setNotes] = useState<TeamNoteEntry[]>([]);
@@ -671,6 +676,31 @@ export default function TeamNotesView({
   useEffect(() => {
     fetchNotes();
   }, [fetchNotes]);
+
+  // ── Deep-link: open specific note when pendingNoteId is set ───────────────
+  useEffect(() => {
+    if (!pendingNoteId) return;
+    // Switch to team tab immediately
+    setActiveTab("team");
+    // Wait for notes to be loaded, then find and open the note
+    const tryOpen = (attempts = 0) => {
+      setNotes(current => {
+        const found = current.find(n => n.id === pendingNoteId);
+        if (found) {
+          setViewing(found);
+          onPendingNoteHandled?.();
+        } else if (attempts < 10) {
+          // Notes may still be loading — retry every 300ms, up to 3s
+          setTimeout(() => tryOpen(attempts + 1), 300);
+        } else {
+          onPendingNoteHandled?.();
+        }
+        return current;
+      });
+    };
+    tryOpen();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingNoteId]);
 
   // Close cat menu on outside click
   useEffect(() => {
