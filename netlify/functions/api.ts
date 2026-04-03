@@ -378,7 +378,17 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
         .replace(/^\/\.netlify\/functions\/api/, "")
         .replace(/^\/api/, "") || "/";
     const method = event.httpMethod;
-    const body = event.body ? JSON.parse(event.body) : {};
+    // Netlify may base64-encode large bodies — decode first to get the raw string
+    let body: Record<string, any> = {};
+    try {
+      const rawBody = event.isBase64Encoded && event.body
+        ? Buffer.from(event.body, "base64").toString("utf-8")
+        : event.body;
+      body = rawBody ? JSON.parse(rawBody) : {};
+    } catch (e) {
+      console.error("Body parse error:", e);
+      body = {};
+    }
 
     const firestore = getDb();
 
@@ -2654,7 +2664,8 @@ Rules:
     // ─── PLAYGROUND TRELLO ─────────────────────────────────────────────────────
     // Boards
     if (rawPath === "/playground/boards" && method === "GET") {
-        try { const s = await firestore.collection("pg_boards").orderBy("createdAt","desc").get(); return json(200, s.docs.map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? null }))); }
+        const wantArch = event.queryStringParameters?.archived === "true";
+        try { const s = await firestore.collection("pg_boards").orderBy("createdAt","desc").get(); const all = s.docs.map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? null })) as any[]; return json(200, all.filter(b => wantArch ? !!b.archived : !b.archived)); }
         catch { return json(500, { error: "Failed" }); }
     }
     if (rawPath === "/playground/boards" && method === "POST") {
@@ -2671,7 +2682,7 @@ Rules:
     }
     // Lists
     const _pgBL = rawPath.match(/^\/playground\/boards\/([^/]+)\/lists$/);
-    if (_pgBL && method === "GET") { const bid = _pgBL[1]; try { const s = await firestore.collection("pg_lists").where("boardId","==",bid).get(); const docs = s.docs.map(d=>({id:d.id,...d.data()} as any)).filter((d:any)=>!d.archived).sort((a:any,b:any)=>a.pos-b.pos); return json(200, docs); } catch { return json(500, { error: "Failed" }); } }
+    if (_pgBL && method === "GET") { const bid = _pgBL[1]; const inclArch = event.queryStringParameters?.includeArchived === "true"; try { const s = await firestore.collection("pg_lists").where("boardId","==",bid).get(); const docs = s.docs.map(d=>({id:d.id,...d.data()} as any)).sort((a:any,b:any)=>a.pos-b.pos); return json(200, inclArch ? docs : docs.filter((d:any)=>!d.archived)); } catch { return json(500, { error: "Failed" }); } }
     if (_pgBL && method === "POST") { const bid = _pgBL[1]; const { title } = body; if (!title?.trim()) return json(400, { error: "Title required" }); try { const ex = await firestore.collection("pg_lists").where("boardId","==",bid).get(); const maxPos = ex.docs.reduce((m,d)=>Math.max(m,(d.data().pos??0)),0); const pos = maxPos + 16384; const r = await firestore.collection("pg_lists").add({ boardId: bid, title: title.trim(), pos, archived: false, createdAt: admin.firestore.FieldValue.serverTimestamp() }); return json(201, { id: r.id }); } catch { return json(500, { error: "Failed" }); } }
     const _pgLM = rawPath.match(/^\/playground\/lists\/([^/]+)$/);
     if (_pgLM) {
@@ -2681,7 +2692,7 @@ Rules:
     }
     // Cards
     const _pgBC = rawPath.match(/^\/playground\/boards\/([^/]+)\/cards$/);
-    if (_pgBC && method === "GET") { const bid = _pgBC[1]; try { const s = await firestore.collection("pg_cards").where("boardId","==",bid).get(); const docs = s.docs.map(d=>({id:d.id,...d.data(), createdAt:(d.data().createdAt?.toDate?.()?.toISOString()??null)} as any)).filter((d:any)=>!d.archived).sort((a:any,b:any)=>a.pos-b.pos); return json(200, docs); } catch { return json(500, { error: "Failed" }); } }
+    if (_pgBC && method === "GET") { const bid = _pgBC[1]; const wantArch = event.queryStringParameters?.archived === "true"; try { const s = await firestore.collection("pg_cards").where("boardId","==",bid).get(); const docs = s.docs.map(d=>({id:d.id,...d.data(), createdAt:(d.data().createdAt?.toDate?.()?.toISOString()??null)} as any)); return json(200, docs.filter((d:any)=>wantArch?!!d.archived:!d.archived).sort((a:any,b:any)=>a.pos-b.pos)); } catch { return json(500, { error: "Failed" }); } }
     if (rawPath === "/playground/cards" && method === "POST") {
         const { boardId, listId, title } = body;
         if (!boardId || !listId || !title?.trim()) return json(400, { error: "boardId, listId, title required" });
@@ -2710,6 +2721,99 @@ Rules:
             await firestore.collection("pg_cards").doc(cid).update({ listId, boardId, pos: newPos, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
             return json(200, { success: true, pos: newPos });
         } catch { return json(500, { error: "Failed to move" }); }
+    }
+
+    // ── Planner: Comments ────────────────────────────────────────────────────────
+    const _pgComm = rawPath.match(/^\/playground\/cards\/([^/]+)\/comments$/);
+    if (_pgComm) {
+        const cid_c = _pgComm[1];
+        if (method === "GET") {
+            try { const s = await firestore.collection("pg_cards").doc(cid_c).collection("comments").orderBy("createdAt","asc").get(); return json(200, s.docs.map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString() }))); }
+            catch { return json(500, { error: "Failed" }); }
+        }
+        if (method === "POST") {
+            const { authorName, authorPhoto, text } = body;
+            if (!text?.trim()) return json(400, { error: "text required" });
+            try {
+                const ref = await firestore.collection("pg_cards").doc(cid_c).collection("comments").add({ authorName: authorName || "Unknown", authorPhoto: authorPhoto || "", text: text.trim(), createdAt: admin.firestore.FieldValue.serverTimestamp() });
+                firestore.collection("pg_cards").doc(cid_c).collection("activity").add({ type: "comment", actorName: authorName || "Unknown", actorPhoto: authorPhoto || "", text: `commented: "${text.trim().slice(0,60)}${text.trim().length > 60 ? "\u2026" : ""}"`, createdAt: admin.firestore.FieldValue.serverTimestamp() }).catch(() => {});
+                return json(201, { id: ref.id });
+            } catch { return json(500, { error: "Failed" }); }
+        }
+    }
+    // DELETE /playground/cards/:id/comments/:cid
+    const _pgCommDel = rawPath.match(/^\/playground\/cards\/([^/]+)\/comments\/([^/]+)$/);
+    if (_pgCommDel && method === "DELETE") {
+        try { await firestore.collection("pg_cards").doc(_pgCommDel[1]).collection("comments").doc(_pgCommDel[2]).delete(); return json(200, { success: true }); }
+        catch { return json(500, { error: "Failed" }); }
+    }
+    // PATCH /playground/cards/:id/comments/:cid/reactions
+    const _pgReact = rawPath.match(/^\/playground\/cards\/([^/]+)\/comments\/([^/]+)\/reactions$/);
+    if (_pgReact && method === "PATCH") {
+        const { emoji, userName } = body;
+        if (!emoji || !userName) return json(400, { error: "emoji and userName required" });
+        try {
+            const ref = firestore.collection("pg_cards").doc(_pgReact[1]).collection("comments").doc(_pgReact[2]);
+            const snap = await ref.get();
+            if (!snap.exists) return json(404, { error: "Comment not found" });
+            const reactions: Record<string, string[]> = snap.data()?.reactions ?? {};
+            const users = reactions[emoji] ?? [];
+            reactions[emoji] = users.includes(userName) ? users.filter((u: string) => u !== userName) : [...users, userName];
+            if (reactions[emoji].length === 0) delete reactions[emoji];
+            await ref.update({ reactions });
+            return json(200, { reactions });
+        } catch { return json(500, { error: "Failed" }); }
+    }
+    // ── Planner: Activity ──────────────────────────────────────────────────────────
+    const _pgAct = rawPath.match(/^\/playground\/cards\/([^/]+)\/activity$/);
+    if (_pgAct) {
+        const cid_a = _pgAct[1];
+        if (method === "GET") {
+            try { const s = await firestore.collection("pg_cards").doc(cid_a).collection("activity").orderBy("createdAt","desc").limit(50).get(); return json(200, s.docs.map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString() }))); }
+            catch { return json(500, { error: "Failed" }); }
+        }
+        if (method === "POST") {
+            const { type: actType, actorName: aName, actorPhoto: aPhoto, text: actText } = body;
+            if (!actType || !actText) return json(400, { error: "type and text required" });
+            try { const ref = await firestore.collection("pg_cards").doc(cid_a).collection("activity").add({ type: actType, actorName: aName || "Unknown", actorPhoto: aPhoto || "", text: actText, createdAt: admin.firestore.FieldValue.serverTimestamp() }); return json(201, { id: ref.id }); }
+            catch { return json(500, { error: "Failed" }); }
+        }
+    }
+    // ── Planner: File Upload (base64 JSON → Firebase Storage via Admin SDK) ─────────
+    if (rawPath === "/playground/upload" && method === "POST") {
+        const { base64, name: fileName, contentType: cType, cardId: cId } = body;
+        if (!base64) return json(400, { error: "Upload failed — file data missing. Try a smaller file (max 5 MB)." });
+        if (!fileName || !cId) return json(400, { error: "Upload failed — missing file name or card ID." });
+        try {
+            const bucket = admin.storage().bucket();
+            const destPath = `playground/attachments/${cId}/${Date.now()}_${fileName}`;
+            const fileRef = bucket.file(destPath);
+            const buffer = Buffer.from(base64, "base64");
+            await fileRef.save(buffer, { metadata: { contentType: cType || "application/octet-stream" } });
+            await fileRef.makePublic();
+            const url = `https://storage.googleapis.com/${bucket.name}/${destPath}`;
+            return json(200, { url, name: fileName });
+        } catch (e: any) {
+            console.error("Storage upload error:", e?.message);
+            return json(500, { error: `Upload failed — ${e?.message ?? "storage error"}` });
+        }
+    }
+    // ── Planner: Member Notifications ────────────────────────────────────────────────
+    if (rawPath === "/planner/notify" && method === "POST") {
+        const { actorId, actorName: aN, actorPhoto: aP, recipientId, type: nType, cardId, cardTitle, boardName } = body;
+        if (!actorId || !recipientId || !nType || !cardId) return json(400, { error: "Missing required fields" });
+        if (actorId === recipientId) return json(200, { ok: true, skipped: true, reason: "self" });
+        try {
+            const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+            const recent = await firestore.collection("notifications").where("recipientId","==",recipientId).where("resourceId","==",cardId).where("type","==",nType).orderBy("createdAt","desc").limit(1).get().catch(() => null);
+            if (recent && !recent.empty) { const lastAt = recent.docs[0].data().createdAt?.toDate?.()?.toISOString() ?? ""; if (lastAt > tenMinAgo) return json(200, { ok: true, skipped: true, reason: "cooldown" }); }
+        } catch { /* skip cooldown on error */ }
+        const verbs: Record<string,string> = { planner_assigned: "assigned you to", planner_comment: "commented on", planner_mention: "mentioned you in", planner_due: "updated due date on" };
+        const msgTitle = `${aN || "Someone"} ${verbs[nType] ?? "updated"} "${cardTitle || "a card"}"`.slice(0, 100);
+        try {
+            await firestore.collection("notifications").add({ type: nType, message: msgTitle, subMessage: boardName || "Planner", actorName: aN || "Someone", actorPhoto: aP || "", actorUserId: actorId, recipientId, targetAudience: "direct", resourceId: cardId, resourceDate: "", readBy: [], deletedBy: [], createdAt: admin.firestore.FieldValue.serverTimestamp() });
+            return json(200, { ok: true, skipped: false });
+        } catch { return json(500, { error: "Failed" }); }
     }
 
     // ── POST /activity/heartbeat — session tracking for Admin Activity Monitor ──

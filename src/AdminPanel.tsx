@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "./AuthContext";
-import { UserPlus, Trash2, Shield, Users, Loader2, Check, X, Clock, UserCheck, Pencil, ShieldCheck, ShieldAlert, Megaphone, Plus, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, Eye, Sparkles, User, Guitar, Mic2, ClipboardList, Sliders, Wrench, ThumbsUp, FlaskConical, Mail, Activity, Wifi, WifiOff, Timer, RefreshCw } from "lucide-react";
+import { UserPlus, Trash2, Shield, Users, Loader2, Check, X, Clock, UserCheck, Pencil, ShieldCheck, ShieldAlert, Megaphone, Plus, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, Eye, Sparkles, User, Guitar, Mic2, ClipboardList, Sliders, Wrench, ThumbsUp, FlaskConical, Mail, Activity, Wifi, WifiOff, Timer, RefreshCw, SquareKanban } from "lucide-react";
 import AutoTextarea from "./AutoTextarea";
 import DateTimePicker from "./DateTimePicker";
 
@@ -429,7 +429,7 @@ export default function AdminPanel({
     onConfirm?: (msg: string, onOk: () => void) => void;
 }) {
     const { isAdmin, user } = useAuth();
-    const [activeTab, setActiveTab] = useState<"team" | "broadcasts" | "birthdays" | "activity">("team");
+    const [activeTab, setActiveTab] = useState<"team" | "planner" | "broadcasts" | "birthdays" | "activity">("team");
     const [members, setMembers] = useState<any[]>([]);
     const [users, setUsers] = useState<ApprovedUser[]>([]);
     const [pending, setPending] = useState<PendingUser[]>([]);
@@ -461,6 +461,11 @@ export default function AdminPanel({
     const [editingBroadcastId, setEditingBroadcastId] = useState<string | null>(null);
     const [bScheduleStart, setBScheduleStart] = useState(""); // ISO datetime-local string
     const [bScheduleEnd, setBScheduleEnd]     = useState(""); // ISO datetime-local string
+
+    // ── Planner Access state ──────────────────────────────────────────────────
+    const [plannerMembers, setPlannerMembers] = useState<any[]>([]);
+    const [plannerLoading, setPlannerLoading] = useState(false);
+    const [grantingId, setGrantingId] = useState<string | null>(null);
 
     const autoGenerate = async () => {
         setBAutoGenerating(true);
@@ -600,10 +605,38 @@ export default function AdminPanel({
         finally { setLoading(false); }
     };
 
+    const fetchPlannerMembers = async () => {
+        setPlannerLoading(true);
+        try {
+            const res = await fetch("/api/members");
+            const data = await res.json();
+            if (Array.isArray(data)) setPlannerMembers(data);
+        } catch { setPlannerMembers([]); }
+        finally { setPlannerLoading(false); }
+    };
+
+    const togglePlannerAccess = async (memberId: string, current: boolean) => {
+        setGrantingId(memberId);
+        try {
+            const res = await fetch(`/api/members/${memberId}/planner-access`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ plannerAccess: !current }),
+            });
+            if (!res.ok) throw new Error();
+            setPlannerMembers(prev => prev.map(m => m.id === memberId ? { ...m, plannerAccess: !current } : m));
+            onToast?.("success", !current ? "Planner access granted!" : "Planner access revoked.");
+        } catch { onToast?.("error", "Failed to update. Try again."); }
+        finally { setGrantingId(null); }
+    };
+
     useEffect(() => { fetchAll(); fetchBroadcasts(); }, []);
     useEffect(() => {
         if (activeTab === "birthdays" && members.length === 0) {
             fetch("/api/members").then(r => r.json()).then(setMembers).catch(() => {});
+        }
+        if (activeTab === "planner" && plannerMembers.length === 0) {
+            fetchPlannerMembers();
         }
     }, [activeTab]);
 
@@ -763,6 +796,16 @@ export default function AdminPanel({
                 <div className="flex gap-1 mt-4 p-1 bg-gray-100 dark:bg-gray-800 rounded-xl w-fit flex-wrap">
                     <button onClick={() => setActiveTab("team")} className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${activeTab === "team" ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"}`}>
                         <span className="flex items-center gap-1.5"><Users size={14} /> Team Access</span>
+                    </button>
+                    <button onClick={() => setActiveTab("planner")} className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${activeTab === "planner" ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"}`}>
+                        <span className="flex items-center gap-1.5">
+                            <SquareKanban size={14} /> Planner
+                            {plannerMembers.filter(m => m.plannerAccess).length > 0 && (
+                                <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-violet-500 text-white text-[9px] font-bold leading-none">
+                                    {plannerMembers.filter(m => m.plannerAccess).length}
+                                </span>
+                            )}
+                        </span>
                     </button>
                     <button onClick={() => setActiveTab("broadcasts")} className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${activeTab === "broadcasts" ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"}`}>
                         <span className="flex items-center gap-1.5"><Megaphone size={14} /> Broadcasts {broadcasts.filter(b => b.active).length > 0 && <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />}</span>
@@ -1178,6 +1221,114 @@ export default function AdminPanel({
                     )}
                 </div>
             </>}
+
+            {/* ── PLANNER ACCESS TAB ──────────────────────────────────────── */}
+            {activeTab === "planner" && (
+                <div className="space-y-4">
+                    {/* Description card */}
+                    <div className="bg-gradient-to-r from-violet-500/10 via-fuchsia-500/10 to-pink-500/10 border border-violet-200 dark:border-violet-800/40 rounded-2xl px-4 py-4">
+                        <div className="flex items-center gap-2.5 mb-1">
+                            <SquareKanban size={18} className="text-violet-500" />
+                            <h3 className="text-sm font-bold text-gray-900 dark:text-white">Planner Full Access</h3>
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+                            Grant any member the <span className="font-semibold text-violet-500">Plan Lead</span> tag to unlock full Planner access — without changing their current role.
+                        </p>
+                    </div>
+
+                    {/* Member list */}
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                        <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+                            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                                <Users size={15} /> All Members
+                            </h3>
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full">
+                                    {plannerMembers.filter(m => m.plannerAccess).length} / {plannerMembers.length} granted
+                                </span>
+                                <button onClick={fetchPlannerMembers} title="Refresh"
+                                    className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-colors">
+                                    <RefreshCw size={13} className={plannerLoading ? "animate-spin" : ""} />
+                                </button>
+                            </div>
+                        </div>
+
+                        {plannerLoading && plannerMembers.length === 0 ? (
+                            <div className="flex items-center justify-center py-10">
+                                <Loader2 size={20} className="animate-spin text-gray-400" />
+                            </div>
+                        ) : plannerMembers.length === 0 ? (
+                            <div className="text-center py-10 text-gray-400 text-sm">No members found. Add members first.</div>
+                        ) : (
+                            <ul className="divide-y divide-gray-100 dark:divide-gray-700/60">
+                                {plannerMembers.map(m => {
+                                    const granted = !!m.plannerAccess;
+                                    const isMe = grantingId === m.id;
+                                    return (
+                                        <li key={m.id} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                                            {/* Avatar with optional spinning gradient ring */}
+                                            <div className="relative shrink-0" style={{ width: 38, height: 38 }}>
+                                                {granted && (
+                                                    <div
+                                                        className="planner-ring-spin absolute inset-0 rounded-full"
+                                                        style={{ background: 'conic-gradient(from 0deg, #7c3aed, #a855f7, #ec4899, #f43f5e, #ea580c, #7c3aed)', zIndex: 0 }}
+                                                    />
+                                                )}
+                                                <div
+                                                    className="absolute rounded-full overflow-hidden"
+                                                    style={{ inset: granted ? 2.5 : 0, zIndex: 1 }}
+                                                >
+                                                    {m.photo
+                                                        ? <img src={m.photo} alt={m.name} className="w-full h-full object-cover" />
+                                                        : <div className="w-full h-full bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-sm">{(m.name || "?")[0].toUpperCase()}</div>
+                                                    }
+                                                </div>
+                                            </div>
+
+                                            {/* Name + role + glowing kanban icon */}
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{m.name}</p>
+                                                <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                                    <RoleBadge role={m.role ?? "member"} />
+                                                    {granted && (
+                                                        <span className="relative group/kbtt">
+                                                            <SquareKanban
+                                                                size={13}
+                                                                style={{ color: '#a855f7', filter: 'drop-shadow(0 0 5px #a855f7aa)' }}
+                                                            />
+                                                            <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-[10px] font-semibold whitespace-nowrap opacity-0 group-hover/kbtt:opacity-100 transition-opacity z-50 shadow-lg">
+                                                                Planner Full Access
+                                                            </span>
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Grant / Revoke toggle button */}
+                                            <button
+                                                onClick={() => togglePlannerAccess(m.id, granted)}
+                                                disabled={isMe}
+                                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all shrink-0 ${
+                                                    granted
+                                                        ? "bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 border border-violet-200 dark:border-violet-700"
+                                                        : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-violet-50 dark:hover:bg-violet-900/20 hover:text-violet-700 dark:hover:text-violet-300 border border-gray-200 dark:border-gray-600"
+                                                } disabled:opacity-50 disabled:cursor-not-allowed`}
+                                            >
+                                                {isMe
+                                                    ? <Loader2 size={12} className="animate-spin" />
+                                                    : granted
+                                                        ? <><Check size={12} /> Plan Lead</>
+                                                        : <><SquareKanban size={12} /> Grant Access</>
+                                                }
+                                            </button>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* ── BIRTHDAYS TAB ───────────────────────────────────────────── */}
             {activeTab === "birthdays" && (

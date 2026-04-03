@@ -89,6 +89,24 @@ body {
   }
 }
 
+/* ── Plan Lead — animated gradient avatar ring ───────────────────────────── */
+@keyframes plannerRingSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.planner-ring-spin {
+  animation: plannerRingSpin 3s linear infinite;
+}
+
+/* ── Admin crown — gentle float above avatar ─────────────────────────────── */
+@keyframes crownBounce {
+  0%, 100% { transform: translateX(-50%) translateY(0px); }
+  50%       { transform: translateX(-50%) translateY(-3px); }
+}
+.crown-bounce {
+  animation: crownBounce 1.6s ease-in-out infinite;
+}
+
 /* Global button press feedback — tactile active state */
 button,
 a {

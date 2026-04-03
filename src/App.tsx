@@ -21,6 +21,7 @@ const NotesPanel    = lazy(() => import("./NotesPanel"));
 const Dashboard     = lazy(() => import("./Dashboard"));
 const DashboardView = lazy(() => import("./DashboardView"));
 const Playground    = lazy(() => import("./Playground"));
+const PlannerView   = lazy(() => import("./Planner"));
 const RehearsalView = lazy(() => import("./RehearsalView"));
 const ScheduleView  = lazy(() => import("./ScheduleView"));
 const SongsView     = lazy(() => import("./SongsView"));
@@ -30,7 +31,7 @@ const TeamNotesView = lazy(() => import("./TeamNotesView"));
 import AutoTextarea from "./AutoTextarea";
 import DatePicker from "./DatePicker";
 
-import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, BookOpen, LayoutGrid, Mic2, Copy, Pencil, Shield, Mail, Bell, Lock, AlertTriangle, CheckCircle, HelpCircle, FlaskConical, NotebookPen } from "lucide-react";
+import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, BookOpen, LayoutGrid, Mic2, Copy, Pencil, Shield, Mail, Bell, Lock, AlertTriangle, CheckCircle, HelpCircle, FlaskConical, NotebookPen, SquareKanban } from "lucide-react";
 import { Song, Tag, Member, ScheduleMember, Schedule } from "./types";
 import LineupPlayer, { LineupTrack, CurrentUser } from "./LineupPlayer";
 import SongsLibraryPlayer, { LibraryTrack } from "./SongsLibraryPlayer";
@@ -175,7 +176,7 @@ const QA_SWITCH_ROLES = [
   { value: "member", label: "Member" },
 ];
 
-function UserMenu({ simulatedRole, onRoleSwitch }: { simulatedRole: string; onRoleSwitch: (r: string) => void }) {
+function UserMenu({ simulatedRole, onRoleSwitch, plannerAccess }: { simulatedRole: string; onRoleSwitch: (r: string) => void; plannerAccess?: boolean }) {
   const { user, logOut, userRole, isAdmin } = useAuth();
   const [open, setOpen] = React.useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -197,7 +198,39 @@ function UserMenu({ simulatedRole, onRoleSwitch }: { simulatedRole: string; onRo
     <div ref={ref} className="relative flex-shrink-0">
       <button onClick={() => setOpen(o => !o)} className="flex items-center gap-2 p-1 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
         {user.photoURL
-          ? <img src={user.photoURL} alt={user.displayName ?? ""} className="w-8 h-8 rounded-full border-2 border-indigo-500" />
+          ? (
+            <div className="relative shrink-0" style={{ width: 32, height: 32, overflow: 'visible' }}>
+              {/* Admin bouncing crown */}
+              {isAdminUserMenu && (
+                <span
+                  className="crown-bounce"
+                  style={{
+                    position: 'absolute',
+                    top: -13,
+                    left: '50%',
+                    fontSize: 13,
+                    lineHeight: 1,
+                    zIndex: 10,
+                    pointerEvents: 'none',
+                    userSelect: 'none',
+                  }}
+                >👑</span>
+              )}
+              {/* Plan Lead animated ring */}
+              {plannerAccess && (
+                <div
+                  className="planner-ring-spin absolute inset-0 rounded-full"
+                  style={{ background: 'conic-gradient(from 0deg, #7c3aed, #a855f7, #ec4899, #f43f5e, #ea580c, #7c3aed)', zIndex: 0 }}
+                />
+              )}
+              <img
+                src={user.photoURL}
+                alt={user.displayName ?? ""}
+                className="rounded-full border-2 border-indigo-500 object-cover"
+                style={{ position: 'relative', zIndex: 1, width: plannerAccess ? 27 : 32, height: plannerAccess ? 27 : 32, margin: plannerAccess ? 2.5 : 0 }}
+              />
+            </div>
+          )
           : <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-sm font-semibold">{user.displayName?.[0] ?? user.email?.[0]?.toUpperCase()}</div>
         }
         <ChevronDown size={14} className="text-gray-400 hidden sm:block" />
@@ -346,6 +379,13 @@ export default function App() {
       setIsSidebarCollapsed(true);
     }
   }, [currentView]);
+
+  // 🗂️ Auto-collapse sidebar when a Playground card modal opens (desktop only)
+  useEffect(() => {
+    const onCardOpen = () => { if (window.innerWidth >= 1024) setIsSidebarCollapsed(true); };
+    window.addEventListener('pg-card-open', onCardOpen);
+    return () => window.removeEventListener('pg-card-open', onCardOpen);
+  }, []);
 
   // ── Real-time notifications ──────────────────────────────────────────────────
   // 10s poll + window focus/visibility — max 10s latency, instant on tab switch
@@ -1069,6 +1109,23 @@ export default function App() {
             </button>
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Rehearsal</span>}
           </div>
+
+          {/* Planner — visible to everyone; full access for Admin/Plan Lead only */}
+          <div className="relative group/tip">
+            <button
+              onClick={() => { setCurrentView("planner"); setIsMobileMenuOpen(false); }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${
+                currentView === "planner"
+                  ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
+                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:white"
+              } ${isSidebarCollapsed ? "justify-center" : ""}`}
+              title="Planner"
+            >
+              <SquareKanban size={20} className="shrink-0" />
+              {!isSidebarCollapsed && <span>Planner</span>}
+            </button>
+            {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Planner</span>}
+          </div>
           {isRoleAdmin && (
             <div className="relative group/tip">
               <button
@@ -1136,7 +1193,7 @@ export default function App() {
         </div>
         {/* Sidebar collapse toggle — floats on the border line */}
         <button
-          onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+          onClick={() => { setIsSidebarCollapsed(!isSidebarCollapsed); window.dispatchEvent(new CustomEvent('pg-sidebar-toggle')); }}
           className="hidden lg:flex absolute -right-3.5 top-8 -translate-y-1/2 z-40 w-7 h-7 items-center justify-center rounded-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-300 shadow-sm transition-all"
         >
           {isSidebarCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
@@ -1189,7 +1246,7 @@ export default function App() {
 
           <div className="flex-1 flex items-center min-w-0">
             <h1 className="text-base sm:text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap truncate">
-              {currentView === "dashboard" ? "Dashboard" : currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : currentView === "playground" ? "Playground" : currentView === "team-notes" ? "Notes" : currentView === "rehearsal" ? "Rehearsal" : "Song Management"}
+              {currentView === "dashboard" ? "Dashboard" : currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : currentView === "playground" ? "Playground" : currentView === "planner" ? "Planner" : currentView === "team-notes" ? "Notes" : currentView === "rehearsal" ? "Rehearsal" : "Song Management"}
             </h1>
           </div>
           <div className="flex items-center gap-2">
@@ -1316,7 +1373,7 @@ export default function App() {
               )}
 
             </div>
-            <UserMenu simulatedRole={simulatedRole} onRoleSwitch={handleRoleSwitch} />
+            <UserMenu simulatedRole={simulatedRole} onRoleSwitch={handleRoleSwitch} plannerAccess={myMemberProfile?.plannerAccess ?? false} />
           </div>
         </header>
 
@@ -1392,7 +1449,19 @@ export default function App() {
                 /* ══════════════════════════════════════════════════
                      PLAYGROUND — admin only sandbox
                 ══════════════════════════════════════════════════ */
-                isRoleAdmin ? <Playground allMembers={allMembers} onToast={showToast} /> : null
+                isRoleAdmin ? <Playground allMembers={allMembers} currentUser={myMemberProfile ? { name: myMemberProfile.name, photo: myMemberProfile.photo } : undefined} onToast={showToast} /> : null
+              ) : currentView === "planner" ? (
+                /* ══════════════════════════════════════════════════
+                     PLANNER — Kanban board (all roles)
+                ══════════════════════════════════════════════════ */
+                <PlannerView
+                  allMembers={allMembers}
+                  currentUser={myMemberProfile
+                    ? { name: myMemberProfile.name, photo: myMemberProfile.photo || myMemberProfile.photoURL || "" }
+                    : (user ? { name: user.displayName || user.email?.split('@')[0] || "Me", photo: user.photoURL || "" } : undefined)}
+                  onToast={showToast}
+                  isFullAccess={isAdmin || (myMemberProfile?.plannerAccess ?? false)}
+                />
               ) : currentView === "team-notes" ? (
                 <TeamNotesView
                   userId={user?.uid ?? ""}

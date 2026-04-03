@@ -2,6 +2,7 @@ import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getMessaging, getToken, onMessage } from "firebase/messaging";
 import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
 // Firebase client config — loaded from environment variables.
 // Safe to expose publicly (restricted by Firebase authorized domains).
@@ -22,6 +23,7 @@ export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 export const db = getFirestore(app);
+export const storage = getStorage(app);
 
 // Firebase Cloud Messaging — for push notifications
 export const messaging = getMessaging(app);

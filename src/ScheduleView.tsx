@@ -1621,7 +1621,8 @@ const handleLineupAck = async (scheduleId: string) => {
                     <AutoTextarea
                       value={editSchedNotes}
                       onChange={e => setEditSchedNotes(e.target.value)}
-                      minRows={2}
+                      minRows={3}
+                      maxRows={8}
                       placeholder="Add notes, reminders, or announcements…"
                       className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder-gray-400"
                     />
