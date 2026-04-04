@@ -14,6 +14,7 @@ function getDb(): FirebaseFirestore.Firestore | null {
     if (admin.apps.length === 0) {
         admin.initializeApp({
             credential: admin.credential.cert({ projectId, clientEmail, privateKey }),
+            storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
         });
     }
     return admin.firestore();

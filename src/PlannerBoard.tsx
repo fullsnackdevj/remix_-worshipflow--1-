@@ -1319,7 +1319,7 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
                   />
                   {draftStartEnabled && draftStart && (
                     <input type="time" value={draftStartTime} onChange={e => setDraftStartTime(e.target.value)}
-                      style={{ colorScheme: "dark" }}
+                      style={{ colorScheme: "dark", color: "white", WebkitTextFillColor: "white" }}
                       className="flex-1 min-w-0 bg-[#1d2125] border border-white/10 rounded px-2 py-1 text-[11px] text-white focus:outline-none focus:border-blue-500/40" />
                   )}
                 </div>
@@ -1351,7 +1351,7 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
                   />
                   {draftDue && (
                     <input type="time" value={draftTime} onChange={e => setDraftTime(e.target.value)}
-                      style={{ colorScheme: "dark" }}
+                      style={{ colorScheme: "dark", color: "white", WebkitTextFillColor: "white" }}
                       className="flex-1 min-w-0 bg-[#1d2125] border border-white/10 rounded px-2 py-1 text-[11px] text-white focus:outline-none focus:border-blue-500/40" />
                   )}
                 </div>
