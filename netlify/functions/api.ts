@@ -1740,6 +1740,23 @@ Rules:
     }
 
 
+    // PATCH /members/:id/planner-access — grant or revoke Planner module access
+    const plannerAccessMatch = rawPath.match(/^\/members\/([^/]+)\/planner-access$/);
+    if (plannerAccessMatch && method === "PATCH") {
+        const memberId = plannerAccessMatch[1];
+        try {
+            const { plannerAccess } = body;
+            if (typeof plannerAccess !== "boolean") return json(400, { error: "plannerAccess must be a boolean" });
+            await firestore.collection("members").doc(memberId).update({
+                plannerAccess,
+                updated_at: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            return json(200, { success: true });
+        } catch (err) {
+            return json(500, { error: "Failed to update planner access" });
+        }
+    }
+
     // PUT /members/:id  &  DELETE /members/:id
     const memberMatch = rawPath.match(/^\/members\/([^/]+)$/);
     if (memberMatch) {
