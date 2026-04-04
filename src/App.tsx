@@ -1110,22 +1110,49 @@ export default function App() {
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Rehearsal</span>}
           </div>
 
-          {/* Planner — visible to everyone; full access for Admin/Plan Lead only */}
-          <div className="relative group/tip">
-            <button
-              onClick={() => { setCurrentView("planner"); setIsMobileMenuOpen(false); }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${
-                currentView === "planner"
-                  ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
-                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:white"
-              } ${isSidebarCollapsed ? "justify-center" : ""}`}
-              title="Planner"
-            >
-              <SquareKanban size={20} className="shrink-0" />
-              {!isSidebarCollapsed && <span>Planner</span>}
-            </button>
-            {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Planner</span>}
-          </div>
+          {/* Planner — gated: admin + test account only; others see disabled "coming soon" */}
+          {(isRoleAdmin || user?.email === "nthlastchild@gmail.com") ? (
+            <div className="relative group/tip">
+              <button
+                onClick={() => { setCurrentView("planner"); setIsMobileMenuOpen(false); }}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${
+                  currentView === "planner"
+                    ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
+                    : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:white"
+                } ${isSidebarCollapsed ? "justify-center" : ""}`}
+                title="Planner"
+              >
+                <SquareKanban size={20} className="shrink-0" />
+                {!isSidebarCollapsed && <span>Planner</span>}
+              </button>
+              {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Planner</span>}
+            </div>
+          ) : (
+            <div className="relative group/tip">
+              <div
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium opacity-40 cursor-not-allowed select-none text-gray-500 dark:text-gray-500 ${isSidebarCollapsed ? "justify-center" : ""}`}
+                onClick={() => {
+                  // mobile tap — briefly show tooltip via a state-free CSS trick (toggle class)
+                  const el = document.getElementById("planner-soon-tip");
+                  if (el) { el.style.opacity = "1"; setTimeout(() => { el.style.opacity = ""; }, 2000); }
+                }}
+              >
+                <SquareKanban size={20} className="shrink-0" />
+                {!isSidebarCollapsed && (
+                  <span className="flex items-center gap-2">
+                    Planner
+                    <span className="text-[10px] font-bold uppercase tracking-wider bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded-full">Soon</span>
+                  </span>
+                )}
+              </div>
+              <span
+                id="planner-soon-tip"
+                className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg"
+              >
+                🚀 Coming Soon — We're polishing this for you!
+              </span>
+            </div>
+          )}
           {isRoleAdmin && (
             <div className="relative group/tip">
               <button
