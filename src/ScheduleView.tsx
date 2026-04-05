@@ -510,38 +510,39 @@ const handleLineupAck = async (scheduleId: string) => {
   return (
     <>
     <div className="max-w-7xl mx-auto">
-      <div className="flex flex-col gap-2 mb-4">
-        {/* Row 1: centered month navigation */}
-        <div className="flex items-center justify-center gap-2">
+      {/* Single toolbar row: [Month|List] — [< Apr 2026 >] — [Add Event] */}
+      <div className="flex items-center justify-between gap-2 mb-4">
+
+        {/* Left: view toggle */}
+        <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-xl p-0.5 gap-0.5 shrink-0">
+          <button onClick={() => setScheduleView("month")} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-all ${scheduleView === "month" ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-white"}`}>
+            <Calendar size={14} />
+            <span className="hidden min-[375px]:inline">Month</span>
+          </button>
+          <button onClick={() => setScheduleView("list")} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-all ${scheduleView === "list" ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-white"}`}>
+            <List size={14} />
+            <span className="hidden min-[375px]:inline">List</span>
+          </button>
+        </div>
+
+        {/* Center: month navigation */}
+        <div className="flex items-center gap-1 sm:gap-2">
           <button onClick={() => setCalendarMonth(new Date(year, month - 1, 1))} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-600 dark:text-gray-400"><ChevronLeft size={18} /></button>
-          <h2 className="font-bold text-gray-900 dark:text-white text-lg min-w-[140px] text-center">
+          <h2 className="font-bold text-gray-900 dark:text-white text-base sm:text-lg min-w-[120px] sm:min-w-[160px] text-center">
             {calendarMonth.toLocaleDateString("en", { month: "long", year: "numeric" })}
           </h2>
           <button onClick={() => setCalendarMonth(new Date(year, month + 1, 1))} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-600 dark:text-gray-400"><ChevronRight size={18} /></button>
         </div>
-        {/* Row 2: view toggles left | add event right */}
-        <div className="flex items-center justify-between">
-          {/* View toggle — icon-only on <xs, icon+label on sm+ */}
-          <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-xl p-0.5 gap-0.5">
-            <button onClick={() => setScheduleView("month")} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-all ${scheduleView === "month" ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-white"}`}>
-              <Calendar size={14} />
-              <span className="hidden min-[375px]:inline">Month</span>
-            </button>
-            <button onClick={() => setScheduleView("list")} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-all ${scheduleView === "list" ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-white"}`}>
-              <List size={14} />
-              <span className="hidden min-[375px]:inline">List</span>
-            </button>
-          </div>
-          {/* Add Event button — smart context-aware */}
+
+        {/* Right: Add Event button */}
+        <div className="shrink-0">
           {(() => {
             const isListView = scheduleView === "list";
             const hasExisting = selectedDateEvents.length > 0;
-            const canBypassPast = false; // no one bypasses past dates
+            const canBypassPast = false;
             const hasDate = !!selectedScheduleDate && selectedScheduleDate >= todayStr;
             const isPast = !!selectedScheduleDate && selectedScheduleDate < todayStr;
-            const isEditingExistingEvent = schedPanelMode === "edit" && !!selectedEventId;
-            const isFormOpen = schedPanelMode === "edit"; // true for both new & existing event form
-            // Permitted users can always add another event on any date in month view
+            const isFormOpen = schedPanelMode === "edit";
             const canAdd = (canWriteSchedule || leaderCanAddOnDate) && !isListView && hasDate && !isFormOpen && selectedDateEvents.length === 0;
             const label = hasExisting ? "Add Another Event" : "Add Event";
             const disabledTitle = isPast && !canBypassPast
@@ -556,20 +557,25 @@ const handleLineupAck = async (scheduleId: string) => {
             if (canAdd) {
               return (
                 <button onClick={() => { setSelectedEventId(null); setSchedPanelMode("edit"); openBlankEventForm(selectedScheduleDate!); }}
-                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-medium transition-colors">
-                  <Plus size={16} /> {label}
+                  className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-medium transition-colors whitespace-nowrap">
+                  <Plus size={16} />
+                  <span className="hidden sm:inline">{label}</span>
+                  <span className="sm:hidden">Add</span>
                 </button>
               );
             }
             return (
               <button disabled title={disabledTitle}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed select-none">
-                <Plus size={16} /> {label}
+                className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-sm font-medium bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed select-none whitespace-nowrap">
+                <Plus size={16} />
+                <span className="hidden sm:inline">{label}</span>
+                <span className="sm:hidden">Add</span>
               </button>
             );
           })()}
         </div>
       </div>
+
 
       <div className="flex gap-4 relative">
         <div className="flex-1 min-w-0">

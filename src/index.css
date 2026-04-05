@@ -89,13 +89,45 @@ body {
   }
 }
 
-/* ── Plan Lead — animated gradient avatar ring ───────────────────────────── */
-@keyframes plannerRingSpin {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
+/* ── Plan Lead — spinning gradient avatar ring ───────────────────────────── */
+@property --planner-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
 }
-.planner-ring-spin {
+@keyframes plannerRingSpin {
+  to { --planner-angle: 360deg; }
+}
+@keyframes plannerGlow {
+  0%, 100% { filter: drop-shadow(0 0 4px #a855f7aa); }
+  50%       { filter: drop-shadow(0 0 9px #ec4899cc); }
+}
+.planner-ring-avatar {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  border-radius: 9999px;
+  overflow: visible;
+  flex-shrink: 0;
+  animation: plannerGlow 2.5s ease-in-out infinite;
+}
+.planner-ring-avatar::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 9999px;
+  background: conic-gradient(from var(--planner-angle), #7c3aed, #a855f7, #ec4899, #f43f5e, #ea580c, #7c3aed);
   animation: plannerRingSpin 3s linear infinite;
+  z-index: 0;
+}
+.planner-ring-avatar img {
+  position: relative;
+  z-index: 1;
+  border-radius: 9999px;
+  display: block;
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
 }
 
 /* ── Admin crown — gentle float above avatar ─────────────────────────────── */
@@ -204,4 +236,31 @@ button.no-scale:active {
 .dark .pretty-scrollbar::-webkit-scrollbar-thumb:hover,
 .dark.pretty-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(129, 140, 248, 0.85);
+}
+
+/* ── Freedom Wall scrollbar — visible on light/pastel note backgrounds ─────── */
+.fw-scrollbar {
+  overflow-y: scroll;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(80, 60, 30, 0.3) transparent;
+}
+.fw-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+.fw-scrollbar::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 99px;
+}
+.fw-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(80, 60, 30, 0.35);
+  border-radius: 99px;
+}
+.fw-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(80, 60, 30, 0.6);
+}
+
+/* ── Freedom Wall: new-note pulse ring ───────────────────────────────────── */
+@keyframes fw-pulse {
+  from { box-shadow: 0 0 0 3px rgba(245,158,11,0.9), 0 0 14px rgba(245,158,11,0.4); }
+  to   { box-shadow: 0 0 0 5px rgba(245,158,11,0.3), 0 0 28px rgba(245,158,11,0.1); }
 }

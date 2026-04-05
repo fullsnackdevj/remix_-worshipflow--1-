@@ -490,6 +490,7 @@ app.get("/api/notifications", async (req, res) => {
       if (n["targetAudience"] === "direct") return n["recipientId"] === userId;
       return false;
     });
+    if (res.headersSent) return; // timeout already responded
     res.json(filtered);
   } catch (e) { if (!res.headersSent) res.json([]); }
 });
@@ -1358,9 +1359,10 @@ app.get("/api/notes", async (_req, res) => {
   if (!firestore) return res.json([]);
   try {
     const snap = await firestore.collection("team_notes").orderBy("createdAt", "desc").get();
+    if (res.headersSent) return; // timeout already responded
     const notes = snap.docs.map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(), updatedAt: d.data().updatedAt?.toDate?.()?.toISOString() ?? null }));
     res.json(notes);
-  } catch (e) { res.status(500).json({ error: "Failed to fetch notes" }); }
+  } catch (e) { if (!res.headersSent) res.status(500).json({ error: "Failed to fetch notes" }); }
 });
 
 // POST /api/notes — create a new note
@@ -1756,11 +1758,12 @@ app.get("/api/planner/boards/archived", async (_req, res) => {
 app.post("/api/planner/boards", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(503).json({ error: "DB unavailable" });
-  const { title, color = "#6366f1", description = "" } = req.body;
+  const { title, color = "#6366f1", description = "", createdBy } = req.body;
   if (!title?.trim()) return res.status(400).json({ error: "Title required" });
   try {
     const r = await firestore.collection("pg_boards").add({
       title: title.trim(), color, description, archived: false, customFieldDefs: [],
+      ...(createdBy ? { createdBy } : {}),
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     res.status(201).json({ id: r.id });
@@ -2126,7 +2129,133 @@ app.post("/api/planner/cards/:id/activity", async (req, res) => {
   } catch (e) { if (!res.headersSent) res.status(500).json({ error: "Failed" }); }
 });
 
-// Vite middleware setup
+// ── FREEDOM WALL ─────────────────────────────────────────────────────────────
+
+// GET /api/freedom-wall — fetch all notes, newest first
+app.get("/api/freedom-wall", async (_req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.json([]);
+  try {
+    const snap = await firestore.collection("freedomWall").orderBy("createdAt", "desc").limit(200).get();
+    const notes = snap.docs.map(d => ({
+      id: d.id,
+      ...d.data(),
+      createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(),
+    }));
+    res.json(notes);
+  } catch (e) { res.status(500).json({ error: "Failed to fetch freedom wall notes" }); }
+});
+
+// POST /api/freedom-wall — create anonymous note
+app.post("/api/freedom-wall", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { message, color, rotation, x, y, authorSessionToken } = req.body;
+  if (!message?.trim()) return res.status(400).json({ error: "message required" });
+  try {
+    const ref = await firestore.collection("freedomWall").add({
+      message: message.trim(), // no character limit — allow stories
+      color: color || "#fef9c3",
+      rotation: typeof rotation === "number" ? rotation : 0,
+      x: typeof x === "number" ? x : 10,
+      y: typeof y === "number" ? y : 10,
+      reactions: {},
+      userReactions: [],
+      authorSessionToken: authorSessionToken || "", // stored for author self-delete
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    res.status(201).json({ id: ref.id });
+  } catch (e) { res.status(500).json({ error: "Failed to create note" }); }
+});
+
+// PATCH /api/freedom-wall/:id/react — toggle emoji reaction by session token
+app.patch("/api/freedom-wall/:id/react", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { emoji, sessionToken } = req.body;
+  if (!emoji || !sessionToken) return res.status(400).json({ error: "emoji and sessionToken required" });
+  try {
+    const ref = firestore.collection("freedomWall").doc(req.params.id);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).json({ error: "Note not found" });
+
+    const data = doc.data()!;
+    const reactions: Record<string, number> = { ...(data.reactions || {}) };
+    const userReactions: string[] = [...(data.userReactions || [])];
+    const reactionKey = `${sessionToken}:${emoji}`;
+    const alreadyReacted = userReactions.includes(reactionKey);
+
+    if (alreadyReacted) {
+      reactions[emoji] = Math.max(0, (reactions[emoji] ?? 1) - 1);
+      if (reactions[emoji] === 0) delete reactions[emoji];
+      const newUserReactions = userReactions.filter(r => r !== reactionKey);
+      await ref.update({ reactions, userReactions: newUserReactions });
+    } else {
+      reactions[emoji] = (reactions[emoji] ?? 0) + 1;
+      userReactions.push(reactionKey);
+      await ref.update({ reactions, userReactions });
+    }
+
+    res.json({ success: true, reactions });
+  } catch (e) { res.status(500).json({ error: "Failed to react" }); }
+});
+
+// PATCH /api/freedom-wall/:id — author-only message edit
+app.patch("/api/freedom-wall/:id", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { message, sessionToken } = req.body;
+  if (!message?.trim()) return res.status(400).json({ error: "message required" });
+  try {
+    const ref = firestore.collection("freedomWall").doc(req.params.id);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).json({ error: "Note not found" });
+    const data = doc.data()!;
+    const isAuthor = sessionToken && data.authorSessionToken && data.authorSessionToken === sessionToken;
+    if (!isAuthor) return res.status(403).json({ error: "Not authorised to edit this note" });
+    await ref.update({ message: message.trim(), editedAt: new Date().toISOString() });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: "Failed to update note" }); }
+});
+
+// DELETE /api/freedom-wall/:id — admin OR note author (matched by session token)
+app.delete("/api/freedom-wall/:id", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { isAdmin: callerIsAdmin, sessionToken } = req.body;
+  try {
+    const doc = await firestore.collection("freedomWall").doc(req.params.id).get();
+    if (!doc.exists) return res.status(404).json({ error: "Note not found" });
+    const data = doc.data()!;
+    const isAuthor = sessionToken && data.authorSessionToken && data.authorSessionToken === sessionToken;
+    if (!callerIsAdmin && !isAuthor) {
+      return res.status(403).json({ error: "Not authorised to delete this note" });
+    }
+    await firestore.collection("freedomWall").doc(req.params.id).delete();
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: "Failed to delete note" }); }
+});
+
+// PATCH /api/freedom-wall/:id/move — author-only note position update
+app.patch("/api/freedom-wall/:id/move", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { x, y, sessionToken } = req.body;
+  if (typeof x !== "number" || typeof y !== "number") {
+    return res.status(400).json({ error: "x and y are required numbers" });
+  }
+  try {
+    const doc = await firestore.collection("freedomWall").doc(req.params.id).get();
+    if (!doc.exists) return res.status(404).json({ error: "Note not found" });
+    const data = doc.data()!;
+    const isAuthor = sessionToken && data.authorSessionToken && data.authorSessionToken === sessionToken;
+    if (!isAuthor) return res.status(403).json({ error: "Only the author can move this note" });
+    await firestore.collection("freedomWall").doc(req.params.id).update({ x, y });
+    res.json({ success: true });
+  } catch { res.status(500).json({ error: "Failed to move note" }); }
+});
+
+
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

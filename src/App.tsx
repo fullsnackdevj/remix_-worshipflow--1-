@@ -21,17 +21,18 @@ const NotesPanel    = lazy(() => import("./NotesPanel"));
 const Dashboard     = lazy(() => import("./Dashboard"));
 const DashboardView = lazy(() => import("./DashboardView"));
 const Playground    = lazy(() => import("./Playground"));
-const PlannerView   = lazy(() => import("./Planner"));
-const RehearsalView = lazy(() => import("./RehearsalView"));
-const ScheduleView  = lazy(() => import("./ScheduleView"));
-const SongsView     = lazy(() => import("./SongsView"));
-const MembersView   = lazy(() => import("./MembersView"));
-const TeamNotesView = lazy(() => import("./TeamNotesView"));
+const PlannerView      = lazy(() => import("./Planner"));
+const RehearsalView    = lazy(() => import("./RehearsalView"));
+const ScheduleView     = lazy(() => import("./ScheduleView"));
+const SongsView        = lazy(() => import("./SongsView"));
+const MembersView      = lazy(() => import("./MembersView"));
+const TeamNotesView    = lazy(() => import("./TeamNotesView"));
+const FreedomWallView  = lazy(() => import("./FreedomWallView"));
 // AutoTextarea & DatePicker are tiny UI primitives — import statically to avoid extra chunk round-trips
 import AutoTextarea from "./AutoTextarea";
 import DatePicker from "./DatePicker";
 
-import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, BookOpen, LayoutGrid, Mic2, Copy, Pencil, Shield, Mail, Bell, Lock, AlertTriangle, CheckCircle, HelpCircle, FlaskConical, NotebookPen, SquareKanban } from "lucide-react";
+import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, BookOpen, LayoutGrid, Mic2, Copy, Pencil, Shield, Mail, Bell, Lock, AlertTriangle, CheckCircle, HelpCircle, FlaskConical, NotebookPen, SquareKanban, Feather } from "lucide-react";
 import { Song, Tag, Member, ScheduleMember, Schedule } from "./types";
 import LineupPlayer, { LineupTrack, CurrentUser } from "./LineupPlayer";
 import SongsLibraryPlayer, { LibraryTrack } from "./SongsLibraryPlayer";
@@ -176,7 +177,7 @@ const QA_SWITCH_ROLES = [
   { value: "member", label: "Member" },
 ];
 
-function UserMenu({ simulatedRole, onRoleSwitch }: { simulatedRole: string; onRoleSwitch: (r: string) => void }) {
+function UserMenu({ simulatedRole, onRoleSwitch, plannerAccess }: { simulatedRole: string; onRoleSwitch: (r: string) => void; plannerAccess?: boolean }) {
   const { user, logOut, userRole, isAdmin } = useAuth();
   const [open, setOpen] = React.useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -199,7 +200,7 @@ function UserMenu({ simulatedRole, onRoleSwitch }: { simulatedRole: string; onRo
       <button onClick={() => setOpen(o => !o)} className="flex items-center gap-2 p-1 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
         {user.photoURL
           ? (
-            <div className="relative shrink-0" style={{ width: 32, height: 32, overflow: 'visible' }}>
+            <div className={plannerAccess ? 'planner-ring-avatar shrink-0' : 'relative shrink-0'}>
               {/* Admin bouncing crown */}
               {isAdminUserMenu && (
                 <span
@@ -220,8 +221,15 @@ function UserMenu({ simulatedRole, onRoleSwitch }: { simulatedRole: string; onRo
               <img
                 src={user.photoURL}
                 alt={user.displayName ?? ""}
-                className="rounded-full border-2 border-indigo-500 object-cover"
-                style={{ position: 'relative', zIndex: 1, width: 32, height: 32, margin: 0 }}
+                className="rounded-full object-cover block"
+                style={{
+                  width: 32,
+                  height: 32,
+                  border: plannerAccess ? 'none' : '2px solid #6366f1',
+                  position: 'relative',
+                  zIndex: 1,
+                  flexShrink: 0,
+                }}
               />
             </div>
           )
@@ -244,6 +252,18 @@ function UserMenu({ simulatedRole, onRoleSwitch }: { simulatedRole: string; onRo
               <span className={`inline-block text-[10px] px-2 py-0.5 rounded-full font-semibold ${badge.className}`}>
                 {canSimulate && effectiveDisplay !== userRole ? `Testing: ${badge.label}` : badge.label}
               </span>
+              {plannerAccess && (
+                <span className="relative group/pfabadge flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-semibold"
+                  style={{ background: 'linear-gradient(135deg, rgba(124,58,237,0.15), rgba(168,85,247,0.15), rgba(236,72,153,0.15))', border: '1px solid rgba(168,85,247,0.35)' }}>
+                  <SquareKanban size={10} style={{ color: '#a855f7', filter: 'drop-shadow(0 0 4px #a855f7aa)' }} />
+                  <span style={{ background: 'linear-gradient(90deg, #a855f7, #ec4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                  Ministry Hub Full Access
+                  </span>
+                  <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-lg bg-gray-900 text-white text-[10px] font-semibold whitespace-nowrap opacity-0 group-hover/pfabadge:opacity-100 transition-opacity z-50 shadow-lg">
+                    Full Ministry Hub access granted by Admin
+                  </span>
+                </span>
+              )}
 
             </div>
           </div>
@@ -296,7 +316,7 @@ export default function App() {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
   const [isDarkMode, setIsDarkMode] = useState(true);
-  const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "playground" | "admin" | "team-notes" | "rehearsal">("dashboard");
+  const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "playground" | "admin" | "team-notes" | "rehearsal" | "freedom-wall">("dashboard");
   const [pendingTeamNoteId, setPendingTeamNoteId] = useState<string | null>(null); // deep-link into Team Notes
   /** True when SongsView is displaying a song detail panel (not the list) */
   const [isSongDetailOpen, setIsSongDetailOpen] = useState(false);
@@ -370,7 +390,7 @@ export default function App() {
   // 🎸 Auto-collapse sidebar when entering Rehearsal mode (needs full width)
   // Desktop/tablet only  — on mobile the sidebar is already a drawer overlay
   useEffect(() => {
-    if (currentView === "rehearsal" && window.innerWidth >= 1024) {
+    if ((currentView === "rehearsal" || currentView === "freedom-wall") && window.innerWidth >= 1024) {
       setIsSidebarCollapsed(true);
     }
   }, [currentView]);
@@ -1114,12 +1134,29 @@ export default function App() {
                   ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
                   : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:white"
               } ${isSidebarCollapsed ? "justify-center" : ""}`}
-              title="Planner"
+              title="Ministry Hub"
             >
               <SquareKanban size={20} className="shrink-0" />
-              {!isSidebarCollapsed && <span>Planner</span>}
+              {!isSidebarCollapsed && <span>Ministry Hub</span>}
             </button>
-            {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Planner</span>}
+            {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Ministry Hub</span>}
+          </div>
+
+          {/* Freedom Wall — anonymous thoughts board */}
+          <div className="relative group/tip">
+            <button
+              onClick={() => { setCurrentView("freedom-wall"); setIsMobileMenuOpen(false); }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${
+                currentView === "freedom-wall"
+                  ? "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300"
+                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:white"
+              } ${isSidebarCollapsed ? "justify-center" : ""}`}
+              title="Freedom Wall"
+            >
+              <Feather size={20} className="shrink-0" />
+              {!isSidebarCollapsed && <span>Freedom Wall</span>}
+            </button>
+            {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Freedom Wall</span>}
           </div>
           {isRoleAdmin && (
             <div className="relative group/tip">
@@ -1241,7 +1278,7 @@ export default function App() {
 
           <div className="flex-1 flex items-center min-w-0">
             <h1 className="text-base sm:text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap truncate">
-              {currentView === "dashboard" ? "Dashboard" : currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : currentView === "playground" ? "Playground" : currentView === "planner" ? "Planner" : currentView === "team-notes" ? "Notes" : currentView === "rehearsal" ? "Rehearsal" : "Song Management"}
+              {currentView === "dashboard" ? "Dashboard" : currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : currentView === "playground" ? "Playground" : currentView === "planner" ? "Ministry Hub" : currentView === "team-notes" ? "Notes" : currentView === "rehearsal" ? "Rehearsal" : currentView === "freedom-wall" ? "Freedom Wall" : "Song Management"}
             </h1>
           </div>
           <div className="flex items-center gap-2">
@@ -1368,7 +1405,7 @@ export default function App() {
               )}
 
             </div>
-            <UserMenu simulatedRole={simulatedRole} onRoleSwitch={handleRoleSwitch} />
+            <UserMenu simulatedRole={simulatedRole} onRoleSwitch={handleRoleSwitch} plannerAccess={isAdmin || (myMemberProfile?.plannerAccess ?? false)} />
           </div>
         </header>
 
@@ -1376,7 +1413,11 @@ export default function App() {
         {/* Content Area */}
         <main className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-900">
           <div className="flex flex-col h-full">
-            <div className="view-enter flex-1 p-4 sm:p-6 overflow-auto">
+            <div className={`view-enter flex-1 overflow-auto ${
+                currentView === "freedom-wall"
+                  ? "p-0 flex flex-col"
+                  : "p-4 sm:p-6"
+              }`}>
               <Suspense fallback={null}>
 
 
@@ -1455,7 +1496,7 @@ export default function App() {
                     ? { name: myMemberProfile.name, photo: myMemberProfile.photo || myMemberProfile.photoURL || "" }
                     : (user ? { name: user.displayName || user.email?.split('@')[0] || "Me", photo: user.photoURL || "" } : undefined)}
                   onToast={showToast}
-                  isFullAccess={true}
+                  isFullAccess={isAdmin || (myMemberProfile?.plannerAccess ?? false)}
                 />
               ) : currentView === "team-notes" ? (
                 <TeamNotesView
@@ -1547,6 +1588,12 @@ export default function App() {
                       }
                     } catch { /* noop */ }
                   }}
+                />
+              ) : currentView === "freedom-wall" ? (
+                <FreedomWallView
+                  isAdmin={isRoleAdmin}
+                  currentUserId={user?.uid ?? null}
+                  onToast={showToast}
                 />
               ) : null}
               </Suspense>

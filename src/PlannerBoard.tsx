@@ -14,7 +14,7 @@ interface Label { id: string; name: string; color: string; }
 interface ChecklistItem { id: string; text: string; done: boolean; }
 interface Checklist { id: string; title: string; items: ChecklistItem[]; }
 interface Attachment { id: string; name: string; url: string; type: "file" | "link"; createdAt: string; }
-interface Board { id: string; title: string; color: string; description: string; archived: boolean; customFieldDefs: CustomFieldDef[]; }
+interface Board { id: string; title: string; color: string; description: string; archived: boolean; customFieldDefs: CustomFieldDef[]; createdBy?: { name: string; photo?: string }; }
 interface PgList { id: string; boardId: string; title: string; pos: number; archived: boolean; }
 interface Card { id: string; boardId: string; listId: string; title: string; description: string; pos: number; members: string[]; labels: Label[]; dueDate: string | null; startDate?: string | null; dueTime?: string; reminder?: string; checklists: Checklist[]; customFields: Record<string, any>; archived: boolean; completed?: boolean; attachments?: Attachment[]; createdAt?: string; }
 interface Comment { id: string; authorName: string; authorPhoto: string; text: string; createdAt: string; reactions?: Record<string, string[]>; attachments?: { id: string; name: string; url: string; type: string }[]; }
@@ -97,6 +97,7 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
   const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 1024);
   const [newChecklistTitle, setNewChecklistTitle] = useState("");
   const [newItems, setNewItems] = useState<Record<string, string>>({});
+  const [editingItem, setEditingItem] = useState<{ clId: string; itemId: string; text: string } | null>(null);
   const [labelSearch, setLabelSearch] = useState("");
   const [newLabelName, setNewLabelName] = useState("");
   const [newLabelColor, setNewLabelColor] = useState(TRELLO_COLORS_30[10]);
@@ -460,6 +461,13 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
   };
   const deleteChecklist = (clId: string) => save({ checklists: c.checklists.filter(cl => cl.id !== clId) });
   const deleteItem = (clId: string, itemId: string) => save({ checklists: c.checklists.map(cl => cl.id === clId ? { ...cl, items: cl.items.filter(i => i.id !== itemId) } : cl) });
+  const renameItem = (clId: string, itemId: string, text: string) => {
+    const cap = (s: string) => s.trim().replace(/\b\w/g, c => c.toUpperCase());
+    const newText = cap(text);
+    if (!newText) return;
+    save({ checklists: c.checklists.map(cl => cl.id === clId ? { ...cl, items: cl.items.map(i => i.id === itemId ? { ...i, text: newText } : i) } : cl) });
+    setEditingItem(null);
+  };
   const addChecklist = () => {
     if (!newChecklistTitle.trim()) return;
     save({ checklists: [...c.checklists, { id: uid(), title: newChecklistTitle.trim().toUpperCase(), items: [] }] });
@@ -604,8 +612,19 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
                   <label className="text-xs text-gray-400 mb-1 block">Copy items from…</label>
                   <select value={copyFrom} onChange={e => setCopyFrom(e.target.value)} className="w-full bg-[#1d2125] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none">
                     <option value="">(none)</option>
-                    {boardCards.filter(bc => bc.id !== card.id && bc.checklists?.length > 0).map(bc =>
-                      bc.checklists.map(cl => <option key={`${bc.id}|${cl.id}`} value={`${bc.id}|${cl.id}`}>{bc.title} — {cl.title}</option>)
+                    {/* Current card's own checklists */}
+                    {c.checklists.length > 0 && (
+                      <optgroup label="This card">
+                        {c.checklists.map(cl => <option key={`${card.id}|${cl.id}`} value={`${card.id}|${cl.id}`}>{cl.title}</option>)}
+                      </optgroup>
+                    )}
+                    {/* Other cards in the board */}
+                    {boardCards.filter(bc => bc.id !== card.id && bc.checklists?.length > 0).length > 0 && (
+                      <optgroup label="Other cards">
+                        {boardCards.filter(bc => bc.id !== card.id && bc.checklists?.length > 0).map(bc =>
+                          bc.checklists.map(cl => <option key={`${bc.id}|${cl.id}`} value={`${bc.id}|${cl.id}`}>{bc.title} — {cl.title}</option>)
+                        )}
+                      </optgroup>
                     )}
                   </select>
                 </div>
@@ -1058,13 +1077,36 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
                   <p className="text-[11px] text-gray-500 font-medium">{clPct}%</p>
                   <div className="h-1.5 bg-white/10 rounded-full overflow-hidden"><div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${clPct}%` }} /></div>
                   <div className="space-y-0.5">
-                    {visibleItems.map(item => (
-                      <div key={item.id} className="flex items-center gap-2.5 group py-1 px-1.5 rounded-lg hover:bg-white/5 transition-colors duration-100 cursor-default">
-                        <button onClick={() => toggleItem(cl.id, item.id)} className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center shrink-0 transition-all ${item.done ? "bg-blue-500 border-blue-500" : "border-gray-500 hover:border-blue-400"}`}>{item.done && <Check size={8} className="text-white" />}</button>
-                        <span className={`text-[13px] flex-1 ${item.done ? "line-through text-gray-500" : "text-gray-300"}`}>{item.text.charAt(0).toUpperCase() + item.text.slice(1)}</span>
-                        <button onClick={() => deleteItem(cl.id, item.id)} className="text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"><X size={10} /></button>
-                      </div>
-                    ))}
+                    {visibleItems.map(item => {
+                      const isEditing = editingItem?.clId === cl.id && editingItem?.itemId === item.id;
+                      return (
+                        <div key={item.id} className="flex items-center gap-2.5 group py-1 px-1.5 rounded-lg hover:bg-white/5 transition-colors duration-100 cursor-default">
+                          <button onClick={() => toggleItem(cl.id, item.id)} className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center shrink-0 transition-all ${item.done ? "bg-blue-500 border-blue-500" : "border-gray-500 hover:border-blue-400"}`}>{item.done && <Check size={8} className="text-white" />}</button>
+                          {isEditing ? (
+                            <input
+                              autoFocus
+                              value={editingItem!.text}
+                              onChange={e => setEditingItem(prev => prev ? { ...prev, text: e.target.value } : null)}
+                              onKeyDown={e => {
+                                if (e.key === "Enter") renameItem(cl.id, item.id, editingItem!.text);
+                                if (e.key === "Escape") setEditingItem(null);
+                              }}
+                              onBlur={() => renameItem(cl.id, item.id, editingItem!.text)}
+                              className="flex-1 bg-[#1d2125] border border-blue-500/60 rounded px-2 py-0.5 text-[13px] text-white focus:outline-none"
+                            />
+                          ) : (
+                            <span
+                              onDoubleClick={() => !item.done && setEditingItem({ clId: cl.id, itemId: item.id, text: item.text })}
+                              title={!item.done ? "Double-click to rename" : undefined}
+                              className={`text-[13px] flex-1 select-none ${item.done ? "line-through text-gray-500" : "text-gray-300 cursor-text"}`}
+                            >
+                              {item.text.charAt(0).toUpperCase() + item.text.slice(1)}
+                            </span>
+                          )}
+                          {!isEditing && <button onClick={() => deleteItem(cl.id, item.id)} className="text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"><X size={10} /></button>}
+                        </div>
+                      );
+                    })}
                   </div>
                   <div className="flex gap-1.5">
                     <input value={newItems[cl.id] ?? ""} onChange={e => setNewItems(p => ({ ...p, [cl.id]: e.target.value }))} onKeyDown={e => e.key === "Enter" && addItem(cl.id)} placeholder="Add an item…"
@@ -1864,6 +1906,7 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
   const [newListTitle, setNewListTitle] = useState("");
   const [showNewBoard, setShowNewBoard] = useState(false);
   const [newBoardTitle, setNewBoardTitle] = useState("");
+  const [newBoardDescription, setNewBoardDescription] = useState("");
   const [newBoardColor, setNewBoardColor] = useState(BOARD_COLORS[0]);
   const [listMenuId, setListMenuId] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
@@ -1880,6 +1923,10 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
   const [bulkRestoreConfirm, setBulkRestoreConfirm] = useState(false);
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
   const [deleteCardConfirm, setDeleteCardConfirm] = useState<string | null>(null);
+  const [deleteArchivedBoardConfirm, setDeleteArchivedBoardConfirm] = useState<{ id: string; title: string } | null>(null);
+  const [deleteListConfirm, setDeleteListConfirm] = useState<{ id: string; title: string } | null>(null);
+  const [deleteActiveBoardCardConfirm, setDeleteActiveBoardCardConfirm] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false); // prevents double-click on all delete confirms
   type CardRestoreDialog = { cardId: string; cardTitle: string; listTitle: string; listId: string; };
   const [cardRestoreDialog, setCardRestoreDialog] = useState<CardRestoreDialog | null>(null);
   const [undoCard, setUndoCard] = useState<Card | null>(null);
@@ -1909,10 +1956,23 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
   const createBoard = async () => {
     if (!newBoardTitle.trim()) return;
     try {
-      const r = await apiFetch("/planner/boards", { method: "POST", body: JSON.stringify({ title: newBoardTitle.trim(), color: newBoardColor }) });
+      const createdBy = currentUser ? { name: currentUser.name, photo: currentUser.photo || "" } : undefined;
+      const r = await apiFetch("/planner/boards", { method: "POST", body: JSON.stringify({ title: newBoardTitle.trim(), color: newBoardColor, description: newBoardDescription.trim(), createdBy }) });
       const { id } = await r.json();
-      const nb: Board = { id, title: newBoardTitle.trim(), color: newBoardColor, description: "", archived: false, customFieldDefs: [] };
-      setNewBoardTitle(""); setShowNewBoard(false); await fetchBoards(); openBoard(nb);
+      const nb: Board = { id, title: newBoardTitle.trim(), color: newBoardColor, description: newBoardDescription.trim(), archived: false, customFieldDefs: [], createdBy };
+      // Auto-create default lists sequentially so order is guaranteed: 1→2→3
+      await apiFetch(`/planner/boards/${id}/lists`, { method: "POST", body: JSON.stringify({ title: "TO DO" }) });
+      await apiFetch(`/planner/boards/${id}/lists`, { method: "POST", body: JSON.stringify({ title: "IN PROGRESS" }) });
+      await apiFetch(`/planner/boards/${id}/lists`, { method: "POST", body: JSON.stringify({ title: "DONE/INCOMPLETE" }) });
+      setNewBoardTitle(""); setNewBoardDescription(""); setShowNewBoard(false);
+      // Inject the new board directly so createdBy is preserved in the tile
+      setBoards(prev => [nb, ...prev]);
+      // Refresh from server in background (won't affect openBoard below)
+      fetchBoards().then(async () => {
+        // After refresh, ensure createdBy is preserved for newly created board
+        setBoards(prev => prev.map(b => b.id === nb.id ? { ...b, createdBy: nb.createdBy } : b));
+      }).catch(() => {});
+      openBoard(nb);
     } catch { onToast("error", "Failed to create board"); }
   };
 
@@ -1940,9 +2000,12 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
   };
 
   const deleteList = async (listId: string) => {
-    if (!confirm("Delete this list and all its cards?")) return;
+    if (isDeleting) return;
+    setIsDeleting(true);
+    setDeleteListConfirm(null);
     try { await apiFetch(`/planner/lists/${listId}`, { method: "DELETE" }); setListMenuId(null); if (activeBoard) await fetchBoardData(activeBoard.id); }
     catch { onToast("error", "Failed"); }
+    finally { setIsDeleting(false); }
   };
 
   const archiveBoard = async (id: string, silent = false) => {
@@ -2003,13 +2066,16 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
   };
 
   const permanentDeleteCard = async (id: string) => {
+    if (isDeleting) return;
+    setIsDeleting(true);
+    setDeleteCardConfirm(null); // close modal immediately — prevents second click
     try {
       await apiFetch(`/planner/cards/${id}`, { method: "DELETE" });
       setArchivedCards(prev => prev.filter(c => c.id !== id));
       if (activeBoard) await fetchBoardData(activeBoard.id);
-      setDeleteCardConfirm(null);
       onToast("success", "Card permanently deleted");
     } catch { onToast("error", "Failed to delete"); }
+    finally { setIsDeleting(false); }
   };
 
   const fetchArchivedCards = async (boardId: string) => {
@@ -2052,31 +2118,39 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
   };
 
   const deleteArchivedBoard = async (id: string) => {
-    if (!confirm("Permanently delete this board and ALL its content? This cannot be undone.")) return;
+    if (isDeleting) return;
+    setIsDeleting(true);
+    setDeleteArchivedBoardConfirm(null); // close modal immediately
     try {
       await apiFetch(`/planner/boards/${id}`, { method: "DELETE" });
       setArchivedBoards(prev => prev.filter(b => b.id !== id));
       setSelectedArchivedBoards(prev => { const n = new Set(prev); n.delete(id); return n; });
       onToast("success", "Board permanently deleted");
     } catch { onToast("error", "Failed to delete board"); }
+    finally { setIsDeleting(false); }
   };
 
   const bulkDeleteArchivedBoards = async () => {
     const count = selectedArchivedBoards.size;
-    if (count === 0) return;
+    if (count === 0 || isDeleting) return;
+    setIsDeleting(true);
+    setBulkDeleteConfirm(false); // close modal immediately
     try {
       await Promise.all([...selectedArchivedBoards].map(id => apiFetch(`/planner/boards/${id}`, { method: "DELETE" })));
       setArchivedBoards(prev => prev.filter(b => !selectedArchivedBoards.has(b.id)));
       setSelectedArchivedBoards(new Set());
-      setBulkDeleteConfirm(false);
       onToast("success", `${count} board${count > 1 ? "s" : ""} permanently deleted`);
     } catch { onToast("error", "Failed to delete some boards"); }
+    finally { setIsDeleting(false); }
   };
 
   const deleteCard = async (id: string) => {
-    if (!confirm("Permanently delete this card?")) return;
+    if (isDeleting) return;
+    setIsDeleting(true);
+    setDeleteActiveBoardCardConfirm(null);
     try { await apiFetch(`/planner/cards/${id}`, { method: "DELETE" }); setSelectedCard(null); if (activeBoard) await fetchBoardData(activeBoard.id); onToast("success", "Deleted"); }
     catch { onToast("error", "Failed"); }
+    finally { setIsDeleting(false); }
   };
 
   const onCardSaved = (updated: Card) => setCards(prev => prev.map(c => c.id === updated.id ? updated : c));
@@ -2098,7 +2172,7 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
           </div>
           <div>
             <h1 className="text-lg font-bold text-white">Boards</h1>
-            <p className="text-xs text-gray-400">Planner workspace</p>
+            <p className="text-xs text-gray-400">Ministry Hub workspace</p>
           </div>
         </div>
         {/* Select to archive + Search */}
@@ -2123,8 +2197,11 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
       {/* Create board form */}
       {showNewBoard && (
         <div className="mb-6 bg-[#22272b] rounded-2xl border border-white/10 p-4 space-y-3 max-w-sm">
+          <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">New Board</p>
           <input value={newBoardTitle} onChange={e => setNewBoardTitle(e.target.value)} onKeyDown={e => e.key === "Enter" && createBoard()} autoFocus placeholder="Board title…"
             className="w-full bg-[#1d2125] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500" />
+          <textarea value={newBoardDescription} onChange={e => setNewBoardDescription(e.target.value)} placeholder="Short description (optional)…" rows={2}
+            className="w-full bg-[#1d2125] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50 resize-none" />
           <div className="flex flex-wrap gap-2">
             {BOARD_COLORS.map(bc => (
               <button key={bc} onClick={() => setNewBoardColor(bc)}
@@ -2132,9 +2209,10 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
                 className={`w-8 h-8 rounded-lg transition-all ${newBoardColor === bc ? "ring-2 ring-white scale-110" : ""}`} />
             ))}
           </div>
+          <p className="text-[10px] text-gray-500">3 default lists (To Do, In Progress, Done) will be created automatically.</p>
           <div className="flex gap-2">
-            <button onClick={() => setShowNewBoard(false)} className="flex-1 py-2 border border-white/10 text-gray-300 rounded-lg text-sm hover:bg-white/5">Cancel</button>
-            <button onClick={createBoard} className="flex-1 py-2 bg-[#579dff] hover:bg-[#4c8ee6] text-[#1d2125] rounded-lg text-sm font-bold">Create</button>
+            <button onClick={() => { setShowNewBoard(false); setNewBoardTitle(""); setNewBoardDescription(""); }} className="flex-1 py-2 border border-white/10 text-gray-300 rounded-lg text-sm hover:bg-white/5">Cancel</button>
+            <button onClick={createBoard} disabled={!newBoardTitle.trim()} className="flex-1 py-2 bg-[#579dff] hover:bg-[#4c8ee6] disabled:opacity-40 text-[#1d2125] rounded-lg text-sm font-bold">Create</button>
           </div>
         </div>
       )}
@@ -2153,7 +2231,7 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
                 <h3 className="text-base font-bold text-white leading-snug">Archive "{b?.title}"?</h3>
               </div>
               <p className="text-sm text-gray-400 mb-5 leading-relaxed">
-                This board and all its lists and cards will be archived. You can restore it anytime from <strong className="text-gray-300">View closed boards</strong> below. Boards that remain closed for <strong className="text-gray-300">30 days</strong> are permanently deleted.
+                This board and all its lists and cards will be archived. You can restore it anytime from <strong className="text-gray-300">Archived Boards</strong> below. Boards that remain archived for <strong className="text-gray-300">30 days</strong> are permanently deleted.
               </p>
               <div className="flex gap-2">
                 <button onClick={() => setArchiveBoardConfirm(null)} className="flex-1 py-2.5 border border-white/10 text-gray-300 rounded-xl text-sm hover:bg-white/5 transition-colors">
@@ -2184,7 +2262,7 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
               </h3>
             </div>
             <p className="text-sm text-gray-400 mb-5 leading-relaxed">
-              The selected board{selectedBulkBoards.size > 1 ? 's' : ''} and all {selectedBulkBoards.size > 1 ? 'their' : 'its'} lists and cards will be archived. You can restore {selectedBulkBoards.size > 1 ? 'them' : 'it'} anytime from <strong className="text-gray-300">View closed boards</strong>. Boards that remain closed for <strong className="text-gray-300">30 days</strong> are permanently deleted.
+              The selected board{selectedBulkBoards.size > 1 ? 's' : ''} and all {selectedBulkBoards.size > 1 ? 'their' : 'its'} lists and cards will be archived. You can restore {selectedBulkBoards.size > 1 ? 'them' : 'it'} anytime from <strong className="text-gray-300">Archived Boards</strong>. Boards that remain archived for <strong className="text-gray-300">30 days</strong> are permanently deleted.
             </p>
             <div className="flex gap-2">
               <button onClick={() => setBulkArchiveConfirm(false)} className="flex-1 py-2.5 border border-white/10 text-gray-300 rounded-xl text-sm hover:bg-white/5 transition-colors">Cancel</button>
@@ -2268,7 +2346,28 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
                     style={{ background: resolveBg(b.color) }}
                     className="w-full h-full rounded-xl flex flex-col justify-end p-3 hover:brightness-110 transition-all shadow-md text-left relative overflow-hidden">
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/15 transition-all rounded-xl pointer-events-none" />
-                    <span className="relative font-bold text-white text-sm drop-shadow-md leading-tight">{b.title}</span>
+                    {/* Creator avatar + crown — top-left */}
+                    {b.createdBy && (
+                      <div className="absolute top-2 left-2 flex items-end" title={`Board Admin: ${b.createdBy.name}`}>
+                        <div className="relative">
+                          {b.createdBy.photo
+                            ? <img src={b.createdBy.photo} alt={b.createdBy.name} className="w-7 h-7 rounded-full border-2 border-white/50 object-cover shadow" />
+                            : <div className="w-7 h-7 rounded-full border-2 border-white/50 flex items-center justify-center text-white text-[10px] font-bold shadow" style={{ backgroundColor: getAvatarColor(b.createdBy.name) }}>{b.createdBy.name.slice(0,2).toUpperCase()}</div>
+                          }
+                          {/* Tiny crown badge */}
+                          <span className="absolute -top-2 -right-1.5 text-[10px] leading-none select-none" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>👑</span>
+                        </div>
+                      </div>
+                    )}
+                    <div className="relative">
+                      <span className="block font-bold text-white text-sm drop-shadow-md leading-tight">{b.title}</span>
+                      {b.description && (
+                        <>
+                          <div className="mt-1 mb-1 border-t border-white/25" />
+                          <p className="text-white/75 leading-snug drop-shadow" style={{ fontSize: 12, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{b.description}</p>
+                        </>
+                      )}
+                    </div>
                   </button>
                   {/* 3-dot menu — appears on hover, full access only */}
                   {isFullAccess && (
@@ -2356,20 +2455,49 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
                 <button onClick={() => setBulkDeleteConfirm(false)} className="flex-1 py-2.5 border border-white/10 text-gray-300 rounded-xl text-sm hover:bg-white/5 transition-colors">Cancel</button>
                 <button
                   onClick={bulkDeleteArchivedBoards}
-                  className="flex-1 py-2.5 bg-red-500 hover:bg-red-400 text-white text-sm font-bold rounded-xl transition-colors">
-                  Yes, delete forever
+                  disabled={isDeleting}
+                  className="flex-1 py-2.5 bg-red-500 hover:bg-red-400 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl transition-colors flex items-center justify-center gap-2">
+                  {isDeleting ? <><span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Deleting…</> : "Yes, delete forever"}
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* ── Row 1: Hide/View closed boards ── */}
+        {/* ── Single archived board permanent delete confirm ── */}
+        {deleteArchivedBoardConfirm && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70" onClick={() => setDeleteArchivedBoardConfirm(null)}>
+            <div className="bg-[#22272b] border border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl mx-4" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-9 h-9 rounded-xl bg-red-500/15 flex items-center justify-center shrink-0 border border-red-500/20">
+                  <Trash2 size={16} className="text-red-400" />
+                </div>
+                <h3 className="text-base font-bold text-white leading-snug">Delete "{deleteArchivedBoardConfirm.title}"?</h3>
+              </div>
+              <p className="text-sm text-gray-400 mb-5 leading-relaxed">
+                This board and <strong className="text-gray-300">all its lists and cards</strong> will be <strong className="text-gray-300">permanently deleted</strong>. This cannot be undone.
+              </p>
+              <div className="flex gap-2">
+                <button onClick={() => setDeleteArchivedBoardConfirm(null)} className="flex-1 py-2.5 border border-white/10 text-gray-300 rounded-xl text-sm hover:bg-white/5 transition-colors">
+                  Cancel
+                </button>
+                <button
+                  onClick={() => deleteArchivedBoard(deleteArchivedBoardConfirm.id)}
+                  disabled={isDeleting}
+                  className="flex-1 py-2.5 bg-red-500 hover:bg-red-400 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl transition-colors flex items-center justify-center gap-2">
+                  {isDeleting ? <><span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Deleting…</> : "Yes, delete forever"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Row 1: Archived Boards toggle ── */}
         <div className="flex items-center">
           <button onClick={() => { setShowArchivedBoards(p => !p); if (!showArchivedBoards) fetchArchivedBoards(); }}
             className="flex items-center gap-2 px-3 py-2 border border-white/10 rounded-lg text-sm text-gray-400 hover:text-white hover:border-white/30 transition-colors font-semibold">
             <Archive size={13} />
-            {showArchivedBoards ? "Hide closed boards" : "View closed boards"}
+            Archived Boards
           </button>
         </div>
 
@@ -2423,7 +2551,7 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
                          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all shrink-0 mt-0.5 ${isSelected ? 'bg-white border-white' : 'border-white/50 bg-black/20'}`}>
                            {isSelected && <Check size={11} className="text-gray-900" />}
                          </div>
-                         <button onClick={e => { e.stopPropagation(); deleteArchivedBoard(b.id); }} title="Delete permanently"
+                         <button onClick={e => { e.stopPropagation(); setDeleteArchivedBoardConfirm({ id: b.id, title: b.title }); }} title="Delete permanently"
                            className="p-1 text-white/50 hover:text-red-300 hover:bg-black/20 rounded transition-colors">
                            <Trash2 size={11} />
                          </button>
@@ -2489,7 +2617,7 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
                           <div className="absolute right-0 top-full mt-1 bg-[#2c333a] border border-white/10 rounded-xl shadow-xl z-30 min-w-[160px] py-1.5">
                             <p className="text-center text-xs text-gray-400 font-semibold py-1.5 border-b border-white/5 mb-1">{list.title}</p>
                             <button onClick={() => archiveList(list.id)} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-300 hover:bg-white/5"><Archive size={12} /> Archive this list</button>
-                            <button onClick={() => deleteList(list.id)} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-400 hover:bg-red-500/10"><Trash2 size={12} /> Delete list</button>
+                            <button onClick={() => setDeleteListConfirm({ id: list.id, title: list.title })} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-400 hover:bg-red-500/10"><Trash2 size={12} /> Delete list</button>
                           </div>
                         )}
                       </div>
@@ -2616,9 +2744,62 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
       </div>
 
       {/* Modals */}
-      {selectedCard && <CardModal card={selectedCard} lists={lists} boards={boards} allMembers={allMembers} currentUser={currentUser} customFieldDefs={activeBoard.customFieldDefs ?? []} onClose={() => setSelectedCard(null)} onSave={c => { onCardSaved(c); setSelectedCard(c); }} onDelete={deleteCard} onArchive={archiveCard} onMove={() => { setMoveCard(selectedCard); setSelectedCard(null); }} onToast={onToast} isFullAccess={isFullAccess} />}
+      {selectedCard && <CardModal card={selectedCard} lists={lists} boards={boards} allMembers={allMembers} currentUser={currentUser} customFieldDefs={activeBoard.customFieldDefs ?? []} onClose={() => setSelectedCard(null)} onSave={c => { onCardSaved(c); setSelectedCard(c); }} onDelete={id => setDeleteActiveBoardCardConfirm(id)} onArchive={archiveCard} onMove={() => { setMoveCard(selectedCard); setSelectedCard(null); }} onToast={onToast} isFullAccess={isFullAccess} />}
       {moveCard && <MoveModal card={moveCard} boards={boards} currentUser={currentUser} allMembers={allMembers} onClose={() => setMoveCard(null)} onMoved={async () => { setMoveCard(null); if (activeBoard) await fetchBoardData(activeBoard.id); }} onToast={onToast} />}
       {showSettings && <BoardSettings board={activeBoard} onClose={() => setShowSettings(false)} onSaved={b => { setActiveBoard(b); setBoards(prev => prev.map(x => x.id === b.id ? b : x)); setShowSettings(false); }} onArchive={archiveBoard} onToast={onToast} />}
+
+      {/* ── Delete List confirm modal ── */}
+      {deleteListConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70" onClick={() => setDeleteListConfirm(null)}>
+          <div className="bg-[#22272b] border border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl mx-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-9 h-9 rounded-xl bg-red-500/15 flex items-center justify-center shrink-0 border border-red-500/20">
+                <Trash2 size={16} className="text-red-400" />
+              </div>
+              <h3 className="text-base font-bold text-white leading-snug">Delete "{deleteListConfirm.title}"?</h3>
+            </div>
+            <p className="text-sm text-gray-400 mb-5 leading-relaxed">
+              This list and <strong className="text-gray-300">all its cards</strong> will be permanently deleted. This cannot be undone.
+            </p>
+            <div className="flex gap-2">
+              <button onClick={() => setDeleteListConfirm(null)} className="flex-1 py-2.5 border border-white/10 text-gray-300 rounded-xl text-sm hover:bg-white/5 transition-colors">Cancel</button>
+              <button
+                onClick={() => deleteList(deleteListConfirm.id)}
+                disabled={isDeleting}
+                className="flex-1 py-2.5 bg-red-500 hover:bg-red-400 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl transition-colors flex items-center justify-center gap-2">
+                {isDeleting ? <><span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Deleting…</> : "Yes, delete list"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete active-board card confirm modal ── */}
+      {deleteActiveBoardCardConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70" onClick={() => setDeleteActiveBoardCardConfirm(null)}>
+          <div className="bg-[#22272b] border border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl mx-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-9 h-9 rounded-xl bg-red-500/15 flex items-center justify-center shrink-0 border border-red-500/20">
+                <Trash2 size={16} className="text-red-400" />
+              </div>
+              <h3 className="text-base font-bold text-white leading-snug">Delete this card permanently?</h3>
+            </div>
+            <p className="text-sm text-gray-400 mb-5 leading-relaxed">
+              This card and all its content will be <strong className="text-gray-300">permanently deleted</strong>. This cannot be undone.
+            </p>
+            <div className="flex gap-2">
+              <button onClick={() => setDeleteActiveBoardCardConfirm(null)} className="flex-1 py-2.5 border border-white/10 text-gray-300 rounded-xl text-sm hover:bg-white/5 transition-colors">Cancel</button>
+              <button
+                onClick={() => deleteCard(deleteActiveBoardCardConfirm)}
+                disabled={isDeleting}
+                className="flex-1 py-2.5 bg-red-500 hover:bg-red-400 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl transition-colors flex items-center justify-center gap-2">
+                {isDeleting ? <><span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Deleting…</> : "Yes, delete forever"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Archived cards panel */}
       {showArchived && (
         <div className="fixed inset-0 z-50 flex" onClick={e => e.target === e.currentTarget && setShowArchived(false)}>
@@ -2642,7 +2823,12 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
                   </p>
                   <div className="flex gap-2">
                     <button onClick={() => setDeleteCardConfirm(null)} className="flex-1 py-2 border border-white/10 text-gray-300 rounded-xl text-xs hover:bg-white/5 transition-colors">Cancel</button>
-                    <button onClick={() => permanentDeleteCard(deleteCardConfirm)} className="flex-1 py-2 bg-red-500 hover:bg-red-400 text-white text-xs font-bold rounded-xl transition-colors">Yes, delete forever</button>
+                    <button
+                      onClick={() => permanentDeleteCard(deleteCardConfirm)}
+                      disabled={isDeleting}
+                      className="flex-1 py-2 bg-red-500 hover:bg-red-400 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5">
+                      {isDeleting ? <><span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />Deleting…</> : "Yes, delete forever"}
+                    </button>
                   </div>
                 </div>
               </div>

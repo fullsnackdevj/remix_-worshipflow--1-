@@ -65,6 +65,7 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
     const [pushed, setPushed] = useState<number | null>(null);
     const [isTestRun, setIsTestRun] = useState(false);
     const [myTokenCount, setMyTokenCount] = useState<number | null>(null);
+    const [sendError, setSendError] = useState<string | null>(null);
     const activeMembers = members.filter(m => m.status !== "inactive");
 
     const CARD_W = 288; // w-72
@@ -229,7 +230,7 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
                 }, 12000);
             }
         } catch (e: any) {
-            alert(e.message || "Failed to send assembly call.");
+            setSendError(e.message || "Failed to send assembly call. Please try again.");
         } finally {
             setSending(false);
         }
@@ -383,6 +384,13 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
                                 </div>
                             )}
 
+                            {sendError && (
+                                <div className="mb-4 flex items-start gap-2 px-3 py-2.5 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40">
+                                    <AlertTriangle size={14} className="text-red-500 shrink-0 mt-0.5" />
+                                    <p className="text-xs text-red-700 dark:text-red-300 flex-1">{sendError}</p>
+                                    <button onClick={() => setSendError(null)} className="text-red-400 hover:text-red-600"><X size={12} /></button>
+                                </div>
+                            )}
                             {/* Actions */}
                             <div className="flex gap-3">
                                 <button onClick={() => setShowConfirm(false)} disabled={sending}

@@ -2689,9 +2689,9 @@ Rules:
         catch { return json(500, { error: "Failed" }); }
     }
     if (rawPath === "/planner/boards" && method === "POST") {
-        const { title, color="#6366f1", description="" } = body;
+        const { title, color="#6366f1", description="", createdBy } = body;
         if (!title?.trim()) return json(400, { error: "Title required" });
-        try { const r = await firestore.collection("pg_boards").add({ title: title.trim(), color, description, archived: false, customFieldDefs: [], createdAt: admin.firestore.FieldValue.serverTimestamp() }); return json(201, { id: r.id }); }
+        try { const r = await firestore.collection("pg_boards").add({ title: title.trim(), color, description, archived: false, customFieldDefs: [], ...(createdBy ? { createdBy } : {}), createdAt: admin.firestore.FieldValue.serverTimestamp() }); return json(201, { id: r.id }); }
         catch { return json(500, { error: "Failed" }); }
     }
     const _pgBM = rawPath.match(/^\/planner\/boards\/([^/]+)$/);
