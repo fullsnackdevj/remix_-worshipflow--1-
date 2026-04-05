@@ -2943,6 +2943,116 @@ Rules:
         }
     }
 
+    // ─── FREEDOM WALL ─────────────────────────────────────────────────────────
+
+    // GET /freedom-wall
+    if (rawPath === "/freedom-wall" && method === "GET") {
+        try {
+            const snap = await firestore.collection("freedomWall").orderBy("createdAt", "desc").limit(200).get();
+            const notes = snap.docs.map(d => ({
+                id: d.id,
+                ...d.data(),
+                createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(),
+            }));
+            return json(200, notes);
+        } catch (e) { return json(500, { error: "Failed to fetch freedom wall notes" }); }
+    }
+
+    // POST /freedom-wall
+    if (rawPath === "/freedom-wall" && method === "POST") {
+        const { message, color, rotation, x, y, authorSessionToken } = body;
+        if (!message?.trim()) return json(400, { error: "message required" });
+        try {
+            const ref = await firestore.collection("freedomWall").add({
+                message: message.trim(),
+                color: color || "#fef9c3",
+                rotation: typeof rotation === "number" ? rotation : 0,
+                x: typeof x === "number" ? x : 10,
+                y: typeof y === "number" ? y : 10,
+                reactions: {},
+                userReactions: [],
+                authorSessionToken: authorSessionToken || "",
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            return json(201, { id: ref.id });
+        } catch (e) { return json(500, { error: "Failed to create note" }); }
+    }
+
+    // PATCH /freedom-wall/:id/react
+    const fwReactMatch = rawPath.match(/^\/freedom-wall\/([^/]+)\/react$/);
+    if (fwReactMatch && method === "PATCH") {
+        const nid = fwReactMatch[1];
+        const { emoji, sessionToken: st } = body;
+        if (!emoji || !st) return json(400, { error: "emoji and sessionToken required" });
+        try {
+            const ref = firestore.collection("freedomWall").doc(nid);
+            const doc = await ref.get();
+            if (!doc.exists) return json(404, { error: "Note not found" });
+            const data = doc.data()!;
+            const reactions: Record<string, number> = { ...(data.reactions || {}) };
+            const userReactions: string[] = [...(data.userReactions || [])];
+            const reactionKey = `${st}:${emoji}`;
+            const alreadyReacted = userReactions.includes(reactionKey);
+            if (alreadyReacted) {
+                reactions[emoji] = Math.max(0, (reactions[emoji] ?? 1) - 1);
+                if (reactions[emoji] === 0) delete reactions[emoji];
+                await ref.update({ reactions, userReactions: userReactions.filter(r => r !== reactionKey) });
+            } else {
+                reactions[emoji] = (reactions[emoji] ?? 0) + 1;
+                userReactions.push(reactionKey);
+                await ref.update({ reactions, userReactions });
+            }
+            return json(200, { success: true, reactions });
+        } catch (e) { return json(500, { error: "Failed to react" }); }
+    }
+
+    // PATCH /freedom-wall/:id/move
+    const fwMoveMatch = rawPath.match(/^\/freedom-wall\/([^/]+)\/move$/);
+    if (fwMoveMatch && method === "PATCH") {
+        const nid = fwMoveMatch[1];
+        const { x: nx, y: ny, sessionToken: st } = body;
+        if (typeof nx !== "number" || typeof ny !== "number") return json(400, { error: "x and y are required numbers" });
+        try {
+            const doc = await firestore.collection("freedomWall").doc(nid).get();
+            if (!doc.exists) return json(404, { error: "Note not found" });
+            const isAuthor = st && doc.data()?.authorSessionToken && doc.data()?.authorSessionToken === st;
+            if (!isAuthor) return json(403, { error: "Only the author can move this note" });
+            await firestore.collection("freedomWall").doc(nid).update({ x: nx, y: ny });
+            return json(200, { success: true });
+        } catch { return json(500, { error: "Failed to move note" }); }
+    }
+
+    // PATCH /freedom-wall/:id  (edit message — author only)
+    const fwEditMatch = rawPath.match(/^\/freedom-wall\/([^/]+)$/);
+    if (fwEditMatch && method === "PATCH") {
+        const nid = fwEditMatch[1];
+        const { message: newMsg, sessionToken: st } = body;
+        if (!newMsg?.trim()) return json(400, { error: "message required" });
+        try {
+            const ref = firestore.collection("freedomWall").doc(nid);
+            const doc = await ref.get();
+            if (!doc.exists) return json(404, { error: "Note not found" });
+            const isAuthor = st && doc.data()?.authorSessionToken && doc.data()?.authorSessionToken === st;
+            if (!isAuthor) return json(403, { error: "Not authorised to edit this note" });
+            await ref.update({ message: newMsg.trim(), editedAt: new Date().toISOString() });
+            return json(200, { success: true });
+        } catch (e) { return json(500, { error: "Failed to update note" }); }
+    }
+
+    // DELETE /freedom-wall/:id  (admin OR author)
+    if (fwEditMatch && method === "DELETE") {
+        const nid = fwEditMatch[1];
+        const { isAdmin: callerIsAdmin, sessionToken: st } = body;
+        try {
+            const doc = await firestore.collection("freedomWall").doc(nid).get();
+            if (!doc.exists) return json(404, { error: "Note not found" });
+            const isAuthor = st && doc.data()?.authorSessionToken && doc.data()?.authorSessionToken === st;
+            if (!callerIsAdmin && !isAuthor) return json(403, { error: "Not authorised to delete this note" });
+            await firestore.collection("freedomWall").doc(nid).delete();
+            return json(200, { success: true });
+        } catch (e) { return json(500, { error: "Failed to delete note" }); }
+    }
+
     return json(404, { error: "Not found" });
 };
 
