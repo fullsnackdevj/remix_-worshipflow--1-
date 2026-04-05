@@ -533,6 +533,8 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
                 if (n["targetAudience"] === "all") return true;
                 if (n["targetAudience"] === "admin_only") return role === "admin";
                 if (n["targetAudience"] === "non_member") return role !== "member";
+                // Direct (Planner): only the specific recipient sees this
+                if (n["targetAudience"] === "direct") return n["recipientId"] === userId;
                 return false;
             });
             return json(200, filtered);
@@ -2681,43 +2683,43 @@ Rules:
 
     // ─── PLAYGROUND TRELLO ─────────────────────────────────────────────────────
     // Boards
-    if (rawPath === "/playground/boards" && method === "GET") {
+    if (rawPath === "/planner/boards" && method === "GET") {
         const wantArch = event.queryStringParameters?.archived === "true";
         try { const s = await firestore.collection("pg_boards").orderBy("createdAt","desc").get(); const all = s.docs.map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? null })) as any[]; return json(200, all.filter(b => wantArch ? !!b.archived : !b.archived)); }
         catch { return json(500, { error: "Failed" }); }
     }
-    if (rawPath === "/playground/boards" && method === "POST") {
+    if (rawPath === "/planner/boards" && method === "POST") {
         const { title, color="#6366f1", description="" } = body;
         if (!title?.trim()) return json(400, { error: "Title required" });
         try { const r = await firestore.collection("pg_boards").add({ title: title.trim(), color, description, archived: false, customFieldDefs: [], createdAt: admin.firestore.FieldValue.serverTimestamp() }); return json(201, { id: r.id }); }
         catch { return json(500, { error: "Failed" }); }
     }
-    const _pgBM = rawPath.match(/^\/playground\/boards\/([^/]+)$/);
+    const _pgBM = rawPath.match(/^\/planner\/boards\/([^/]+)$/);
     if (_pgBM) {
         const bid = _pgBM[1];
         if (method === "PUT") { try { const { title, color, description, archived, customFieldDefs } = body; await firestore.collection("pg_boards").doc(bid).update({ ...(title!==undefined && {title}), ...(color!==undefined && {color}), ...(description!==undefined && {description}), ...(archived!==undefined && {archived}), ...(customFieldDefs!==undefined && {customFieldDefs}) }); return json(200, { success: true }); } catch { return json(500, { error: "Failed" }); } }
         if (method === "DELETE") { try { const ls = await firestore.collection("pg_lists").where("boardId","==",bid).get(); const cs = await firestore.collection("pg_cards").where("boardId","==",bid).get(); const b = firestore.batch(); ls.docs.forEach(d=>b.delete(d.ref)); cs.docs.forEach(d=>b.delete(d.ref)); b.delete(firestore.collection("pg_boards").doc(bid)); await b.commit(); return json(200, { success: true }); } catch { return json(500, { error: "Failed" }); } }
     }
     // Lists
-    const _pgBL = rawPath.match(/^\/playground\/boards\/([^/]+)\/lists$/);
+    const _pgBL = rawPath.match(/^\/planner\/boards\/([^/]+)\/lists$/);
     if (_pgBL && method === "GET") { const bid = _pgBL[1]; const inclArch = event.queryStringParameters?.includeArchived === "true"; try { const s = await firestore.collection("pg_lists").where("boardId","==",bid).get(); const docs = s.docs.map(d=>({id:d.id,...d.data()} as any)).sort((a:any,b:any)=>a.pos-b.pos); return json(200, inclArch ? docs : docs.filter((d:any)=>!d.archived)); } catch { return json(500, { error: "Failed" }); } }
     if (_pgBL && method === "POST") { const bid = _pgBL[1]; const { title } = body; if (!title?.trim()) return json(400, { error: "Title required" }); try { const ex = await firestore.collection("pg_lists").where("boardId","==",bid).get(); const maxPos = ex.docs.reduce((m,d)=>Math.max(m,(d.data().pos??0)),0); const pos = maxPos + 16384; const r = await firestore.collection("pg_lists").add({ boardId: bid, title: title.trim(), pos, archived: false, createdAt: admin.firestore.FieldValue.serverTimestamp() }); return json(201, { id: r.id }); } catch { return json(500, { error: "Failed" }); } }
-    const _pgLM = rawPath.match(/^\/playground\/lists\/([^/]+)$/);
+    const _pgLM = rawPath.match(/^\/planner\/lists\/([^/]+)$/);
     if (_pgLM) {
         const lid = _pgLM[1];
         if (method === "PUT") { try { const { title, archived, pos } = body; await firestore.collection("pg_lists").doc(lid).update({ ...(title!==undefined && {title}), ...(archived!==undefined && {archived}), ...(pos!==undefined && {pos}) }); return json(200, { success: true }); } catch { return json(500, { error: "Failed" }); } }
         if (method === "DELETE") { try { const cs = await firestore.collection("pg_cards").where("listId","==",lid).get(); const b = firestore.batch(); cs.docs.forEach(d=>b.delete(d.ref)); b.delete(firestore.collection("pg_lists").doc(lid)); await b.commit(); return json(200, { success: true }); } catch { return json(500, { error: "Failed" }); } }
     }
     // Cards
-    const _pgBC = rawPath.match(/^\/playground\/boards\/([^/]+)\/cards$/);
+    const _pgBC = rawPath.match(/^\/planner\/boards\/([^/]+)\/cards$/);
     if (_pgBC && method === "GET") { const bid = _pgBC[1]; const wantArch = event.queryStringParameters?.archived === "true"; try { const s = await firestore.collection("pg_cards").where("boardId","==",bid).get(); const docs = s.docs.map(d=>({id:d.id,...d.data(), createdAt:(d.data().createdAt?.toDate?.()?.toISOString()??null)} as any)); return json(200, docs.filter((d:any)=>wantArch?!!d.archived:!d.archived).sort((a:any,b:any)=>a.pos-b.pos)); } catch { return json(500, { error: "Failed" }); } }
-    if (rawPath === "/playground/cards" && method === "POST") {
+    if (rawPath === "/planner/cards" && method === "POST") {
         const { boardId, listId, title } = body;
         if (!boardId || !listId || !title?.trim()) return json(400, { error: "boardId, listId, title required" });
         try { const ex = await firestore.collection("pg_cards").where("listId","==",listId).get(); const maxPos = ex.docs.reduce((m,d)=>Math.max(m,(d.data().pos??0)),0); const pos = maxPos + 16384; const r = await firestore.collection("pg_cards").add({ boardId, listId, title: title.trim(), description: "", pos, members: [], labels: [], dueDate: null, checklists: [], customFields: {}, archived: false, createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() }); return json(201, { id: r.id }); }
         catch { return json(500, { error: "Failed" }); }
     }
-    const _pgCM = rawPath.match(/^\/playground\/cards\/([^/]+)$/);
+    const _pgCM = rawPath.match(/^\/planner\/cards\/([^/]+)$/);
     if (_pgCM) {
         const cid = _pgCM[1];
         if (method === "GET") { try { const d = await firestore.collection("pg_cards").doc(cid).get(); return d.exists ? json(200, { id: d.id, ...d.data() }) : json(404, { error: "Not found" }); } catch { return json(500, { error: "Failed" }); } }
@@ -2725,7 +2727,7 @@ Rules:
         if (method === "DELETE") { try { await firestore.collection("pg_cards").doc(cid).delete(); return json(200, { success: true }); } catch { return json(500, { error: "Failed" }); } }
     }
     // Move card (fractional indexing)
-    const _pgMV = rawPath.match(/^\/playground\/cards\/([^/]+)\/move$/);
+    const _pgMV = rawPath.match(/^\/planner\/cards\/([^/]+)\/move$/);
     if (_pgMV && method === "PATCH") {
         const cid = _pgMV[1];
         const { boardId, listId, position } = body;
@@ -2742,7 +2744,7 @@ Rules:
     }
 
     // ── Planner: Comments ────────────────────────────────────────────────────────
-    const _pgComm = rawPath.match(/^\/playground\/cards\/([^/]+)\/comments$/);
+    const _pgComm = rawPath.match(/^\/planner\/cards\/([^/]+)\/comments$/);
     if (_pgComm) {
         const cid_c = _pgComm[1];
         if (method === "GET") {
@@ -2750,23 +2752,23 @@ Rules:
             catch { return json(500, { error: "Failed" }); }
         }
         if (method === "POST") {
-            const { authorName, authorPhoto, text } = body;
-            if (!text?.trim()) return json(400, { error: "text required" });
+            const { authorName, authorPhoto, text, attachments } = body;
+            if (!text?.trim() && (!attachments || attachments.length === 0)) return json(400, { error: "text or attachment required" });
             try {
-                const ref = await firestore.collection("pg_cards").doc(cid_c).collection("comments").add({ authorName: authorName || "Unknown", authorPhoto: authorPhoto || "", text: text.trim(), createdAt: admin.firestore.FieldValue.serverTimestamp() });
-                firestore.collection("pg_cards").doc(cid_c).collection("activity").add({ type: "comment", actorName: authorName || "Unknown", actorPhoto: authorPhoto || "", text: `commented: "${text.trim().slice(0,60)}${text.trim().length > 60 ? "\u2026" : ""}"`, createdAt: admin.firestore.FieldValue.serverTimestamp() }).catch(() => {});
+                const ref = await firestore.collection("pg_cards").doc(cid_c).collection("comments").add({ authorName: authorName || "Unknown", authorPhoto: authorPhoto || "", text: text?.trim() || "", attachments: attachments || [], createdAt: admin.firestore.FieldValue.serverTimestamp() });
+                firestore.collection("pg_cards").doc(cid_c).collection("activity").add({ type: "comment", actorName: authorName || "Unknown", actorPhoto: authorPhoto || "", text: text?.trim() ? `commented: "${text.trim().slice(0,60)}${text.trim().length > 60 ? "\u2026" : ""}"` : "added an attachment", createdAt: admin.firestore.FieldValue.serverTimestamp() }).catch(() => {});
                 return json(201, { id: ref.id });
             } catch { return json(500, { error: "Failed" }); }
         }
     }
-    // DELETE /playground/cards/:id/comments/:cid
-    const _pgCommDel = rawPath.match(/^\/playground\/cards\/([^/]+)\/comments\/([^/]+)$/);
+    // DELETE /planner/cards/:id/comments/:cid
+    const _pgCommDel = rawPath.match(/^\/planner\/cards\/([^/]+)\/comments\/([^/]+)$/);
     if (_pgCommDel && method === "DELETE") {
         try { await firestore.collection("pg_cards").doc(_pgCommDel[1]).collection("comments").doc(_pgCommDel[2]).delete(); return json(200, { success: true }); }
         catch { return json(500, { error: "Failed" }); }
     }
-    // PATCH /playground/cards/:id/comments/:cid/reactions
-    const _pgReact = rawPath.match(/^\/playground\/cards\/([^/]+)\/comments\/([^/]+)\/reactions$/);
+    // PATCH /planner/cards/:id/comments/:cid/reactions
+    const _pgReact = rawPath.match(/^\/planner\/cards\/([^/]+)\/comments\/([^/]+)\/reactions$/);
     if (_pgReact && method === "PATCH") {
         const { emoji, userName } = body;
         if (!emoji || !userName) return json(400, { error: "emoji and userName required" });
@@ -2783,7 +2785,7 @@ Rules:
         } catch { return json(500, { error: "Failed" }); }
     }
     // ── Planner: Activity ──────────────────────────────────────────────────────────
-    const _pgAct = rawPath.match(/^\/playground\/cards\/([^/]+)\/activity$/);
+    const _pgAct = rawPath.match(/^\/planner\/cards\/([^/]+)\/activity$/);
     if (_pgAct) {
         const cid_a = _pgAct[1];
         if (method === "GET") {
@@ -2798,13 +2800,13 @@ Rules:
         }
     }
     // ── Planner: File Upload (base64 JSON → Firebase Storage via Admin SDK) ─────────
-    if (rawPath === "/playground/upload" && method === "POST") {
+    if (rawPath === "/planner/upload" && method === "POST") {
         const { base64, name: fileName, contentType: cType, cardId: cId } = body;
         if (!base64) return json(400, { error: "Upload failed — file data missing. Try a smaller file (max 5 MB)." });
         if (!fileName || !cId) return json(400, { error: "Upload failed — missing file name or card ID." });
         try {
             const bucket = admin.storage().bucket();
-            const destPath = `playground/attachments/${cId}/${Date.now()}_${fileName}`;
+            const destPath = `planner/attachments/${cId}/${Date.now()}_${fileName}`;
             const fileRef = bucket.file(destPath);
             const buffer = Buffer.from(base64, "base64");
             await fileRef.save(buffer, { metadata: { contentType: cType || "application/octet-stream" } });
@@ -2816,22 +2818,42 @@ Rules:
             return json(500, { error: `Upload failed — ${e?.message ?? "storage error"}` });
         }
     }
-    // ── Planner: Member Notifications ────────────────────────────────────────────────
+    // ── Planner: Member Notifications (batch) ────────────────────────────────────────────────
     if (rawPath === "/planner/notify" && method === "POST") {
-        const { actorId, actorName: aN, actorPhoto: aP, recipientId, type: nType, cardId, cardTitle, boardName } = body;
-        if (!actorId || !recipientId || !nType || !cardId) return json(400, { error: "Missing required fields" });
-        if (actorId === recipientId) return json(200, { ok: true, skipped: true, reason: "self" });
-        try {
-            const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-            const recent = await firestore.collection("notifications").where("recipientId","==",recipientId).where("resourceId","==",cardId).where("type","==",nType).orderBy("createdAt","desc").limit(1).get().catch(() => null);
-            if (recent && !recent.empty) { const lastAt = recent.docs[0].data().createdAt?.toDate?.()?.toISOString() ?? ""; if (lastAt > tenMinAgo) return json(200, { ok: true, skipped: true, reason: "cooldown" }); }
-        } catch { /* skip cooldown on error */ }
-        const verbs: Record<string,string> = { planner_assigned: "assigned you to", planner_comment: "commented on", planner_mention: "mentioned you in", planner_due: "updated due date on" };
+        const { actorId, actorName: aN, actorPhoto: aP,
+                recipientId, recipientIds,          // accept both forms
+                type: nType, cardId, cardTitle, boardName } = body;
+
+        if (!actorId || !nType || !cardId) return json(400, { error: "Missing required fields" });
+
+        // Normalise to array — support single recipientId for backward compat
+        const targets: string[] = Array.isArray(recipientIds)
+            ? recipientIds
+            : recipientId ? [String(recipientId)] : [];
+
+        if (!targets.length) return json(400, { error: "No recipients specified" });
+
+        const verbs: Record<string,string> = { planner_assigned: "assigned you to", planner_comment: "commented on", planner_mention: "mentioned you in", planner_due: "updated due date on", planner_moved: "moved" };
         const msgTitle = `${aN || "Someone"} ${verbs[nType] ?? "updated"} "${cardTitle || "a card"}"`.slice(0, 100);
-        try {
-            await firestore.collection("notifications").add({ type: nType, message: msgTitle, subMessage: boardName || "Planner", actorName: aN || "Someone", actorPhoto: aP || "", actorUserId: actorId, recipientId, targetAudience: "direct", resourceId: cardId, resourceDate: "", readBy: [], deletedBy: [], createdAt: admin.firestore.FieldValue.serverTimestamp() });
-            return json(200, { ok: true, skipped: false });
-        } catch { return json(500, { error: "Failed" }); }
+
+        let sent = 0, skipped = 0;
+        await Promise.allSettled(targets.map(async (rId: string) => {
+            if (actorId === rId) { skipped++; return; } // self-suppression
+            try {
+                const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+                const recent = await firestore.collection("notifications").where("recipientId","==",rId).where("resourceId","==",cardId).where("type","==",nType).orderBy("createdAt","desc").limit(1).get().catch(() => null);
+                if (recent && !recent.empty) {
+                    const lastAt = recent.docs[0].data().createdAt?.toDate?.()?.toISOString() ?? "";
+                    if (lastAt > tenMinAgo) { skipped++; return; } // cooldown
+                }
+            } catch { /* skip cooldown check on error */ }
+            try {
+                await firestore.collection("notifications").add({ type: nType, message: msgTitle, subMessage: boardName || "Planner", actorName: aN || "Someone", actorPhoto: aP || "", actorUserId: actorId, recipientId: rId, targetAudience: "direct", resourceId: cardId, resourceDate: "", readBy: [], deletedBy: [], createdAt: admin.firestore.FieldValue.serverTimestamp() });
+                sent++;
+            } catch { skipped++; }
+        }));
+
+        return json(200, { ok: true, sent, skipped });
     }
 
     // ── POST /activity/heartbeat — session tracking for Admin Activity Monitor ──

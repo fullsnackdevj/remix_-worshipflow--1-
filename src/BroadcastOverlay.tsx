@@ -48,8 +48,8 @@ export default function BroadcastOverlay() {
         const minDelay = new Promise<void>(res => setTimeout(res, MIN_LOAD_MS));
         Promise.all([poll(), minDelay]).finally(() => setIsChecking(false));
 
-        // ── Poll every 30 seconds so schedule windows open/close automatically ──
-        const interval = setInterval(poll, 30_000);
+        // ── Poll every 5 minutes — broadcasts only change when admin manually toggles them ──
+        const interval = setInterval(poll, 5 * 60_000);
         return () => clearInterval(interval);
     }, [user?.email, isAdmin]);
 

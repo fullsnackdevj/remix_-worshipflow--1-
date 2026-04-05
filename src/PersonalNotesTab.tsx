@@ -177,11 +177,15 @@ function PersonalNoteCard({
   }, [note.body]);
 
   return (
-    <div className={`group relative rounded-2xl border transition-all hover:shadow-md ${
-      note.pinned
-        ? "border-amber-300 dark:border-amber-600 bg-amber-50/60 dark:bg-amber-900/10"
-        : "border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/50"
-    }`}>
+    <div
+      className={`group relative rounded-2xl border transition-all hover:shadow-md cursor-pointer ${
+        note.pinned
+          ? "border-amber-300 dark:border-amber-600 bg-amber-50/60 dark:bg-amber-900/10"
+          : "border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/50"
+      }`}
+      onDoubleClick={() => onEdit(note)}
+      title="Double-click to edit"
+    >
       {note.pinned && (
         <span className="absolute -top-2 left-4 flex items-center gap-1 text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/50 border border-amber-200 dark:border-amber-700 px-2 py-0.5 rounded-full">
           <Pin size={9} /> Pinned
@@ -335,7 +339,7 @@ function PersonalNoteFormModal({
 
   return createPortal((
     <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="w-full max-w-lg bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-white/10 overflow-hidden">
+      <div className="w-full max-w-lg bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-white/10 overflow-hidden flex flex-col max-h-[90vh]">
 
         {/* Discard banner */}
         {showDiscard && (
@@ -385,7 +389,7 @@ function PersonalNoteFormModal({
         </div>
 
         {/* Body */}
-        <div className="p-5 space-y-4">
+        <div className="p-5 space-y-4 overflow-y-auto flex-1" style={{ scrollbarWidth: "thin" }}>
           {/* Category pills */}
           <div className="flex flex-wrap gap-2">
             {CATEGORIES.map(c => (
@@ -418,9 +422,9 @@ function PersonalNoteFormModal({
               value={body}
               onChange={e => { setBody(e.target.value); setShowDiscard(false); }}
               minRows={5}
+              maxRows={14}
               placeholder="Write your personal thoughts, prayer requests, reminders, or journal entries here…"
               className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-400 transition resize-none"
-              style={{ maxHeight: "50vh", overflowY: "auto", scrollbarWidth: "thin" }}
             />
           </div>
         </div>

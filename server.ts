@@ -234,7 +234,7 @@ function plannerTypeVerb(type: string): string {
 }
 
 async function writeNotification(firestore: admin.firestore.Firestore, payload: {
-  type: "new_event" | "updated_event" | "new_song" | "access_request";
+  type: "new_event" | "updated_event" | "new_song" | "access_request" | "team_note" | "note_resolved" | "note_done" | "note_acknowledged";
   message: string;
   subMessage: string;
   actorName: string;
@@ -491,7 +491,7 @@ app.get("/api/notifications", async (req, res) => {
       return false;
     });
     res.json(filtered);
-  } catch (e) { res.json([]); }
+  } catch (e) { if (!res.headersSent) res.json([]); }
 });
 
 // PATCH /api/notifications/read — mark one or all as read
@@ -538,50 +538,62 @@ app.delete("/api/notifications/:id", async (req, res) => {
   } catch (e) { res.status(500).json({ error: "Failed to delete" }); }
 });
 
-// POST /api/planner/notify — anti-spam directed notification for Planner events
+// POST /api/planner/notify — batch anti-spam directed notifications for Planner events
+// Accepts recipientIds (array) or recipientId (string, backward compat).
+// Loops per-recipient server-side so the frontend only sends 1 request for N members.
 app.post("/api/planner/notify", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.json({ ok: true, skipped: true, reason: "no-db" });
 
-  const { actorId, actorName, actorPhoto, recipientId,
-          type, cardId, cardTitle, boardName } = req.body as Record<string, string>;
+  const { actorId, actorName, actorPhoto,
+          recipientId, recipientIds,           // accept both forms
+          type, cardId, cardTitle, boardName } = req.body as Record<string, any>;
 
-  if (!actorId || !recipientId || !type || !cardId)
+  if (!actorId || !type || !cardId)
     return res.status(400).json({ error: "Missing required fields" });
 
-  // ── Layer 1: Self-suppression ──────────────────────────────────────────
-  if (actorId === recipientId)
-    return res.json({ ok: true, skipped: true, reason: "self" });
+  // Normalise to array — support single recipientId for backward compat
+  const targets: string[] = Array.isArray(recipientIds)
+    ? recipientIds
+    : recipientId ? [recipientId] : [];
 
-  // ── Layer 3: Actor rate limit ──────────────────────────────────────────
+  if (!targets.length)
+    return res.status(400).json({ error: "No recipients specified" });
+
+  // ── Layer 3: Actor rate limit (once per batch, not per recipient) ──────────
   if (!checkActorRateLimit(actorId))
     return res.json({ ok: true, skipped: true, reason: "rate-limit" });
 
-  // ── Layer 2: Cooldown check ────────────────────────────────────────────
-  if (await isPlannerCoolingDown(firestore, recipientId, cardId, type))
-    return res.json({ ok: true, skipped: true, reason: "cooldown" });
-
-  // ✅ All layers passed — write notification
-  const verb = plannerTypeVerb(type);
+  const verb  = plannerTypeVerb(type);
   const title = `${actorName} ${verb} "${cardTitle || "a card"}"`.slice(0, 100);
   const body  = boardName || "Planner";
-  try {
+
+  const results = await Promise.allSettled(targets.map(async (recipientId) => {
+    // ── Layer 1: Self-suppression ────────────────────────────────────────────
+    if (actorId === recipientId) return { skipped: true, reason: "self" };
+
+    // ── Layer 2: Per-recipient cooldown check ────────────────────────────────
+    if (await isPlannerCoolingDown(firestore, recipientId, cardId, type))
+      return { skipped: true, reason: "cooldown" };
+
+    // ✅ Write notification for this recipient
     await firestore.collection("notifications").add({
       type,
       message: title,
       subMessage: body,
-      actorName:    actorName    || "Someone",
-      actorPhoto:   actorPhoto   || "",
-      actorUserId:  actorId,
-      recipientId,                          // for "direct" audience filter
+      actorName:     actorName     || "Someone",
+      actorPhoto:    actorPhoto    || "",
+      actorUserId:   actorId,
+      recipientId,
       targetAudience: "direct",
-      resourceId:   cardId,
-      resourceDate: "",
+      resourceId:    cardId,
+      resourceDate:  "",
       readBy:    [],
       deletedBy: [],
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
-    // Push only to recipient's devices
+
+    // Push to this recipient's devices (fire-and-forget)
     sendPushNotification(firestore, {
       title, body,
       targetAudience: "direct",
@@ -589,11 +601,13 @@ app.post("/api/planner/notify", async (req, res) => {
       type,
       resourceId: cardId,
     });
-    res.json({ ok: true, skipped: false });
-  } catch (e) {
-    console.error("Planner notify error:", e);
-    res.status(500).json({ error: "Failed" });
-  }
+
+    return { skipped: false };
+  }));
+
+  const sent    = results.filter(r => r.status === "fulfilled" && !(r.value as any).skipped).length;
+  const skipped = results.length - sent;
+  res.json({ ok: true, sent, skipped });
 });
 
 // DELETE /api/notifications — soft-delete all visible for this user
@@ -1373,7 +1387,7 @@ app.post("/api/notes", async (req, res) => {
     // Notify all team members that a new note was posted
     const typeLabel = type === "bug" ? "🐞 Bug" : type === "feature" ? "💡 Feature" : "📝 Note";
     writeNotification(firestore, {
-      type: "new_song", // reuse new_song type for notification routing
+      type: "team_note",
       message: `${authorName || "Someone"} posted a ${typeLabel}`,
       subMessage: content.trim().slice(0, 80) + (content.trim().length > 80 ? "…" : ""),
       actorName: authorName || "Unknown",
@@ -1675,9 +1689,9 @@ Rules:
 
 // ── PLAYGROUND TRELLO ───────────────────────────────────────────────────────
 
-// POST /api/playground/upload  — supports base64 JSON or multipart form-data
+// POST /api/planner/upload  — supports base64 JSON or multipart form-data
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
-app.post("/api/playground/upload", upload.single("file"), async (req, res) => {
+app.post("/api/planner/upload", upload.single("file"), async (req, res) => {
   try {
     getDb();
     if (admin.apps.length === 0) return res.status(503).json({ error: "Storage unavailable" });
@@ -1707,7 +1721,7 @@ app.post("/api/playground/upload", upload.single("file"), async (req, res) => {
       return res.status(400).json({ error: "No file data" });
     }
 
-    const destPath = `playground/attachments/${cardId}/${id}_${originalName}`;
+    const destPath = `planner/attachments/${cardId}/${id}_${originalName}`;
     const file = bucket.file(destPath);
     await file.save(buffer, { metadata: { contentType: mimeType } });
     await file.makePublic();
@@ -1719,8 +1733,8 @@ app.post("/api/playground/upload", upload.single("file"), async (req, res) => {
   }
 });
 
-// GET /api/playground/boards  (add ?archived=true to get archived boards)
-app.get("/api/playground/boards", async (req, res) => {
+// GET /api/planner/boards  (add ?archived=true to get archived boards)
+app.get("/api/planner/boards", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(503).json({ error: "DB unavailable" });
   try {
@@ -1733,13 +1747,13 @@ app.get("/api/playground/boards", async (req, res) => {
   } catch { res.status(500).json({ error: "Failed" }); }
 });
 
-// GET /api/playground/boards/archived — kept for backwards compat, delegates to query param
-app.get("/api/playground/boards/archived", async (_req, res) => {
-  res.redirect('/api/playground/boards?archived=true');
+// GET /api/planner/boards/archived — kept for backwards compat, delegates to query param
+app.get("/api/planner/boards/archived", async (_req, res) => {
+  res.redirect('/api/planner/boards?archived=true');
 });
 
-// POST /api/playground/boards
-app.post("/api/playground/boards", async (req, res) => {
+// POST /api/planner/boards
+app.post("/api/planner/boards", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(503).json({ error: "DB unavailable" });
   const { title, color = "#6366f1", description = "" } = req.body;
@@ -1753,8 +1767,8 @@ app.post("/api/playground/boards", async (req, res) => {
   } catch { res.status(500).json({ error: "Failed" }); }
 });
 
-// PUT /api/playground/boards/:id  — update (title, color, description, archived, customFieldDefs)
-app.put("/api/playground/boards/:id", async (req, res) => {
+// PUT /api/planner/boards/:id  — update (title, color, description, archived, customFieldDefs)
+app.put("/api/planner/boards/:id", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(503).json({ error: "DB unavailable" });
   const { title, color, description, archived, customFieldDefs } = req.body;
@@ -1773,8 +1787,8 @@ app.put("/api/playground/boards/:id", async (req, res) => {
   }
 });
 
-// DELETE /api/playground/boards/:id  — cascade-delete lists + cards
-app.delete("/api/playground/boards/:id", async (req, res) => {
+// DELETE /api/planner/boards/:id  — cascade-delete lists + cards
+app.delete("/api/planner/boards/:id", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(503).json({ error: "DB unavailable" });
   const bid = req.params.id;
@@ -1792,8 +1806,8 @@ app.delete("/api/playground/boards/:id", async (req, res) => {
   } catch { res.status(500).json({ error: "Failed" }); }
 });
 
-// GET /api/playground/boards/:id/lists
-app.get("/api/playground/boards/:id/lists", async (req, res) => {
+// GET /api/planner/boards/:id/lists
+app.get("/api/planner/boards/:id/lists", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(503).json({ error: "DB unavailable" });
   const includeArchived = req.query.includeArchived === "true";
@@ -1807,8 +1821,8 @@ app.get("/api/playground/boards/:id/lists", async (req, res) => {
   } catch { res.status(500).json({ error: "Failed" }); }
 });
 
-// POST /api/playground/boards/:id/lists
-app.post("/api/playground/boards/:id/lists", async (req, res) => {
+// POST /api/planner/boards/:id/lists
+app.post("/api/planner/boards/:id/lists", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(503).json({ error: "DB unavailable" });
   const bid = req.params.id;
@@ -1825,8 +1839,8 @@ app.post("/api/playground/boards/:id/lists", async (req, res) => {
   } catch { res.status(500).json({ error: "Failed" }); }
 });
 
-// PUT /api/playground/lists/:id
-app.put("/api/playground/lists/:id", async (req, res) => {
+// PUT /api/planner/lists/:id
+app.put("/api/planner/lists/:id", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(503).json({ error: "DB unavailable" });
   const { title, archived, pos } = req.body;
@@ -1843,8 +1857,8 @@ app.put("/api/playground/lists/:id", async (req, res) => {
   }
 });
 
-// DELETE /api/playground/lists/:id  — cascade-delete cards in this list
-app.delete("/api/playground/lists/:id", async (req, res) => {
+// DELETE /api/planner/lists/:id  — cascade-delete cards in this list
+app.delete("/api/planner/lists/:id", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(503).json({ error: "DB unavailable" });
   const lid = req.params.id;
@@ -1858,8 +1872,8 @@ app.delete("/api/playground/lists/:id", async (req, res) => {
   } catch { res.status(500).json({ error: "Failed" }); }
 });
 
-// GET /api/playground/boards/:id/cards  (add ?archived=true to get archived cards)
-app.get("/api/playground/boards/:id/cards", async (req, res) => {
+// GET /api/planner/boards/:id/cards  (add ?archived=true to get archived cards)
+app.get("/api/planner/boards/:id/cards", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(503).json({ error: "DB unavailable" });
   try {
@@ -1873,8 +1887,8 @@ app.get("/api/playground/boards/:id/cards", async (req, res) => {
   } catch { res.status(500).json({ error: "Failed" }); }
 });
 
-// GET /api/playground/boards/:id/cards/archived
-app.get("/api/playground/boards/:id/cards/archived", async (req, res) => {
+// GET /api/planner/boards/:id/cards/archived
+app.get("/api/planner/boards/:id/cards/archived", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(503).json({ error: "DB unavailable" });
   try {
@@ -1886,8 +1900,8 @@ app.get("/api/playground/boards/:id/cards/archived", async (req, res) => {
   } catch { res.status(500).json({ error: "Failed" }); }
 });
 
-// POST /api/playground/cards
-app.post("/api/playground/cards", async (req, res) => {
+// POST /api/planner/cards
+app.post("/api/planner/cards", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(503).json({ error: "DB unavailable" });
   const { boardId, listId, title } = req.body;
@@ -1906,8 +1920,8 @@ app.post("/api/playground/cards", async (req, res) => {
   } catch { res.status(500).json({ error: "Failed" }); }
 });
 
-// GET /api/playground/cards/:id
-app.get("/api/playground/cards/:id", async (req, res) => {
+// GET /api/planner/cards/:id
+app.get("/api/planner/cards/:id", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(503).json({ error: "DB unavailable" });
   try {
@@ -1917,8 +1931,8 @@ app.get("/api/playground/cards/:id", async (req, res) => {
   } catch (e) { if (!res.headersSent) res.status(500).json({ error: "Failed" }); }
 });
 
-// PUT /api/playground/cards/:id  — partial update
-app.put("/api/playground/cards/:id", async (req, res) => {
+// PUT /api/planner/cards/:id  — partial update
+app.put("/api/planner/cards/:id", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(503).json({ error: "DB unavailable" });
   const { title, description, members, labels, dueDate, startDate, dueTime, reminder, checklists, customFields, archived, listId, pos, completed, attachments } = req.body;
@@ -1949,8 +1963,8 @@ app.put("/api/playground/cards/:id", async (req, res) => {
   }
 });
 
-// DELETE /api/playground/cards/:id
-app.delete("/api/playground/cards/:id", async (req, res) => {
+// DELETE /api/planner/cards/:id
+app.delete("/api/planner/cards/:id", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(503).json({ error: "DB unavailable" });
   try {
@@ -1960,8 +1974,8 @@ app.delete("/api/playground/cards/:id", async (req, res) => {
   } catch (e) { if (!res.headersSent) res.status(500).json({ error: "Failed" }); }
 });
 
-// PATCH /api/playground/cards/:id/move  — fractional-index repositioning
-app.patch("/api/playground/cards/:id/move", async (req, res) => {
+// PATCH /api/planner/cards/:id/move  — fractional-index repositioning
+app.patch("/api/planner/cards/:id/move", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(503).json({ error: "DB unavailable" });
   const cid = req.params.id;
@@ -1995,8 +2009,8 @@ app.patch("/api/playground/cards/:id/move", async (req, res) => {
 
 // ── PLAYGROUND COMMENTS ─────────────────────────────────────────────────────
 
-// GET /api/playground/cards/:id/comments
-app.get("/api/playground/cards/:id/comments", async (req, res) => {
+// GET /api/planner/cards/:id/comments
+app.get("/api/planner/cards/:id/comments", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(503).json({ error: "DB unavailable" });
   try {
@@ -2010,18 +2024,19 @@ app.get("/api/playground/cards/:id/comments", async (req, res) => {
   } catch (e) { if (!res.headersSent) res.status(500).json({ error: "Failed" }); }
 });
 
-// POST /api/playground/cards/:id/comments
-app.post("/api/playground/cards/:id/comments", async (req, res) => {
+// POST /api/planner/cards/:id/comments
+app.post("/api/planner/cards/:id/comments", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(503).json({ error: "DB unavailable" });
-  const { authorName, authorPhoto, text } = req.body;
-  if (!text?.trim()) return res.status(400).json({ error: "text required" });
+  const { authorName, authorPhoto, text, attachments } = req.body;
+  if (!text?.trim() && (!attachments || attachments.length === 0)) return res.status(400).json({ error: "text or attachment required" });
   try {
     const ref = await firestore.collection("pg_cards").doc(req.params.id)
       .collection("comments").add({
         authorName: authorName || "Unknown",
         authorPhoto: authorPhoto || "",
-        text: text.trim(),
+        text: text?.trim() || "",
+        attachments: attachments || [],
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       });
     // Write activity entry non-blocking so it doesn't delay or double-respond
@@ -2030,7 +2045,7 @@ app.post("/api/playground/cards/:id/comments", async (req, res) => {
         type: "comment",
         actorName: authorName || "Unknown",
         actorPhoto: authorPhoto || "",
-        text: `commented: "${text.trim().slice(0, 60)}${text.trim().length > 60 ? "\u2026" : ""}"`,
+        text: text?.trim() ? `commented: "${text.trim().slice(0, 60)}${text.trim().length > 60 ? "\u2026" : ""}"` : "added an attachment",
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       }).catch(() => {});
     if (res.headersSent) return;
@@ -2038,8 +2053,8 @@ app.post("/api/playground/cards/:id/comments", async (req, res) => {
   } catch (e) { if (!res.headersSent) res.status(500).json({ error: "Failed" }); }
 });
 
-// DELETE /api/playground/cards/:id/comments/:cid
-app.delete("/api/playground/cards/:id/comments/:cid", async (req, res) => {
+// DELETE /api/planner/cards/:id/comments/:cid
+app.delete("/api/planner/cards/:id/comments/:cid", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(503).json({ error: "DB unavailable" });
   try {
@@ -2050,9 +2065,9 @@ app.delete("/api/playground/cards/:id/comments/:cid", async (req, res) => {
   } catch (e) { if (!res.headersSent) res.status(500).json({ error: "Failed" }); }
 });
 
-// PATCH /api/playground/cards/:id/comments/:cid/reactions
+// PATCH /api/planner/cards/:id/comments/:cid/reactions
 // Body: { emoji: string, userName: string }  — toggles user on/off for that emoji
-app.patch("/api/playground/cards/:id/comments/:cid/reactions", async (req, res) => {
+app.patch("/api/planner/cards/:id/comments/:cid/reactions", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(503).json({ error: "DB unavailable" });
   const { emoji, userName } = req.body;
@@ -2077,8 +2092,8 @@ app.patch("/api/playground/cards/:id/comments/:cid/reactions", async (req, res) 
 
 // ── PLAYGROUND ACTIVITY ─────────────────────────────────────────────────────
 
-// GET /api/playground/cards/:id/activity
-app.get("/api/playground/cards/:id/activity", async (req, res) => {
+// GET /api/planner/cards/:id/activity
+app.get("/api/planner/cards/:id/activity", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(503).json({ error: "DB unavailable" });
   try {
@@ -2092,8 +2107,8 @@ app.get("/api/playground/cards/:id/activity", async (req, res) => {
   } catch (e) { if (!res.headersSent) res.status(500).json({ error: "Failed" }); }
 });
 
-// POST /api/playground/cards/:id/activity  — write an activity entry
-app.post("/api/playground/cards/:id/activity", async (req, res) => {
+// POST /api/planner/cards/:id/activity  — write an activity entry
+app.post("/api/planner/cards/:id/activity", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(503).json({ error: "DB unavailable" });
   const { type, actorName, actorPhoto, text } = req.body;

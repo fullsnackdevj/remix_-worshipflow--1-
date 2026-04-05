@@ -2,13 +2,11 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Plus, X, ChevronLeft, ChevronRight, MoreHorizontal, Check,
   Trash2, Archive, AlignLeft, CheckSquare, Settings,
-  ArrowRight, Users, Calendar, Search, Tag, Pencil, Smile,
-  MessageSquare, Paperclip, LayoutGrid, Send, Activity,
-  CheckCircle2, Circle, Link2, FileText, Image as ImageIcon, RotateCcw,
-  AlertTriangle, Layers
+  ArrowRight, Users, Calendar, Search, Tag, Pencil,
+  MessageSquare, Paperclip, LayoutGrid,
+  CheckCircle2, Circle, Link2, FileText, RotateCcw,
+  AlertTriangle, Layers, Loader2, ExternalLink, Eye, EyeOff, CornerUpLeft
 } from "lucide-react";
-import { storage } from "./firebase";
-import { ref as storageRef, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 
 type FieldType = "text" | "number" | "dropdown" | "checkbox";
 interface CustomFieldDef { id: string; name: string; type: FieldType; options?: string[]; }
@@ -19,24 +17,15 @@ interface Attachment { id: string; name: string; url: string; type: "file" | "li
 interface Board { id: string; title: string; color: string; description: string; archived: boolean; customFieldDefs: CustomFieldDef[]; }
 interface PgList { id: string; boardId: string; title: string; pos: number; archived: boolean; }
 interface Card { id: string; boardId: string; listId: string; title: string; description: string; pos: number; members: string[]; labels: Label[]; dueDate: string | null; startDate?: string | null; dueTime?: string; reminder?: string; checklists: Checklist[]; customFields: Record<string, any>; archived: boolean; completed?: boolean; attachments?: Attachment[]; createdAt?: string; }
-interface Comment { id: string; authorName: string; authorPhoto: string; text: string; createdAt: string; reactions?: Record<string, string[]>; }
-interface ActivityEntry { id: string; type: string; actorName: string; actorPhoto: string; text: string; createdAt: string; }
+interface Comment { id: string; authorName: string; authorPhoto: string; text: string; createdAt: string; reactions?: Record<string, string[]>; attachments?: { id: string; name: string; url: string; type: string }[]; }
+
 interface Props { allMembers?: any[]; currentUser?: { name: string; photo?: string }; onToast: (t: "success" | "error", m: string) => void; isFullAccess?: boolean; }
 
 const API = import.meta.env.DEV ? "http://localhost:3000/api" : "/api";
 const uid = () => Math.random().toString(36).slice(2, 10);
 const apiFetch = (path: string, opts?: RequestInit) => fetch(`${API}${path}`, { headers: { "Content-Type": "application/json" }, ...opts });
 
-const LABEL_COLORS = [
-  { bg: "bg-green-500", hex: "#22c55e", name: "Green" },
-  { bg: "bg-yellow-400", hex: "#facc15", name: "Yellow" },
-  { bg: "bg-orange-500", hex: "#f97316", name: "Orange" },
-  { bg: "bg-red-500", hex: "#ef4444", name: "Red" },
-  { bg: "bg-purple-500", hex: "#a855f7", name: "Purple" },
-  { bg: "bg-blue-500", hex: "#3b82f6", name: "Blue" },
-  { bg: "bg-sky-400", hex: "#38bdf8", name: "Sky" },
-  { bg: "bg-pink-500", hex: "#ec4899", name: "Pink" },
-];
+
 
 // 30-color Trello-style palette (5 cols × 6 rows)
 const TRELLO_COLORS_30 = [
@@ -58,8 +47,8 @@ const BOARD_COLORS = [
   "linear-gradient(135deg,#e07b3c,#d29034)",
   "linear-gradient(135deg,#5b3fa5,#8b46ff)",
 ];
-// Solid fallback for old boards that have hex colors
-const resolveBg = (c: string) => c.startsWith("#") ? c : c;
+// Returns the board background (gradient or hex color)
+const resolveBg = (c: string) => c;
 
 const AVATAR_COLORS = ["#0079bf","#d29034","#519839","#b04632","#89609e","#cd5a91","#4bbf6b","#00aecc"];
 
@@ -111,7 +100,6 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
   const [labelSearch, setLabelSearch] = useState("");
   const [newLabelName, setNewLabelName] = useState("");
   const [newLabelColor, setNewLabelColor] = useState(TRELLO_COLORS_30[10]);
-  const [creatingLabel, setCreatingLabel] = useState(false);
   // label edit state
   const [labelView, setLabelView] = useState<"list"|"create"|"edit">("list");
   const [editingLabel, setEditingLabel] = useState<Label | null>(null);
@@ -120,8 +108,26 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
   const [memberSearch, setMemberSearch] = useState("");
   // board-level label pool (per-board, persisted in localStorage)
   const BOARD_LABELS_KEY = `wf_board_labels_${card.boardId}`;
+  const DEFAULT_STATUS_LABELS: Label[] = [
+    { id: "default-inprogress", name: "In Progress", color: "#0079bf" },
+    { id: "default-onhold",    name: "On Hold",     color: "#d29034" },
+    { id: "default-blocked",   name: "Blocked",     color: "#cf513d" },
+    { id: "default-done",      name: "Done",        color: "#519839" },
+  ];
   const [boardLabels, setBoardLabels] = useState<Label[]>(() => {
-    try { return JSON.parse(localStorage.getItem(BOARD_LABELS_KEY) || "[]"); } catch { return []; }
+    try {
+      const stored: Label[] = JSON.parse(localStorage.getItem(BOARD_LABELS_KEY) || "[]");
+      // Seed defaults if pool is completely empty
+      const base = stored.length === 0 ? [...DEFAULT_STATUS_LABELS] : [...stored];
+      // Merge any labels already on the card but missing from the pool
+      for (const l of card.labels) {
+        if (!base.find(x => x.id === l.id)) base.push(l);
+      }
+      if (base.length !== stored.length) {
+        try { localStorage.setItem(BOARD_LABELS_KEY, JSON.stringify(base)); } catch { /* noop */ }
+      }
+      return base;
+    } catch { return DEFAULT_STATUS_LABELS; }
   });
   const saveBoardLabels = (labels: Label[]) => {
     setBoardLabels(labels);
@@ -145,6 +151,9 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
   const [descDraft, setDescDraft] = useState(card.description ?? "");
   // emoji reactions — persisted to Firestore via PATCH endpoint
   const [emojiPickerFor, setEmojiPickerFor] = useState<string | null>(null);
+  const [deleteCommentConfirm, setDeleteCommentConfirm] = useState<string | null>(null);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentText, setEditingCommentText] = useState('');
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const QUICK_EMOJIS = ["👍","❤️","😂","😮","😢","👏","🔥","🎉","✅","💯"];
   const toggleEmoji = async (cmId: string, emoji: string) => {
@@ -162,7 +171,7 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
     setEmojiPickerFor(null);
     // Persist to Firestore
     try {
-      await apiFetch(`/playground/cards/${card.id}/comments/${cmId}/reactions`, {
+      await apiFetch(`/planner/cards/${card.id}/comments/${cmId}/reactions`, {
         method: "PATCH",
         body: JSON.stringify({ emoji, userName }),
       });
@@ -175,15 +184,19 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dropZoneRef = useRef<HTMLDivElement>(null);
-  const attachPasteRef = useRef<HTMLDivElement>(null);
+
   const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
   const commentAttachRef = useRef<HTMLInputElement>(null);
+  const [pendingCommentAttach, setPendingCommentAttach] = useState<{ id: string; name: string; url: string; type: string } | null>(null);
+  const [uploadingCommentAttach, setUploadingCommentAttach] = useState(false);
+  const [reminderOpen, setReminderOpen] = useState(false);
+  const reminderRef = useRef<HTMLDivElement>(null);
   const leftPanelRef = useRef<HTMLDivElement>(null);
   const commentsThreadRef = useRef<HTMLDivElement>(null);
   const bodyWrapperRef = useRef<HTMLDivElement>(null);
   const commentsPanelRef = useRef<HTMLDivElement>(null);
   const savedCommentsScrollRef = useRef(0); // saves scroll position before hiding
-  const datesBtnWrapRef = useRef<HTMLDivElement>(null);
+  const datesBtnWrapRef = useRef<HTMLElement>(null); // shared ref: wraps both a <div> and <button>
   const [datesPanelPos, setDatesPanelPos] = useState<{ top: number; left: number } | null>(null);
   const [descEditing, setDescEditing] = useState(false);
   const [archiveConfirm, setArchiveConfirm] = useState(false);
@@ -249,18 +262,21 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
   const nextCalMonth = () => setCalMonth(m => { if (m === 12) { setCalYear(y => y+1); return 1; } return m+1; });
   const [calTarget, setCalTarget] = useState<'start' | 'due'>('due');
   const selectCalDay = (day: number) => {
-    const neitherChecked = !draftStartEnabled && !draftDue;
-    if (neitherChecked) return; // calendar is inactive — do nothing
+    // Mirror the noneChecked logic from the calendar render
+    const dueEnabled = !!draftDue || calTarget === 'due';
+    if (!draftStartEnabled && !dueEnabled) return; // no checkbox active — do nothing
     const ymd = toYMD(calYear, calMonth, day);
-    if (draftStartEnabled && !draftDue) {
-      // ONLY start checked → fill start
+    if (draftStartEnabled && !dueEnabled) {
+      // ONLY start checked → fill start, advance target to due (sequential flow)
       setDraftStart(ymd);
-    } else if (!draftStartEnabled && draftDue !== undefined) {
+      setCalTarget('due');
+    } else if (!draftStartEnabled && dueEnabled) {
       // ONLY due checked → fill due
       setDraftDue(ymd);
     } else {
-      // BOTH checked → use explicit calTarget
-      if (calTarget === 'start') { setDraftStart(ymd); setCalTarget('due'); }
+      // BOTH checked → use explicit calTarget, NO auto-advance
+      // (user controls target by clicking a field input first)
+      if (calTarget === 'start') setDraftStart(ymd);
       else setDraftDue(ymd);
     }
   };
@@ -282,12 +298,15 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
   // hide checked items per checklist
   const [hiddenChecklists, setHiddenChecklists] = useState<Set<string>>(new Set());
   const toggleHideChecked = (clId: string) => setHiddenChecklists(prev => { const s = new Set(prev); s.has(clId) ? s.delete(clId) : s.add(clId); return s; });
+  const [editingChecklistId, setEditingChecklistId] = useState<string | null>(null);
+  const [editingChecklistTitle, setEditingChecklistTitle] = useState("");
+  const [deleteChecklistConfirm, setDeleteChecklistConfirm] = useState<string | null>(null);
   // copy-from checklist: board cards
   const [boardCards, setBoardCards] = useState<Card[]>([]);
   const [copyFrom, setCopyFrom] = useState("");
   useEffect(() => {
     if (panel === "checklist" && card.boardId) {
-      apiFetch(`/playground/boards/${card.boardId}/cards`).then(r => r.json()).then(d => { if (Array.isArray(d)) setBoardCards(d); }).catch(() => {});
+      apiFetch(`/planner/boards/${card.boardId}/cards`).then(r => r.json()).then(d => { if (Array.isArray(d)) setBoardCards(d); }).catch(() => {});
     }
   }, [panel, card.boardId]);
   const addChecklistWithCopy = () => {
@@ -298,7 +317,7 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
       const srcCl = srcCard?.checklists?.find(cl => cl.id === copyFrom.split("|")[1]);
       if (srcCl) items = srcCl.items.map(i => ({ ...i, id: uid(), done: false }));
     }
-    save({ checklists: [...c.checklists, { id: uid(), title: newChecklistTitle.trim(), items }] });
+    save({ checklists: [...c.checklists, { id: uid(), title: newChecklistTitle.trim().toUpperCase(), items }] });
     setNewChecklistTitle(""); setCopyFrom(""); setPanel("main");
   };
   // drag-and-drop for attachments
@@ -309,14 +328,14 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
 
   // Fetch comments & activity when modal opens
   useEffect(() => {
-    apiFetch(`/playground/cards/${card.id}/comments`).then(r => r.json()).then(d => { if (Array.isArray(d)) setComments(d); }).catch(() => {});
+    apiFetch(`/planner/cards/${card.id}/comments`).then(r => r.json()).then(d => { if (Array.isArray(d)) setComments(d); }).catch(() => {});
   }, [card.id]);
 
   const save = async (partial: Partial<Card>) => {
     const prev = c;                          // snapshot before optimistic update
     const updated = { ...c, ...partial }; setC(updated); setSaving(true);
     try {
-      await apiFetch(`/playground/cards/${card.id}`, { method: "PUT", body: JSON.stringify(partial) });
+      await apiFetch(`/planner/cards/${card.id}`, { method: "PUT", body: JSON.stringify(partial) });
       // Write activity for key changes
       const actor = currentUser?.name || "Someone";
       const photo = currentUser?.photo || "";
@@ -329,52 +348,58 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
       else if (partial.completed !== undefined) actText = partial.completed ? "marked card as complete" : "marked card as incomplete";
       else if (partial.description !== undefined) actText = "updated description";
       if (actText) {
-        apiFetch(`/playground/cards/${card.id}/activity`, { method: "POST", body: JSON.stringify({ type: "update", actorName: actor, actorPhoto: photo, text: actText }) }).catch(() => {});
+        apiFetch(`/planner/cards/${card.id}/activity`, { method: "POST", body: JSON.stringify({ type: "update", actorName: actor, actorPhoto: photo, text: actText }) }).catch(() => {});
       }
       onSave(updated);
     } catch { setC(prev); onToast("error", "Failed to save"); } finally { setSaving(false); }
   };
 
   const sendComment = async () => {
-    if (!comment.trim()) return;
+    if (!comment.trim() && !pendingCommentAttach) return;
     setSendingComment(true);
     try {
       const actor = currentUser?.name || "Someone";
       const photo = currentUser?.photo || "";
-      const r = await apiFetch(`/playground/cards/${card.id}/comments`, { method: "POST", body: JSON.stringify({ authorName: actor, authorPhoto: photo, text: comment.trim() }) });
+      const attachments = pendingCommentAttach ? [pendingCommentAttach] : [];
+      const r = await apiFetch(`/planner/cards/${card.id}/comments`, { method: "POST", body: JSON.stringify({ authorName: actor, authorPhoto: photo, text: comment.trim(), attachments }) });
       const { id } = await r.json();
-      setComments(prev => [...prev, { id, authorName: actor, authorPhoto: photo, text: comment.trim(), createdAt: new Date().toISOString() }]);
+      setComments(prev => [...prev, { id, authorName: actor, authorPhoto: photo, text: comment.trim(), createdAt: new Date().toISOString(), attachments }]);
       setComment("");
+      setPendingCommentAttach(null);
       // Notify all card members about the new comment (spam-guarded server-side)
       notifyPlannerMembers('planner_comment', c.members);
     } catch { onToast("error", "Failed to post comment"); } finally { setSendingComment(false); }
   };
 
   const deleteComment = async (cid: string) => {
-    await apiFetch(`/playground/cards/${card.id}/comments/${cid}`, { method: "DELETE" });
+    await apiFetch(`/planner/cards/${card.id}/comments/${cid}`, { method: "DELETE" });
     setComments(prev => prev.filter(x => x.id !== cid));
     onToast('success', 'Comment deleted');
   };
 
-  // ── Planner notification helper (fire-and-forget, spam-guarded server-side) ──
+  // ── Planner notification helper — batch: 1 request for all recipients ──────
+  // Instead of N separate POSTs (one per member), resolves all recipient IDs
+  // client-side and sends a single batch request. The server handles the
+  // per-recipient loop, cooldown checks, and self-suppression internally.
   const notifyPlannerMembers = useCallback((type: string, targets: string[]) => {
     if (!targets.length) return;
     const actorMember = allMembers.find((m: any) => m.name === currentUser?.name);
     const actorId = actorMember?.id || currentUser?.name || 'unknown';
     const boardTitle = boards.find(b => b.id === card.boardId)?.title || 'Planner';
-    targets.forEach(memberName => {
-      const recipient = allMembers.find((m: any) => m.name === memberName);
-      if (!recipient?.id) return;
-      apiFetch('/planner/notify', {
-        method: 'POST',
-        body: JSON.stringify({
-          actorId, actorName: currentUser?.name || 'Someone',
-          actorPhoto: currentUser?.photo || '',
-          recipientId: recipient.id,
-          type, cardId: card.id, cardTitle: c.title, boardName: boardTitle,
-        }),
-      }).catch(() => {});
-    });
+    // Resolve all member names → IDs in one pass (filter out unknowns + self)
+    const recipientIds = targets
+      .map(name => allMembers.find((m: any) => m.name === name)?.id)
+      .filter((id): id is string => !!id && id !== actorId);
+    if (!recipientIds.length) return;
+    apiFetch('/planner/notify', {
+      method: 'POST',
+      body: JSON.stringify({
+        actorId, actorName: currentUser?.name || 'Someone',
+        actorPhoto: currentUser?.photo || '',
+        recipientIds,                          // array — server loops internally
+        type, cardId: card.id, cardTitle: c.title, boardName: boardTitle,
+      }),
+    }).catch(() => {});
   }, [allMembers, boards, card.boardId, card.id, c.title, currentUser]);
 
   // Attachment: file upload → base64 JSON → API (server or Netlify) → Firebase Storage via Admin SDK
@@ -392,7 +417,7 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
         reader.readAsDataURL(file);
       });
       setUploadProgress(60);
-      const resp = await apiFetch('/playground/upload', {
+      const resp = await apiFetch('/planner/upload', {
         method: 'POST',
         body: JSON.stringify({ base64, name: file.name, contentType: file.type, cardId: card.id }),
       });
@@ -429,28 +454,33 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
   const toggleItem = (clId: string, itemId: string) => save({ checklists: c.checklists.map(cl => cl.id === clId ? { ...cl, items: cl.items.map(i => i.id === itemId ? { ...i, done: !i.done } : i) } : cl) });
   const addItem = (clId: string) => {
     const text = newItems[clId]?.trim(); if (!text) return;
-    save({ checklists: c.checklists.map(cl => cl.id === clId ? { ...cl, items: [...cl.items, { id: uid(), text, done: false }] } : cl) });
+    const capFirst = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+    save({ checklists: c.checklists.map(cl => cl.id === clId ? { ...cl, items: [...cl.items, { id: uid(), text: capFirst(text), done: false }] } : cl) });
     setNewItems(p => ({ ...p, [clId]: "" }));
   };
   const deleteChecklist = (clId: string) => save({ checklists: c.checklists.filter(cl => cl.id !== clId) });
   const deleteItem = (clId: string, itemId: string) => save({ checklists: c.checklists.map(cl => cl.id === clId ? { ...cl, items: cl.items.filter(i => i.id !== itemId) } : cl) });
   const addChecklist = () => {
     if (!newChecklistTitle.trim()) return;
-    save({ checklists: [...c.checklists, { id: uid(), title: newChecklistTitle.trim(), items: [] }] });
+    save({ checklists: [...c.checklists, { id: uid(), title: newChecklistTitle.trim().toUpperCase(), items: [] }] });
     setNewChecklistTitle(""); setPanel("main");
   };
   const addNewLabel = () => {
     if (!newLabelName.trim()) return;
+    const isDupe = boardLabels.some(l => l.name.trim().toLowerCase() === newLabelName.trim().toLowerCase());
+    if (isDupe) return; // blocked by inline warning
     const nl: Label = { id: uid(), name: newLabelName.trim(), color: newLabelColor };
     const updatedPool = [...boardLabels, nl];
     saveBoardLabels(updatedPool);
     // auto-check on this card too
     save({ labels: [...c.labels, nl] });
-    setNewLabelName(""); setNewLabelColor(TRELLO_COLORS_30[10]); setCreatingLabel(false); setLabelView("list");
+    setNewLabelName(""); setNewLabelColor(TRELLO_COLORS_30[10]); setLabelView("list");
   };
   const openEditLabel = (l: Label) => { setEditingLabel(l); setEditLabelName(l.name); setEditLabelColor(l.color); setLabelView("edit"); };
   const saveEditLabel = () => {
     if (!editingLabel) return;
+    const isDupe = boardLabels.some(l => l.id !== editingLabel.id && l.name.trim().toLowerCase() === editLabelName.trim().toLowerCase());
+    if (isDupe) return; // blocked by inline warning
     const updatedPool = boardLabels.map(l => l.id === editingLabel.id ? { ...l, name: editLabelName, color: editLabelColor } : l);
     saveBoardLabels(updatedPool);
     // also update label on this card if it's checked
@@ -473,22 +503,28 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
   const removeMember = (name: string) => save({ members: c.members.filter(x => x !== name) });
   const setCustomField = (defId: string, val: any) => save({ customFields: { ...c.customFields, [defId]: val } });
   const filteredMembers = allMembers.filter(m => !memberSearch || m.name?.toLowerCase().includes(memberSearch.toLowerCase()));
-  const filteredLabels = c.labels.filter(l => !labelSearch || l.name.toLowerCase().includes(labelSearch.toLowerCase()));
 
   const Btn = ({ icon, label, act, onCl }: { icon: React.ReactNode; label: string; act?: boolean; onCl: () => void }) => (
-    <button onClick={onCl} className={`flex items-center gap-1.5 px-3 py-1.5 rounded border text-xs font-medium transition-all duration-150 ${act ? "bg-[#1c3a5e] border-blue-500/50 text-blue-300" : "border-white/10 text-gray-300 hover:bg-[#282e33] hover:border-white/20 hover:text-white bg-[#22272b]"}`}>{icon}{label}</button>
+    <button onClick={onCl} className={`flex items-center gap-2 px-3 py-1.5 rounded-md border text-[13px] font-medium transition-all duration-150 ${act ? "bg-[#1c3a5e] border-blue-500/50 text-blue-300" : "border-[#454f59] text-gray-200 hover:bg-[#282e33] hover:border-[#5a6577] hover:text-white bg-[#22272b]"}`}>{icon}{label}</button>
   );
 
   return (
     <>
     <div className="fixed inset-0 z-50 flex flex-col items-center bg-black/85"
-      style={{ padding: '8px clamp(4px, 16px, 24px)' }}
+      style={{ padding: '8px clamp(0px, 8px, 16px)' }}
       onClick={e => e.target === e.currentTarget && onClose()}>
+      {/* Trello-style thin scrollbar for webkit (Chrome/Safari) */}
+      <style>{`
+        .card-left-panel::-webkit-scrollbar { width: 5px; }
+        .card-left-panel::-webkit-scrollbar-track { background: transparent; }
+        .card-left-panel::-webkit-scrollbar-thumb { background: rgba(150,155,163,0.45); border-radius: 999px; }
+        .card-left-panel::-webkit-scrollbar-thumb:hover { background: rgba(180,185,193,0.6); }
+      `}</style>
       <div className="bg-[#1d2125] rounded-2xl w-full shadow-2xl border border-white/5 flex flex-col"
         style={{
           maxHeight: 'calc(100dvh - 16px)',
-          minHeight: 'min(calc(100dvh - 16px), 480px)',
-          maxWidth: showCommentsPanel ? '1000px' : '660px',
+          minHeight: 'min(calc(100dvh - 16px), 540px)',
+          maxWidth: showCommentsPanel ? '1100px' : '768px',
           transition: 'max-width 320ms cubic-bezier(0.4, 0, 0.2, 1)',
         }}
         onClick={e => e.stopPropagation()}>
@@ -518,10 +554,17 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
             <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded ml-1"><X size={16} /></button>
           </div>
         </div>
-        {/* Two-panel body — always row on lg+, right panel animates width */}
+        {/* Two-panel body — always row on lg+, right panel animates */}
         <div ref={bodyWrapperRef} className="flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden lg:flex-1 lg:min-h-0" style={{ overscrollBehavior: 'contain' }}>
-          {/* LEFT — card details */}
-          <div ref={leftPanelRef} className="min-w-0 p-3 sm:p-4 space-y-3.5 lg:flex-1 lg:overflow-y-auto">
+          {/* LEFT — card details + Trello-style center scrollbar */}
+          <div
+            ref={leftPanelRef}
+            className="card-left-panel min-w-0 px-4 pt-4 pb-4 sm:px-5 sm:pt-5 space-y-4 lg:flex-1 lg:overflow-y-auto"
+            style={{
+              scrollbarWidth: 'thin',
+              scrollbarColor: 'rgba(150,155,163,0.45) rgba(0,0,0,0)',
+            }}
+          >
             {/* Title with completion toggle — Trello large title style */}
             <div className="flex items-start gap-3">
               {isFullAccess && (
@@ -532,26 +575,25 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
               )}
               <textarea value={c.title} readOnly={!isFullAccess}
                 onChange={isFullAccess ? e => setC(p => ({ ...p, title: e.target.value })) : undefined}
-                onBlur={isFullAccess ? () => save({ title: c.title }) : undefined} rows={2}
-                className={`flex-1 bg-transparent font-bold text-xl leading-snug focus:outline-none resize-none placeholder-gray-600 ${c.completed ? "line-through text-gray-500" : "text-white"} ${!isFullAccess ? "cursor-default" : ""}`} />
+                onBlur={isFullAccess ? () => { const cap = (s: string) => s.trim().replace(/\b\w/g, c => c.toUpperCase()); const capitalized = cap(c.title); if (capitalized !== c.title) setC(p => ({ ...p, title: capitalized })); save({ title: capitalized }); } : undefined} rows={1}
+                className={`flex-1 bg-transparent font-bold text-[22px] leading-snug focus:outline-none resize-none placeholder-gray-600 ${c.completed ? "line-through text-gray-500" : "text-white"} ${!isFullAccess ? "cursor-default" : ""}`} />
             </div>
             {/* Action buttons — full access only */}
             {isFullAccess && (
-              <div className="flex flex-wrap gap-1.5 ml-9">
-                <Btn icon={<Plus size={11} />} label="Add" act={false} onCl={() => setPanel("main")} />
+              <div className="flex flex-wrap gap-1.5 sm:ml-7">
                 <div ref={datesBtnWrapRef}>
-                  <Btn icon={<Calendar size={10} />} label="Dates" act={panel === "dates"} onCl={toggleDatesPanel} />
+                  <Btn icon={<Calendar size={12} />} label="Dates" act={panel === "dates"} onCl={toggleDatesPanel} />
                 </div>
-                <Btn icon={<CheckSquare size={10} />} label="Checklist" act={panel === "checklist"} onCl={() => setPanel(panel === "checklist" ? "main" : "checklist")} />
-                <Btn icon={<Users size={10} />} label="Members" act={panel === "members"} onCl={() => setPanel(panel === "members" ? "main" : "members")} />
-                <Btn icon={<Tag size={10} />} label="Labels" act={panel === "labels"} onCl={() => setPanel(panel === "labels" ? "main" : "labels")} />
-                <Btn icon={<Paperclip size={10} />} label="Attachment" act={panel === "attachment"} onCl={() => setPanel(panel === "attachment" ? "main" : "attachment")} />
+                <Btn icon={<CheckSquare size={12} />} label="Checklist" act={panel === "checklist"} onCl={() => setPanel(panel === "checklist" ? "main" : "checklist")} />
+                <Btn icon={<Users size={12} />} label="Members" act={panel === "members"} onCl={() => setPanel(panel === "members" ? "main" : "members")} />
+                <Btn icon={<Tag size={12} />} label="Labels" act={panel === "labels"} onCl={() => setPanel(panel === "labels" ? "main" : "labels")} />
+                <Btn icon={<Paperclip size={12} />} label="Attachment" act={panel === "attachment"} onCl={() => setPanel(panel === "attachment" ? "main" : "attachment")} />
               </div>
             )}
 
             {/* Checklist sub-panel */}
             {panel === "checklist" && (
-              <div className="ml-8 bg-[#22272b] border border-white/10 rounded-xl p-4 space-y-3">
+              <div className="sm:ml-7 bg-[#22272b] border border-white/10 rounded-xl p-4 space-y-3">
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Add Checklist</p>
                 <div>
                   <label className="text-xs text-gray-400 mb-1 block">Title</label>
@@ -572,7 +614,7 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
             )}
             {/* Members sub-panel */}
             {panel === "members" && (
-              <div className="ml-8 bg-[#22272b] border border-white/10 rounded-xl overflow-hidden">
+              <div className="sm:ml-7 bg-[#22272b] border border-white/10 rounded-xl overflow-hidden">
                 <div className="relative p-3 border-b border-white/5">
                   <Search size={12} className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-500" />
                   <input value={memberSearch} onChange={e => setMemberSearch(e.target.value)} autoFocus placeholder="Search members…"
@@ -593,7 +635,7 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
             )}
             {/* Attachment sub-panel — compact Trello-style */}
             {panel === "attachment" && (
-              <div className="ml-8 bg-[#22272b] border border-white/10 rounded-xl overflow-hidden w-72">
+              <div className="sm:ml-7 bg-[#22272b] border border-white/10 rounded-xl overflow-hidden w-72">
                 {/* Header */}
                 <div className="flex items-center justify-between px-3 py-2.5 border-b border-white/5">
                   <p className="text-xs font-semibold text-white">Attach</p>
@@ -630,7 +672,7 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
                 <div className="px-3 py-2.5 space-y-1.5">
                   <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Link</p>
                   <input value={linkUrl} onChange={e => setLinkUrl(e.target.value)} placeholder="Paste a URL…"
-                    className="w-full bg-[#1d2125] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50" />
+                    className="w-full bg-[#1d2125] border border-white/10 rounded-lg px-3 py-2 text-[13px] text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50" />
                   <input value={linkName} onChange={e => setLinkName(e.target.value)} placeholder="Display text (optional)"
                     className="w-full bg-[#1d2125] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none" />
                   <div className="flex gap-1.5 pt-0.5">
@@ -641,18 +683,72 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
               </div>
             )}
 
-            {/* Labels shown */}
-            {c.labels.length > 0 && (
-              <div className="ml-8">
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Labels</p>
-                <div className="flex flex-wrap gap-1.5 items-center">
-                  {c.labels.map(l => (
-                    <span key={l.id} style={{ backgroundColor: l.color }}
-                      onClick={() => { setPanel("labels"); setLabelView("list"); }}
-                      className="flex items-center gap-1 px-3 py-1.5 rounded text-xs font-bold text-white cursor-pointer hover:brightness-90">{l.name}</span>
-                  ))}
-                  <button onClick={() => setPanel(panel === "labels" ? "main" : "labels")} className="w-7 h-7 rounded bg-white/10 hover:bg-white/20 flex items-center justify-center text-gray-300"><Plus size={13} /></button>
-                </div>
+            {/* Labels + Dates inline row */}
+            {(c.labels.length > 0 || c.dueDate || c.startDate) && (
+              <div className="sm:ml-7 space-y-2">
+                {/* Labels row */}
+                {c.labels.length > 0 && (
+                  <div>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Labels</p>
+                    <div className="flex flex-wrap gap-1.5 items-center">
+                      {c.labels.map(l => (
+                        <span key={l.id} style={{ backgroundColor: l.color }}
+                          onClick={() => { setPanel("labels"); setLabelView("list"); }}
+                          className="flex items-center gap-1 px-3 py-1.5 rounded text-[13px] font-bold text-white cursor-pointer hover:brightness-90">{l.name}</span>
+                      ))}
+                      <button onClick={() => setPanel(panel === "labels" ? "main" : "labels")} className="px-2.5 py-[10px] rounded bg-white/10 hover:bg-white/20 flex items-center justify-center text-gray-300"><Plus size={13} /></button>
+                      {/* Dates pill — inline with labels */}
+                      {(c.dueDate || c.startDate) && panel !== "dates" && (
+                        <button
+                          ref={datesBtnWrapRef as any}
+                          onClick={toggleDatesPanel}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-[13px] font-medium transition-colors ${
+                            isOverdue
+                              ? "bg-red-500/20 border-red-500/50 text-red-300 hover:bg-red-500/30"
+                              : "border-[#454f59] bg-[#22272b] text-gray-200 hover:bg-[#282e33] hover:border-[#5a6577]"
+                          }`}
+                        >
+                          <Calendar size={12} />
+                          <span>
+                            {c.startDate && (
+                              <>{new Date(c.startDate + "T00:00:00").toLocaleDateString("en", { month: "short", day: "numeric" })} – </>
+                            )}
+                            {new Date(c.dueDate! + "T00:00:00").toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}
+                            {c.dueTime && <>, {c.dueTime}</>}
+                          </span>
+                          <ChevronLeft size={11} className="rotate-180 opacity-60 ml-0.5" />
+                          {isOverdue && <span className="ml-1 text-red-400 text-[11px] font-semibold">· Overdue</span>}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {/* Dates row — only when no labels */}
+                {c.labels.length === 0 && (c.dueDate || c.startDate) && panel !== "dates" && (
+                  <div>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Dates</p>
+                    <button
+                      ref={datesBtnWrapRef as any}
+                      onClick={toggleDatesPanel}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-[13px] font-medium transition-colors ${
+                        isOverdue
+                          ? "bg-red-500/20 border-red-500/50 text-red-300 hover:bg-red-500/30"
+                          : "border-[#454f59] bg-[#22272b] text-gray-200 hover:bg-[#282e33] hover:border-[#5a6577]"
+                      }`}
+                    >
+                      <Calendar size={12} />
+                      <span>
+                        {c.startDate && (
+                          <>{new Date(c.startDate + "T00:00:00").toLocaleDateString("en", { month: "short", day: "numeric" })} – </>
+                        )}
+                        {new Date(c.dueDate! + "T00:00:00").toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}
+                        {c.dueTime && <>, {c.dueTime}</>}
+                      </span>
+                      <ChevronLeft size={11} className="rotate-180 opacity-60 ml-0.5" />
+                      {isOverdue && <span className="ml-1 text-red-400 text-[11px] font-semibold">· Overdue</span>}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
             {/* Label picker — Trello-style with list/create/edit views */}
@@ -707,7 +803,10 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
                     <div>
                       <label className="text-xs text-gray-400 mb-1 block font-semibold">Title</label>
                       <input value={newLabelName} onChange={e => setNewLabelName(e.target.value)} autoFocus placeholder="Label name…"
-                        className="w-full bg-[#1d2125] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50" />
+                        className={`w-full bg-[#1d2125] border rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none ${boardLabels.some(l => l.name.trim().toLowerCase() === newLabelName.trim().toLowerCase()) ? 'border-amber-500/70 focus:border-amber-500' : 'border-white/10 focus:border-blue-500/50'}`} />
+                      {newLabelName.trim() && boardLabels.some(l => l.name.trim().toLowerCase() === newLabelName.trim().toLowerCase()) && (
+                        <p className="text-[11px] text-amber-400 mt-1 flex items-center gap-1"><AlertTriangle size={10} /> A label with this name already exists.</p>
+                      )}
                     </div>
                     <div>
                       <label className="text-xs text-gray-400 mb-2 block font-semibold">Select a color</label>
@@ -739,7 +838,10 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
                     <div>
                       <label className="text-xs text-gray-400 mb-1 block font-semibold">Title</label>
                       <input value={editLabelName} onChange={e => setEditLabelName(e.target.value)} autoFocus
-                        className="w-full bg-[#1d2125] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50" />
+                        className={`w-full bg-[#1d2125] border rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none ${boardLabels.some(l => l.id !== editingLabel?.id && l.name.trim().toLowerCase() === editLabelName.trim().toLowerCase()) ? 'border-amber-500/70 focus:border-amber-500' : 'border-white/10 focus:border-blue-500/50'}`} />
+                      {editLabelName.trim() && boardLabels.some(l => l.id !== editingLabel?.id && l.name.trim().toLowerCase() === editLabelName.trim().toLowerCase()) && (
+                        <p className="text-[11px] text-amber-400 mt-1 flex items-center gap-1"><AlertTriangle size={10} /> A label with this name already exists.</p>
+                      )}
                     </div>
                     <div>
                       <label className="text-xs text-gray-400 mb-2 block font-semibold">Select a color</label>
@@ -763,71 +865,88 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
                 )}
               </div>
             )}
-            {/* Members shown */}
+            {/* Members */}
             {c.members.length > 0 && (
-              <div className="ml-8">
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Members</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {c.members.map(m => { const mem = allMembers.find((x: any) => x.name === m); const mPhoto = mem?.photo || mem?.photoURL || ""; return (
-                    <div key={m} className="flex items-center gap-1.5 bg-white/10 text-xs text-gray-200 px-2 py-1 rounded-full">
-                      <Avatar name={m} photo={mPhoto} size={18} />{m}<button onClick={() => removeMember(m)} className="text-gray-500 hover:text-white ml-0.5"><X size={9} /></button>
-                    </div>
-                  ); })}
+              <div className="sm:ml-7">
+                <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Members</p>
+                <div className="flex items-center">
+                  <div className="flex -space-x-2">
+                    {c.members.map(m => {
+                      const mem = allMembers.find((x: any) => x.name === m);
+                      const mPhoto = mem?.photo || mem?.photoURL || "";
+                      return (
+                        <div key={m} className="relative group/av">
+                          <button
+                            onClick={() => removeMember(m)}
+                            title={`Remove ${m}`}
+                            className="block rounded-full ring-2 ring-[#1d2125] hover:ring-red-500/70 transition-all"
+                          >
+                            <Avatar name={m} photo={mPhoto} size={30} />
+                          </button>
+                          <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 whitespace-nowrap px-2 py-1 rounded-lg bg-gray-900 text-white text-[11px] font-medium shadow-lg opacity-0 group-hover/av:opacity-100 transition-opacity z-30">
+                            {m}
+                            <span className="ml-1 text-red-400 text-[10px]">(click to remove)</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <button
+                    onClick={() => setPanel(panel === "members" ? "main" : "members")}
+                    className="ml-1.5 w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-gray-300 ring-2 ring-[#1d2125] transition-colors"
+                    title="Add member"
+                  >
+                    <Plus size={13} />
+                  </button>
                 </div>
-              </div>
-            )}
-            {/* Due date badge */}
-            {c.dueDate && panel !== "dates" && (
-              <div className="ml-8">
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Due date</p>
-                <button onClick={() => setPanel("dates")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${isOverdue ? "bg-red-500 text-white" : "bg-white/10 text-gray-200 hover:bg-white/20"}`}>
-                  <Calendar size={11} />{new Date(c.dueDate + "T00:00:00").toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}{isOverdue && " · Overdue"}
-                </button>
               </div>
             )}
             {/* Attachments shown */}
             {(c.attachments ?? []).length > 0 && (() => {
               const isImg = (url: string) => /\.(jpe?g|png|gif|webp|svg|bmp|ico)($|\?)/i.test(url);
               return (
-                <div className="ml-8">
-                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Attachments</p>
-                  <div className="space-y-2">
+                <div className="sm:ml-7">
+                  <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Attachments</p>
+                  <div className="space-y-1">
                     {(c.attachments ?? []).map(att => (
-                      <div key={att.id} className="flex items-start gap-2.5 bg-[#22272b] border border-white/10 rounded-lg overflow-hidden">
-                        {/* Thumbnail or icon */}
+                      <div key={att.id} className="flex items-center gap-2 px-2 py-1.5 bg-[#22272b] border border-white/10 rounded-lg hover:bg-[#282e33] transition-colors group">
+                        {/* Thumbnail or type icon */}
                         {isImg(att.url) ? (
-                          <button onClick={() => setLightboxUrl(att.url)}
-                            className="shrink-0 w-14 h-14 overflow-hidden bg-black/30 flex items-center justify-center hover:brightness-110 transition-all">
+                          <button onClick={() => setLightboxUrl(att.url)} className="shrink-0 w-8 h-8 rounded overflow-hidden border border-white/10 hover:brightness-110 transition-all">
                             <img src={att.url} alt={att.name} className="w-full h-full object-cover" />
                           </button>
                         ) : (
-                          <div className="shrink-0 w-14 h-14 flex items-center justify-center bg-white/5">
-                            {att.type === "link" ? <Link2 size={16} className="text-blue-400" /> : <FileText size={16} className="text-emerald-400" />}
+                          <div className="shrink-0 w-8 h-8 rounded bg-white/5 border border-white/10 flex items-center justify-center">
+                            {att.type === "link" ? <Link2 size={13} className="text-blue-400" /> : <FileText size={13} className="text-emerald-400" />}
                           </div>
                         )}
-                        {/* Info */}
-                        <div className="flex-1 min-w-0 py-2 pr-2">
-                          <a href={att.url} target="_blank" rel="noopener noreferrer"
-                            className="text-xs text-gray-200 hover:text-blue-300 font-medium block truncate leading-snug">{att.name}</a>
-                          <span className="text-[10px] text-gray-600">{att.type === "link" ? "Link" : "File"}</span>
-                          <div className="flex gap-2 mt-1 items-center flex-wrap">
-                            {isImg(att.url) && (
-                              <button onClick={() => setLightboxUrl(att.url)}
-                                className="text-[10px] text-blue-400 hover:text-blue-300 underline">View</button>
-                            )}
-                            {confirmRemoveAtt === att.id ? (
-                              <>
-                                <span className="text-[10px] text-amber-400 font-semibold">Remove?</span>
-                                <button onClick={() => { removeAttachment(att.id); setConfirmRemoveAtt(null); }}
-                                  className="text-[10px] bg-red-500/20 hover:bg-red-500/40 text-red-400 px-1.5 py-0.5 rounded font-semibold transition-colors">Yes</button>
-                                <button onClick={() => setConfirmRemoveAtt(null)}
-                                  className="text-[10px] bg-white/10 hover:bg-white/15 text-gray-400 px-1.5 py-0.5 rounded transition-colors">No</button>
-                              </>
-                            ) : (
+                        {/* Name */}
+                        <a href={att.url} target="_blank" rel="noopener noreferrer"
+                          className="flex-1 min-w-0 text-[13px] text-gray-200 hover:text-blue-300 font-medium truncate leading-none">
+                          {att.name}
+                        </a>
+                        {/* Actions — right side */}
+                        <div className="flex items-center gap-0.5 shrink-0 ml-2">
+                          {confirmRemoveAtt === att.id ? (
+                            <>
+                              <span className="text-[11px] text-amber-400 font-semibold mr-1">Remove?</span>
+                              <button onClick={() => { removeAttachment(att.id); setConfirmRemoveAtt(null); }}
+                                className="text-[11px] bg-red-500/20 hover:bg-red-500/40 text-red-400 px-2 py-0.5 rounded font-semibold transition-colors">Yes</button>
+                              <button onClick={() => setConfirmRemoveAtt(null)}
+                                className="text-[11px] bg-white/10 hover:bg-white/15 text-gray-400 px-2 py-0.5 rounded transition-colors ml-1">No</button>
+                            </>
+                          ) : (
+                            <>
+                              <button onClick={() => isImg(att.url) ? setLightboxUrl(att.url) : window.open(att.url, '_blank')}
+                                title="View" className="w-7 h-7 flex items-center justify-center rounded text-gray-500 hover:text-blue-400 hover:bg-white/10 transition-colors">
+                                <ExternalLink size={13} />
+                              </button>
                               <button onClick={() => setConfirmRemoveAtt(att.id)}
-                                className="text-[10px] text-gray-500 hover:text-red-400 transition-colors">Remove</button>
-                            )}
-                          </div>
+                                title="Remove" className="w-7 h-7 flex items-center justify-center rounded text-gray-500 hover:text-red-400 hover:bg-white/10 transition-colors">
+                                <Trash2 size={13} />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -836,45 +955,37 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
               );
             })()}
             {/* Description */}
-            <div className="ml-7">
-              <div className="flex items-center justify-between gap-2 mb-1.5">
-                <div className="flex items-center gap-1.5"><AlignLeft size={12} className="text-gray-400" /><p className="text-xs font-bold text-white">Description</p></div>
-                <div className="flex items-center gap-2">
-                  {descDraft !== c.description && (
-                    <span className="text-[9px] font-bold text-amber-400 border border-amber-400/40 bg-amber-400/10 px-1.5 py-0.5 rounded tracking-wider">UNSAVED CHANGES</span>
-                  )}
-                  {!descEditing && c.description && (
-                    <button onClick={() => setDescEditing(true)}
-                      className="px-2 py-0.5 bg-white/10 hover:bg-white/20 text-gray-300 text-[11px] font-medium rounded transition-colors">Edit</button>
-                  )}
-                </div>
+            <div className="sm:ml-7 mt-2">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2"><AlignLeft size={14} className="text-gray-400" /><p className="text-[14px] font-bold text-white">Description</p></div>
+                {descDraft !== c.description && (
+                  <span className="text-[9px] font-bold text-amber-400 border border-amber-400/40 bg-amber-400/10 px-1.5 py-0.5 rounded tracking-wider">UNSAVED CHANGES</span>
+                )}
               </div>
               {!descEditing ? (
-                <div onClick={() => setDescEditing(true)}
-                  className={`w-full min-h-[44px] cursor-text px-1 py-0.5 rounded-lg transition-colors hover:bg-white/5 ${
-                    !c.description ? 'border border-dashed border-white/10' : ''
-                  }`}>
+                <div onClick={() => isFullAccess ? setDescEditing(true) : undefined}
+                  className={`w-full min-h-[56px] ${isFullAccess ? 'cursor-text' : ''} px-3 py-2.5 rounded-lg transition-colors bg-[#22272b] border border-[#454f59] hover:border-[#5a6577]`}>
                   {c.description
-                    ? <p className="text-xs text-gray-300 leading-relaxed whitespace-pre-wrap">{c.description}</p>
-                    : <span className="text-xs text-gray-600">Add a more detailed description…</span>}
+                    ? <p className="text-[13px] text-gray-300 leading-relaxed whitespace-pre-wrap">{c.description}</p>
+                    : <span className="text-[13px] text-gray-500">Add a more detailed description…</span>}
                 </div>
               ) : (
                 <>
                   <textarea autoFocus value={descDraft} onChange={e => setDescDraft(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Escape') { setDescDraft(c.description); setDescEditing(false); } }}
-                    rows={3} placeholder="Add a more detailed description…"
-                    className="w-full bg-[#22272b] border border-blue-500/50 rounded-lg px-2.5 py-2 text-xs text-gray-300 placeholder-gray-500 focus:outline-none resize-none" />
-                  <div className="flex items-center gap-2 mt-1.5">
+                    rows={4} placeholder="Add a more detailed description…"
+                    className="w-full bg-[#22272b] border border-blue-500/60 rounded-lg px-3 py-2.5 text-[13px] text-gray-300 placeholder-gray-500 focus:outline-none resize-none leading-relaxed" />
+                  <div className="flex items-center gap-2 mt-2">
                     <button onClick={() => { save({ description: descDraft }); setC(p => ({ ...p, description: descDraft })); setDescEditing(false); }}
-                      className="px-3 py-1 bg-[#579dff] hover:bg-[#4c8ee6] text-[#1d2125] text-[11px] font-bold rounded-lg">Save</button>
+                      className="px-4 py-1.5 bg-[#579dff] hover:bg-[#4c8ee6] text-[#1d2125] text-[13px] font-bold rounded-md">Save</button>
                     <button onClick={() => { setDescDraft(c.description); setDescEditing(false); }}
-                      className="text-[11px] text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-white/10 transition-colors">Discard changes</button>
+                      className="text-[13px] text-gray-400 hover:text-white px-3 py-1.5 rounded-md hover:bg-white/10 transition-colors">Discard changes</button>
                   </div>
                 </>
               )}
             </div>
             {/* ── Divider after description ── */}
-            <div className="ml-7 mr-2 border-t border-white/[0.07] my-1" />
+            <div className="sm:ml-7 mr-2 border-t border-white/[0.07] my-1" />
             {/* Checklists */}
             {c.checklists.map(cl => {
               const clDone = cl.items.filter(i => i.done).length; const clTotal = cl.items.length;
@@ -882,21 +993,75 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
               const hidden = hiddenChecklists.has(cl.id);
               const visibleItems = hidden ? cl.items.filter(i => !i.done) : cl.items;
               return (
-                <div key={cl.id} className="ml-7 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5"><CheckSquare size={12} className="text-gray-400" /><p className="text-xs font-bold text-white uppercase tracking-wide">{cl.title}</p></div>
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => toggleHideChecked(cl.id)} className="px-2 py-0.5 bg-white/10 hover:bg-white/20 text-gray-300 text-[11px] rounded font-medium transition-colors">{hidden ? "Show checked items" : "Hide checked items"}</button>
-                      <button onClick={() => deleteChecklist(cl.id)} className="px-2 py-0.5 bg-white/10 hover:bg-white/20 text-gray-300 text-[11px] rounded font-medium transition-colors">Delete</button>
+                <div key={cl.id} className="sm:ml-7 space-y-2 pt-1">
+                  <div className="flex flex-wrap items-center gap-y-1.5 gap-x-2">
+                    <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                      <CheckSquare size={13} className="text-gray-400 shrink-0" />
+                      {editingChecklistId === cl.id ? (
+                        <input
+                          autoFocus
+                          value={editingChecklistTitle}
+                          onChange={e => setEditingChecklistTitle(e.target.value)}
+                          onBlur={() => {
+                            const t = editingChecklistTitle.trim().toUpperCase();
+                            if (t && t !== cl.title) save({ checklists: c.checklists.map(x => x.id === cl.id ? { ...x, title: t } : x) });
+                            setEditingChecklistId(null);
+                          }}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                            if (e.key === 'Escape') setEditingChecklistId(null);
+                          }}
+                          className="bg-[#1d2125] border border-blue-500/50 rounded px-2 py-0.5 text-[14px] font-bold text-white focus:outline-none w-full"
+                        />
+                      ) : (
+                        <p
+                          className="text-[14px] font-bold text-white cursor-pointer hover:text-blue-300 transition-colors truncate"
+                          onClick={() => { setEditingChecklistId(cl.id); setEditingChecklistTitle(cl.title); }}
+                          title="Click to rename"
+                        >{cl.title}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {cl.items.length > 0 && (
+                        <button
+                          onClick={() => clDone > 0 && toggleHideChecked(cl.id)}
+                          disabled={clDone === 0}
+                          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-[12px] font-medium transition-all duration-150 ${
+                            clDone === 0
+                              ? 'border-[#2e3540] text-gray-600 bg-[#1d2125] cursor-not-allowed opacity-50'
+                              : 'border-[#454f59] text-gray-200 hover:bg-[#282e33] hover:border-[#5a6577] hover:text-white bg-[#22272b] cursor-pointer'
+                          }`}>
+                          {hidden ? <><Eye size={12} /><span className="hidden sm:inline">Show checked</span></> : <><EyeOff size={12} /><span className="hidden sm:inline">Hide checked</span></>}
+                        </button>
+                      )}
+                      <button onClick={() => setDeleteChecklistConfirm(cl.id)}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-[#454f59] text-red-400 hover:bg-red-500/10 hover:border-red-500/40 hover:text-red-300 bg-[#22272b] text-[12px] font-medium transition-all duration-150">
+                        <Trash2 size={12} />
+                        <span className="hidden sm:inline">Delete Checklist</span>
+                      </button>
                     </div>
                   </div>
-                  <p className="text-[10px] text-gray-500">{clPct}%</p>
-                  <div className="h-1 bg-white/10 rounded-full overflow-hidden"><div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${clPct}%` }} /></div>
+                  {/* Delete confirmation bar */}
+                  {deleteChecklistConfirm === cl.id && (
+                    <div className="flex items-center justify-between gap-3 px-3 py-2 bg-red-500/10 border border-red-500/25 rounded-lg">
+                      <p className="text-[12px] text-red-400 font-medium">This will permanently delete the entire checklist and all its items.</p>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button onClick={() => setDeleteChecklistConfirm(null)}
+                          className="px-3 py-1 text-[12px] text-gray-400 hover:text-white rounded-md hover:bg-white/10 transition-colors">Cancel</button>
+                        <button onClick={() => { deleteChecklist(cl.id); setDeleteChecklistConfirm(null); }}
+                          className="flex items-center gap-1.5 px-3 py-1 bg-red-500 hover:bg-red-400 text-white text-[12px] font-bold rounded-md transition-colors">
+                          <Trash2 size={11} /> Yes, delete
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  <p className="text-[11px] text-gray-500 font-medium">{clPct}%</p>
+                  <div className="h-1.5 bg-white/10 rounded-full overflow-hidden"><div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${clPct}%` }} /></div>
                   <div className="space-y-0.5">
                     {visibleItems.map(item => (
                       <div key={item.id} className="flex items-center gap-2.5 group py-1 px-1.5 rounded-lg hover:bg-white/5 transition-colors duration-100 cursor-default">
                         <button onClick={() => toggleItem(cl.id, item.id)} className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center shrink-0 transition-all ${item.done ? "bg-blue-500 border-blue-500" : "border-gray-500 hover:border-blue-400"}`}>{item.done && <Check size={8} className="text-white" />}</button>
-                        <span className={`text-xs flex-1 ${item.done ? "line-through text-gray-500" : "text-gray-200"}`}>{item.text}</span>
+                        <span className={`text-[13px] flex-1 ${item.done ? "line-through text-gray-500" : "text-gray-300"}`}>{item.text.charAt(0).toUpperCase() + item.text.slice(1)}</span>
                         <button onClick={() => deleteItem(cl.id, item.id)} className="text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"><X size={10} /></button>
                       </div>
                     ))}
@@ -904,7 +1069,7 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
                   <div className="flex gap-1.5">
                     <input value={newItems[cl.id] ?? ""} onChange={e => setNewItems(p => ({ ...p, [cl.id]: e.target.value }))} onKeyDown={e => e.key === "Enter" && addItem(cl.id)} placeholder="Add an item…"
                       className="flex-1 bg-[#22272b] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50" />
-                    <button onClick={() => addItem(cl.id)} className="px-3 py-1.5 bg-[#579dff] hover:bg-[#4c8ee6] text-[#1d2125] text-[11px] font-bold rounded-lg">Add</button>
+                    <button onClick={() => addItem(cl.id)} className="px-3 py-1.5 bg-[#579dff] hover:bg-[#4c8ee6] text-[#1d2125] text-[13px] font-bold rounded-lg">Add</button>
                   </div>
                 </div>
               );
@@ -950,8 +1115,12 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
           >
             {/* Inner content: fixed 420px on desktop so width animation doesn't reflow; full width on mobile */}
             <div className="flex flex-col h-full lg:w-[420px] w-full">
-            <div className="flex items-center px-4 py-3 border-b border-white/5">
-              <div className="flex items-center gap-2 text-sm font-semibold text-white"><MessageSquare size={14} className="text-gray-400" />Comments</div>
+            {/* Header — Trello style: 'Comments and activity' */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 shrink-0">
+              <div className="flex items-center gap-2 text-[13px] font-bold text-white">
+                <MessageSquare size={14} className="text-gray-400" />
+                Comments and activity
+              </div>
             </div>
             {/* Comment input — shown if full access OR assigned to card */}
             {!canComment && (
@@ -971,7 +1140,7 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
                 .cm-box.cm-focused { border-color: #4c90e2 !important; box-shadow: 0 0 0 1px rgba(76,144,226,.25); background-color: #2c2d2e !important; }
               `}</style>
 
-              {/* Hidden file input for comment attachments — same 5MB limit as card */}
+              {/* Hidden file input for comment attachments — uploads and previews inline in comment */}
               <input
                 type="file"
                 ref={commentAttachRef}
@@ -980,8 +1149,21 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
                 onChange={async e => {
                   const file = e.target.files?.[0];
                   if (!file) return;
-                  await uploadFile(file);
-                  e.target.value = '';
+                  if (file.size > 5 * 1024 * 1024) { onToast('error', 'File too large — max 5 MB.'); return; }
+                  setUploadingCommentAttach(true);
+                  try {
+                    const base64 = await new Promise<string>((resolve, reject) => {
+                      const reader = new FileReader();
+                      reader.onload = () => resolve((reader.result as string).split(',')[1]);
+                      reader.onerror = reject;
+                      reader.readAsDataURL(file);
+                    });
+                    const resp = await apiFetch('/planner/upload', { method: 'POST', body: JSON.stringify({ base64, name: file.name, contentType: file.type, cardId: card.id }) });
+                    if (!resp.ok) throw new Error('Upload failed');
+                    const { url } = await resp.json();
+                    setPendingCommentAttach({ id: uid(), name: file.name, url, type: 'file' });
+                  } catch (err: any) { onToast('error', err?.message ?? 'Upload failed'); }
+                  finally { setUploadingCommentAttach(false); e.target.value = ''; }
                 }}
               />
 
@@ -1015,24 +1197,47 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
                 />
               </div>
 
+              {/* Pending comment attachment chip */}
+              {pendingCommentAttach && (
+                <div className="flex items-center gap-2 mt-2 px-2 py-1.5 bg-white/8 border border-white/10 rounded-lg">
+                  <Paperclip size={12} className="text-blue-400 shrink-0" />
+                  <span className="text-xs text-gray-300 truncate flex-1">{pendingCommentAttach.name}</span>
+                  <button onClick={() => setPendingCommentAttach(null)} className="text-gray-500 hover:text-red-400 transition-colors shrink-0"><X size={12} /></button>
+                </div>
+              )}
+              {uploadingCommentAttach && (
+                <div className="flex items-center gap-2 mt-2 px-2 py-1.5 bg-white/8 border border-white/10 rounded-lg">
+                  <Loader2 size={12} className="text-blue-400 animate-spin shrink-0" />
+                  <span className="text-xs text-gray-400">Uploading…</span>
+                </div>
+              )}
               {/* Bottom bar — Save (FB blue when text) + Attach — show when focused OR typing */}
-              {(commentFocused || comment.trim()) && (
+              {(commentFocused || comment.trim() || pendingCommentAttach) && (
                 <div className="flex items-center justify-between mt-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={sendComment}
+                      disabled={sendingComment || (!comment.trim() && !pendingCommentAttach)}
+                      className={`px-4 py-1.5 text-sm font-semibold rounded-lg transition-all duration-150 ${
+                        (comment.trim() || pendingCommentAttach)
+                          ? 'bg-[#1877F2] hover:bg-[#166FE5] text-white shadow-sm'
+                          : 'bg-white/8 text-gray-500 cursor-default'
+                      }`}>
+                      {sendingComment ? 'Saving…' : 'Save'}
+                    </button>
+                    <button
+                      onMouseDown={e => e.preventDefault()}
+                      onClick={() => { setComment(''); setPendingCommentAttach(null); setCommentFocused(false); }}
+                      className="px-3 py-1.5 text-sm text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
+                      Cancel
+                    </button>
+                  </div>
                   <button
-                    onClick={sendComment}
-                    disabled={sendingComment || !comment.trim()}
-                    className={`px-4 py-1.5 text-sm font-semibold rounded-lg transition-all duration-150 ${
-                      comment.trim()
-                        ? 'bg-[#1877F2] hover:bg-[#166FE5] text-white shadow-sm'
-                        : 'bg-white/8 text-gray-500 cursor-default'
-                    }`}>
-                    {sendingComment ? 'Saving…' : 'Save'}
-                  </button>
-                  <button
-                    onMouseDown={e => e.preventDefault()} // keep focus on textarea
+                    onMouseDown={e => e.preventDefault()}
                     onClick={() => commentAttachRef.current?.click()}
                     title="Attach file (max 5 MB)"
-                    className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
+                    disabled={uploadingCommentAttach || !!pendingCommentAttach}
+                    className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                     <Paperclip size={15} />
                   </button>
                 </div>
@@ -1072,74 +1277,108 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
               )}
               {/* Comment bubbles — Trello-style */}
               {comments.map(cm => (
-                <div key={cm.id} className="flex items-start gap-2.5 px-4 py-3 border-b border-white/5 group">
-                  <Avatar name={cm.authorName} photo={cm.authorPhoto} size={28} />
+                <div key={cm.id} className="flex items-start gap-2.5 px-3 py-2.5 border-b border-white/[0.06] group">
+                  <Avatar name={cm.authorName} photo={cm.authorPhoto} size={30} />
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-bold text-white">{cm.authorName}</span>
-                      <span className="text-[10px] text-gray-500">{fullTimestamp(cm.createdAt)}</span>
+                    <div className="flex items-baseline gap-2 mb-2">
+                      <span className="text-[13px] font-bold text-white leading-snug">{cm.authorName}</span>
+                      <span className="text-[11px] font-medium text-blue-400 hover:underline cursor-default leading-snug">{fullTimestamp(cm.createdAt)}</span>
                     </div>
-                    {/* Message bubble — @mention highlighting using known member names */}
-                    <div className="bg-[#282f35] rounded-xl rounded-tl-sm px-3 py-2">
-                      <p className="text-sm text-gray-200 break-words leading-relaxed">
-                        {(() => {
-                          if (!c.members.length) return cm.text;
-                          // Build regex from known member names (longest first to avoid partial match)
-                          const sorted = [...c.members].sort((a, b) => b.length - a.length);
-                          const escaped = sorted.map(m => m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-                          const re = new RegExp(`(@(?:${escaped.join('|')}))`, 'g');
-                          const parts = cm.text.split(re);
-                          return parts.map((part, i) =>
-                            sorted.some(m => part === `@${m}`) ? (
-                              <span key={i} className="inline-flex items-center bg-blue-500/20 text-blue-300 text-xs font-semibold px-1.5 py-0.5 rounded-md">{part}</span>
-                            ) : <span key={i}>{part}</span>
-                          );
-                        })()}
-                      </p>
-                    </div>
-                    {/* Active reactions — read from Firestore-backed cm.reactions */}
-                    {Object.keys(cm.reactions ?? {}).length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-1.5 ml-1">
-                        {(Object.entries(cm.reactions!) as [string, string[]][]).map(([emoji, users]) => (
-                          <button key={emoji} onClick={() => toggleEmoji(cm.id, emoji)}
-                            className={`flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs transition-colors border ${
-                              users.includes(currentUser?.name || '')
-                                ? 'bg-blue-500/30 border-blue-400/50 text-blue-200'
-                                : 'bg-white/8 border-white/10 text-gray-400 hover:bg-white/12'
-                            }`}>
-                            {emoji}{users.length > 1 ? ` ${users.length}` : ''}
-                          </button>
+                    {/* Message bubble — inline editable when editing */}
+                    {editingCommentId === cm.id ? (
+                      <div className="w-full">
+                        <textarea
+                          value={editingCommentText}
+                          onChange={e => setEditingCommentText(e.target.value)}
+                          autoFocus rows={2}
+                          className="w-full bg-[#1d2125] border border-blue-500/50 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none resize-none"
+                        />
+                        <div className="flex gap-2 mt-1.5">
+                          <button
+                            onClick={async () => {
+                              if (!editingCommentText.trim()) return;
+                              await apiFetch(`/planner/cards/${card.id}/comments/${cm.id}`, { method: 'PATCH', body: JSON.stringify({ text: editingCommentText.trim() }) });
+                              setEditingCommentId(null);
+                            }}
+                            className="px-3 py-1 bg-blue-500 hover:bg-blue-400 text-white text-xs font-bold rounded-md transition-colors">Save</button>
+                          <button onClick={() => setEditingCommentId(null)}
+                            className="px-3 py-1 text-xs text-gray-400 hover:text-white hover:bg-white/10 rounded-md transition-colors">Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="w-full bg-[#282f35] rounded-lg px-3 py-2 text-[13px] leading-relaxed">
+                        {cm.text && <p className="text-sm text-gray-200 break-words leading-relaxed">
+                          {(() => {
+                            if (!c.members.length) return cm.text;
+                            const sorted = [...c.members].sort((a, b) => b.length - a.length);
+                            const escaped = sorted.map(m => m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+                            const re = new RegExp(`(@(?:${escaped.join('|')}))`, 'g');
+                            const parts = cm.text.split(re);
+                            return parts.map((part, i) =>
+                              sorted.some(m => part === `@${m}`) ? (
+                                <span key={i} className="inline-flex items-center bg-blue-500/20 text-blue-300 text-xs font-semibold px-1.5 py-0.5 rounded-md">{part}</span>
+                              ) : <span key={i}>{part}</span>
+                            );
+                          })()}
+                        </p>}
+                        {/* Inline attachment preview inside comment bubble */}
+                        {cm.attachments?.map(att => (
+                          <a key={att.id} href={att.url} target="_blank" rel="noopener noreferrer"
+                            className="flex items-center gap-2 mt-2 px-2.5 py-2 bg-white/8 hover:bg-white/12 border border-white/10 rounded-lg transition-colors group/att">
+                            {att.url.match(/\.(jpe?g|png|gif|webp|svg)$/i)
+                              ? <img src={att.url} alt={att.name} className="w-10 h-10 object-cover rounded-md shrink-0 border border-white/10" />
+                              : <div className="w-10 h-10 bg-blue-500/20 rounded-md flex items-center justify-center shrink-0"><Paperclip size={16} className="text-blue-400" /></div>
+                            }
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium text-gray-200 truncate group-hover/att:text-blue-300 transition-colors">{att.name}</p>
+                              <p className="text-[10px] text-gray-500 mt-0.5">Attachment · Click to view</p>
+                            </div>
+                            <ExternalLink size={12} className="text-gray-600 group-hover/att:text-blue-400 shrink-0 transition-colors" />
+                          </a>
                         ))}
                       </div>
                     )}
-                    {/* Emoji picker popover */}
-                    {emojiPickerFor === cm.id && (
-                      <div className="relative z-10">
-                        <div className="absolute left-0 top-1 bg-[#1d2125] border border-white/15 rounded-xl shadow-2xl p-2 flex flex-wrap gap-1 w-52">
-                          {QUICK_EMOJIS.map(e => (
-                            <button key={e} onClick={() => toggleEmoji(cm.id, e)}
-                              className="text-base w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors">{e}</button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {/* Reactions + Reply */}
-                    <div className="flex items-center gap-2 mt-1.5 ml-1">
-                      <button onClick={() => setEmojiPickerFor(prev => prev === cm.id ? null : cm.id)}
-                        className={`transition-colors ${emojiPickerFor === cm.id ? "text-blue-400" : "text-gray-600 hover:text-gray-400"}`}><Smile size={13} /></button>
-                      <span className="text-gray-700 text-xs">·</span>
+
+                    {/* Action bar — icon buttons with tooltips */}
+                    <div className="flex items-center gap-1 mt-1.5 ml-0.5">
+                      {(cm.authorName === currentUser?.name || isFullAccess) && editingCommentId !== cm.id && (
+                        <button onClick={() => { setEditingCommentId(cm.id); setEditingCommentText(cm.text); }}
+                          title="Edit" className="relative group/tip w-6 h-6 flex items-center justify-center rounded text-gray-600 hover:text-blue-400 hover:bg-white/10 transition-colors">
+                          <Pencil size={11} />
+                          <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-1.5 py-0.5 rounded bg-gray-900 text-white text-[10px] whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity">Edit</span>
+                        </button>
+                      )}
                       <button onClick={() => {
                         const text = `@${cm.authorName} `;
                         setComment(text);
-                        setEmojiPickerFor(null);
                         setTimeout(() => {
                           const el = commentTextareaRef.current;
                           if (el) { el.focus(); el.setSelectionRange(text.length, text.length); }
                         }, 50);
-                      }} className="text-[11px] text-gray-500 hover:text-gray-300 font-medium transition-colors">Reply</button>
+                      }} title="Reply" className="relative group/tip w-6 h-6 flex items-center justify-center rounded text-gray-600 hover:text-gray-300 hover:bg-white/10 transition-colors">
+                        <CornerUpLeft size={11} />
+                        <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-1.5 py-0.5 rounded bg-gray-900 text-white text-[10px] whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity">Reply</span>
+                      </button>
+                      {(cm.authorName === currentUser?.name || isFullAccess) && (
+                        deleteCommentConfirm === cm.id ? (
+                          <span className="flex items-center gap-1.5 ml-1">
+                            <span className="text-[11px] text-red-400 font-medium">Delete?</span>
+                            <button onClick={() => { deleteComment(cm.id); setDeleteCommentConfirm(null); }}
+                              className="text-[11px] font-bold text-red-400 hover:text-red-300 transition-colors">Yes</button>
+                            <span className="text-gray-700 text-xs">·</span>
+                            <button onClick={() => setDeleteCommentConfirm(null)}
+                              className="text-[11px] text-gray-500 hover:text-gray-300 transition-colors">No</button>
+                          </span>
+                        ) : (
+                          <button onClick={() => setDeleteCommentConfirm(cm.id)}
+                            title="Delete" className="relative group/tip w-6 h-6 flex items-center justify-center rounded text-gray-600 hover:text-red-400 hover:bg-white/10 transition-colors">
+                            <Trash2 size={11} />
+                            <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-1.5 py-0.5 rounded bg-gray-900 text-white text-[10px] whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity">Delete</span>
+                          </button>
+                        )
+                      )}
                     </div>
                   </div>
-                  <button onClick={() => deleteComment(cm.id)} className="text-gray-700 hover:text-red-400 opacity-0 group-hover:opacity-100 shrink-0 mt-1"><X size={11} /></button>
                 </div>
               ))}
 
@@ -1149,13 +1388,15 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
       </div>{/* /body */}
       </div>{/* /card */}
 
-      {/* ── Floating Comments pill — sits BELOW the card, separated, Trello-style */}
-      <div className="flex justify-center mt-3 shrink-0" onClick={e => e.stopPropagation()}>
+      {/* ── Bottom tab bar ── */}
+      <div
+        className="shrink-0 flex items-center justify-center px-4"
+        onClick={e => e.stopPropagation()}
+      >
         <button
           onClick={() => {
             const opening = !showCommentsPanel;
             if (!opening) {
-              // HIDING: save comments scroll position, then smooth scroll card to top, then collapse
               if (commentsThreadRef.current) {
                 savedCommentsScrollRef.current = commentsThreadRef.current.scrollTop;
               }
@@ -1163,7 +1404,6 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
               bodyWrapperRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
               setTimeout(() => setShowCommentsPanel(false), 350);
             } else {
-              // SHOWING: expand immediately, then restore scroll position
               setShowCommentsPanel(true);
               setTimeout(() => {
                 if (window.innerWidth >= 1024) {
@@ -1182,23 +1422,26 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
               }, 340);
             }
           }}
-          className={`flex items-center gap-2.5 px-5 py-2.5 text-sm font-semibold rounded-full shadow-2xl transition-all duration-200 ${
-            showCommentsPanel
-              ? 'text-blue-300 hover:text-blue-200'
-              : 'text-gray-300 hover:text-white'
-          }`}
+          className="flex items-center gap-2 transition-all duration-200 rounded hover:opacity-80"
           style={{
-            backgroundColor: 'rgba(30,33,38,0.92)',
-            backdropFilter: 'blur(12px)',
-            WebkitBackdropFilter: 'blur(12px)',
-            border: '1px solid rgba(255,255,255,0.10)',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
+            backgroundColor: 'rgb(17, 20, 22)',
+            border: '1px solid rgba(100, 108, 118, 0.35)',
+            borderRadius: '5px',
+            marginBlock: '0.5rem',
+            paddingInline: '14px',
+            paddingBlock: '10px',
           }}
         >
-          <MessageSquare size={15} className={showCommentsPanel ? 'text-blue-400' : 'text-gray-400'} />
-          {showCommentsPanel ? 'Hide comments' : 'Show comments'}
-          {showCommentsPanel && (
-            <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+          <MessageSquare size={16} className="text-blue-400" />
+          {/* Label + underline — shown sm+ */}
+          <span className="flex flex-col items-center">
+            <span className="text-[13px] font-semibold text-blue-400 leading-none">Comments</span>
+            <span className="mt-1 block w-6 h-[2.5px] rounded-full bg-blue-500" />
+          </span>
+          {comments.length > 0 && (
+            <span className="text-[11px] font-bold text-blue-300 bg-blue-500/20 px-1.5 py-0.5 rounded-full leading-none">
+              {comments.length}
+            </span>
           )}
         </button>
       </div>
@@ -1267,7 +1510,9 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
                 const isStart        = draftStartEnabled && ymd === draftStart;
                 const isToday        = ymd === todayYMD;
                 const isPast         = ymd < todayYMD;                          // before today — blocked
-                const noneChecked    = !draftStartEnabled && !draftDue;         // no checkbox active
+                // due checkbox is active if draftDue is filled OR calTarget is 'due' (checked but not yet picked)
+                const dueEnabled     = !!draftDue || calTarget === 'due';
+                const noneChecked    = !draftStartEnabled && !dueEnabled;       // no checkbox active
                 const isDisabled     = isPast || noneChecked;
                 return (
                   <button key={day} onClick={() => selectCalDay(day)}
@@ -1311,11 +1556,12 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
                   {draftStartEnabled && <Check size={8} className="text-white" />}
                 </button>
                 <div className="flex-1 flex items-center gap-1">
-                  <input type="text" readOnly placeholder="M/D/YYYY"
+                  <input type="text" readOnly placeholder="M/D/YYYY" tabIndex={-1}
                     value={draftStart && draftStartEnabled ? new Date(draftStart + "T12:00:00").toLocaleDateString("en", { month: "numeric", day: "numeric", year: "numeric" }) : ""}
                     onClick={() => { setDraftStartEnabled(true); setCalTarget('start'); }}
-                    className={`flex-1 min-w-0 bg-[#1d2125] border border-white/10 rounded px-2 py-1 text-[11px] cursor-pointer focus:outline-none focus:border-blue-500/40 ${
-                      draftStartEnabled && draftStart ? "text-white" : "text-gray-500"}`}
+                    className={`flex-1 min-w-0 bg-[#1d2125] border rounded px-2 py-1 text-[11px] cursor-pointer outline-none ${
+                      draftStartEnabled && draftStart ? "text-white" : "text-gray-500"} ${
+                      calTarget === 'start' ? "border-blue-500/60" : "border-white/10"}`}
                   />
                   {draftStartEnabled && draftStart && (
                     <input type="time" value={draftStartTime} onChange={e => setDraftStartTime(e.target.value)}
@@ -1331,12 +1577,14 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
               <div className="flex items-center gap-1.5">
                 <button onClick={() => {
                     if (draftDue) {
-                      // Unchecking: clear the due date so stale value doesn't persist
+                      // Unchecking: clear the due date
                       setDraftDue("");
                       setDraftTime("");
+                      setCalTarget('start');
                     } else {
-                      // Checking: activate with today's date as default
-                      setDraftDue(todayYMD);
+                      // Checking: leave blank — user will pick from calendar
+                      setDraftDue("");
+                      setCalTarget('due');
                     }
                   }}
                   className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
@@ -1344,10 +1592,12 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
                   {draftDue && <Check size={8} className="text-white" />}
                 </button>
                 <div className="flex-1 flex items-center gap-1">
-                  <input type="text" readOnly placeholder="M/D/YYYY"
+                  <input type="text" readOnly placeholder="M/D/YYYY" tabIndex={-1}
                     value={draftDue ? new Date(draftDue + "T12:00:00").toLocaleDateString("en", { month: "numeric", day: "numeric", year: "numeric" }) : ""}
-                    className={`flex-1 min-w-0 bg-[#1d2125] border border-white/10 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-blue-500/40 ${
-                      draftDue ? "text-white" : "text-gray-500"}`}
+                    onClick={() => { setCalTarget('due'); if (!draftDue) setDraftDue(""); }}
+                    className={`flex-1 min-w-0 bg-[#1d2125] border rounded px-2 py-1 text-[11px] cursor-pointer outline-none ${
+                      draftDue ? "text-white" : "text-gray-500"} ${
+                      calTarget === 'due' ? "border-blue-500/60" : "border-white/10"}`}
                   />
                   {draftDue && (
                     <input type="time" value={draftTime} onChange={e => setDraftTime(e.target.value)}
@@ -1373,16 +1623,34 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
               );
             })()}
           </div>
-          {/* ── Reminder ── */}
+          {/* ── Reminder — custom dropdown always opens downward ── */}
           <div className="px-3 pb-2.5 space-y-1 border-t border-white/5 pt-2.5">
             <p className="text-[10px] font-semibold text-gray-400">Set due date reminder</p>
-            <select value={draftReminder} onChange={e => setDraftReminder(e.target.value)}
-              className="w-full bg-[#1d2125] border border-white/10 rounded px-2 pr-6 py-1.5 text-[11px] text-white focus:outline-none">
-              <option value="none">None</option>
-              <option value="1d">1 Day before</option>
-              <option value="2d">2 Days before</option>
-              <option value="1w">1 Week before</option>
-            </select>
+            <div ref={reminderRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setReminderOpen(o => !o)}
+                onBlur={() => setTimeout(() => setReminderOpen(false), 150)}
+                className="w-full flex items-center justify-between bg-[#1d2125] border border-white/10 rounded px-2.5 py-1.5 text-[11px] text-white focus:outline-none focus:border-blue-500/50 hover:border-white/20 transition-colors">
+                <span>{draftReminder === 'none' ? 'None' : draftReminder === '1d' ? '1 Day before' : draftReminder === '2d' ? '2 Days before' : '1 Week before'}</span>
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" className={`text-gray-400 transition-transform ${reminderOpen ? 'rotate-180' : ''}`}><path d="M1 3l4 4 4-4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>
+              </button>
+              {reminderOpen && (
+                <div className="absolute bottom-full left-0 right-0 mb-1 bg-[#22272b] border border-white/15 rounded-lg shadow-2xl z-[200]">
+                  {([['none','None'],['1d','1 Day before'],['2d','2 Days before'],['1w','1 Week before']] as [string,string][]).map(([val, label]) => (
+                    <button key={val} type="button"
+                      onMouseDown={e => { e.preventDefault(); setDraftReminder(val); setReminderOpen(false); }}
+                      className={`w-full flex items-center gap-2 px-3 py-2 text-[11px] text-left transition-colors hover:bg-white/8 ${
+                        draftReminder === val ? 'text-blue-300 bg-blue-500/10' : 'text-gray-200'
+                      }`}>
+                      {draftReminder === val && <span className="text-blue-400">✓</span>}
+                      {draftReminder !== val && <span className="w-3" />}
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <p className="text-[10px] text-gray-600 leading-tight">Reminders will be sent to all members and watchers of this card.</p>
           </div>
           {/* ── Save ── */}
@@ -1428,7 +1696,7 @@ function MoveModal({ card, boards, currentUser, allMembers, onClose, onMoved, on
   useEffect(() => {
     if (!destBoard) return;
     setLoadingLists(true);
-    apiFetch(`/playground/boards/${destBoard}/lists`)
+    apiFetch(`/planner/boards/${destBoard}/lists`)
       .then(r => r.json())
       .then((data: PgList[]) => {
         const active = Array.isArray(data) ? data.filter(l => !l.archived) : [];
@@ -1445,27 +1713,28 @@ function MoveModal({ card, boards, currentUser, allMembers, onClose, onMoved, on
   const doMove = async () => {
     setMoving(true);
     try {
-      const r = await apiFetch(`/playground/cards/${card.id}/move`, { method: "PATCH", body: JSON.stringify({ boardId: destBoard, listId: destList, position }) });
+      const r = await apiFetch(`/planner/cards/${card.id}/move`, { method: "PATCH", body: JSON.stringify({ boardId: destBoard, listId: destList, position }) });
       if (!r.ok) throw new Error();
       const fromList = boardLists.find(l => l.id === card.listId)?.title ?? "unknown";
       const toList = boardLists.find(l => l.id === destList)?.title ?? "unknown";
-      apiFetch(`/playground/cards/${card.id}/activity`, { method: "POST", body: JSON.stringify({ type: "move", actorName: currentUser?.name || "Someone", actorPhoto: currentUser?.photo || "", text: `moved this card from ${fromList} to ${toList}` }) }).catch(() => {});
-      // Notify all card members about the move (spam-guarded)
+      apiFetch(`/planner/cards/${card.id}/activity`, { method: "POST", body: JSON.stringify({ type: "move", actorName: currentUser?.name || "Someone", actorPhoto: currentUser?.photo || "", text: `moved this card from ${fromList} to ${toList}` }) }).catch(() => {});
+      // Notify all card members about the move — single batch request
       if (allMembers?.length && card.members?.length) {
         const actorMember = allMembers.find((m: any) => m.name === currentUser?.name);
         const actorId = actorMember?.id || currentUser?.name || 'unknown';
         const boardTitle = boards.find(b => b.id === destBoard)?.title || 'Planner';
-        card.members.forEach((memberName: string) => {
-          const recipient = allMembers.find((m: any) => m.name === memberName);
-          if (!recipient?.id) return;
+        const recipientIds = card.members
+          .map((name: string) => allMembers.find((m: any) => m.name === name)?.id)
+          .filter((id: string | undefined): id is string => !!id && id !== actorId);
+        if (recipientIds.length) {
           apiFetch('/planner/notify', { method: 'POST', body: JSON.stringify({
             actorId, actorName: currentUser?.name || 'Someone',
             actorPhoto: currentUser?.photo || '',
-            recipientId: recipient.id,
+            recipientIds,
             type: 'planner_moved', cardId: card.id,
             cardTitle: card.title, boardName: boardTitle,
           }) }).catch(() => {});
-        });
+        }
       }
       onToast("success", "Card moved!"); onMoved();
     }
@@ -1552,7 +1821,7 @@ function BoardSettings({ board, onClose, onSaved, onArchive, onToast }:
   const [newFieldOptions, setNewFieldOptions] = useState("");
   const save = async () => {
     setSaving(true);
-    try { await apiFetch(`/playground/boards/${board.id}`, { method: "PUT", body: JSON.stringify({ title, color, description: desc, customFieldDefs: defs }) }); onSaved({ ...board, title, color, description: desc, customFieldDefs: defs }); onToast("success", "Saved!"); }
+    try { await apiFetch(`/planner/boards/${board.id}`, { method: "PUT", body: JSON.stringify({ title, color, description: desc, customFieldDefs: defs }) }); onSaved({ ...board, title, color, description: desc, customFieldDefs: defs }); onToast("success", "Saved!"); }
     catch { onToast("error", "Failed"); } finally { setSaving(false); }
   };
   const addField = () => {
@@ -1567,7 +1836,7 @@ function BoardSettings({ board, onClose, onSaved, onArchive, onToast }:
         <div className="space-y-4">
           <div><label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1 block">Name</label><input value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-[#1d2125] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none" /></div>
           <div><label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1 block">Description</label><textarea value={desc} onChange={e => setDesc(e.target.value)} rows={2} className="w-full bg-[#1d2125] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none resize-none" /></div>
-          <div><label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2 block">Color</label><div className="flex flex-wrap gap-2">{BOARD_COLORS.map(bc => <button key={bc} onClick={() => setColor(bc)} style={{ backgroundColor: bc }} className={`w-8 h-8 rounded-lg transition-all ${color === bc ? "ring-2 ring-white scale-110" : ""}`} />)}</div></div>
+          <div><label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2 block">Color</label><div className="flex flex-wrap gap-2">{BOARD_COLORS.map(bc => <button key={bc} onClick={() => setColor(bc)} style={{ background: bc }} className={`w-8 h-8 rounded-lg transition-all ${color === bc ? "ring-2 ring-white scale-110" : ""}`} />)}</div></div>
           <div className="flex gap-2 pt-2 border-t border-white/10">
             <button onClick={() => onArchive(board.id)} className="flex-1 py-2 bg-white/5 hover:bg-amber-500/20 text-gray-300 hover:text-amber-400 text-sm rounded-xl flex items-center justify-center gap-1.5"><Archive size={13} /> Archive Board</button>
             <button onClick={save} disabled={saving} className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl disabled:opacity-50">{saving ? "Saving…" : "Save"}</button>
@@ -1585,6 +1854,7 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
   const [cards, setCards] = useState<Card[]>([]);
   const [activeBoard, setActiveBoard] = useState<Board | null>(null);
   const [loading, setLoading] = useState(false);
+  const [boardsLoading, setBoardsLoading] = useState(true);
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
   const [moveCard, setMoveCard] = useState<Card | null>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -1602,6 +1872,14 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
   const [archivedBoards, setArchivedBoards] = useState<Board[]>([]);
   const [showArchivedBoards, setShowArchivedBoards] = useState(false);
   const [selectedArchivedBoards, setSelectedArchivedBoards] = useState<Set<string>>(new Set());
+  const [boardMenuId, setBoardMenuId] = useState<string | null>(null);
+  const [archiveBoardConfirm, setArchiveBoardConfirm] = useState<string | null>(null);
+  const [bulkArchiveMode, setBulkArchiveMode] = useState(false);
+  const [selectedBulkBoards, setSelectedBulkBoards] = useState<Set<string>>(new Set());
+  const [bulkArchiveConfirm, setBulkArchiveConfirm] = useState(false);
+  const [bulkRestoreConfirm, setBulkRestoreConfirm] = useState(false);
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
+  const [deleteCardConfirm, setDeleteCardConfirm] = useState<string | null>(null);
   type CardRestoreDialog = { cardId: string; cardTitle: string; listTitle: string; listId: string; };
   const [cardRestoreDialog, setCardRestoreDialog] = useState<CardRestoreDialog | null>(null);
   const [undoCard, setUndoCard] = useState<Card | null>(null);
@@ -1609,8 +1887,10 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
   const cardInputRef = useRef<HTMLInputElement>(null);
 
   const fetchBoards = useCallback(async () => {
-    try { const r = await apiFetch("/playground/boards"); const data = await r.json(); setBoards(Array.isArray(data) ? data.filter((b: Board) => !b.archived) : []); }
+    setBoardsLoading(true);
+    try { const r = await apiFetch("/planner/boards"); const data = await r.json(); setBoards(Array.isArray(data) ? data.filter((b: Board) => !b.archived) : []); }
     catch { onToast("error", "Failed to load boards"); }
+    finally { setBoardsLoading(false); }
   }, []);
 
   useEffect(() => { fetchBoards(); }, [fetchBoards]);
@@ -1618,7 +1898,7 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
   const fetchBoardData = useCallback(async (boardId: string) => {
     setLoading(true);
     try {
-      const [lr, cr] = await Promise.all([apiFetch(`/playground/boards/${boardId}/lists`), apiFetch(`/playground/boards/${boardId}/cards`)]);
+      const [lr, cr] = await Promise.all([apiFetch(`/planner/boards/${boardId}/lists`), apiFetch(`/planner/boards/${boardId}/cards`)]);
       const [ls, cs] = await Promise.all([lr.json(), cr.json()]);
       setLists(Array.isArray(ls) ? ls : []); setCards(Array.isArray(cs) ? cs : []);
     } catch { onToast("error", "Failed to load board"); } finally { setLoading(false); }
@@ -1629,7 +1909,7 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
   const createBoard = async () => {
     if (!newBoardTitle.trim()) return;
     try {
-      const r = await apiFetch("/playground/boards", { method: "POST", body: JSON.stringify({ title: newBoardTitle.trim(), color: newBoardColor }) });
+      const r = await apiFetch("/planner/boards", { method: "POST", body: JSON.stringify({ title: newBoardTitle.trim(), color: newBoardColor }) });
       const { id } = await r.json();
       const nb: Board = { id, title: newBoardTitle.trim(), color: newBoardColor, description: "", archived: false, customFieldDefs: [] };
       setNewBoardTitle(""); setShowNewBoard(false); await fetchBoards(); openBoard(nb);
@@ -1638,41 +1918,42 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
 
   const createList = async () => {
     if (!newListTitle.trim() || !activeBoard) return;
-    try { await apiFetch(`/playground/boards/${activeBoard.id}/lists`, { method: "POST", body: JSON.stringify({ title: newListTitle.trim() }) }); setNewListTitle(""); setAddingList(false); await fetchBoardData(activeBoard.id); }
+    try { await apiFetch(`/planner/boards/${activeBoard.id}/lists`, { method: "POST", body: JSON.stringify({ title: newListTitle.trim().toUpperCase() }) }); setNewListTitle(""); setAddingList(false); await fetchBoardData(activeBoard.id); }
     catch { onToast("error", "Failed to create list"); }
   };
 
   const createCard = async (listId: string) => {
     if (!newCardTitle.trim() || !activeBoard) return;
     try {
-      const r = await apiFetch("/playground/cards", { method: "POST", body: JSON.stringify({ boardId: activeBoard.id, listId, title: newCardTitle.trim() }) });
+      const cap = (s: string) => s.trim().replace(/\b\w/g, c => c.toUpperCase());
+      const r = await apiFetch("/planner/cards", { method: "POST", body: JSON.stringify({ boardId: activeBoard.id, listId, title: cap(newCardTitle.trim()) }) });
       const { id } = await r.json();
       const listTitle = lists.find(l => l.id === listId)?.title ?? "this list";
-      apiFetch(`/playground/cards/${id}/activity`, { method: "POST", body: JSON.stringify({ type: "create", actorName: currentUser?.name || "Someone", actorPhoto: currentUser?.photo || "", text: `added this card to ${listTitle}` }) }).catch(() => {});
+      apiFetch(`/planner/cards/${id}/activity`, { method: "POST", body: JSON.stringify({ type: "create", actorName: currentUser?.name || "Someone", actorPhoto: currentUser?.photo || "", text: `added this card to ${listTitle}` }) }).catch(() => {});
       setNewCardTitle(""); setAddingCard(null); await fetchBoardData(activeBoard.id);
     } catch { onToast("error", "Failed to create card"); }
   };
 
   const archiveList = async (listId: string) => {
-    try { await apiFetch(`/playground/lists/${listId}`, { method: "PUT", body: JSON.stringify({ archived: true }) }); setListMenuId(null); if (activeBoard) await fetchBoardData(activeBoard.id); onToast("success", "List archived"); }
+    try { await apiFetch(`/planner/lists/${listId}`, { method: "PUT", body: JSON.stringify({ archived: true }) }); setListMenuId(null); if (activeBoard) await fetchBoardData(activeBoard.id); onToast("success", "List archived"); }
     catch { onToast("error", "Failed"); }
   };
 
   const deleteList = async (listId: string) => {
     if (!confirm("Delete this list and all its cards?")) return;
-    try { await apiFetch(`/playground/lists/${listId}`, { method: "DELETE" }); setListMenuId(null); if (activeBoard) await fetchBoardData(activeBoard.id); }
+    try { await apiFetch(`/planner/lists/${listId}`, { method: "DELETE" }); setListMenuId(null); if (activeBoard) await fetchBoardData(activeBoard.id); }
     catch { onToast("error", "Failed"); }
   };
 
-  const archiveBoard = async (id: string) => {
-    try { await apiFetch(`/playground/boards/${id}`, { method: "PUT", body: JSON.stringify({ archived: true }) }); setShowSettings(false); setActiveBoard(null); await fetchBoards(); onToast("success", "Board archived"); }
-    catch { onToast("error", "Failed"); }
+  const archiveBoard = async (id: string, silent = false) => {
+    try { await apiFetch(`/planner/boards/${id}`, { method: "PUT", body: JSON.stringify({ archived: true }) }); setShowSettings(false); setActiveBoard(null); await fetchBoards(); if (!silent) onToast("success", "Board archived"); }
+    catch { if (!silent) onToast("error", "Failed to archive board"); }
   };
 
   const archiveCard = async (id: string) => {
     const target = cards.find(c => c.id === id) ?? null;
     try {
-      await apiFetch(`/playground/cards/${id}`, { method: "PUT", body: JSON.stringify({ archived: true }) });
+      await apiFetch(`/planner/cards/${id}`, { method: "PUT", body: JSON.stringify({ archived: true }) });
       setSelectedCard(null);
       if (activeBoard) await fetchBoardData(activeBoard.id);
       // Show undo bar for 5s (this acts as the success confirmation)
@@ -1705,14 +1986,14 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
         }
         if (forceRestoreList && archivedParent) {
           try {
-            await apiFetch(`/playground/lists/${archivedParent.id}`, { method: "PUT", body: JSON.stringify({ archived: false }) });
+            await apiFetch(`/planner/lists/${archivedParent.id}`, { method: "PUT", body: JSON.stringify({ archived: false }) });
             setArchivedLists(prev => prev.filter(l => l.id !== archivedParent.id));
           } catch { onToast("error", "Could not restore list"); return; }
         }
       }
     }
     try {
-      await apiFetch(`/playground/cards/${id}`, { method: "PUT", body: JSON.stringify({ archived: false }) });
+      await apiFetch(`/planner/cards/${id}`, { method: "PUT", body: JSON.stringify({ archived: false }) });
       setArchivedCards(prev => prev.filter(c => c.id !== id));
       setUndoCard(null);
       if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
@@ -1722,11 +2003,11 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
   };
 
   const permanentDeleteCard = async (id: string) => {
-    if (!confirm("Permanently delete this card? This cannot be undone.")) return;
     try {
-      await apiFetch(`/playground/cards/${id}`, { method: "DELETE" });
+      await apiFetch(`/planner/cards/${id}`, { method: "DELETE" });
       setArchivedCards(prev => prev.filter(c => c.id !== id));
       if (activeBoard) await fetchBoardData(activeBoard.id);
+      setDeleteCardConfirm(null);
       onToast("success", "Card permanently deleted");
     } catch { onToast("error", "Failed to delete"); }
   };
@@ -1734,8 +2015,8 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
   const fetchArchivedCards = async (boardId: string) => {
     try {
       const [cardsRes, listsRes] = await Promise.all([
-        apiFetch(`/playground/boards/${boardId}/cards?archived=true`),
-        apiFetch(`/playground/boards/${boardId}/lists?includeArchived=true`),
+        apiFetch(`/planner/boards/${boardId}/cards?archived=true`),
+        apiFetch(`/planner/boards/${boardId}/lists?includeArchived=true`),
       ]);
       const cardsData = await cardsRes.json();
       const listsData = await listsRes.json();
@@ -1746,7 +2027,7 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
 
   const fetchArchivedBoards = async () => {
     try {
-      const r = await apiFetch("/playground/boards?archived=true");
+      const r = await apiFetch("/planner/boards?archived=true");
       const data = await r.json();
       setArchivedBoards(Array.isArray(data) ? data : []);
     } catch { setArchivedBoards([]); }
@@ -1754,26 +2035,26 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
 
   const restoreList = async (listId: string) => {
     try {
-      await apiFetch(`/playground/lists/${listId}`, { method: "PUT", body: JSON.stringify({ archived: false }) });
+      await apiFetch(`/planner/lists/${listId}`, { method: "PUT", body: JSON.stringify({ archived: false }) });
       setArchivedLists(prev => prev.filter(l => l.id !== listId));
       if (activeBoard) await fetchBoardData(activeBoard.id);
       onToast("success", "List restored!");
     } catch { onToast("error", "Failed to restore list"); }
   };
 
-  const restoreBoard = async (id: string) => {
+  const restoreBoard = async (id: string, silent = false) => {
     try {
-      await apiFetch(`/playground/boards/${id}`, { method: "PUT", body: JSON.stringify({ archived: false }) });
+      await apiFetch(`/planner/boards/${id}`, { method: "PUT", body: JSON.stringify({ archived: false }) });
       setArchivedBoards(prev => prev.filter(b => b.id !== id));
       await fetchBoards();
-      onToast("success", "Board restored!");
-    } catch { onToast("error", "Failed to restore board"); }
+      if (!silent) onToast("success", "Board restored!");
+    } catch { if (!silent) onToast("error", "Failed to restore board"); }
   };
 
   const deleteArchivedBoard = async (id: string) => {
     if (!confirm("Permanently delete this board and ALL its content? This cannot be undone.")) return;
     try {
-      await apiFetch(`/playground/boards/${id}`, { method: "DELETE" });
+      await apiFetch(`/planner/boards/${id}`, { method: "DELETE" });
       setArchivedBoards(prev => prev.filter(b => b.id !== id));
       setSelectedArchivedBoards(prev => { const n = new Set(prev); n.delete(id); return n; });
       onToast("success", "Board permanently deleted");
@@ -1783,18 +2064,18 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
   const bulkDeleteArchivedBoards = async () => {
     const count = selectedArchivedBoards.size;
     if (count === 0) return;
-    if (!confirm(`Permanently delete ${count} board${count > 1 ? "s" : ""} and ALL their content? This cannot be undone.`)) return;
     try {
-      await Promise.all([...selectedArchivedBoards].map(id => apiFetch(`/playground/boards/${id}`, { method: "DELETE" })));
+      await Promise.all([...selectedArchivedBoards].map(id => apiFetch(`/planner/boards/${id}`, { method: "DELETE" })));
       setArchivedBoards(prev => prev.filter(b => !selectedArchivedBoards.has(b.id)));
       setSelectedArchivedBoards(new Set());
+      setBulkDeleteConfirm(false);
       onToast("success", `${count} board${count > 1 ? "s" : ""} permanently deleted`);
     } catch { onToast("error", "Failed to delete some boards"); }
   };
 
   const deleteCard = async (id: string) => {
     if (!confirm("Permanently delete this card?")) return;
-    try { await apiFetch(`/playground/cards/${id}`, { method: "DELETE" }); setSelectedCard(null); if (activeBoard) await fetchBoardData(activeBoard.id); onToast("success", "Deleted"); }
+    try { await apiFetch(`/planner/cards/${id}`, { method: "DELETE" }); setSelectedCard(null); if (activeBoard) await fetchBoardData(activeBoard.id); onToast("success", "Deleted"); }
     catch { onToast("error", "Failed"); }
   };
 
@@ -1820,14 +2101,22 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
             <p className="text-xs text-gray-400">Planner workspace</p>
           </div>
         </div>
-        {/* Search */}
-        <div className="relative w-full sm:w-56">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-          <input
-            value={boardSearch} onChange={e => setBoardSearch(e.target.value)}
-            placeholder="Search boards"
-            className="w-full bg-[#22272b] border border-white/10 rounded-lg pl-8 pr-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50"
-          />
+        {/* Select to archive + Search */}
+        <div className="flex items-center gap-2">
+          {isFullAccess && !bulkArchiveMode && (
+            <button onClick={() => { setBulkArchiveMode(true); setSelectedBulkBoards(new Set()); }}
+              className="flex items-center gap-1.5 px-3 py-2 border border-white/10 rounded-lg text-sm text-gray-400 hover:text-white hover:border-white/30 transition-colors font-semibold whitespace-nowrap">
+              <Layers size={13} /> Select to archive…
+            </button>
+          )}
+          <div className="relative w-full sm:w-56">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+            <input
+              value={boardSearch} onChange={e => setBoardSearch(e.target.value)}
+              placeholder="Search boards"
+              className="w-full bg-[#22272b] border border-white/10 rounded-lg pl-8 pr-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50"
+            />
+          </div>
         </div>
       </div>
 
@@ -1850,10 +2139,100 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
         </div>
       )}
 
+      {/* ── Single board archive confirmation dialog ── */}
+      {archiveBoardConfirm && (() => {
+        const confirmId = archiveBoardConfirm; // narrow null away
+        const b = boards.find(x => x.id === confirmId);
+        return (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70" onClick={() => setArchiveBoardConfirm(null)}>
+            <div className="bg-[#22272b] border border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl mx-4" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/15 flex items-center justify-center shrink-0 border border-amber-500/20">
+                  <Archive size={16} className="text-amber-400" />
+                </div>
+                <h3 className="text-base font-bold text-white leading-snug">Archive "{b?.title}"?</h3>
+              </div>
+              <p className="text-sm text-gray-400 mb-5 leading-relaxed">
+                This board and all its lists and cards will be archived. You can restore it anytime from <strong className="text-gray-300">View closed boards</strong> below. Boards that remain closed for <strong className="text-gray-300">30 days</strong> are permanently deleted.
+              </p>
+              <div className="flex gap-2">
+                <button onClick={() => setArchiveBoardConfirm(null)} className="flex-1 py-2.5 border border-white/10 text-gray-300 rounded-xl text-sm hover:bg-white/5 transition-colors">
+                  Cancel, keep it
+                </button>
+                <button
+                  onClick={() => { archiveBoard(confirmId); setArchiveBoardConfirm(null); setBoardMenuId(null); }}
+                  className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-black text-sm font-bold rounded-xl transition-colors"
+                >
+                  Yes, archive board
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Bulk archive confirmation dialog ── */}
+      {bulkArchiveConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70" onClick={() => setBulkArchiveConfirm(false)}>
+          <div className="bg-[#22272b] border border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl mx-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-9 h-9 rounded-xl bg-amber-500/15 flex items-center justify-center shrink-0 border border-amber-500/20">
+                <Archive size={16} className="text-amber-400" />
+              </div>
+              <h3 className="text-base font-bold text-white leading-snug">
+                Archive {selectedBulkBoards.size} board{selectedBulkBoards.size > 1 ? 's' : ''}?
+              </h3>
+            </div>
+            <p className="text-sm text-gray-400 mb-5 leading-relaxed">
+              The selected board{selectedBulkBoards.size > 1 ? 's' : ''} and all {selectedBulkBoards.size > 1 ? 'their' : 'its'} lists and cards will be archived. You can restore {selectedBulkBoards.size > 1 ? 'them' : 'it'} anytime from <strong className="text-gray-300">View closed boards</strong>. Boards that remain closed for <strong className="text-gray-300">30 days</strong> are permanently deleted.
+            </p>
+            <div className="flex gap-2">
+              <button onClick={() => setBulkArchiveConfirm(false)} className="flex-1 py-2.5 border border-white/10 text-gray-300 rounded-xl text-sm hover:bg-white/5 transition-colors">Cancel</button>
+              <button
+                onClick={async () => {
+                  const ids = Array.from(selectedBulkBoards) as string[];
+                  const count = ids.length;
+                  for (const id of ids) { await archiveBoard(id, true); }
+                  setSelectedBulkBoards(new Set()); setBulkArchiveMode(false); setBulkArchiveConfirm(false);
+                  onToast("success", `${count} board${count > 1 ? 's' : ''} archived`);
+                }}
+                className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-black text-sm font-bold rounded-xl transition-colors"
+              >
+                Archive {selectedBulkBoards.size > 1 ? 'all' : 'it'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Bulk archive mode bar ── */}
+      {isFullAccess && bulkArchiveMode && (
+        <div className="mb-4 flex items-center gap-3 flex-wrap bg-[#22272b] border border-white/10 rounded-xl px-4 py-3">
+          <Archive size={14} className="text-amber-400 shrink-0" />
+          <span className="text-sm text-gray-300 font-medium flex-1">
+            {selectedBulkBoards.size === 0 ? 'Click boards to select them for archiving' : `${selectedBulkBoards.size} board${selectedBulkBoards.size > 1 ? 's' : ''} selected`}
+          </span>
+          {selectedBulkBoards.size > 0 && (
+            <button
+              onClick={() => setBulkArchiveConfirm(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/30 rounded-lg text-xs font-bold transition-colors"
+            >
+              <Archive size={11} /> Archive {selectedBulkBoards.size}
+            </button>
+          )}
+          <button
+            onClick={() => { setBulkArchiveMode(false); setSelectedBulkBoards(new Set()); }}
+            className="text-xs text-gray-500 hover:text-white px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
       {/* Board grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3" onClick={() => setBoardMenuId(null)}>
         {/* Create new board tile — full access only */}
-        {isFullAccess && (
+        {isFullAccess && !bulkArchiveMode && (
           <button onClick={() => setShowNewBoard(true)}
             className="aspect-[5/3] rounded-xl flex flex-col items-center justify-center gap-1.5 bg-white/10 hover:bg-white/15 transition-all text-gray-400 hover:text-gray-200">
             <Plus size={18} />
@@ -1861,15 +2240,64 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
           </button>
         )}
 
-        {filteredBoards.map(b => (
-          <button key={b.id} onClick={() => openBoard(b)}
-            style={{ background: resolveBg(b.color) }}
-            className="aspect-[5/3] rounded-xl flex flex-col justify-end p-3 hover:brightness-110 transition-all shadow-md text-left relative overflow-hidden group">
-            {/* Subtle dark overlay on hover */}
-            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/15 transition-all rounded-xl pointer-events-none" />
-            <span className="relative font-bold text-white text-sm drop-shadow-md leading-tight">{b.title}</span>
-          </button>
-        ))}
+        {boardsLoading
+          ? Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="aspect-[5/3] rounded-xl bg-white/5 animate-pulse" />
+            ))
+          : filteredBoards.map(b => {
+              const isSelectedBulk = selectedBulkBoards.has(b.id);
+              if (bulkArchiveMode) {
+                // Bulk selection tile
+                return (
+                  <button key={b.id}
+                    onClick={e => { e.stopPropagation(); setSelectedBulkBoards(prev => { const n = new Set(prev); n.has(b.id) ? n.delete(b.id) : n.add(b.id); return n; }); }}
+                    style={{ background: resolveBg(b.color) }}
+                    className={`aspect-[5/3] rounded-xl flex flex-col justify-end p-3 transition-all shadow-md text-left relative overflow-hidden select-none ${isSelectedBulk ? 'ring-2 ring-white brightness-100' : 'brightness-60 hover:brightness-75'}`}>
+                    <div className={`absolute top-2 right-2 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${isSelectedBulk ? 'bg-white border-white' : 'border-white/60 bg-black/20'}`}>
+                      {isSelectedBulk && <Check size={11} className="text-gray-900" />}
+                    </div>
+                    <span className="relative font-bold text-white text-sm drop-shadow-md leading-tight">{b.title}</span>
+                  </button>
+                );
+              }
+              // Normal mode — board tile with hover 3-dot menu
+              return (
+                <div key={b.id} className="relative group aspect-[5/3]">
+                  <button
+                    onClick={() => openBoard(b)}
+                    style={{ background: resolveBg(b.color) }}
+                    className="w-full h-full rounded-xl flex flex-col justify-end p-3 hover:brightness-110 transition-all shadow-md text-left relative overflow-hidden">
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/15 transition-all rounded-xl pointer-events-none" />
+                    <span className="relative font-bold text-white text-sm drop-shadow-md leading-tight">{b.title}</span>
+                  </button>
+                  {/* 3-dot menu — appears on hover, full access only */}
+                  {isFullAccess && (
+                    <div className="absolute top-1.5 right-1.5" onClick={e => e.stopPropagation()}>
+                      <button
+                        onClick={() => setBoardMenuId(boardMenuId === b.id ? null : b.id)}
+                        className="p-1 rounded-md bg-black/30 hover:bg-black/55 text-white/80 hover:text-white opacity-0 group-hover:opacity-100 transition-all"
+                        title="Board options"
+                      >
+                        <MoreHorizontal size={13} />
+                      </button>
+                      {boardMenuId === b.id && (
+                        <div className="absolute right-0 top-full mt-1 bg-[#2c333a] border border-white/10 rounded-xl shadow-xl z-40 min-w-[170px] py-1.5 overflow-hidden">
+                          <button onClick={() => { openBoard(b); setBoardMenuId(null); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] text-gray-200 hover:bg-white/8 hover:text-white transition-colors">
+                            <ArrowRight size={13} className="text-gray-500" /> Open board
+                          </button>
+                          <div className="mx-2 my-1 border-t border-white/5" />
+                          <button onClick={() => { setArchiveBoardConfirm(b.id); setBoardMenuId(null); }}
+                            className="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] text-amber-400 hover:bg-amber-500/10 transition-colors">
+                            <Archive size={13} /> Archive board…
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+        }
       </div>
 
       {filteredBoards.length === 0 && boardSearch && (
@@ -1878,63 +2306,139 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
 
       {/* Archived Boards — full access only */}
       {isFullAccess && <div className="mt-10">
-        <div className="flex items-center gap-3 flex-wrap">
+
+        {/* ── Bulk Restore confirm modal ── */}
+        {bulkRestoreConfirm && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70" onClick={() => setBulkRestoreConfirm(false)}>
+            <div className="bg-[#22272b] border border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl mx-4" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/15 flex items-center justify-center shrink-0 border border-emerald-500/20">
+                  <RotateCcw size={16} className="text-emerald-400" />
+                </div>
+                <h3 className="text-base font-bold text-white leading-snug">Restore {selectedArchivedBoards.size} board{selectedArchivedBoards.size > 1 ? 's' : ''}?</h3>
+              </div>
+              <p className="text-sm text-gray-400 mb-5 leading-relaxed">
+                The selected board{selectedArchivedBoards.size > 1 ? 's' : ''} will be moved back to your active workspace and become fully accessible again.
+              </p>
+              <div className="flex gap-2">
+                <button onClick={() => setBulkRestoreConfirm(false)} className="flex-1 py-2.5 border border-white/10 text-gray-300 rounded-xl text-sm hover:bg-white/5 transition-colors">Cancel</button>
+                <button
+                  onClick={async () => {
+                    const ids = Array.from(selectedArchivedBoards) as string[];
+                    const count = ids.length;
+                    for (const id of ids) { await restoreBoard(id, true); }
+                    setSelectedArchivedBoards(new Set());
+                    setBulkRestoreConfirm(false);
+                    onToast("success", `${count} board${count > 1 ? 's' : ''} restored`);
+                  }}
+                  className="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black text-sm font-bold rounded-xl transition-colors">
+                  Yes, restore {selectedArchivedBoards.size > 1 ? 'all' : 'it'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Bulk Delete confirm modal ── */}
+        {bulkDeleteConfirm && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70" onClick={() => setBulkDeleteConfirm(false)}>
+            <div className="bg-[#22272b] border border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl mx-4" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-9 h-9 rounded-xl bg-red-500/15 flex items-center justify-center shrink-0 border border-red-500/20">
+                  <Trash2 size={16} className="text-red-400" />
+                </div>
+                <h3 className="text-base font-bold text-white leading-snug">Delete {selectedArchivedBoards.size} board{selectedArchivedBoards.size > 1 ? 's' : ''} permanently?</h3>
+              </div>
+              <p className="text-sm text-gray-400 mb-5 leading-relaxed">
+                This will <strong className="text-gray-300">permanently delete</strong> the selected board{selectedArchivedBoards.size > 1 ? 's' : ''} and all {selectedArchivedBoards.size > 1 ? 'their' : 'its'} lists and cards. <strong className="text-gray-300">This cannot be undone.</strong>
+              </p>
+              <div className="flex gap-2">
+                <button onClick={() => setBulkDeleteConfirm(false)} className="flex-1 py-2.5 border border-white/10 text-gray-300 rounded-xl text-sm hover:bg-white/5 transition-colors">Cancel</button>
+                <button
+                  onClick={bulkDeleteArchivedBoards}
+                  className="flex-1 py-2.5 bg-red-500 hover:bg-red-400 text-white text-sm font-bold rounded-xl transition-colors">
+                  Yes, delete forever
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Row 1: Hide/View closed boards ── */}
+        <div className="flex items-center">
           <button onClick={() => { setShowArchivedBoards(p => !p); if (!showArchivedBoards) fetchArchivedBoards(); }}
-            className="flex items-center gap-2 px-3 py-1.5 border border-white/10 rounded-lg text-xs text-gray-400 hover:text-white hover:border-white/30 transition-colors font-semibold">
-            <Archive size={12} />
+            className="flex items-center gap-2 px-3 py-2 border border-white/10 rounded-lg text-sm text-gray-400 hover:text-white hover:border-white/30 transition-colors font-semibold">
+            <Archive size={13} />
             {showArchivedBoards ? "Hide closed boards" : "View closed boards"}
           </button>
-          {showArchivedBoards && selectedArchivedBoards.size > 0 && (
-            <button onClick={bulkDeleteArchivedBoards}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg text-xs font-semibold transition-colors">
-              <Trash2 size={11} /> Delete selected ({selectedArchivedBoards.size})
-            </button>
-          )}
         </div>
+
         {showArchivedBoards && (
           <>
-            {/* 30-day auto-delete notice */}
-            <div className="flex items-start gap-2 mt-3 px-3 py-2 bg-amber-500/10 border border-amber-500/20 rounded-lg max-w-xl">
-              <AlertTriangle size={13} className="text-amber-400 shrink-0 mt-0.5" />
-              <p className="text-xs text-amber-400/80">Archived boards that remain closed for <strong>30 days</strong> will be automatically and permanently deleted along with all their lists and cards.</p>
+            {/* ── Row 2: Selection bar — full width ── */}
+            {selectedArchivedBoards.size > 0 && (
+              <div className="mt-3 w-full flex items-center gap-3 bg-[#22272b] border border-white/10 rounded-xl px-4 py-2.5">
+                <RotateCcw size={13} className="text-emerald-400 shrink-0" />
+                <span className="text-sm text-gray-300 font-medium flex-1">
+                  {selectedArchivedBoards.size} board{selectedArchivedBoards.size > 1 ? 's' : ''} selected
+                </span>
+                <button onClick={() => setBulkRestoreConfirm(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-bold transition-colors whitespace-nowrap">
+                  <RotateCcw size={11} /> Restore {selectedArchivedBoards.size}
+                </button>
+                <button onClick={() => setBulkDeleteConfirm(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/30 rounded-lg text-xs font-bold transition-colors whitespace-nowrap">
+                  <Trash2 size={11} /> Delete {selectedArchivedBoards.size}
+                </button>
+                <button onClick={() => setSelectedArchivedBoards(new Set())}
+                  className="text-xs text-gray-500 hover:text-white px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors">
+                  Cancel
+                </button>
+              </div>
+            )}
+
+            {/* ── Row 3: 30-day warning — full width, single line ── */}
+            <div className="mt-3 w-full flex items-center gap-2 px-3 py-2 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+              <AlertTriangle size={13} className="text-amber-400 shrink-0" />
+              <p className="text-xs text-amber-400/80 whitespace-nowrap overflow-hidden text-ellipsis">Archived boards that remain closed for <strong>30 days</strong> will be automatically and permanently deleted along with all their lists and cards.</p>
             </div>
             {archivedBoards.length === 0 ? (
               <p className="text-xs text-gray-600 ml-1 mt-3">No archived boards.</p>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 mt-4">
                 {archivedBoards.map(b => {
-                  const isSelected = selectedArchivedBoards.has(b.id);
-                  return (
-                    <div key={b.id}
-                      style={{ background: resolveBg(b.color) }}
-                      className={`aspect-[5/3] rounded-xl flex flex-col justify-between p-2.5 shadow-md relative overflow-hidden transition-all ${isSelected ? "ring-2 ring-white opacity-80" : "opacity-60 hover:opacity-75"}`}>
-                      {/* Top row: checkbox + delete */}
-                      <div className="flex items-start justify-between">
-                        <input type="checkbox" checked={isSelected}
-                          onChange={e => setSelectedArchivedBoards(prev => {
-                            const next = new Set(prev);
-                            if (e.target.checked) next.add(b.id); else next.delete(b.id);
-                            return next;
-                          })}
-                          className="w-3.5 h-3.5 rounded accent-white cursor-pointer mt-0.5"
-                          onClick={e => e.stopPropagation()}
-                        />
-                        <button onClick={() => deleteArchivedBoard(b.id)} title="Delete permanently"
-                          className="p-1 text-white/50 hover:text-red-300 hover:bg-black/20 rounded transition-colors">
-                          <Trash2 size={11} />
-                        </button>
-                      </div>
-                      {/* Bottom: title + restore */}
-                      <div>
-                        <span className="font-bold text-white text-sm drop-shadow leading-tight block mb-1.5 truncate">{b.title}</span>
-                        <button onClick={() => restoreBoard(b.id)}
-                          className="flex items-center gap-1 bg-white/20 hover:bg-white/40 text-white text-[11px] font-semibold px-2 py-1 rounded-lg transition-colors">
-                          <RotateCcw size={10} /> Restore
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+                   const isSelected = selectedArchivedBoards.has(b.id);
+                   const toggleSelect = () => setSelectedArchivedBoards(prev => {
+                     const next = new Set(prev);
+                     if (next.has(b.id)) next.delete(b.id); else next.add(b.id);
+                     return next;
+                   });
+                   return (
+                     <div key={b.id}
+                       onClick={toggleSelect}
+                       style={{ background: resolveBg(b.color) }}
+                       className={`aspect-[5/3] rounded-xl flex flex-col justify-between p-2.5 shadow-md relative overflow-hidden transition-all cursor-pointer select-none ${isSelected ? "ring-2 ring-white brightness-100 opacity-100" : "opacity-60 hover:opacity-80 hover:brightness-90"}`}>
+                       {/* Top row: circle indicator + delete */}
+                       <div className="flex items-start justify-between">
+                         <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all shrink-0 mt-0.5 ${isSelected ? 'bg-white border-white' : 'border-white/50 bg-black/20'}`}>
+                           {isSelected && <Check size={11} className="text-gray-900" />}
+                         </div>
+                         <button onClick={e => { e.stopPropagation(); deleteArchivedBoard(b.id); }} title="Delete permanently"
+                           className="p-1 text-white/50 hover:text-red-300 hover:bg-black/20 rounded transition-colors">
+                           <Trash2 size={11} />
+                         </button>
+                       </div>
+                       {/* Bottom: title + restore */}
+                       <div>
+                         <span className="font-bold text-white text-sm drop-shadow leading-tight block mb-1.5 truncate">{b.title}</span>
+                         <button onClick={e => { e.stopPropagation(); restoreBoard(b.id); }}
+                           className="flex items-center gap-1 bg-white/20 hover:bg-white/40 text-white text-[11px] font-semibold px-2 py-1 rounded-lg transition-colors">
+                           <RotateCcw size={10} /> Restore
+                         </button>
+                       </div>
+                     </div>
+                   );
+                 })}
               </div>
             )}
           </>
@@ -1952,9 +2456,13 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
       <div className="flex items-center gap-2 px-4 py-2.5 shrink-0" style={{ background: resolveBg(activeBoard.color) }}>
         <button onClick={() => { setActiveBoard(null); setLists([]); setCards([]); }} className="p-1.5 text-white/70 hover:text-white hover:bg-white/20 rounded transition-colors"><ChevronLeft size={16} /></button>
         <h2 className="font-bold text-white text-base flex-1">{activeBoard.title}</h2>
-        <span className="text-white/50 text-xs">{boardCards.length}/500</span>
-        {isFullAccess && <button onClick={() => { setShowArchived(true); if (activeBoard) fetchArchivedCards(activeBoard.id); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-semibold rounded-lg transition-colors"><Archive size={12} /> Archived</button>}
-        {isFullAccess && <button onClick={() => setShowSettings(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-semibold rounded-lg transition-colors"><Settings size={12} /> Board settings</button>}
+        <span
+          title={`${boardCards.length} cards used · ${500 - boardCards.length} remaining`}
+          className={`text-xs px-3 py-1.5 rounded-lg font-semibold ${boardCards.length >= 450 ? 'bg-amber-500/20 text-amber-300' : 'bg-white/20 text-white/70'}`}>
+          {boardCards.length}<span className="hidden sm:inline"> / 500 cards</span><span className="sm:hidden">/500</span>
+        </span>
+        {isFullAccess && <button onClick={() => { setShowArchived(true); if (activeBoard) fetchArchivedCards(activeBoard.id); }} title="Archived" className="flex items-center gap-1.5 px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-semibold rounded-lg transition-colors"><Archive size={12} /><span className="hidden sm:inline">Archived</span></button>}
+        {isFullAccess && <button onClick={() => setShowSettings(true)} title="Board settings" className="flex items-center gap-1.5 px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-semibold rounded-lg transition-colors"><Settings size={12} /><span className="hidden sm:inline">Board settings</span></button>}
       </div>
 
       {/* Kanban area */}
@@ -1962,11 +2470,11 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
         {loading ? (
           <div className="flex items-center justify-center h-full"><div className="w-7 h-7 border-2 border-white border-t-transparent rounded-full animate-spin" /></div>
         ) : (
-          <div className="flex gap-3 overflow-x-auto h-full px-3 py-3" onClick={() => setListMenuId(null)}>
+          <div className="flex gap-3 overflow-x-auto h-full px-3 py-4 items-start" onClick={() => setListMenuId(null)}>
             {lists.map(list => {
               const listCards = boardCards.filter(c => c.listId === list.id);
               return (
-                <div key={list.id} className="flex-shrink-0 w-[272px] flex flex-col rounded-xl max-h-full" style={{ backgroundColor: "#101204ee" }}>
+                <div key={list.id} className="flex-shrink-0 w-[300px] flex flex-col rounded-xl self-start" style={{ backgroundColor: "#101204ee" }}>
                   {/* List header — Trello style: ALL CAPS, small */}
                   <div className="flex items-center justify-between px-3 pt-2.5 pb-1.5 shrink-0">
                     <span className="font-bold text-white text-[13px] flex-1 leading-tight tracking-wide uppercase">{list.title}</span>
@@ -1988,8 +2496,8 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
                     )}
                   </div>
 
-                  {/* Cards scrollable */}
-                  <div className="flex-1 overflow-y-auto px-1.5 space-y-1.5 pb-1 max-h-[calc(100vh-220px)]">
+                  {/* Cards list */}
+                  <div className="px-1.5 space-y-2 pb-1">
                     {listCards.map(card => {
                       const totalItems = card.checklists.reduce((s, cl) => s + cl.items.length, 0);
                       const doneItems = card.checklists.reduce((s, cl) => s + cl.items.filter(i => i.done).length, 0);
@@ -1998,37 +2506,38 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
                         <div key={card.id} onClick={() => setSelectedCard(card)}
                           className="rounded-lg cursor-pointer transition-all duration-150 group shadow-sm relative hover:brightness-125"
                           style={{ backgroundColor: "#22272b" }}>
-                          {/* Thin label strips at very top */}
                           {card.labels.length > 0 && (
-                            <div className="flex flex-wrap gap-1 px-2 pt-2">
+                            <div className="flex flex-wrap gap-1.5 px-3 pt-2.5">
                               {card.labels.map(l => (
                                 <span key={l.id} style={{ backgroundColor: l.color }}
-                                  className="h-2 w-10 rounded-full inline-block" />
+                                  className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold text-white leading-none whitespace-nowrap max-w-[120px] truncate">
+                                  {l.name || ''}
+                                </span>
                               ))}
                             </div>
                           )}
-                          <div className="px-2.5 pt-2 pb-2">
-                            <p className="text-[13px] text-white leading-snug">{card.title}</p>
+                          <div className="px-3 pt-2.5 pb-3">
+                            <p className="text-[15px] text-white leading-snug font-medium">{card.title}</p>
                             {/* Meta row */}
                             {(isOverdue || card.dueDate || card.description || totalItems > 0) && (
-                              <div className="flex items-center justify-between mt-2">
+                              <div className="flex items-center justify-between mt-2.5">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   {isOverdue && (
-                                    <span className="flex items-center gap-1 text-[11px] font-semibold text-white bg-red-500 px-1.5 py-0.5 rounded">
-                                      <Calendar size={9} />{new Date(card.dueDate! + "T00:00:00").toLocaleDateString("en", { month: "short", day: "numeric", year: "2-digit" })}
+                                    <span className="flex items-center gap-1 text-[12px] font-semibold text-white bg-red-500 px-1.5 py-0.5 rounded">
+                                      <Calendar size={10} />{new Date(card.dueDate! + "T00:00:00").toLocaleDateString("en", { month: "short", day: "numeric", year: "2-digit" })}
                                     </span>
                                   )}
                                   {!isOverdue && card.dueDate && (
-                                    <span className="flex items-center gap-1 text-[11px] text-gray-400">
-                                      <Calendar size={10} />{new Date(card.dueDate + "T00:00:00").toLocaleDateString("en", { month: "short", day: "numeric" })}
+                                    <span className="flex items-center gap-1 text-[12px] text-gray-400">
+                                      <Calendar size={11} />{new Date(card.dueDate + "T00:00:00").toLocaleDateString("en", { month: "short", day: "numeric" })}
                                     </span>
                                   )}
                                   {card.description && <AlignLeft size={12} className="text-gray-500" />}
                                   {totalItems > 0 && (
-                                    <span className={`flex items-center gap-0.5 text-[11px] font-medium px-1 py-0.5 rounded ${
+                                    <span className={`flex items-center gap-0.5 text-[12px] font-medium px-1.5 py-0.5 rounded ${
                                       doneItems === totalItems ? "bg-green-600/30 text-green-400" : "text-gray-400"
                                     }`}>
-                                      <CheckSquare size={10} />{doneItems}/{totalItems}
+                                      <CheckSquare size={11} />{doneItems}/{totalItems}
                                     </span>
                                   )}
                                 </div>
@@ -2038,10 +2547,10 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
                                     {card.members.slice(0, 3).map((m, i) => {
                                       const mem = allMembers.find(x => x.name === m);
                                       const mPhoto = mem?.photo || mem?.photoURL || "";
-                                      return <div key={i}><Avatar name={m} photo={mPhoto} size={22} /></div>;
+                                      return <div key={i}><Avatar name={m} photo={mPhoto} size={28} /></div>;
                                     })}
                                     {card.members.length > 3 && (
-                                      <div className="w-5 h-5 rounded-full bg-gray-600 flex items-center justify-center text-[9px] text-white font-bold border border-[#22272b]">+{card.members.length - 3}</div>
+                                      <div className="w-6 h-6 rounded-full bg-gray-600 flex items-center justify-center text-[10px] text-white font-bold border border-[#22272b]">+{card.members.length - 3}</div>
                                     )}
                                   </div>
                                 )}
@@ -2069,14 +2578,10 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
 
                   {/* Footer: Add a card — full access only */}
                   {isFullAccess && addingCard !== list.id && (
-                    <div className="flex items-center justify-between px-1.5 py-1.5 shrink-0">
+                    <div className="px-1.5 py-1.5 shrink-0">
                       <button onClick={() => { setAddingCard(list.id); setNewCardTitle(""); }}
-                        className="flex items-center gap-1.5 px-2 py-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors text-[13px] flex-1">
+                        className="w-full flex items-center gap-1.5 px-2 py-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors text-[13px]">
                         <Plus size={14} /> Add a card
-                      </button>
-                      <button onClick={() => { setAddingCard(list.id); setNewCardTitle(""); }}
-                        className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Add card">
-                        <CheckSquare size={13} />
                       </button>
                     </div>
                   )}
@@ -2086,7 +2591,7 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
 
             {/* Add a list — full access only */}
             {isFullAccess && (
-              <div className="flex-shrink-0 w-[272px]">
+              <div className="flex-shrink-0 w-[300px]">
                 {addingList ? (
                   <div className="rounded-xl p-2 space-y-2" style={{ backgroundColor: "#101204ee" }}>
                     <input value={newListTitle} onChange={e => setNewListTitle(e.target.value)}
@@ -2100,8 +2605,8 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
                   </div>
                 ) : (
                   <button onClick={() => setAddingList(true)}
-                    className="w-full flex items-center gap-2 px-3 py-2.5 bg-white/15 hover:bg-white/25 text-white text-sm font-medium rounded-xl transition-colors">
-                    <Plus size={15} /> Add another list
+                    className="w-fit flex items-center gap-1.5 px-3 py-2.5 bg-white/15 hover:bg-white/25 text-white text-sm font-medium rounded-xl transition-colors">
+                    <Plus size={14} /> Add another list
                   </button>
                 )}
               </div>
@@ -2117,11 +2622,31 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
       {/* Archived cards panel */}
       {showArchived && (
         <div className="fixed inset-0 z-50 flex" onClick={e => e.target === e.currentTarget && setShowArchived(false)}>
-          <div className="ml-auto w-full max-w-sm bg-[#1d2125] h-full border-l border-white/10 flex flex-col shadow-2xl">
+          <div className="ml-auto w-full max-w-sm bg-[#1d2125] h-full border-l border-white/10 flex flex-col shadow-2xl relative">
             <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
               <div className="flex items-center gap-2"><Archive size={14} className="text-amber-400" /><h3 className="text-sm font-bold text-white">Archived Lists / Cards</h3></div>
               <button onClick={() => setShowArchived(false)} className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded"><X size={15} /></button>
             </div>
+            {/* ── Delete card confirmation modal ── */}
+            {deleteCardConfirm && (
+              <div className="absolute inset-0 z-[70] flex items-center justify-center bg-black/70 rounded-l-none" onClick={() => setDeleteCardConfirm(null)}>
+                <div className="bg-[#22272b] border border-white/10 rounded-2xl p-5 w-[calc(100%-2rem)] shadow-2xl mx-4" onClick={e => e.stopPropagation()}>
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-9 h-9 rounded-xl bg-red-500/15 flex items-center justify-center shrink-0 border border-red-500/20">
+                      <Trash2 size={16} className="text-red-400" />
+                    </div>
+                    <h3 className="text-sm font-bold text-white leading-snug">Delete this card permanently?</h3>
+                  </div>
+                  <p className="text-xs text-gray-400 mb-4 leading-relaxed">
+                    This card and all its content will be <strong className="text-gray-300">permanently deleted</strong>. This cannot be undone.
+                  </p>
+                  <div className="flex gap-2">
+                    <button onClick={() => setDeleteCardConfirm(null)} className="flex-1 py-2 border border-white/10 text-gray-300 rounded-xl text-xs hover:bg-white/5 transition-colors">Cancel</button>
+                    <button onClick={() => permanentDeleteCard(deleteCardConfirm)} className="flex-1 py-2 bg-red-500 hover:bg-red-400 text-white text-xs font-bold rounded-xl transition-colors">Yes, delete forever</button>
+                  </div>
+                </div>
+              </div>
+            )}
             {archivedLists.length === 0 && archivedCards.length === 0 ? (
               <div className="flex flex-col items-center justify-center flex-1 gap-2 text-center px-6">
                 <Archive size={32} className="text-gray-600" />
@@ -2190,7 +2715,7 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
                               className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 text-xs font-semibold rounded-lg transition-colors">
                               <RotateCcw size={11} /> {listIsArchived ? "Restore Both" : "Restore"}
                             </button>
-                            <button onClick={() => permanentDeleteCard(ac.id)}
+                            <button onClick={() => setDeleteCardConfirm(ac.id)}
                               className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-semibold rounded-lg transition-colors">
                               <Trash2 size={11} /> Delete
                             </button>

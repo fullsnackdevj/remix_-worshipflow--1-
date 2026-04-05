@@ -176,7 +176,7 @@ const QA_SWITCH_ROLES = [
   { value: "member", label: "Member" },
 ];
 
-function UserMenu({ simulatedRole, onRoleSwitch, plannerAccess }: { simulatedRole: string; onRoleSwitch: (r: string) => void; plannerAccess?: boolean }) {
+function UserMenu({ simulatedRole, onRoleSwitch }: { simulatedRole: string; onRoleSwitch: (r: string) => void }) {
   const { user, logOut, userRole, isAdmin } = useAuth();
   const [open, setOpen] = React.useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -216,18 +216,12 @@ function UserMenu({ simulatedRole, onRoleSwitch, plannerAccess }: { simulatedRol
                   }}
                 >👑</span>
               )}
-              {/* Plan Lead animated ring */}
-              {plannerAccess && (
-                <div
-                  className="planner-ring-spin absolute inset-0 rounded-full"
-                  style={{ background: 'conic-gradient(from 0deg, #7c3aed, #a855f7, #ec4899, #f43f5e, #ea580c, #7c3aed)', zIndex: 0 }}
-                />
-              )}
+
               <img
                 src={user.photoURL}
                 alt={user.displayName ?? ""}
                 className="rounded-full border-2 border-indigo-500 object-cover"
-                style={{ position: 'relative', zIndex: 1, width: plannerAccess ? 27 : 32, height: plannerAccess ? 27 : 32, margin: plannerAccess ? 2.5 : 0 }}
+                style={{ position: 'relative', zIndex: 1, width: 32, height: 32, margin: 0 }}
               />
             </div>
           )
@@ -250,6 +244,7 @@ function UserMenu({ simulatedRole, onRoleSwitch, plannerAccess }: { simulatedRol
               <span className={`inline-block text-[10px] px-2 py-0.5 rounded-full font-semibold ${badge.className}`}>
                 {canSimulate && effectiveDisplay !== userRole ? `Testing: ${badge.label}` : badge.label}
               </span>
+
             </div>
           </div>
 
@@ -358,7 +353,7 @@ export default function App() {
       } catch { /* silent */ }
     };
     checkPokes();
-    const id = setInterval(checkPokes, 15_000); // Reduced from 5s → 15s (66% fewer invocations)
+    const id = setInterval(checkPokes, 60_000); // 60s — aligned with notification poll (was 15s, 4× more calls)
     return () => clearInterval(id);
   }, [user?.uid]);
 
@@ -1110,49 +1105,22 @@ export default function App() {
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Rehearsal</span>}
           </div>
 
-          {/* Planner — gated: admin + test account only; others see disabled "coming soon" */}
-          {(isRoleAdmin || user?.email === "nthlastchild@gmail.com") ? (
-            <div className="relative group/tip">
-              <button
-                onClick={() => { setCurrentView("planner"); setIsMobileMenuOpen(false); }}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${
-                  currentView === "planner"
-                    ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
-                    : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:white"
-                } ${isSidebarCollapsed ? "justify-center" : ""}`}
-                title="Planner"
-              >
-                <SquareKanban size={20} className="shrink-0" />
-                {!isSidebarCollapsed && <span>Planner</span>}
-              </button>
-              {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Planner</span>}
-            </div>
-          ) : (
-            <div className="relative group/tip">
-              <div
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium opacity-40 cursor-not-allowed select-none text-gray-500 dark:text-gray-500 ${isSidebarCollapsed ? "justify-center" : ""}`}
-                onClick={() => {
-                  // mobile tap — briefly show tooltip via a state-free CSS trick (toggle class)
-                  const el = document.getElementById("planner-soon-tip");
-                  if (el) { el.style.opacity = "1"; setTimeout(() => { el.style.opacity = ""; }, 2000); }
-                }}
-              >
-                <SquareKanban size={20} className="shrink-0" />
-                {!isSidebarCollapsed && (
-                  <span className="flex items-center gap-2">
-                    Planner
-                    <span className="text-[10px] font-bold uppercase tracking-wider bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded-full">Soon</span>
-                  </span>
-                )}
-              </div>
-              <span
-                id="planner-soon-tip"
-                className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg"
-              >
-                🚀 Coming Soon — We're polishing this for you!
-              </span>
-            </div>
-          )}
+          {/* Planner — open to all users */}
+          <div className="relative group/tip">
+            <button
+              onClick={() => { setCurrentView("planner"); setIsMobileMenuOpen(false); }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${
+                currentView === "planner"
+                  ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
+                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:white"
+              } ${isSidebarCollapsed ? "justify-center" : ""}`}
+              title="Planner"
+            >
+              <SquareKanban size={20} className="shrink-0" />
+              {!isSidebarCollapsed && <span>Planner</span>}
+            </button>
+            {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Planner</span>}
+          </div>
           {isRoleAdmin && (
             <div className="relative group/tip">
               <button
@@ -1400,7 +1368,7 @@ export default function App() {
               )}
 
             </div>
-            <UserMenu simulatedRole={simulatedRole} onRoleSwitch={handleRoleSwitch} plannerAccess={myMemberProfile?.plannerAccess ?? false} />
+            <UserMenu simulatedRole={simulatedRole} onRoleSwitch={handleRoleSwitch} />
           </div>
         </header>
 
@@ -1487,7 +1455,7 @@ export default function App() {
                     ? { name: myMemberProfile.name, photo: myMemberProfile.photo || myMemberProfile.photoURL || "" }
                     : (user ? { name: user.displayName || user.email?.split('@')[0] || "Me", photo: user.photoURL || "" } : undefined)}
                   onToast={showToast}
-                  isFullAccess={isAdmin || (myMemberProfile?.plannerAccess ?? false)}
+                  isFullAccess={true}
                 />
               ) : currentView === "team-notes" ? (
                 <TeamNotesView
