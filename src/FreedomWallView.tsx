@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { X, Plus, Trash2, Info, Heart, Maximize2, Pencil, LayoutGrid } from "lucide-react";
 
 
@@ -99,8 +100,8 @@ function formatNoteText(raw: string): string {
 
 // ── About Modal ───────────────────────────────────────────────────────────────
 function AboutModal({ onClose }: { onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm px-4 pb-4 sm:pb-0" onClick={(e) => e.target === e.currentTarget && onClose()}>
+  return createPortal(
+    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="w-full max-w-sm bg-[#16161e] rounded-3xl border border-white/10 shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-5 pt-5 pb-3">
           <div className="flex items-center gap-2.5">
@@ -121,7 +122,8 @@ function AboutModal({ onClose }: { onClose: () => void }) {
           <button onClick={onClose} className="w-full py-2.5 rounded-2xl text-sm font-bold text-[#1c1917] transition-all active:scale-95" style={{ background: "linear-gradient(135deg, #f59e0b, #d97706)" }}>Got it 👍</button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -145,6 +147,12 @@ function NoteCard({
   const dragStart = useRef({ mouseX: 0, mouseY: 0, noteX: 0, noteY: 0 });
   const moved = useRef(false);
 
+  // ── Touch drag (mobile) ─────────────────────────────────────────────────────
+  const touchDragActive = useRef(false);
+  const touchStart = useRef({ clientX: 0, clientY: 0, noteX: 0, noteY: 0 });
+  const onMoveRef = useRef(onMove);
+  useEffect(() => { onMoveRef.current = onMove; }, [onMove]);
+
   const isAuthor = !!note.authorSessionToken && note.authorSessionToken === sessionToken;
   const canDelete = isAdmin || isAuthor;
 
@@ -154,7 +162,31 @@ function NoteCard({
   const totalHearts = Object.values(note.reactions).reduce((s, v) => s + v, 0);
   const hasReacted  = note.userReactions.some((r) => r.startsWith(sessionToken + ":"));
 
-  // ── Drag-to-move (author only) ──────────────────────────────────────────────
+  // ── Touch drag (document-level, passive:false so we can preventDefault) ─────
+  useEffect(() => {
+    if (!isAuthor) return;
+    const noteId = note.id;
+    const onTouchMoveDoc = (e: TouchEvent) => {
+      if (!touchDragActive.current) return;
+      e.preventDefault(); // stop scroll + page pan while dragging a note
+      const t = e.touches[0];
+      const dx = t.clientX - touchStart.current.clientX;
+      const dy = t.clientY - touchStart.current.clientY;
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved.current = true;
+      const newX = Math.max(0, Math.min(99, touchStart.current.noteX + (dx / CANVAS_W) * 100));
+      const newY = Math.max(0, Math.min(99, touchStart.current.noteY + (dy / CANVAS_H) * 100));
+      onMoveRef.current(noteId, newX, newY);
+    };
+    const onTouchEndDoc = () => { touchDragActive.current = false; };
+    document.addEventListener("touchmove", onTouchMoveDoc, { passive: false });
+    document.addEventListener("touchend", onTouchEndDoc);
+    return () => {
+      document.removeEventListener("touchmove", onTouchMoveDoc);
+      document.removeEventListener("touchend", onTouchEndDoc);
+    };
+  }, [isAuthor, note.id]); // re-register when temp-id becomes real id
+
+  // ── Drag-to-move (author only, mouse) ──────────────────────────────────────
   const handleDragMouseDown = (e: React.MouseEvent) => {
     if (!isAuthor) return;
     e.stopPropagation();
@@ -203,6 +235,18 @@ function NoteCard({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onMouseDown={isAuthor ? handleDragMouseDown : undefined}
+      onTouchStart={(e) => {
+        if (!isAuthor) return;
+        e.stopPropagation(); // prevent board pan from starting
+        touchDragActive.current = true;
+        moved.current = false;
+        const t = e.touches[0];
+        touchStart.current = { clientX: t.clientX, clientY: t.clientY, noteX: note.x, noteY: note.y };
+      }}
+      onTouchMove={(e) => {
+        // Stop the React synthetic event from reaching the board's onTouchMove pan handler
+        if (isAuthor && touchDragActive.current) e.stopPropagation();
+      }}
     >
       {/* Pin */}
       <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
@@ -282,7 +326,7 @@ function NoteCard({
             {/* Full view */}
             <button
               onClick={(e) => { e.stopPropagation(); onView(note); }}
-              className={`flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded-md transition-all ${hovered ? "opacity-70 hover:opacity-100" : "opacity-0 group-hover/note:opacity-70"}`}
+              className={`flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded-md transition-all [@media(hover:none)]:opacity-70 ${hovered ? "opacity-70 hover:opacity-100" : "opacity-0 group-hover/note:opacity-70"}`}
               style={{ color: colorScheme.text }}
               title="View full note"
             >
@@ -320,9 +364,10 @@ function NoteCard({
 }
 
 // ── Note Full View Modal ──────────────────────────────────────────────────────
-function NoteFullViewModal({ note, sessionToken, isAdmin, onClose, onReact, onDelete }: {
+function NoteFullViewModal({ note, sessionToken, isAdmin, onClose, onReact, onDelete, onEdit }: {
   note: FreedomNote; sessionToken: string; isAdmin?: boolean;
   onClose: () => void; onReact: (id: string, emoji: string) => void; onDelete: (id: string) => void;
+  onEdit?: (note: FreedomNote) => void;
 }) {
   const colorScheme = NOTE_COLORS.find((c) => c.bg === note.color) ?? NOTE_COLORS[0];
   const isAuthor = !!note.authorSessionToken && note.authorSessionToken === sessionToken;
@@ -343,21 +388,36 @@ function NoteFullViewModal({ note, sessionToken, isAdmin, onClose, onReact, onDe
             <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-black/10 transition-colors" style={{ color: colorScheme.text }}><X size={16} /></button>
           </div>
           <div className="px-6 pb-4 fw-scrollbar" style={{ maxHeight: "60vh" }}>
+            {/* Date/time stamp */}
+            <p className="text-[11px] font-medium mb-3 opacity-60 border-b pb-2" style={{ color: colorScheme.text, borderColor: colorScheme.border }}>
+              {new Date(note.createdAt).toLocaleDateString("en", { weekday: "long", month: "short", day: "numeric", year: "numeric" })}
+              {" · "}
+              {new Date(note.createdAt).toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", hour12: true })}
+            </p>
             <p className="leading-relaxed break-words whitespace-pre-wrap" style={{ color: colorScheme.text, fontFamily: "'EB Garamond', Georgia, serif", fontSize: 15, lineHeight: 1.7 }}>{note.message}</p>
           </div>
           <div className="flex items-center justify-between px-5 py-3 border-t" style={{ borderColor: colorScheme.border }}>
-            {!isAuthor && (
-              <button onClick={() => onReact(note.id, "❤️")} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all hover:scale-105 active:scale-95" style={{ background: hasReacted ? "rgba(239,68,68,0.12)" : "rgba(0,0,0,0.06)", border: `1px solid ${hasReacted ? "rgba(239,68,68,0.3)" : colorScheme.border}` }} title={hasReacted ? "Remove heart" : "Send a heart"}>
-                <Heart size={15} strokeWidth={2} style={{ color: hasReacted ? "#ef4444" : colorScheme.text, fill: hasReacted ? "#ef4444" : "none" }} />
-                <span className="text-xs font-semibold" style={{ color: hasReacted ? "#ef4444" : colorScheme.text }}>{totalHearts > 0 ? totalHearts : "Heart"}</span>
-              </button>
-            )}
-            {isAuthor && totalHearts > 0 && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full" style={{ background: "rgba(0,0,0,0.05)", border: `1px solid ${colorScheme.border}` }}>
-                <Heart size={15} strokeWidth={2} style={{ color: colorScheme.text, fill: "none", opacity: 0.4 }} />
-                <span className="text-xs font-semibold opacity-50" style={{ color: colorScheme.text }}>{totalHearts}</span>
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              {!isAuthor && (
+                <button onClick={() => onReact(note.id, "❤️")} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all hover:scale-105 active:scale-95" style={{ background: hasReacted ? "rgba(239,68,68,0.12)" : "rgba(0,0,0,0.06)", border: `1px solid ${hasReacted ? "rgba(239,68,68,0.3)" : colorScheme.border}` }} title={hasReacted ? "Remove heart" : "Send a heart"}>
+                  <Heart size={15} strokeWidth={2} style={{ color: hasReacted ? "#ef4444" : colorScheme.text, fill: hasReacted ? "#ef4444" : "none" }} />
+                  <span className="text-xs font-semibold" style={{ color: hasReacted ? "#ef4444" : colorScheme.text }}>{totalHearts > 0 ? totalHearts : "Heart"}</span>
+                </button>
+              )}
+              {isAuthor && totalHearts > 0 && (
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full" style={{ background: "rgba(0,0,0,0.05)", border: `1px solid ${colorScheme.border}` }}>
+                  <Heart size={15} strokeWidth={2} style={{ color: colorScheme.text, fill: "none", opacity: 0.4 }} />
+                  <span className="text-xs font-semibold opacity-50" style={{ color: colorScheme.text }}>{totalHearts}</span>
+                </div>
+              )}
+              {/* Edit — author only, touch-friendly */}
+              {isAuthor && onEdit && (
+                <button onClick={() => { onEdit(note); onClose(); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all hover:scale-105 active:scale-95" style={{ background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.25)" }}>
+                  <Pencil size={13} style={{ color: "#8b5cf6" }} />
+                  <span className="text-xs font-semibold" style={{ color: "#8b5cf6" }}>Edit</span>
+                </button>
+              )}
+            </div>
             {canDelete && (
               <button onClick={() => { onDelete(note.id); onClose(); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all hover:scale-105" style={{ background: isAdmin ? "rgba(239,68,68,0.1)" : "rgba(139,92,246,0.1)", border: `1px solid ${isAdmin ? "rgba(239,68,68,0.25)" : "rgba(139,92,246,0.25)"}` }}>
                 <Trash2 size={13} style={{ color: isAdmin ? "#dc2626" : "#8b5cf6" }} />
@@ -504,41 +564,73 @@ function ViewAllModal({ notes, sessionToken, isAdmin, onClose, onView, onReact, 
               const reacted = note.userReactions.some((r) => r.startsWith(sessionToken + ":"));
               return (
                 <div key={note.id}
-                  className="relative rounded-2xl p-4 flex flex-col cursor-pointer group transition-all hover:scale-[1.02] hover:shadow-2xl"
-                  style={{ background: color.bg, border: `1px solid ${color.border}`, height: 200 }}
+                  className="relative rounded-2xl p-4 pt-5 flex flex-col cursor-pointer group transition-all hover:scale-[1.02] hover:shadow-2xl"
+                  style={{ background: color.bg, border: `1px solid ${color.border}`, minHeight: 200 }}
                   onClick={() => { onView(note); }}
                 >
                   {/* Pin */}
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 pointer-events-none"><Pin color={isAuthor ? "#7c3aed" : "#b45309"} /></div>
                   {/* Tape */}
                   <div className="absolute top-0 left-1/2 -translate-x-1/2 w-10 h-3 rounded-b-sm" style={{ background: "rgba(255,220,120,0.45)" }} />
+
+                  {/* Heart — top-right corner, same as scattered note */}
+                  {isAuthor ? (
+                    hearts > 0 && (
+                      <div className="absolute top-2 right-3 flex items-center gap-0.5 pointer-events-none opacity-50">
+                        <Heart size={12} strokeWidth={2} style={{ color: color.text, fill: "none" }} />
+                        <span className="text-[9px] font-bold leading-none" style={{ color: color.text }}>{hearts}</span>
+                      </div>
+                    )
+                  ) : (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onReact(note.id, "❤️"); }}
+                      className="absolute top-2 right-3 flex items-center gap-0.5 transition-all hover:scale-115 active:scale-95"
+                      title={reacted ? "Remove heart" : "Send a heart"}
+                    >
+                      <Heart size={13} strokeWidth={2} style={{ color: reacted ? "#ef4444" : color.text, fill: reacted ? "#ef4444" : "none", opacity: reacted ? 1 : 0.45 }} />
+                      {hearts > 0 && <span className="text-[9px] font-bold leading-none" style={{ color: reacted ? "#ef4444" : color.text, opacity: reacted ? 1 : 0.5 }}>{hearts}</span>}
+                    </button>
+                  )}
+
+                  {/* Timestamp — top of card, above message */}
+                  <p className="text-[11px] font-medium mb-2 pb-2 border-b" style={{ color: color.text, opacity: 0.55, borderColor: color.border }}>
+                    {new Date(note.createdAt).toLocaleDateString("en", { weekday: "long", month: "short", day: "numeric", year: "numeric" })}
+                    {" · "}
+                    {new Date(note.createdAt).toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", hour12: true })}
+                  </p>
+
                   {/* Message */}
-                  <div className="flex-1 overflow-hidden mt-2">
-                    <p className="text-sm leading-relaxed break-words whitespace-pre-wrap line-clamp-6"
+                  <div className="flex-1 overflow-hidden">
+                    <p className="leading-relaxed break-words whitespace-pre-wrap line-clamp-4"
                       style={{ color: color.text, fontFamily: "'EB Garamond', Georgia, serif", fontSize: 13 }}>
                       {note.message}
                     </p>
                   </div>
-                  {/* Footer */}
-                  <div className="flex items-center justify-between mt-2 pt-2 border-t" style={{ borderColor: color.border }}>
-                    <button onClick={(e) => { e.stopPropagation(); onReact(note.id, "❤️"); }}
-                      className="flex items-center gap-1 transition-all hover:scale-110"
-                      style={{ color: reacted ? "#ef4444" : color.text, opacity: reacted ? 1 : 0.5 }}
+
+                  {/* Bottom actions — hover only, like scattered note */}
+                  <div className="flex items-center justify-between mt-2 pt-1">
+                    <button onClick={(e) => { e.stopPropagation(); onView(note); }}
+                      className="flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded-md transition-all opacity-0 group-hover:opacity-70 hover:!opacity-100"
+                      style={{ color: color.text }}
+                      title="View full note"
                     >
-                      <Heart size={12} strokeWidth={2} style={{ fill: reacted ? "#ef4444" : "none", color: reacted ? "#ef4444" : color.text }} />
-                      {hearts > 0 && <span className="text-[10px] font-bold">{hearts}</span>}
+                      <Maximize2 size={10} strokeWidth={2} />
+                      <span>Full view</span>
                     </button>
                     {canDel && (
                       <button onClick={(e) => { e.stopPropagation(); onDelete(note.id); }}
-                        className="opacity-0 group-hover:opacity-100 p-1 rounded-full transition-all"
+                        className="p-1 rounded-full transition-all opacity-0 group-hover:opacity-100"
                         style={{ background: isAdmin ? "rgba(239,68,68,0.15)" : "rgba(139,92,246,0.15)" }}
                         title={isAdmin ? "Remove (Admin)" : "Delete my note"}
                       >
-                        <Trash2 size={11} style={{ color: isAdmin ? "#dc2626" : "#8b5cf6" }} />
+                        <Trash2 size={10} style={{ color: isAdmin ? "#dc2626" : "#8b5cf6" }} />
                       </button>
                     )}
                   </div>
                 </div>
+
+
+
               );
             })}
           </div>
@@ -728,9 +820,22 @@ export default function FreedomWallView({ isAdmin, currentUserId, onToast }: Fre
     const noteId = confirmDeleteId;
     setConfirmDeleteId(null);
     setNotes((prev) => prev.filter((n) => n.id !== noteId));
-    fetch(`/api/freedom-wall/${noteId}`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isAdmin: !!isAdmin, sessionToken }) })
-      .then(() => onToast?.("success", "Note deleted"))
-      .catch(() => { fetchNotes(); onToast?.("error", "Could not remove note"); });
+    fetch(`/api/freedom-wall/${noteId}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isAdmin: !!isAdmin, sessionToken }),
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error ?? "Failed");
+        }
+        onToast?.("success", "Note removed");
+      })
+      .catch((err) => {
+        fetchNotes(); // restore if server rejected
+        onToast?.("error", `Could not remove note: ${err.message ?? "Unknown error"}`);
+      });
   };
 
   // ── Edit ───────────────────────────────────────────────────────────────────
@@ -849,8 +954,8 @@ export default function FreedomWallView({ isAdmin, currentUserId, onToast }: Fre
         )}
 
         {/* Hint */}
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
-          <span className="text-[10px] text-white/20 font-medium tracking-wide">Scroll to zoom · Drag to explore · Click note to view · Hover for actions</span>
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none text-center whitespace-nowrap">
+          <span className="text-[10px] text-white/20 font-medium tracking-wide">Drag to explore · Tap note to view &amp; act</span>
         </div>
       </div>
 
@@ -866,6 +971,7 @@ export default function FreedomWallView({ isAdmin, currentUserId, onToast }: Fre
       {viewingNote && (
         <NoteFullViewModal note={viewingNote} sessionToken={sessionToken} isAdmin={isAdmin}
           onClose={() => setViewingNote(null)} onReact={handleReact} onDelete={handleDelete}
+          onEdit={(n) => { setViewingNote(null); setEditingNote(n); }}
         />
       )}
       {editingNote && (

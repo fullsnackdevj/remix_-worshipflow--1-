@@ -2178,8 +2178,15 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
         {/* Select to archive + Search */}
         <div className="flex items-center gap-2">
           {isFullAccess && !bulkArchiveMode && (
-            <button onClick={() => { setBulkArchiveMode(true); setSelectedBulkBoards(new Set()); }}
-              className="flex items-center gap-1.5 px-3 py-2 border border-white/10 rounded-lg text-sm text-gray-400 hover:text-white hover:border-white/30 transition-colors font-semibold whitespace-nowrap">
+            <button
+              onClick={() => { if (boards.length === 0) return; setBulkArchiveMode(true); setSelectedBulkBoards(new Set()); }}
+              disabled={boards.length === 0}
+              title={boards.length === 0 ? "No boards to archive" : "Select boards to archive"}
+              className="flex items-center gap-1.5 px-3 py-2 border border-white/10 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors"
+              style={boards.length === 0
+                ? { color: "#4b5563", cursor: "not-allowed", opacity: 0.5 }
+                : { color: "#9ca3af" }
+              }>
               <Layers size={13} /> Select to archive…
             </button>
           )}
@@ -2401,6 +2408,9 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
 
       {filteredBoards.length === 0 && boardSearch && (
         <p className="text-gray-500 text-sm text-center mt-8">No boards match "{boardSearch}"</p>
+      )}
+      {boards.length === 0 && !boardSearch && !boardsLoading && (
+        <p className="text-xs text-gray-600 ml-1 mt-3">No boards created yet.</p>
       )}
 
       {/* Archived Boards — full access only */}

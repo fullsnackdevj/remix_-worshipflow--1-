@@ -264,3 +264,16 @@ button.no-scale:active {
   from { box-shadow: 0 0 0 3px rgba(245,158,11,0.9), 0 0 14px rgba(245,158,11,0.4); }
   to   { box-shadow: 0 0 0 5px rgba(245,158,11,0.3), 0 0 28px rgba(245,158,11,0.1); }
 }
+
+/* ── iOS: prevent auto-zoom on input focus ───────────────────────────────────
+   Safari zooms whenever a focused input/textarea/select has font-size < 16px.
+   This rule targets iOS/Safari only via @supports and forces 16px minimum.
+   Does NOT affect desktop browsers or disable user-initiated pinch-zoom.
+   ─────────────────────────────────────────────────────────────────────────── */
+@supports (-webkit-touch-callout: none) {
+  input,
+  textarea,
+  select {
+    font-size: max(16px, 1em) !important;
+  }
+}
