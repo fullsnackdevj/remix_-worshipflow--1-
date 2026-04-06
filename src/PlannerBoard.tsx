@@ -1927,6 +1927,9 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
   const [deleteListConfirm, setDeleteListConfirm] = useState<{ id: string; title: string } | null>(null);
   const [deleteActiveBoardCardConfirm, setDeleteActiveBoardCardConfirm] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false); // prevents double-click on all delete confirms
+  const [isCreatingBoard, setIsCreatingBoard] = useState(false);
+  const [isCreatingList, setIsCreatingList] = useState(false);
+  const [isCreatingCard, setIsCreatingCard] = useState(false);
   type CardRestoreDialog = { cardId: string; cardTitle: string; listTitle: string; listId: string; };
   const [cardRestoreDialog, setCardRestoreDialog] = useState<CardRestoreDialog | null>(null);
   const [undoCard, setUndoCard] = useState<Card | null>(null);
@@ -1954,7 +1957,8 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
   const openBoard = (b: Board) => { setActiveBoard(b); fetchBoardData(b.id); };
 
   const createBoard = async () => {
-    if (!newBoardTitle.trim()) return;
+    if (!newBoardTitle.trim() || isCreatingBoard) return;
+    setIsCreatingBoard(true);
     try {
       const createdBy = currentUser ? { name: currentUser.name, photo: currentUser.photo || "" } : undefined;
       const r = await apiFetch("/planner/boards", { method: "POST", body: JSON.stringify({ title: newBoardTitle.trim(), color: newBoardColor, description: newBoardDescription.trim(), createdBy }) });
@@ -1974,16 +1978,20 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
       }).catch(() => {});
       openBoard(nb);
     } catch { onToast("error", "Failed to create board"); }
+    finally { setIsCreatingBoard(false); }
   };
 
   const createList = async () => {
-    if (!newListTitle.trim() || !activeBoard) return;
+    if (!newListTitle.trim() || !activeBoard || isCreatingList) return;
+    setIsCreatingList(true);
     try { await apiFetch(`/planner/boards/${activeBoard.id}/lists`, { method: "POST", body: JSON.stringify({ title: newListTitle.trim().toUpperCase() }) }); setNewListTitle(""); setAddingList(false); await fetchBoardData(activeBoard.id); }
     catch { onToast("error", "Failed to create list"); }
+    finally { setIsCreatingList(false); }
   };
 
   const createCard = async (listId: string) => {
-    if (!newCardTitle.trim() || !activeBoard) return;
+    if (!newCardTitle.trim() || !activeBoard || isCreatingCard) return;
+    setIsCreatingCard(true);
     try {
       const cap = (s: string) => s.trim().replace(/\b\w/g, c => c.toUpperCase());
       const r = await apiFetch("/planner/cards", { method: "POST", body: JSON.stringify({ boardId: activeBoard.id, listId, title: cap(newCardTitle.trim()) }) });
@@ -1992,6 +2000,7 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
       apiFetch(`/planner/cards/${id}/activity`, { method: "POST", body: JSON.stringify({ type: "create", actorName: currentUser?.name || "Someone", actorPhoto: currentUser?.photo || "", text: `added this card to ${listTitle}` }) }).catch(() => {});
       setNewCardTitle(""); setAddingCard(null); await fetchBoardData(activeBoard.id);
     } catch { onToast("error", "Failed to create card"); }
+    finally { setIsCreatingCard(false); }
   };
 
   const archiveList = async (listId: string) => {
@@ -2219,7 +2228,9 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
           <p className="text-[10px] text-gray-500">3 default lists (To Do, In Progress, Done) will be created automatically.</p>
           <div className="flex gap-2">
             <button onClick={() => { setShowNewBoard(false); setNewBoardTitle(""); setNewBoardDescription(""); }} className="flex-1 py-2 border border-white/10 text-gray-300 rounded-lg text-sm hover:bg-white/5">Cancel</button>
-            <button onClick={createBoard} disabled={!newBoardTitle.trim()} className="flex-1 py-2 bg-[#579dff] hover:bg-[#4c8ee6] disabled:opacity-40 text-[#1d2125] rounded-lg text-sm font-bold">Create</button>
+            <button onClick={createBoard} disabled={!newBoardTitle.trim() || isCreatingBoard} className="flex-1 py-2 bg-[#579dff] hover:bg-[#4c8ee6] disabled:opacity-40 text-[#1d2125] rounded-lg text-sm font-bold flex items-center justify-center gap-2">
+              {isCreatingBoard ? <><span className="w-3.5 h-3.5 border-2 border-[#1d2125]/40 border-t-[#1d2125] rounded-full animate-spin" />Creating…</> : "Create"}
+            </button>
           </div>
         </div>
       )}
@@ -2707,7 +2718,9 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
                           autoFocus placeholder="Enter a title for this card…"
                           className="w-full bg-transparent text-sm text-white placeholder-gray-500 focus:outline-none resize-none" />
                         <div className="flex items-center gap-1.5">
-                          <button onClick={() => createCard(list.id)} className="px-3 py-1.5 bg-[#579dff] hover:bg-[#4c8ee6] text-[#1d2125] text-xs font-bold rounded transition-colors">Add card</button>
+                          <button onClick={() => createCard(list.id)} disabled={isCreatingCard} className="px-3 py-1.5 bg-[#579dff] hover:bg-[#4c8ee6] disabled:opacity-60 text-[#1d2125] text-xs font-bold rounded transition-colors flex items-center gap-1.5">
+                            {isCreatingCard ? <><span className="w-3 h-3 border-2 border-[#1d2125]/40 border-t-[#1d2125] rounded-full animate-spin" />Adding…</> : "Add card"}
+                          </button>
                           <button onClick={() => { setAddingCard(null); setNewCardTitle(""); }} className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors"><X size={15} /></button>
                         </div>
                       </div>
@@ -2737,7 +2750,9 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
                       autoFocus placeholder="Enter list name…"
                       className="w-full bg-white/10 border border-blue-500/50 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none" />
                     <div className="flex items-center gap-1.5">
-                      <button onClick={createList} className="px-3 py-1.5 bg-[#579dff] hover:bg-[#4c8ee6] text-[#1d2125] text-xs font-bold rounded transition-colors">Add list</button>
+                      <button onClick={createList} disabled={isCreatingList} className="px-3 py-1.5 bg-[#579dff] hover:bg-[#4c8ee6] disabled:opacity-60 text-[#1d2125] text-xs font-bold rounded transition-colors flex items-center gap-1.5">
+                        {isCreatingList ? <><span className="w-3 h-3 border-2 border-[#1d2125]/40 border-t-[#1d2125] rounded-full animate-spin" />Adding…</> : "Add list"}
+                      </button>
                       <button onClick={() => { setAddingList(false); setNewListTitle(""); }} className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors"><X size={15} /></button>
                     </div>
                   </div>
