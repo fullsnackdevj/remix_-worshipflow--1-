@@ -317,6 +317,24 @@ export default function App() {
   }, []);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "playground" | "admin" | "team-notes" | "rehearsal" | "freedom-wall">("dashboard");
+
+  // ── New-module glow: glows until user first visits the module ────────────
+  // To add a future new module: add a new useState with its own localStorage key
+  const [unseenPlanner, setUnseenPlanner] = useState(() => !localStorage.getItem("wf_seen_planner"));
+  const [unseenFreedomWall, setUnseenFreedomWall] = useState(() => !localStorage.getItem("wf_seen_freedom_wall"));
+  const markPlannerSeen = () => { if (unseenPlanner) { localStorage.setItem("wf_seen_planner", "1"); setUnseenPlanner(false); } };
+  const markFreedomWallSeen = () => { if (unseenFreedomWall) { localStorage.setItem("wf_seen_freedom_wall", "1"); setUnseenFreedomWall(false); } };
+
+  // 📱 Auto-open mobile sidebar when there are unseen new modules
+  // Only on mobile (< 1024px). Stops once all modules are seen.
+  useEffect(() => {
+    const hasUnseen = unseenPlanner || unseenFreedomWall;
+    if (hasUnseen && window.innerWidth < 1024) {
+      // Small delay so the app finishes the initial render before sliding the drawer open
+      const t = setTimeout(() => setIsMobileMenuOpen(true), 400);
+      return () => clearTimeout(t);
+    }
+  }, []); // run once on mount only
   const [pendingTeamNoteId, setPendingTeamNoteId] = useState<string | null>(null); // deep-link into Team Notes
   /** True when SongsView is displaying a song detail panel (not the list) */
   const [isSongDetailOpen, setIsSongDetailOpen] = useState(false);
@@ -1128,16 +1146,30 @@ export default function App() {
           {/* Planner — open to all users */}
           <div className="relative group/tip">
             <button
-              onClick={() => { setCurrentView("planner"); setIsMobileMenuOpen(false); }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${
+              onClick={() => { setCurrentView("planner"); setIsMobileMenuOpen(false); markPlannerSeen(); }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all font-medium ${
                 currentView === "planner"
                   ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
-                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:white"
+                  : unseenPlanner
+                    ? "text-indigo-400 dark:text-indigo-300 hover:bg-indigo-900/20"
+                    : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:white"
               } ${isSidebarCollapsed ? "justify-center" : ""}`}
+              style={unseenPlanner && currentView !== "planner" ? {
+                boxShadow: "0 0 0 1px rgba(99,102,241,0.4), 0 0 12px rgba(99,102,241,0.25)",
+                animation: "newModulePulse 2s ease-in-out infinite",
+              } : {}}
               title="Ministry Hub"
             >
-              <SquareKanban size={20} className="shrink-0" />
+              <span className="relative shrink-0">
+                <SquareKanban size={20} />
+                {unseenPlanner && currentView !== "planner" && (
+                  <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-indigo-400 border border-[#1a1f2e]" />
+                )}
+              </span>
               {!isSidebarCollapsed && <span>Ministry Hub</span>}
+              {!isSidebarCollapsed && unseenPlanner && currentView !== "planner" && (
+                <span className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">NEW</span>
+              )}
             </button>
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Ministry Hub</span>}
           </div>
@@ -1145,16 +1177,30 @@ export default function App() {
           {/* Freedom Wall — anonymous thoughts board */}
           <div className="relative group/tip">
             <button
-              onClick={() => { setCurrentView("freedom-wall"); setIsMobileMenuOpen(false); }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${
+              onClick={() => { setCurrentView("freedom-wall"); setIsMobileMenuOpen(false); markFreedomWallSeen(); }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all font-medium ${
                 currentView === "freedom-wall"
                   ? "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300"
-                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:white"
+                  : unseenFreedomWall
+                    ? "text-amber-400 dark:text-amber-300 hover:bg-amber-900/20"
+                    : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:white"
               } ${isSidebarCollapsed ? "justify-center" : ""}`}
+              style={unseenFreedomWall && currentView !== "freedom-wall" ? {
+                boxShadow: "0 0 0 1px rgba(251,191,36,0.35), 0 0 12px rgba(251,191,36,0.2)",
+                animation: "newModulePulse 2s ease-in-out infinite",
+              } : {}}
               title="Freedom Wall"
             >
-              <Feather size={20} className="shrink-0" />
+              <span className="relative shrink-0">
+                <Feather size={20} />
+                {unseenFreedomWall && currentView !== "freedom-wall" && (
+                  <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400 border border-[#1a1f2e]" />
+                )}
+              </span>
               {!isSidebarCollapsed && <span>Freedom Wall</span>}
+              {!isSidebarCollapsed && unseenFreedomWall && currentView !== "freedom-wall" && (
+                <span className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">NEW</span>
+              )}
             </button>
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Freedom Wall</span>}
           </div>

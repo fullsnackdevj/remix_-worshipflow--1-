@@ -21,6 +21,12 @@ body {
   will-change: opacity, transform;
 }
 
+/* ── New-module sidebar glow pulse ─────────────────────────────────────────── */
+@keyframes newModulePulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.65; }
+}
+
 /* ── Bell ring — plays when a real-time notification arrives ─────────────── */
 @keyframes bellRing {
   0%   { transform: rotate(0deg); }

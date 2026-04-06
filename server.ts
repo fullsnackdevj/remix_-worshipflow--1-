@@ -972,10 +972,10 @@ app.get("/api/members", async (req, res) => {
         updated_at: data.updated_at?.toDate?.()?.toISOString() || data.updated_at,
       };
     });
-    res.json(members);
+    if (!res.headersSent) res.json(members);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "Failed to fetch members" });
+    if (!res.headersSent) res.status(500).json({ error: "Failed to fetch members" });
   }
 });
 

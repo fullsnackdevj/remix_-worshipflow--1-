@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   Plus, X, ChevronLeft, ChevronRight, MoreHorizontal, Check,
   Trash2, Archive, AlignLeft, CheckSquare, Settings,
   ArrowRight, Users, Calendar, Search, Tag, Pencil,
   MessageSquare, Paperclip, LayoutGrid,
   CheckCircle2, Circle, Link2, FileText, RotateCcw,
-  AlertTriangle, Layers, Loader2, ExternalLink, Eye, EyeOff, CornerUpLeft
+  AlertTriangle, Layers, Loader2, ExternalLink, Eye, EyeOff, CornerUpLeft, Info
 } from "lucide-react";
 
 type FieldType = "text" | "number" | "dropdown" | "checkbox";
@@ -1889,6 +1890,170 @@ function BoardSettings({ board, onClose, onSaved, onArchive, onToast }:
   );
 }
 
+// ── How It Works Modal ─────────────────────────────────────────────────────
+function HowItWorksModal({ onClose, isFullAccess }: { onClose: () => void; isFullAccess: boolean }) {
+  const [tab, setTab] = useState<"boards" | "lists" | "cards">("boards");
+  const tabs = [
+    { id: "boards", label: "Boards", emoji: "🗂️" },
+    { id: "lists",  label: "Lists",  emoji: "📋" },
+    { id: "cards",  label: "Cards",  emoji: "🃏" },
+  ] as const;
+
+  // ── Full Access content (Leaders & Admins) ─────────────────────────────
+  const fullContent = {
+    boards: {
+      title: "Boards — Your Ministry Projects",
+      badge: "Leader / Admin",
+      badgeColor: "#3b82f6",
+      description: "A Board is the top-level workspace for any ministry project, event, or ongoing effort. You have full control — create, configure, archive, and delete boards.",
+      items: [
+        { icon: "➕", text: "Create a board for any project — a youth camp, Sunday service prep, outreach event, or team task." },
+        { icon: "🎨", text: "Pick a color per board to instantly distinguish different ministries at a glance." },
+        { icon: "📁", text: "Archive a board when the project is done. It won't clutter your workspace but can still be restored any time." },
+        { icon: "🗑️", text: "Permanently delete an archived board if it's no longer needed. This cannot be undone." },
+        { icon: "👑", text: "Your avatar with a crown appears on boards you created, so the team knows who's responsible." },
+        { icon: "🔍", text: "Use the search bar to quickly find a specific board when your workspace grows." },
+      ],
+    },
+    lists: {
+      title: "Lists — Workflow Stages",
+      badge: "Leader / Admin",
+      badgeColor: "#3b82f6",
+      description: "Lists are the columns inside a board representing stages of your workflow. By default every board gets: TO DO, IN PROGRESS, and DONE/INCOMPLETE.",
+      items: [
+        { icon: "📌", text: "Lists define your process stages. Cards move from left to right as work is completed." },
+        { icon: "✏️", text: "Rename a list to fit your ministry's language — e.g. 'Prayer Items', 'Pending Approval', 'Completed'." },
+        { icon: "➕", text: "Add extra lists if your workflow needs more stages. New lists appear at the end." },
+        { icon: "📦", text: "Archive a list when it's no longer active — all its cards are archived with it but can be restored." },
+        { icon: "🔁", text: "Lists stay in the order created. Plan your workflow stages carefully before building cards." },
+        { icon: "⬆️", text: "Only Leaders and Admins can add, rename, or archive lists." },
+      ],
+    },
+    cards: {
+      title: "Cards — Individual Tasks & Items",
+      badge: "Leader / Admin",
+      badgeColor: "#3b82f6",
+      description: "Cards are the individual tasks inside a list. Create and manage them to track anything from a simple to-do to a complex multi-step ministry task.",
+      items: [
+        { icon: "📝", text: "Give each card a clear, action-oriented title — e.g. 'Prepare worship slides', 'Contact venue'." },
+        { icon: "👤", text: "Assign one or more team members so everyone knows who owns what." },
+        { icon: "📅", text: "Set a start and due date to keep the team accountable to a timeline." },
+        { icon: "💬", text: "Leave comments to discuss progress, share updates, or give feedback." },
+        { icon: "📎", text: "Attach files — images, documents — directly to a card for easy reference." },
+        { icon: "🔀", text: "Move a card between lists by dragging or using the Move button inside the card." },
+        { icon: "✅", text: "Add a checklist to break a card into smaller actionable steps." },
+        { icon: "🗑️", text: "Archive a done card, or permanently delete it. Archived cards can always be restored." },
+      ],
+    },
+  };
+
+  // ── Read-only Member content ───────────────────────────────────────────
+  const memberContent = {
+    boards: {
+      title: "Boards — What You Can See",
+      badge: "Member",
+      badgeColor: "#8b5cf6",
+      description: "A Board is a ministry workspace created by your Leader or Admin. Each board is a project or ongoing effort — you can browse all boards here in Ministry Hub.",
+      items: [
+        { icon: "👀", text: "You can view all boards and see everything inside them — lists, cards, assignments, and comments." },
+        { icon: "🎨", text: "Each board has a unique color to help you quickly identify different ministry projects." },
+        { icon: "👑", text: "The avatar with a crown on a board tile shows who created it — usually your Leader or Admin." },
+        { icon: "🔍", text: "Use the search bar to quickly find a specific board by name." },
+        { icon: "📌", text: "Tap any board tile to enter it and see the full list of tasks inside." },
+        { icon: "ℹ️", text: "Only Leaders and Admins can create, archive, or delete boards." },
+      ],
+    },
+    lists: {
+      title: "Lists — Understanding the Workflow",
+      badge: "Member",
+      badgeColor: "#8b5cf6",
+      description: "Inside every board you'll see columns called Lists. They represent stages — usually TO DO, IN PROGRESS, and DONE/INCOMPLETE. They show where tasks stand.",
+      items: [
+        { icon: "📋", text: "Lists are columns that represent different stages of a ministry project's workflow." },
+        { icon: "➡️", text: "As work progresses, cards move from left to right — from To Do to In Progress to Done." },
+        { icon: "📌", text: "Check the list a card is in to know its current status at a glance." },
+        { icon: "👀", text: "You can read all lists and their cards freely — nothing is hidden from members." },
+        { icon: "ℹ️", text: "Only Leaders and Admins can add, rename, or archive lists." },
+      ],
+    },
+    cards: {
+      title: "Cards — Your Tasks & Assignments",
+      badge: "Member",
+      badgeColor: "#8b5cf6",
+      description: "Cards are individual tasks inside a list. This is where you'll find your personal assignments, deadlines, and updates from your team.",
+      items: [
+        { icon: "👤", text: "Look for cards with your name or avatar — those are tasks assigned directly to you." },
+        { icon: "📅", text: "Check the due date on your cards to know your deadlines. Overdue cards are highlighted." },
+        { icon: "💬", text: "Tap a card to open it, then read or add comments to discuss progress with your team." },
+        { icon: "📎", text: "View file attachments on a card — documents or images shared by Leaders for your reference." },
+        { icon: "✅", text: "Inside a card you may see a checklist — these are the steps needed to complete the task." },
+        { icon: "👀", text: "You can view all cards in all lists. Your Leader/Admin manages moving and archiving them." },
+      ],
+    },
+  };
+
+  const content = isFullAccess ? fullContent : memberContent;
+  const c = content[tab];
+
+  return (
+    <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/75 backdrop-blur-sm px-4" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      {/* Inject pulse animation */}
+      <style>{`@keyframes plannerInfoPulse { 0%,100%{box-shadow:0 0 0 3px rgba(59,130,246,0.2),0 0 16px rgba(59,130,246,0.3)} 50%{box-shadow:0 0 0 5px rgba(59,130,246,0.35),0 0 24px rgba(59,130,246,0.55)} }`}</style>
+      <div className="w-full max-w-lg bg-[#1d2125] rounded-2xl border border-white/10 shadow-2xl overflow-hidden flex flex-col" style={{ maxHeight: "90vh" }}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-white/8 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-blue-500/20 flex items-center justify-center">
+              <Info size={18} className="text-blue-400" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-bold text-white">How Ministry Hub Works</h2>
+                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full" style={{ background: `${c.badgeColor}22`, color: c.badgeColor, border: `1px solid ${c.badgeColor}44` }}>{c.badge}</span>
+              </div>
+              <p className="text-[11px] text-gray-500">{isFullAccess ? "Full management guide — Leaders & Admins" : "Viewer's guide — Team Member"}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-xl text-gray-500 hover:text-white hover:bg-white/10 transition-colors"><X size={16} /></button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-1 px-5 pt-4 pb-0 shrink-0 border-b border-white/6">
+          {tabs.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold transition-all border-b-2 -mb-px ${tab === t.id ? "text-blue-400 border-blue-500" : "text-gray-500 border-transparent hover:text-gray-300"}`}>
+              <span>{t.emoji}</span>{t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Content */}
+        <div className="overflow-y-auto px-5 py-5 space-y-4 flex-1" style={{ scrollbarWidth: "thin", scrollbarColor: "#374151 transparent" }}>
+          <div className="p-3 rounded-xl border" style={{ background: `${c.badgeColor}0d`, borderColor: `${c.badgeColor}22` }}>
+            <h3 className="text-sm font-bold text-white mb-1">{c.title}</h3>
+            <p className="text-xs leading-relaxed" style={{ color: "#9ca3af" }}>{c.description}</p>
+          </div>
+          <div className="space-y-2">
+            {c.items.map((item, i) => (
+              <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-white/4 border border-white/6">
+                <span className="text-base leading-none mt-0.5 shrink-0">{item.icon}</span>
+                <p className="text-xs text-gray-300 leading-relaxed">{item.text}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-4 border-t border-white/8 shrink-0">
+          <button onClick={onClose} className="w-full py-2.5 rounded-xl text-sm font-bold text-white transition-all active:scale-95" style={{ background: `linear-gradient(135deg, ${isFullAccess ? "#3b82f6, #1d4ed8" : "#7c3aed, #4c1d95"})` }}>
+            Got it, let's go! 🚀
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Component ─────────────────────────────────────────────────────────
 export default function PlaygroundTrello({ allMembers = [], currentUser, onToast, isFullAccess = true }: Props) {
   const [boards, setBoards] = useState<Board[]>([]);
@@ -1905,6 +2070,8 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
   const [addingList, setAddingList] = useState(false);
   const [newListTitle, setNewListTitle] = useState("");
   const [showNewBoard, setShowNewBoard] = useState(false);
+  const [showHowItWorks, setShowHowItWorks] = useState(false);
+  const [infoGlowing, setInfoGlowing] = useState(() => !localStorage.getItem("plannerHubSeenInfo"));
   const [newBoardTitle, setNewBoardTitle] = useState("");
   const [newBoardDescription, setNewBoardDescription] = useState("");
   const [newBoardColor, setNewBoardColor] = useState(BOARD_COLORS[0]);
@@ -2173,8 +2340,8 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
 
   if (!activeBoard) return (
     <div>
-      {/* Header row: title left, search right */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+      {/* Row 1: title left, ! info button far right — same line as "Boards" */}
+      <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center shadow">
             <LayoutGrid size={18} className="text-white" />
@@ -2184,29 +2351,50 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
             <p className="text-xs text-gray-400">Ministry Hub workspace</p>
           </div>
         </div>
-        {/* Select to archive + Search */}
-        <div className="flex items-center gap-2">
-          {isFullAccess && !bulkArchiveMode && (
-            <button
-              onClick={() => { if (boards.length === 0) return; setBulkArchiveMode(true); setSelectedBulkBoards(new Set()); }}
-              disabled={boards.length === 0}
-              title={boards.length === 0 ? "No boards to archive" : "Select boards to archive"}
-              className="flex items-center gap-1.5 px-3 py-2 border border-white/10 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors"
-              style={boards.length === 0
-                ? { color: "#4b5563", cursor: "not-allowed", opacity: 0.5 }
-                : { color: "#9ca3af" }
-              }>
-              <Layers size={13} /> Select to archive…
-            </button>
+        {/* ! — far right of the Boards title row, glows on first visit */}
+        <button
+          onClick={() => { setShowHowItWorks(true); if (infoGlowing) { localStorage.setItem("plannerHubSeenInfo", "1"); setInfoGlowing(false); } }}
+          className="relative shrink-0 w-8 h-8 flex items-center justify-center rounded-full border transition-all"
+          style={infoGlowing ? {
+            borderColor: "rgba(59,130,246,0.7)",
+            color: "#93c5fd",
+            boxShadow: "0 0 0 3px rgba(59,130,246,0.25), 0 0 16px rgba(59,130,246,0.4)",
+            animation: "plannerInfoPulse 1.8s ease-in-out infinite",
+          } : {
+            borderColor: "rgba(255,255,255,0.12)",
+            color: "#6b7280",
+          }}
+          title="How Ministry Hub works"
+        >
+          <Info size={14} />
+          {infoGlowing && (
+            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-blue-400 border-2 border-[#1d2125]" />
           )}
-          <div className="relative w-full sm:w-56">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-            <input
-              value={boardSearch} onChange={e => setBoardSearch(e.target.value)}
-              placeholder="Search boards"
-              className="w-full bg-[#22272b] border border-white/10 rounded-lg pl-8 pr-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50"
-            />
-          </div>
+        </button>
+      </div>
+
+      {/* Row 2: archive + search controls */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-6">
+        {isFullAccess && !bulkArchiveMode && (
+          <button
+            onClick={() => { if (boards.length === 0) return; setBulkArchiveMode(true); setSelectedBulkBoards(new Set()); }}
+            disabled={boards.length === 0}
+            title={boards.length === 0 ? "No boards to archive" : "Select boards to archive"}
+            className="flex items-center gap-1.5 px-3 py-2 border border-white/10 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors"
+            style={boards.length === 0
+              ? { color: "#4b5563", cursor: "not-allowed", opacity: 0.5 }
+              : { color: "#9ca3af" }
+            }>
+            <Layers size={13} /> Select to archive…
+          </button>
+        )}
+        <div className="relative w-full sm:w-56">
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+          <input
+            value={boardSearch} onChange={e => setBoardSearch(e.target.value)}
+            placeholder="Search boards"
+            className="w-full bg-[#22272b] border border-white/10 rounded-lg pl-8 pr-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50"
+          />
         </div>
       </div>
 
@@ -2593,6 +2781,12 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
           </>
         )}
       </div>}
+
+      {/* ── How It Works Modal ─────────────────────────────────────────────── */}
+      {showHowItWorks && createPortal(
+        <HowItWorksModal isFullAccess={isFullAccess} onClose={() => setShowHowItWorks(false)} />,
+        document.body
+      )}
     </div>
   );
 
