@@ -1907,7 +1907,7 @@ app.get("/api/planner/boards/:id/cards/archived", async (req, res) => {
 app.post("/api/planner/cards", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(503).json({ error: "DB unavailable" });
-  const { boardId, listId, title } = req.body;
+  const { boardId, listId, title, createdBy } = req.body;
   if (!boardId || !listId || !title?.trim()) return res.status(400).json({ error: "boardId, listId, title required" });
   try {
     const ex = await firestore.collection("pg_cards").where("listId", "==", listId).get();
@@ -1916,6 +1916,7 @@ app.post("/api/planner/cards", async (req, res) => {
       boardId, listId, title: title.trim(), description: "", pos: maxPos + 16384,
       members: [], labels: [], dueDate: null, checklists: [], customFields: {},
       archived: false,
+      ...(createdBy ? { createdBy } : {}),
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
@@ -2254,6 +2255,62 @@ app.patch("/api/freedom-wall/:id/move", async (req, res) => {
     res.json({ success: true });
   } catch { res.status(500).json({ error: "Failed to move note" }); }
 });
+
+// ── PLANNER → CALENDAR INTEGRATION ──────────────────────────────────────────
+// GET /api/planner/my-cards?memberName=...
+// Returns all non-archived cards that:
+//   1. Have the given member name in their members[] array
+//   2. Have a dueDate set
+// Also fetches the board title for each card so the calendar can display it.
+app.get("/api/planner/my-cards", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const memberName = (req.query.memberName as string || "").trim();
+  if (!memberName) return res.status(400).json({ error: "memberName is required" });
+  try {
+    // Query cards where members array contains this member name
+    const snap = await firestore
+      .collection("pg_cards")
+      .where("members", "array-contains", memberName)
+      .where("archived", "==", false)
+      .get();
+
+    // Filter to only cards with a dueDate
+    const cards = snap.docs
+      .map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? null } as any))
+      .filter((c: any) => !!c.dueDate && !c.archived);
+
+    if (cards.length === 0) return res.json([]);
+
+    // Batch-fetch unique board titles (one read per unique boardId)
+    const boardIds = [...new Set(cards.map((c: any) => c.boardId as string))];
+    const boardSnaps = await Promise.all(
+      boardIds.map(bid => firestore.collection("pg_boards").doc(bid).get())
+    );
+    const boardTitleMap: Record<string, string> = {};
+    boardSnaps.forEach(bs => { if (bs.exists) boardTitleMap[bs.id] = (bs.data() as any).title || "Board"; });
+
+    // Attach boardTitle to each card
+    const result = cards.map((c: any) => ({
+      id: c.id,
+      boardId: c.boardId,
+      boardTitle: boardTitleMap[c.boardId] || "Ministry Hub",
+      listId: c.listId,
+      title: c.title,
+      dueDate: c.dueDate,
+      startDate: c.startDate ?? null,
+      completed: c.completed ?? false,
+      members: c.members ?? [],
+    }));
+
+    res.json(result);
+  } catch (e: any) {
+    console.error("[GET /api/planner/my-cards]", e?.message);
+    res.status(500).json({ error: "Failed to fetch assigned cards" });
+  }
+});
+
+
 
 
 async function startServer() {

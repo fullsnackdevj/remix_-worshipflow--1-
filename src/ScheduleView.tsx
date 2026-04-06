@@ -4,7 +4,7 @@ import AutoTextarea from "./AutoTextarea";
 import { Member, ScheduleMember, Schedule, Song, Tag } from "./types";
 import {
   ChevronLeft, ChevronRight, Plus, Calendar, List, X,
-  Copy, Pencil, Lock, Users, Sun, Music, BookOpen, Mail, Eye, Loader2, Heart,
+  Copy, Pencil, Lock, Users, Sun, Music, BookOpen, Mail, Eye, Loader2, Heart, SquareKanban, ExternalLink, CheckCircle2,
 } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -52,6 +52,8 @@ export interface ScheduleViewProps {
   onOpenVideo?: (url: string) => void;
   /** Called when an event panel opens — lets App auto-collapse the sidebar */
   onEventPanelOpen?: () => void;
+  /** Navigate to Ministry Hub and open a specific card */
+  onNavigateToPlanner?: (target: { boardId: string; cardId: string }) => void;
 }
 
 export default function ScheduleView({
@@ -73,6 +75,7 @@ export default function ScheduleView({
   onDeepLinkHandled,
   onOpenVideo,
   onEventPanelOpen,
+  onNavigateToPlanner,
 }: ScheduleViewProps) {
 
   // ── Local scheduling state ────────────────────────────────────────────────
@@ -86,6 +89,13 @@ const [isNotifying, setIsNotifying] = useState(false);
 const [isAcking, setIsAcking] = useState(false);
 const [showEmailPreview, setShowEmailPreview] = useState(false);
 const [scheduleView, setScheduleView] = useState<"month" | "list">("month");
+
+  // ── Ministry Hub assigned cards ───────────────────────────────────────────
+  type MyPlannerCard = {
+    id: string; boardId: string; boardTitle: string; listId: string;
+    title: string; dueDate: string; startDate: string | null; completed: boolean;
+  };
+  const [myPlannerCards, setMyPlannerCards] = useState<MyPlannerCard[]>([]);
 const [calendarMonth, setCalendarMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
 // Edit form fields
 const [editSchedServiceType, setEditSchedServiceType] = useState<"sunday" | "midweek">("sunday");
@@ -160,10 +170,10 @@ const [schedMemberSearch, setSchedMemberSearch] = useState("");
           message: bdayMsg.trim() || BDAY_QUICK_MSGS[0],
         }),
       });
-      if (res.status === 429) { showToast("info", "You already sent a birthday wish today!"); setBdaySending("idle"); return; }
+if (res.status === 429) { showToast("info", "You already sent a birthday wish today!"); setBdaySending("idle"); return; }
       if (!res.ok) throw new Error("Failed");
       setBdaySending("sent");
-      showToast("success", `🎉 Birthday wish sent to ${bdayModal.member.name.split(" ")[0]}!`);
+showToast("success", `Birthday wish sent to ${bdayModal.member.name.split("")[0]}!`);
       // Refresh wishes list
       const fresh = await fetch(`/api/birthday-wish?memberId=${bdayModal.member.id}&date=${bdayModal.dateStr}`);
       const freshData = await fresh.json();
@@ -233,7 +243,7 @@ const openBlankEventForm = (dateStr: string) => {
   // Absolute rule: past dates are view-only for everyone — no exceptions
   const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
   if (dateStr < todayStr) {
-    showToast("error", "This date has passed. Events cannot be added.");
+showToast("error", "This date has passed. Events cannot be added.");
     return;
   }
   setSelectedScheduleDate(dateStr);
@@ -315,15 +325,15 @@ const closeScheduleEditor = () => {
 
 const handleSaveSchedule = async () => {
   if (!selectedScheduleDate || isSavingSchedule) return;
-  if (!editSchedEventName.trim()) { showToast("error", "Event name is required."); return; }
+if (!editSchedEventName.trim()) { showToast("error", "Event name is required."); return; }
   const isServiceEvent = ["sunday service", "midweek service"].includes(editSchedEventName.toLowerCase());
   const isMidweekSvc = editSchedEventName.toLowerCase() === "midweek service";
   const isSundaySvc = editSchedEventName.toLowerCase() === "sunday service";
-  if (isServiceEvent && !editSchedWorshipLeader) { showToast("error", "Worship Leader is required for service events."); return; }
-  if (isServiceEvent && editSchedMusicians.length === 0) { showToast("error", "At least one Musician is required for service events."); return; }
-  if (isMidweekSvc && !editSchedSongLineup.solemn) { showToast("error", "A Solemn song is required for Midweek Service."); return; }
-  if (isSundaySvc && !editSchedSongLineup.joyful) { showToast("error", "A Joyful song is required for Sunday Service."); return; }
-  if (isSundaySvc && !editSchedSongLineup.solemn) { showToast("error", "A Solemn song is required for Sunday Service."); return; }
+if (isServiceEvent && !editSchedWorshipLeader) { showToast("error", "Worship Leader is required for service events."); return; }
+if (isServiceEvent && editSchedMusicians.length === 0) { showToast("error", "At least one Musician is required for service events."); return; }
+if (isMidweekSvc && !editSchedSongLineup.solemn) { showToast("error", "A Solemn song is required for Midweek Service."); return; }
+if (isSundaySvc && !editSchedSongLineup.joyful) { showToast("error", "A Joyful song is required for Sunday Service."); return; }
+if (isSundaySvc && !editSchedSongLineup.solemn) { showToast("error", "A Solemn song is required for Sunday Service."); return; }
   setIsSavingSchedule(true);
   const cu = getAuth().currentUser;
   const actorDisplayName = cu?.displayName || cu?.email?.split("@")[0] || user?.displayName || "Worship Team";
@@ -361,20 +371,20 @@ const handleSaveSchedule = async () => {
       );
       setAllSchedules(updatedSchedules);
       writeSchedulesCache(updatedSchedules); // ← fresh data, not stale closure
-      showToast("success", "Event updated!");
+showToast("success", "Event updated!");
     } else {
       const newEv: Schedule = { id: saved.id, ...payload };
       const updatedSchedules = [...allSchedules, newEv];
       setAllSchedules(updatedSchedules);
       writeSchedulesCache(updatedSchedules); // ← fresh data, not stale closure
       setSelectedEventId(saved.id);
-      showToast("success", "Event saved!");
+showToast("success", "Event saved!");
     }
     setSchedPanelMode("view");
     // ── Background re-sync with Firestore so local state == server state ──
     fetchSchedules({ background: true });
   } catch (err: any) {
-    showToast("error", err.message || "Could not save event.");
+showToast("error", err.message || "Could not save event.");
   } finally {
     setIsSavingSchedule(false);
   }
@@ -396,13 +406,13 @@ const handleDeleteSchedule = () => {
       if (remaining.length === 0) closeScheduleEditor();
       else if (remaining.length === 1) openEventById(remaining[0].id, selectedScheduleDate!);
       else { setSelectedEventId(null); setSchedPanelMode("view"); }
-      showToast("success", "Event removed.");
+showToast("success", "Event removed.");
       // ── Fire DELETE in background — restore on failure ─────────────────
       fetch(`/api/schedules/${targetEvent.id}`, { method: "DELETE" })
         .then(res => { if (!res.ok) throw new Error("Server error"); })
         .catch(() => {
           setAllSchedules(prev => [...prev, targetEvent]); // restore
-          showToast("error", "Could not remove event. Please try again.");
+showToast("error", "Could not remove event. Please try again.");
         });
     }
   });
@@ -426,9 +436,9 @@ const handleNotifyTeam = async () => {
     setAllSchedules(prev => prev.map(s =>
       s.id === editingExisting.id ? { ...s, lastNotifiedAt: new Date().toISOString() } as any : s
     ));
-    showToast("success", "📢 Team notified via email!");
+showToast("success", "Team notified via email!");
   } catch (err: any) {
-    showToast("error", err.message || "Could not send notification.");
+showToast("error", err.message || "Could not send notification.");
   } finally {
     setIsNotifying(false);
   }
@@ -438,7 +448,7 @@ const handleNotifyTeam = async () => {
 const handleLineupAck = async (scheduleId: string) => {
   if (isAcking) return;
   const cu = getAuth().currentUser;
-  if (!cu) { showToast("error", "You must be signed in to acknowledge."); return; }
+if (!cu) { showToast("error", "You must be signed in to acknowledge."); return; }
   const userId = cu.uid;
   const userName = cu.displayName || cu.email?.split("@")[0] || "Team Member";
   const photo = cu.photoURL || "";
@@ -471,7 +481,7 @@ const handleLineupAck = async (scheduleId: string) => {
     setAllSchedules(prev => prev.map(s =>
       s.id === scheduleId ? { ...s, lineupAcks: acksNow } : s
     ));
-    showToast("error", "Could not save acknowledgment. Try again.");
+showToast("error", "Could not save acknowledgment. Try again.");
   } finally {
     setIsAcking(false);
   }
@@ -487,6 +497,15 @@ const handleLineupAck = async (scheduleId: string) => {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── Fetch my assigned Ministry Hub cards ──────────────────────────────────
+  useEffect(() => {
+    if (!myMemberProfile?.name) return;
+    fetch(`/api/planner/my-cards?memberName=${encodeURIComponent(myMemberProfile.name)}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(data => { if (Array.isArray(data)) setMyPlannerCards(data); })
+      .catch(() => {});
+  }, [myMemberProfile?.name]);
 
   // ── Deep-link: open specific event from notification ─────────────────────
   useEffect(() => {
@@ -643,6 +662,21 @@ const handleLineupAck = async (scheduleId: string) => {
                           </div>
                         );
                       })()}
+                      {/* Ministry Hub task pill */}
+                      {(() => {
+                        const tasksOnDay = myPlannerCards.filter(c => c.dueDate === dateStr);
+                        if (!tasksOnDay.length) return null;
+                        const allDone = tasksOnDay.every(c => c.completed);
+                        const doneCt = tasksOnDay.filter(c => c.completed).length;
+                        return (
+                          <div className="flex items-center gap-0.5 mt-0.5">
+                            <SquareKanban size={9} className={allDone ? "text-emerald-500" : "text-amber-500"} />
+                            <p className={`text-[10px] font-semibold leading-tight ${allDone ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
+                              {doneCt}/{tasksOnDay.length} task{tasksOnDay.length !== 1 ? "s" : ""}
+                            </p>
+                          </div>
+                        );
+                      })()}
                       {/* Birthday avatars */}
                       {(() => {
                         const mmdd = dateStr.slice(5);
@@ -787,7 +821,7 @@ const handleLineupAck = async (scheduleId: string) => {
                                 (s.assignments || []).forEach((a: any) => { lines.push(""); lines.push(`${a.role}: ${(a.members || []).map((m: any) => m.name).join(", ") || "(none)"}`); });
                               }
                               if (s.notes) { lines.push(""); lines.push("*Notes:"); lines.push(s.notes); }
-                              navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", "Copied!"));
+navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", "Copied!"));
                             }}
                             className="absolute top-3 right-3 p-1.5 text-gray-400 dark:text-gray-500 hover:text-indigo-500 dark:hover:text-indigo-400 opacity-40 sm:opacity-0 sm:group-hover:opacity-100 transition-all rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
                           >
@@ -804,12 +838,13 @@ const handleLineupAck = async (scheduleId: string) => {
         </div>
 
         {/* SIDE PANEL */}
-        {selectedScheduleDate && (() => { const _mmdd = selectedScheduleDate.slice(5); const _hasBd = (birthdayMap[_mmdd] ?? []).length > 0; return (selectedDateEvents.length > 0 || schedPanelMode === "edit" || _hasBd); })() && (
+        {selectedScheduleDate && (() => { const _mmdd = selectedScheduleDate.slice(5); const _hasBd = (birthdayMap[_mmdd] ?? []).length > 0; const _hasTasks = myPlannerCards.some(c => c.dueDate === selectedScheduleDate); return (selectedDateEvents.length > 0 || schedPanelMode === "edit" || _hasBd || _hasTasks); })() && (
           <div className="md:hidden fixed inset-0 bg-black/50 z-40" onClick={closeScheduleEditor} />
         )}
-        {selectedScheduleDate && (() => { const _mmdd = selectedScheduleDate.slice(5); const _hasBd = (birthdayMap[_mmdd] ?? []).length > 0; return (selectedDateEvents.length > 0 || schedPanelMode === "edit" || _hasBd); })() && (() => {
+        {selectedScheduleDate && (() => { const _mmdd = selectedScheduleDate.slice(5); const _hasBd = (birthdayMap[_mmdd] ?? []).length > 0; const _hasTasks = myPlannerCards.some(c => c.dueDate === selectedScheduleDate); return (selectedDateEvents.length > 0 || schedPanelMode === "edit" || _hasBd || _hasTasks); })() && (() => {
           const isDatePast = selectedScheduleDate < todayStr;
-          const showDayView = (selectedDateEvents.length >= 1 || (birthdayMap[selectedScheduleDate.slice(5)] ?? []).length > 0) && !selectedEventId && schedPanelMode !== "edit";
+          const tasksOnThisDay = myPlannerCards.filter(c => c.dueDate === selectedScheduleDate);
+          const showDayView = (selectedDateEvents.length >= 1 || (birthdayMap[selectedScheduleDate.slice(5)] ?? []).length > 0 || tasksOnThisDay.length > 0) && !selectedEventId && schedPanelMode !== "edit";
           const bdaysOnDate = birthdayMap[selectedScheduleDate.slice(5)] ?? [];
           if (showDayView) {
             const dateLabel = new Date(selectedScheduleDate + "T00:00:00").toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
@@ -868,6 +903,60 @@ const handleLineupAck = async (scheduleId: string) => {
                     );
                   })}
                 </div>
+
+                {/* ── Ministry Hub tasks due on this date ── */}
+                {(() => {
+                  if (!tasksOnThisDay.length) return null;
+                  const doneCount = tasksOnThisDay.filter(c => c.completed).length;
+                  return (
+                    <div className="mb-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-1.5">
+                          <SquareKanban size={12} className="text-amber-500" />
+                          <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">My Tasks</p>
+                        </div>
+                        <span className="text-[10px] font-semibold text-gray-400">{doneCount}/{tasksOnThisDay.length} done</span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {tasksOnThisDay.map(card => (
+                          <div key={card.id} className={`flex items-start gap-2.5 p-2.5 rounded-xl border transition-all ${
+                            card.completed
+                              ? "bg-emerald-50 dark:bg-emerald-900/15 border-emerald-300 dark:border-emerald-700/50"
+                              : "bg-amber-50 dark:bg-amber-900/15 border-amber-200 dark:border-amber-700/40"
+                          }`}>
+                            <div className="shrink-0 mt-0.5">
+                              {card.completed
+                                ? <CheckCircle2 size={14} className="text-emerald-500" />
+                                : <div className="w-3.5 h-3.5 rounded-full border-2 border-amber-400" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-xs font-medium leading-snug ${
+                                card.completed ? "line-through text-emerald-600 dark:text-emerald-400" : "text-gray-800 dark:text-gray-100"
+                              }`}>{card.title}</p>
+                              <p className={`text-[10px] mt-0.5 truncate ${
+                                card.completed ? "text-emerald-600 dark:text-emerald-500" : "text-amber-600 dark:text-amber-500"
+                              }`}>{card.boardTitle}</p>
+                            </div>
+                            {onNavigateToPlanner && (
+                              <button
+                                onClick={() => onNavigateToPlanner({ boardId: card.boardId, cardId: card.id })}
+                                title="Open card in Ministry Hub"
+                                className={`shrink-0 p-1.5 rounded-lg transition-all ${
+                                  card.completed
+                                    ? "text-emerald-500 hover:text-white hover:bg-emerald-500 dark:hover:bg-emerald-600"
+                                    : "text-amber-500 hover:text-white hover:bg-amber-500 dark:hover:bg-amber-600"
+                                }`}
+                              >
+                                <ExternalLink size={12} />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {isDatePast ? (
                   <div className="w-full flex items-center gap-2 py-2.5 px-3 border border-amber-200 dark:border-amber-700/40 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 rounded-xl text-xs font-medium">
                     <Lock size={13} className="shrink-0" />
@@ -1002,7 +1091,7 @@ const handleLineupAck = async (scheduleId: string) => {
                         editSchedAssignments.forEach(asgn => { lines.push(""); lines.push(`${asgn.role}: ${asgn.members.map(m => m.name).join(", ") || "(none)"}`); });
                       }
                       if (editSchedNotes) { lines.push(""); lines.push("*Notes:"); lines.push(editSchedNotes); }
-                      navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", "Copied to clipboard!"));
+navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", "Copied to clipboard!"));
                     }} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg transition-colors"><Copy size={16} /></button>
                   )}
                   <button onClick={closeScheduleEditor} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg"><X size={18} /></button>
@@ -1173,6 +1262,7 @@ const handleLineupAck = async (scheduleId: string) => {
                     </div>
                   );
                 })()}
+
                 {/* ── Birthday celebrant cards (single-event view) ── */}
                 {(() => {
                   const bdSingle = birthdayMap[selectedScheduleDate!.slice(5)] ?? [];

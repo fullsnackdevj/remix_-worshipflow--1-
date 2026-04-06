@@ -325,6 +325,10 @@ export default function App() {
   const markPlannerSeen = () => { if (unseenPlanner) { localStorage.setItem("wf_seen_planner", "1"); setUnseenPlanner(false); } };
   const markFreedomWallSeen = () => { if (unseenFreedomWall) { localStorage.setItem("wf_seen_freedom_wall", "1"); setUnseenFreedomWall(false); } };
 
+  // ── Planner deep-link state (from calendar task card ⇒ open specific card) ──
+  const [pendingPlannerBoardId, setPendingPlannerBoardId] = useState<string | null>(null);
+  const [pendingPlannerCardId, setPendingPlannerCardId] = useState<string | null>(null);
+
   // 📱 Auto-open mobile sidebar when there are unseen new modules
   // Only on mobile (< 1024px). Stops once all modules are seen.
   useEffect(() => {
@@ -585,7 +589,7 @@ export default function App() {
     if (songsWithVideo.length === 0) return;
     // Conflict guard: lineup player is already open
     if (lineupOpen) {
-      showToast("warning", "⚠️ Another player is active. Please close the Lineup Player first.");
+showToast("warning", "️ Another player is active. Please close the Lineup Player first.");
       return;
     }
     const idx = songId ? songsWithVideo.findIndex(t => t.id === songId) : 0;
@@ -596,7 +600,7 @@ export default function App() {
   const openLineupPlayer = () => {
     // Conflict guard: library player is already open
     if (libraryOpen) {
-      showToast("warning", "⚠️ Another player is active. Please close the Song Library Player first.");
+showToast("warning", "️ Another player is active. Please close the Song Library Player first.");
       return;
     }
     setLineupOpen(true);
@@ -1485,6 +1489,13 @@ export default function App() {
                   user={user}
                   showToast={showToast}
                   setCurrentView={setCurrentView}
+                  onNavigateToPlanner={({ boardId, cardId }) => {
+                    // Empty strings = landing page nav → clear any pending deep-link
+                    setPendingPlannerBoardId(boardId || null);
+                    setPendingPlannerCardId(cardId || null);
+                    setCurrentView('planner');
+                    markPlannerSeen();
+                  }}
                   onOpenLineup={openLineupPlayer}
                   lineupTrackCount={lineupSongCount}
                   isLineupOpen={lineupOpen}
@@ -1521,6 +1532,12 @@ export default function App() {
                    onEventPanelOpen={() => {
                      if (window.innerWidth >= 768) setIsSidebarCollapsed(true);
                    }}
+                   onNavigateToPlanner={({ boardId, cardId }: { boardId: string; cardId: string }) => {
+                     setPendingPlannerBoardId(boardId);
+                     setPendingPlannerCardId(cardId);
+                     setCurrentView("planner");
+                     markPlannerSeen();
+                   }}
                 />
               ) : null}
 
@@ -1543,6 +1560,8 @@ export default function App() {
                     : (user ? { name: user.displayName || user.email?.split('@')[0] || "Me", photo: user.photoURL || "" } : undefined)}
                   onToast={showToast}
                   isFullAccess={isAdmin || (myMemberProfile?.plannerAccess ?? false)}
+                  deepLinkBoardId={pendingPlannerBoardId}
+                  deepLinkCardId={pendingPlannerCardId}
                 />
               ) : currentView === "team-notes" ? (
                 <TeamNotesView

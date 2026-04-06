@@ -20,7 +20,7 @@ interface PgList { id: string; boardId: string; title: string; pos: number; arch
 interface Card { id: string; boardId: string; listId: string; title: string; description: string; pos: number; members: string[]; labels: Label[]; dueDate: string | null; startDate?: string | null; dueTime?: string; reminder?: string; checklists: Checklist[]; customFields: Record<string, any>; archived: boolean; completed?: boolean; attachments?: Attachment[]; createdAt?: string; }
 interface Comment { id: string; authorName: string; authorPhoto: string; text: string; createdAt: string; reactions?: Record<string, string[]>; attachments?: { id: string; name: string; url: string; type: string }[]; }
 
-interface Props { allMembers?: any[]; currentUser?: { name: string; photo?: string }; onToast: (t: "success" | "error", m: string) => void; isFullAccess?: boolean; }
+interface Props { allMembers?: any[]; currentUser?: { name: string; photo?: string }; onToast: (t: "success" | "error", m: string) => void; isFullAccess?: boolean; deepLinkBoardId?: string | null; deepLinkCardId?: string | null; }
 
 const API = import.meta.env.DEV ? "http://localhost:3000/api" : "/api";
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -92,8 +92,8 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
   const [c, setC] = useState<Card>({ ...card });
   const [saving, setSaving] = useState(false);
   const [panel, setPanel] = useState<"main"|"dates"|"checklist"|"members"|"labels"|"attachment">("main");
-  // On mobile/tablet (< lg = 1024px) start with comments collapsed; desktop starts open
-  const [showCommentsPanel, setShowCommentsPanel] = useState(() => window.innerWidth >= 1024);
+  // Comments panel: collapsed by default on all screen sizes — user opens it when needed
+  const [showCommentsPanel, setShowCommentsPanel] = useState(false);
   // Reactive desktop breakpoint — updates on resize so panel layout adapts in real-time
   const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 1024);
   const [newChecklistTitle, setNewChecklistTitle] = useState("");
@@ -335,6 +335,17 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
 
   const save = async (partial: Partial<Card>) => {
     const prev = c;                          // snapshot before optimistic update
+    // Auto-move to DONE list when marking as complete
+    let autoMoveListId: string | null = null;
+    if (partial.completed === true && c.completed !== true) {
+      const doneList = lists.find(l =>
+        /done|complete/i.test(l.title) && l.id !== c.listId
+      );
+      if (doneList) {
+        autoMoveListId = doneList.id;
+        partial = { ...partial, listId: doneList.id };
+      }
+    }
     const updated = { ...c, ...partial }; setC(updated); setSaving(true);
     try {
       await apiFetch(`/planner/cards/${card.id}`, { method: "PUT", body: JSON.stringify(partial) });
@@ -352,8 +363,12 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
       if (actText) {
         apiFetch(`/planner/cards/${card.id}/activity`, { method: "POST", body: JSON.stringify({ type: "update", actorName: actor, actorPhoto: photo, text: actText }) }).catch(() => {});
       }
+      if (autoMoveListId) {
+        const movedList = lists.find(l => l.id === autoMoveListId);
+onToast("success", `Moved to "${movedList?.title ?? "Done"}"`);
+      }
       onSave(updated);
-    } catch { setC(prev); onToast("error", "Failed to save"); } finally { setSaving(false); }
+} catch { setC(prev); onToast("error", "Failed to save"); } finally { setSaving(false); }
   };
 
   const sendComment = async () => {
@@ -370,13 +385,13 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
       setPendingCommentAttach(null);
       // Notify all card members about the new comment (spam-guarded server-side)
       notifyPlannerMembers('planner_comment', c.members);
-    } catch { onToast("error", "Failed to post comment"); } finally { setSendingComment(false); }
+} catch { onToast("error", "Failed to post comment"); } finally { setSendingComment(false); }
   };
 
   const deleteComment = async (cid: string) => {
     await apiFetch(`/planner/cards/${card.id}/comments/${cid}`, { method: "DELETE" });
     setComments(prev => prev.filter(x => x.id !== cid));
-    onToast('success', 'Comment deleted');
+onToast('success', 'Comment deleted');
   };
 
   // ── Planner notification helper — batch: 1 request for all recipients ──────
@@ -407,7 +422,7 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
   // Attachment: file upload → base64 JSON → API (server or Netlify) → Firebase Storage via Admin SDK
   const uploadFile = async (file: File) => {
     if (file.size > 5 * 1024 * 1024) {
-      onToast('error', 'File too large — maximum size is 5 MB.');
+onToast('error', 'File too large — maximum size is 5 MB.');
       return;
     }
     setUploading(true); setUploadProgress(30);
@@ -428,9 +443,9 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
       const att: Attachment = { id: uid(), name: file.name, url, type: "file", createdAt: new Date().toISOString() };
       await save({ attachments: [...(c.attachments ?? []), att] });
       setUploading(false); setUploadProgress(0); setPanel("main");
-      onToast("success", "File attached!");
+onToast("success", "File attached!");
     } catch (e: any) {
-      onToast("error", e?.message ?? "Upload failed");
+onToast("error", e?.message ?? "Upload failed");
       setUploading(false);
     }
   };
@@ -445,15 +460,64 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
   const removeAttachment = async (id: string) => {
     try {
       await save({ attachments: (c.attachments ?? []).filter(a => a.id !== id) });
-      onToast('success', 'Attachment removed');
+onToast('success', 'Attachment removed');
     } catch { /* save() already shows the toast and reverts */ }
   };
   const [confirmRemoveAtt, setConfirmRemoveAtt] = useState<string | null>(null);
 
   const listName = lists.find(l => l.id === c.listId)?.title ?? "";
   const isOverdue = c.dueDate && new Date(c.dueDate) < new Date();
+  // When card is completed → entire card goes read-only (toggle still works to un-complete)
+  const isEditable = isFullAccess && !c.completed;
 
-  const toggleItem = (clId: string, itemId: string) => save({ checklists: c.checklists.map(cl => cl.id === clId ? { ...cl, items: cl.items.map(i => i.id === itemId ? { ...i, done: !i.done } : i) } : cl) });
+  const toggleItem = (clId: string, itemId: string) => {
+    const targetCl = c.checklists.find(cl => cl.id === clId);
+    if (!targetCl) return;
+    const targetItem = targetCl.items.find(i => i.id === itemId);
+    if (!targetItem) return;
+    const isChecking = !targetItem.done;
+    const updatedChecklists = c.checklists.map(cl =>
+      cl.id === clId ? { ...cl, items: cl.items.map(i => i.id === itemId ? { ...i, done: !i.done } : i) } : cl
+    );
+    let patch: Partial<typeof c> = { checklists: updatedChecklists };
+
+    if (isChecking) {
+      // ── 1. First item checked → ANY LIST → IN PROGRESS ─────────────────
+      const noItemsDoneYet = !c.checklists.some(cl => cl.items.some(i => i.done));
+      const alreadyInProgressOrDone = /in.?progress|progress|done|complete/i.test(listName);
+      if (noItemsDoneYet && !alreadyInProgressOrDone) {
+        const inProgressList = lists.find(l => /in.?progress|progress/i.test(l.title));
+        if (inProgressList) {
+          patch = { ...patch, listId: inProgressList.id };
+onToast("success", `Moved to "${inProgressList.title}"`);
+        }
+      }
+      // ── 2. ALL checklists hit 100% → IN PROGRESS → DONE ─────────────────
+      const allDone = updatedChecklists.length > 0 &&
+        updatedChecklists.every(cl => cl.items.length > 0 && cl.items.every(i => i.done));
+      if (allDone) {
+        const doneList = lists.find(l => /done|complete/i.test(l.title));
+        if (doneList && c.listId !== doneList.id) {
+          patch = { ...patch, listId: doneList.id };
+onToast("success", `All done! Moved to "${doneList.title}"`);
+        }
+      }
+    } else {
+      // ── 3. Last item unchecked → IN PROGRESS → TO DO ─────────────────────
+      const remaining = updatedChecklists.reduce(
+        (count, cl) => count + cl.items.filter(i => i.done).length, 0
+      );
+      if (remaining === 0 && /in.?progress|progress/i.test(listName)) {
+        const todoList = lists.find(l => /to.?do|todo/i.test(l.title));
+        if (todoList) {
+          patch = { ...patch, listId: todoList.id };
+onToast("success", `️ Moved back to "${todoList.title}"`);
+        }
+      }
+    }
+
+    save(patch);
+  };
   const addItem = (clId: string) => {
     const text = newItems[clId]?.trim(); if (!text) return;
     const capFirst = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -568,28 +632,42 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
           {/* LEFT — card details + Trello-style center scrollbar */}
           <div
             ref={leftPanelRef}
-            className="card-left-panel min-w-0 px-4 pt-4 pb-4 sm:px-5 sm:pt-5 space-y-4 lg:flex-1 lg:overflow-y-auto"
+            className="card-left-panel min-w-0 px-6 pt-5 pb-6 sm:px-7 space-y-4 lg:flex-1 lg:overflow-y-auto"
             style={{
               scrollbarWidth: 'thin',
               scrollbarColor: 'rgba(150,155,163,0.45) rgba(0,0,0,0)',
             }}
           >
-            {/* Title with completion toggle — Trello large title style */}
-            <div className="flex items-start gap-3">
-              {isFullAccess && (
-                <button onClick={() => save({ completed: !c.completed })} title={c.completed ? "Mark incomplete" : "Mark complete"}
-                  className="mt-1.5 shrink-0 text-gray-400 hover:text-blue-400 transition-colors">
-                  {c.completed ? <CheckCircle2 size={20} className="text-blue-400" /> : <Circle size={20} />}
+            {/* ── Approved by Board Admin toggle ──
+                Visible ONLY when card is in the DONE list AND viewer is full-access (board admin).
+                Members assigned to the card cannot see this toggle. */}
+            {isFullAccess && /done|complete/i.test(listName) && (
+              <div className="flex items-center gap-3 mb-3">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider select-none">Approved by Board Admin</span>
+                <button
+                  onClick={() => save({ completed: !c.completed })}
+                  title={c.completed ? "Revoke approval" : "Approve this card"}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none ${
+                    c.completed ? "bg-emerald-500" : "bg-gray-600"
+                  } cursor-pointer hover:opacity-90`}
+                >
+                  <span className={`inline-block h-4 w-4 rounded-full bg-white shadow-md transform transition-transform duration-200 ${c.completed ? "translate-x-6" : "translate-x-1"}`} />
                 </button>
-              )}
-              <textarea value={c.title} readOnly={!isFullAccess}
-                onChange={isFullAccess ? e => setC(p => ({ ...p, title: e.target.value })) : undefined}
-                onBlur={isFullAccess ? () => { const cap = (s: string) => s.trim().replace(/\b\w/g, c => c.toUpperCase()); const capitalized = cap(c.title); if (capitalized !== c.title) setC(p => ({ ...p, title: capitalized })); save({ title: capitalized }); } : undefined} rows={1}
-                className={`flex-1 bg-transparent font-bold text-[22px] leading-snug focus:outline-none resize-none placeholder-gray-600 ${c.completed ? "line-through text-gray-500" : "text-white"} ${!isFullAccess ? "cursor-default" : ""}`} />
+                <span className={`text-xs font-bold transition-colors duration-200 ${c.completed ? "text-emerald-400" : "text-gray-500"}`}>
+                  {c.completed ? "YES" : "NO"}
+                </span>
+              </div>
+            )}
+            {/* Title row */}
+            <div className="flex items-start gap-3 mb-4">
+              <textarea value={c.title} readOnly={!isEditable}
+                onChange={isEditable ? e => setC(p => ({ ...p, title: e.target.value })) : undefined}
+                onBlur={isEditable ? () => { const cap = (s: string) => s.trim().replace(/\b\w/g, c => c.toUpperCase()); const capitalized = cap(c.title); if (capitalized !== c.title) setC(p => ({ ...p, title: capitalized })); save({ title: capitalized }); } : undefined} rows={1}
+                className={`flex-1 bg-transparent font-bold text-[22px] leading-snug focus:outline-none resize-none placeholder-gray-600 ${c.completed ? "line-through text-gray-500" : "text-white"} ${!isEditable ? "cursor-default" : ""}`} />
             </div>
-            {/* Action buttons — full access only */}
-            {isFullAccess && (
-              <div className="flex flex-wrap gap-1.5 sm:ml-7">
+            {/* Action buttons — full access + not completed only */}
+            {isEditable && (
+              <div className="flex flex-wrap gap-1.5">
                 <div ref={datesBtnWrapRef}>
                   <Btn icon={<Calendar size={12} />} label="Dates" act={panel === "dates"} onCl={toggleDatesPanel} />
                 </div>
@@ -602,7 +680,7 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
 
             {/* Checklist sub-panel */}
             {panel === "checklist" && (
-              <div className="sm:ml-7 bg-[#22272b] border border-white/10 rounded-xl p-4 space-y-3">
+              <div className="bg-[#22272b] border border-white/10 rounded-xl p-4 space-y-3">
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Add Checklist</p>
                 <div>
                   <label className="text-xs text-gray-400 mb-1 block">Title</label>
@@ -634,28 +712,32 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
             )}
             {/* Members sub-panel */}
             {panel === "members" && (
-              <div className="sm:ml-7 bg-[#22272b] border border-white/10 rounded-xl overflow-hidden">
-                <div className="relative p-3 border-b border-white/5">
-                  <Search size={12} className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-500" />
-                  <input value={memberSearch} onChange={e => setMemberSearch(e.target.value)} autoFocus placeholder="Search members…"
-                    className="w-full pl-7 pr-3 py-1.5 bg-[#1d2125] rounded-lg text-xs text-white placeholder-gray-500 focus:outline-none" />
+              <>
+                {/* Backdrop — click outside to close */}
+                <div className="fixed inset-0 z-10" onClick={() => { setPanel("main"); setMemberSearch(""); }} />
+                <div className="relative z-20 bg-[#22272b] border border-white/10 rounded-xl overflow-hidden">
+                  <div className="relative p-3 border-b border-white/5">
+                    <Search size={12} className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-500" />
+                    <input value={memberSearch} onChange={e => setMemberSearch(e.target.value)} autoFocus placeholder="Search members…"
+                      className="w-full pl-7 pr-3 py-1.5 bg-[#1d2125] rounded-lg text-xs text-white placeholder-gray-500 focus:outline-none" />
+                  </div>
+                  <div className="max-h-44 overflow-y-auto">
+                    {filteredMembers.map((m: any) => (
+                      <button key={m.id} onClick={() => addMember(m.name)} className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-white/5 text-left">
+                        <Avatar name={m.name} photo={m.photo} size={26} /><span className="text-sm text-gray-300 flex-1">{m.name}</span>
+                        {c.members.includes(m.name) && <Check size={12} className="text-blue-400" />}
+                      </button>
+                    ))}
+                    {memberSearch && !allMembers.find((m: any) => m.name?.toLowerCase() === memberSearch.toLowerCase()) && (
+                      <button onClick={() => addMember(memberSearch)} className="w-full px-3 py-2 text-xs text-blue-400 hover:bg-white/5 text-left">+ Add "{memberSearch}"</button>
+                    )}
+                  </div>
                 </div>
-                <div className="max-h-44 overflow-y-auto">
-                  {filteredMembers.map((m: any) => (
-                    <button key={m.id} onClick={() => addMember(m.name)} className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-white/5 text-left">
-                      <Avatar name={m.name} photo={m.photo} size={26} /><span className="text-sm text-gray-300 flex-1">{m.name}</span>
-                      {c.members.includes(m.name) && <Check size={12} className="text-blue-400" />}
-                    </button>
-                  ))}
-                  {memberSearch && !allMembers.find((m: any) => m.name?.toLowerCase() === memberSearch.toLowerCase()) && (
-                    <button onClick={() => addMember(memberSearch)} className="w-full px-3 py-2 text-xs text-blue-400 hover:bg-white/5 text-left">+ Add "{memberSearch}"</button>
-                  )}
-                </div>
-              </div>
+              </>
             )}
             {/* Attachment sub-panel — compact Trello-style */}
             {panel === "attachment" && (
-              <div className="sm:ml-7 bg-[#22272b] border border-white/10 rounded-xl overflow-hidden w-72">
+              <div className="bg-[#22272b] border border-white/10 rounded-xl overflow-hidden w-72">
                 {/* Header */}
                 <div className="flex items-center justify-between px-3 py-2.5 border-b border-white/5">
                   <p className="text-xs font-semibold text-white">Attach</p>
@@ -705,7 +787,7 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
 
             {/* Labels + Dates inline row */}
             {(c.labels.length > 0 || c.dueDate || c.startDate) && (
-              <div className="sm:ml-7 space-y-2">
+              <div className="space-y-2">
                 {/* Labels row */}
                 {c.labels.length > 0 && (
                   <div>
@@ -721,11 +803,11 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
                       {(c.dueDate || c.startDate) && panel !== "dates" && (
                         <button
                           ref={datesBtnWrapRef as any}
-                          onClick={toggleDatesPanel}
+                          onClick={isEditable ? toggleDatesPanel : undefined}
                           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-[13px] font-medium transition-colors ${
                             isOverdue
-                              ? "bg-red-500/20 border-red-500/50 text-red-300 hover:bg-red-500/30"
-                              : "border-[#454f59] bg-[#22272b] text-gray-200 hover:bg-[#282e33] hover:border-[#5a6577]"
+                              ? "bg-red-500/20 border-red-500/50 text-red-300" + (isEditable ? " hover:bg-red-500/30" : " cursor-default opacity-75")
+                              : "border-[#454f59] bg-[#22272b] text-gray-200" + (isEditable ? " hover:bg-[#282e33] hover:border-[#5a6577]" : " cursor-default opacity-75")
                           }`}
                         >
                           <Calendar size={12} />
@@ -736,7 +818,7 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
                             {new Date(c.dueDate! + "T00:00:00").toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}
                             {c.dueTime && <>, {c.dueTime}</>}
                           </span>
-                          <ChevronLeft size={11} className="rotate-180 opacity-60 ml-0.5" />
+                          {isEditable && <ChevronLeft size={11} className="rotate-180 opacity-60 ml-0.5" />}
                           {isOverdue && <span className="ml-1 text-red-400 text-[11px] font-semibold">· Overdue</span>}
                         </button>
                       )}
@@ -749,11 +831,11 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
                     <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Dates</p>
                     <button
                       ref={datesBtnWrapRef as any}
-                      onClick={toggleDatesPanel}
+                      onClick={isEditable ? toggleDatesPanel : undefined}
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-[13px] font-medium transition-colors ${
                         isOverdue
-                          ? "bg-red-500/20 border-red-500/50 text-red-300 hover:bg-red-500/30"
-                          : "border-[#454f59] bg-[#22272b] text-gray-200 hover:bg-[#282e33] hover:border-[#5a6577]"
+                          ? "bg-red-500/20 border-red-500/50 text-red-300" + (isEditable ? " hover:bg-red-500/30" : " cursor-default opacity-75")
+                          : "border-[#454f59] bg-[#22272b] text-gray-200" + (isEditable ? " hover:bg-[#282e33] hover:border-[#5a6577]" : " cursor-default opacity-75")
                       }`}
                     >
                       <Calendar size={12} />
@@ -764,7 +846,7 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
                         {new Date(c.dueDate! + "T00:00:00").toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}
                         {c.dueTime && <>, {c.dueTime}</>}
                       </span>
-                      <ChevronLeft size={11} className="rotate-180 opacity-60 ml-0.5" />
+                      {isEditable && <ChevronLeft size={11} className="rotate-180 opacity-60 ml-0.5" />}
                       {isOverdue && <span className="ml-1 text-red-400 text-[11px] font-semibold">· Overdue</span>}
                     </button>
                   </div>
@@ -887,7 +969,7 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
             )}
             {/* Members */}
             {c.members.length > 0 && (
-              <div className="sm:ml-7">
+              <div>
                 <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Members</p>
                 <div className="flex items-center">
                   <div className="flex -space-x-2">
@@ -896,28 +978,38 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
                       const mPhoto = mem?.photo || mem?.photoURL || "";
                       return (
                         <div key={m} className="relative group/av">
-                          <button
-                            onClick={() => removeMember(m)}
-                            title={`Remove ${m}`}
-                            className="block rounded-full ring-2 ring-[#1d2125] hover:ring-red-500/70 transition-all"
-                          >
-                            <Avatar name={m} photo={mPhoto} size={30} />
-                          </button>
-                          <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 whitespace-nowrap px-2 py-1 rounded-lg bg-gray-900 text-white text-[11px] font-medium shadow-lg opacity-0 group-hover/av:opacity-100 transition-opacity z-30">
-                            {m}
-                            <span className="ml-1 text-red-400 text-[10px]">(click to remove)</span>
-                          </div>
+                          {isEditable ? (
+                            <button
+                              onClick={() => removeMember(m)}
+                              title={`Remove ${m}`}
+                              className="block rounded-full ring-2 ring-[#1d2125] hover:ring-red-500/70 transition-all"
+                            >
+                              <Avatar name={m} photo={mPhoto} size={30} />
+                            </button>
+                          ) : (
+                            <div className="block rounded-full ring-2 ring-[#1d2125]">
+                              <Avatar name={m} photo={mPhoto} size={30} />
+                            </div>
+                          )}
+                          {isEditable && (
+                            <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 whitespace-nowrap px-2 py-1 rounded-lg bg-gray-900 text-white text-[11px] font-medium shadow-lg opacity-0 group-hover/av:opacity-100 transition-opacity z-30">
+                              {m}
+                              <span className="ml-1 text-red-400 text-[10px]">(click to remove)</span>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
                   </div>
-                  <button
-                    onClick={() => setPanel(panel === "members" ? "main" : "members")}
-                    className="ml-1.5 w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-gray-300 ring-2 ring-[#1d2125] transition-colors"
-                    title="Add member"
-                  >
-                    <Plus size={13} />
-                  </button>
+                  {isEditable && (
+                    <button
+                      onClick={() => setPanel(panel === "members" ? "main" : "members")}
+                      className="ml-1.5 w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-gray-300 ring-2 ring-[#1d2125] transition-colors"
+                      title="Add member"
+                    >
+                      <Plus size={13} />
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -925,7 +1017,7 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
             {(c.attachments ?? []).length > 0 && (() => {
               const isImg = (url: string) => /\.(jpe?g|png|gif|webp|svg|bmp|ico)($|\?)/i.test(url);
               return (
-                <div className="sm:ml-7">
+                <div>
                   <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Attachments</p>
                   <div className="space-y-1">
                     {(c.attachments ?? []).map(att => (
@@ -975,19 +1067,19 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
               );
             })()}
             {/* Description */}
-            <div className="sm:ml-7 mt-2">
+            <div className="mt-2">
               <div className="flex items-center justify-between gap-2 mb-2">
                 <div className="flex items-center gap-2"><AlignLeft size={14} className="text-gray-400" /><p className="text-[14px] font-bold text-white">Description</p></div>
-                {descDraft !== c.description && (
+                {isEditable && descDraft !== c.description && (
                   <span className="text-[9px] font-bold text-amber-400 border border-amber-400/40 bg-amber-400/10 px-1.5 py-0.5 rounded tracking-wider">UNSAVED CHANGES</span>
                 )}
               </div>
               {!descEditing ? (
-                <div onClick={() => isFullAccess ? setDescEditing(true) : undefined}
-                  className={`w-full min-h-[56px] ${isFullAccess ? 'cursor-text' : ''} px-3 py-2.5 rounded-lg transition-colors bg-[#22272b] border border-[#454f59] hover:border-[#5a6577]`}>
+                <div onClick={() => isEditable ? setDescEditing(true) : undefined}
+                  className={`w-full min-h-[56px] ${isEditable ? 'cursor-text' : 'cursor-default'} px-3 py-2.5 rounded-lg transition-colors bg-[#22272b] border border-[#454f59] ${isEditable ? 'hover:border-[#5a6577]' : ''}`}>
                   {c.description
                     ? <p className="text-[13px] text-gray-300 leading-relaxed whitespace-pre-wrap">{c.description}</p>
-                    : <span className="text-[13px] text-gray-500">Add a more detailed description…</span>}
+                    : <span className="text-[13px] text-gray-500">{isEditable ? "Add a more detailed description…" : "No description"}</span>}
                 </div>
               ) : (
                 <>
@@ -995,17 +1087,19 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
                     onKeyDown={e => { if (e.key === 'Escape') { setDescDraft(c.description); setDescEditing(false); } }}
                     rows={4} placeholder="Add a more detailed description…"
                     className="w-full bg-[#22272b] border border-blue-500/60 rounded-lg px-3 py-2.5 text-[13px] text-gray-300 placeholder-gray-500 focus:outline-none resize-none leading-relaxed" />
-                  <div className="flex items-center gap-2 mt-2">
-                    <button onClick={() => { save({ description: descDraft }); setC(p => ({ ...p, description: descDraft })); setDescEditing(false); }}
-                      className="px-4 py-1.5 bg-[#579dff] hover:bg-[#4c8ee6] text-[#1d2125] text-[13px] font-bold rounded-md">Save</button>
-                    <button onClick={() => { setDescDraft(c.description); setDescEditing(false); }}
-                      className="text-[13px] text-gray-400 hover:text-white px-3 py-1.5 rounded-md hover:bg-white/10 transition-colors">Discard changes</button>
-                  </div>
+                  {isEditable && (
+                    <div className="flex items-center gap-2 mt-2">
+                      <button onClick={() => { save({ description: descDraft }); setC(p => ({ ...p, description: descDraft })); setDescEditing(false); }}
+                        className="px-4 py-1.5 bg-[#579dff] hover:bg-[#4c8ee6] text-[#1d2125] text-[13px] font-bold rounded-md">Save</button>
+                      <button onClick={() => { setDescDraft(c.description); setDescEditing(false); }}
+                        className="text-[13px] text-gray-400 hover:text-white px-3 py-1.5 rounded-md hover:bg-white/10 transition-colors">Discard changes</button>
+                    </div>
+                  )}
                 </>
               )}
             </div>
             {/* ── Divider after description ── */}
-            <div className="sm:ml-7 mr-2 border-t border-white/[0.07] my-1" />
+            <div className="mr-2 border-t border-white/[0.07] my-1" />
             {/* Checklists */}
             {c.checklists.map(cl => {
               const clDone = cl.items.filter(i => i.done).length; const clTotal = cl.items.length;
@@ -1013,7 +1107,7 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
               const hidden = hiddenChecklists.has(cl.id);
               const visibleItems = hidden ? cl.items.filter(i => !i.done) : cl.items;
               return (
-                <div key={cl.id} className="sm:ml-7 space-y-2 pt-1">
+                <div key={cl.id} className="space-y-2 pt-1">
                   <div className="flex flex-wrap items-center gap-y-1.5 gap-x-2">
                     <div className="flex items-center gap-1.5 flex-1 min-w-0">
                       <CheckSquare size={13} className="text-gray-400 shrink-0" />
@@ -1035,14 +1129,14 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
                         />
                       ) : (
                         <p
-                          className="text-[14px] font-bold text-white cursor-pointer hover:text-blue-300 transition-colors truncate"
-                          onClick={() => { setEditingChecklistId(cl.id); setEditingChecklistTitle(cl.title); }}
-                          title="Click to rename"
+                          className={`text-[14px] font-bold text-white truncate ${isEditable ? "cursor-pointer hover:text-blue-300 transition-colors" : "cursor-default"}`}
+                          onClick={isEditable ? () => { setEditingChecklistId(cl.id); setEditingChecklistTitle(cl.title); } : undefined}
+                          title={isEditable ? "Click to rename" : undefined}
                         >{cl.title}</p>
                       )}
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
-                      {cl.items.length > 0 && (
+                      {cl.items.length > 0 && isEditable && (
                         <button
                           onClick={() => clDone > 0 && toggleHideChecked(cl.id)}
                           disabled={clDone === 0}
@@ -1054,11 +1148,13 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
                           {hidden ? <><Eye size={12} /><span className="hidden sm:inline">Show checked</span></> : <><EyeOff size={12} /><span className="hidden sm:inline">Hide checked</span></>}
                         </button>
                       )}
-                      <button onClick={() => setDeleteChecklistConfirm(cl.id)}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-[#454f59] text-red-400 hover:bg-red-500/10 hover:border-red-500/40 hover:text-red-300 bg-[#22272b] text-[12px] font-medium transition-all duration-150">
-                        <Trash2 size={12} />
-                        <span className="hidden sm:inline">Delete Checklist</span>
-                      </button>
+                      {isEditable && (
+                        <button onClick={() => setDeleteChecklistConfirm(cl.id)}
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-[#454f59] text-red-400 hover:bg-red-500/10 hover:border-red-500/40 hover:text-red-300 bg-[#22272b] text-[12px] font-medium transition-all duration-150">
+                          <Trash2 size={12} />
+                          <span className="hidden sm:inline">Delete Checklist</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                   {/* Delete confirmation bar */}
@@ -1077,43 +1173,47 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
                   )}
                   <p className="text-[11px] text-gray-500 font-medium">{clPct}%</p>
                   <div className="h-1.5 bg-white/10 rounded-full overflow-hidden"><div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${clPct}%` }} /></div>
-                  <div className="space-y-0.5">
-                    {visibleItems.map(item => {
-                      const isEditing = editingItem?.clId === cl.id && editingItem?.itemId === item.id;
-                      return (
-                        <div key={item.id} className="flex items-center gap-2.5 group py-1 px-1.5 rounded-lg hover:bg-white/5 transition-colors duration-100 cursor-default">
-                          <button onClick={() => toggleItem(cl.id, item.id)} className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center shrink-0 transition-all ${item.done ? "bg-blue-500 border-blue-500" : "border-gray-500 hover:border-blue-400"}`}>{item.done && <Check size={8} className="text-white" />}</button>
-                          {isEditing ? (
-                            <input
-                              autoFocus
-                              value={editingItem!.text}
-                              onChange={e => setEditingItem(prev => prev ? { ...prev, text: e.target.value } : null)}
-                              onKeyDown={e => {
-                                if (e.key === "Enter") renameItem(cl.id, item.id, editingItem!.text);
-                                if (e.key === "Escape") setEditingItem(null);
-                              }}
-                              onBlur={() => renameItem(cl.id, item.id, editingItem!.text)}
-                              className="flex-1 bg-[#1d2125] border border-blue-500/60 rounded px-2 py-0.5 text-[13px] text-white focus:outline-none"
-                            />
-                          ) : (
-                            <span
-                              onDoubleClick={() => !item.done && setEditingItem({ clId: cl.id, itemId: item.id, text: item.text })}
-                              title={!item.done ? "Double-click to rename" : undefined}
-                              className={`text-[13px] flex-1 select-none ${item.done ? "line-through text-gray-500" : "text-gray-300 cursor-text"}`}
-                            >
-                              {item.text.charAt(0).toUpperCase() + item.text.slice(1)}
-                            </span>
-                          )}
-                          {!isEditing && <button onClick={() => deleteItem(cl.id, item.id)} className="text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"><X size={10} /></button>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="flex gap-1.5">
-                    <input value={newItems[cl.id] ?? ""} onChange={e => setNewItems(p => ({ ...p, [cl.id]: e.target.value }))} onKeyDown={e => e.key === "Enter" && addItem(cl.id)} placeholder="Add an item…"
-                      className="flex-1 bg-[#22272b] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50" />
-                    <button onClick={() => addItem(cl.id)} className="px-3 py-1.5 bg-[#579dff] hover:bg-[#4c8ee6] text-[#1d2125] text-[13px] font-bold rounded-lg">Add</button>
-                  </div>
+                  {isEditable && (
+                    <>
+                      <div className="space-y-0.5">
+                        {visibleItems.map(item => {
+                          const isEditing = editingItem?.clId === cl.id && editingItem?.itemId === item.id;
+                          return (
+                            <div key={item.id} className="flex items-center gap-2.5 group py-1 px-1.5 rounded-lg hover:bg-white/5 transition-colors duration-100 cursor-default">
+                              <button onClick={() => isEditable && toggleItem(cl.id, item.id)} disabled={!isEditable} className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center shrink-0 transition-all ${item.done ? "bg-blue-500 border-blue-500" : isEditable ? "border-gray-500 hover:border-blue-400" : "border-gray-600 opacity-50 cursor-not-allowed"}`}>{item.done && <Check size={8} className="text-white" />}</button>
+                              {isEditing ? (
+                                <input
+                                  autoFocus
+                                  value={editingItem!.text}
+                                  onChange={e => setEditingItem(prev => prev ? { ...prev, text: e.target.value } : null)}
+                                  onKeyDown={e => {
+                                    if (e.key === "Enter") renameItem(cl.id, item.id, editingItem!.text);
+                                    if (e.key === "Escape") setEditingItem(null);
+                                  }}
+                                  onBlur={() => renameItem(cl.id, item.id, editingItem!.text)}
+                                  className="flex-1 bg-[#1d2125] border border-blue-500/60 rounded px-2 py-0.5 text-[13px] text-white focus:outline-none"
+                                />
+                              ) : (
+                                <span
+                                  onDoubleClick={() => !item.done && setEditingItem({ clId: cl.id, itemId: item.id, text: item.text })}
+                                  title={!item.done ? "Double-click to rename" : undefined}
+                                  className={`text-[13px] flex-1 select-none ${item.done ? "line-through text-gray-500" : "text-gray-300 cursor-text"}`}
+                                >
+                                  {item.text.charAt(0).toUpperCase() + item.text.slice(1)}
+                                </span>
+                              )}
+                              {!isEditing && isEditable && <button onClick={() => deleteItem(cl.id, item.id)} className="text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"><X size={10} /></button>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="flex gap-1.5">
+                        <input value={newItems[cl.id] ?? ""} onChange={e => setNewItems(p => ({ ...p, [cl.id]: e.target.value }))} onKeyDown={e => e.key === "Enter" && addItem(cl.id)} placeholder="Add an item…"
+                          className="flex-1 bg-[#22272b] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50" />
+                        <button onClick={() => addItem(cl.id)} className="px-3 py-1.5 bg-[#579dff] hover:bg-[#4c8ee6] text-[#1d2125] text-[13px] font-bold rounded-lg">Add</button>
+                      </div>
+                    </>
+                  )}
                 </div>
               );
             })}
@@ -1192,7 +1292,7 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
                 onChange={async e => {
                   const file = e.target.files?.[0];
                   if (!file) return;
-                  if (file.size > 5 * 1024 * 1024) { onToast('error', 'File too large — max 5 MB.'); return; }
+if (file.size > 5 * 1024 * 1024) { onToast('error', 'File too large — max 5 MB.'); return; }
                   setUploadingCommentAttach(true);
                   try {
                     const base64 = await new Promise<string>((resolve, reject) => {
@@ -1205,7 +1305,7 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
                     if (!resp.ok) throw new Error('Upload failed');
                     const { url } = await resp.json();
                     setPendingCommentAttach({ id: uid(), name: file.name, url, type: 'file' });
-                  } catch (err: any) { onToast('error', err?.message ?? 'Upload failed'); }
+} catch (err: any) { onToast('error', err?.message ?? 'Upload failed'); }
                   finally { setUploadingCommentAttach(false); e.target.value = ''; }
                 }}
               />
@@ -1431,7 +1531,8 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
       </div>{/* /body */}
       </div>{/* /card */}
 
-      {/* ── Bottom tab bar ── */}
+      {/* ── Bottom tab bar — hidden when card is approved ── */}
+      {!c.completed && (
       <div
         className="shrink-0 flex items-center justify-center px-4"
         onClick={e => e.stopPropagation()}
@@ -1488,6 +1589,7 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
           )}
         </button>
       </div>
+      )}
     </div>{/* /overlay */}
     {/* Image Lightbox — responsive, no overflow on any screen */}
     {lightboxUrl && (
@@ -1779,9 +1881,9 @@ function MoveModal({ card, boards, currentUser, allMembers, onClose, onMoved, on
           }) }).catch(() => {});
         }
       }
-      onToast("success", "Card moved!"); onMoved();
+onToast("success", "Card moved!"); onMoved();
     }
-    catch { onToast("error", "Failed to move"); } finally { setMoving(false); }
+catch { onToast("error", "Failed to move"); } finally { setMoving(false); }
   };
   // Helper: CSS grid row expand/collapse — only true smooth height-to-auto animation
   const gridRow = (show: boolean) => ({
@@ -1864,8 +1966,8 @@ function BoardSettings({ board, onClose, onSaved, onArchive, onToast }:
   const [newFieldOptions, setNewFieldOptions] = useState("");
   const save = async () => {
     setSaving(true);
-    try { await apiFetch(`/planner/boards/${board.id}`, { method: "PUT", body: JSON.stringify({ title, color, description: desc, customFieldDefs: defs }) }); onSaved({ ...board, title, color, description: desc, customFieldDefs: defs }); onToast("success", "Saved!"); }
-    catch { onToast("error", "Failed"); } finally { setSaving(false); }
+try { await apiFetch(`/planner/boards/${board.id}`, { method: "PUT", body: JSON.stringify({ title, color, description: desc, customFieldDefs: defs }) }); onSaved({ ...board, title, color, description: desc, customFieldDefs: defs }); onToast("success", "Saved!"); }
+catch { onToast("error", "Failed"); } finally { setSaving(false); }
   };
   const addField = () => {
     if (!newFieldName.trim()) return;
@@ -1892,11 +1994,12 @@ function BoardSettings({ board, onClose, onSaved, onArchive, onToast }:
 
 // ── How It Works Modal ─────────────────────────────────────────────────────
 function HowItWorksModal({ onClose, isFullAccess }: { onClose: () => void; isFullAccess: boolean }) {
-  const [tab, setTab] = useState<"boards" | "lists" | "cards">("boards");
+  const [tab, setTab] = useState<"boards" | "lists" | "cards" | "workflow">("boards");
   const tabs = [
-    { id: "boards", label: "Boards", emoji: "🗂️" },
-    { id: "lists",  label: "Lists",  emoji: "📋" },
-    { id: "cards",  label: "Cards",  emoji: "🃏" },
+    { id: "boards",   label: "Boards",   emoji: "🗂️" },
+    { id: "lists",    label: "Lists",    emoji: "📋" },
+    { id: "cards",    label: "Cards",    emoji: "🃏" },
+    { id: "workflow", label: "Workflow", emoji: "⚡" },
   ] as const;
 
   // ── Full Access content (Leaders & Admins) ─────────────────────────────
@@ -1919,7 +2022,7 @@ function HowItWorksModal({ onClose, isFullAccess }: { onClose: () => void; isFul
       title: "Lists — Workflow Stages",
       badge: "Leader / Admin",
       badgeColor: "#3b82f6",
-      description: "Lists are the columns inside a board representing stages of your workflow. By default every board gets: TO DO, IN PROGRESS, and DONE/INCOMPLETE.",
+      description: "Lists are the columns inside a board representing stages of your workflow. By default every board gets: TO DO, IN PROGRESS, and DONE/COMPLETED.",
       items: [
         { icon: "📌", text: "Lists define your process stages. Cards move from left to right as work is completed." },
         { icon: "✏️", text: "Rename a list to fit your ministry's language — e.g. 'Prayer Items', 'Pending Approval', 'Completed'." },
@@ -1945,6 +2048,20 @@ function HowItWorksModal({ onClose, isFullAccess }: { onClose: () => void; isFul
         { icon: "🗑️", text: "Archive a done card, or permanently delete it. Archived cards can always be restored." },
       ],
     },
+    workflow: {
+      title: "Workflow — How Tasks Progress Automatically",
+      badge: "Leader / Admin",
+      badgeColor: "#10b981",
+      description: "Ministry Hub has a built-in smart workflow engine. Cards move between lists automatically based on checklist progress — no manual dragging needed.",
+      items: [
+        { icon: "🚀", text: "Any List → IN PROGRESS: The moment a team member checks the first item in any checklist, the card automatically moves to the IN PROGRESS list — no matter which list it started from." },
+        { icon: "🏁", text: "IN PROGRESS → DONE/COMPLETED: When ALL items across ALL checklists on a card are checked (100%), the card is automatically moved to the DONE/COMPLETED list." },
+        { icon: "↩️", text: "IN PROGRESS → TO DO: If the last remaining checked item is unchecked — bringing progress back to 0% — the card automatically moves back to TO DO." },
+        { icon: "🔒", text: "Board Admin Approval: Once a card reaches DONE/COMPLETED, only a Board Admin can mark it 'Approved'. This locks the card into full read-only mode — no edits until the Admin un-approves it." },
+        { icon: "👁️", text: "Approval badge is hidden on TO DO and IN PROGRESS cards — it only appears on cards in the DONE/COMPLETED list, keeping the UI clean." },
+        { icon: "👤", text: "My Tasks Dashboard: Every card assigned to you automatically appears in the 'My Tasks' panel on your Dashboard — with real-time status and a one-click link to open the card." },
+      ],
+    },
   };
 
   // ── Read-only Member content ───────────────────────────────────────────
@@ -1967,7 +2084,7 @@ function HowItWorksModal({ onClose, isFullAccess }: { onClose: () => void; isFul
       title: "Lists — Understanding the Workflow",
       badge: "Member",
       badgeColor: "#8b5cf6",
-      description: "Inside every board you'll see columns called Lists. They represent stages — usually TO DO, IN PROGRESS, and DONE/INCOMPLETE. They show where tasks stand.",
+      description: "Inside every board you'll see columns called Lists. They represent stages — usually TO DO, IN PROGRESS, and DONE/COMPLETED. They show where tasks stand.",
       items: [
         { icon: "📋", text: "Lists are columns that represent different stages of a ministry project's workflow." },
         { icon: "➡️", text: "As work progresses, cards move from left to right — from To Do to In Progress to Done." },
@@ -1988,6 +2105,20 @@ function HowItWorksModal({ onClose, isFullAccess }: { onClose: () => void; isFul
         { icon: "📎", text: "View file attachments on a card — documents or images shared by Leaders for your reference." },
         { icon: "✅", text: "Inside a card you may see a checklist — these are the steps needed to complete the task." },
         { icon: "👀", text: "You can view all cards in all lists. Your Leader/Admin manages moving and archiving them." },
+      ],
+    },
+    workflow: {
+      title: "Workflow — How Your Tasks Move Automatically",
+      badge: "Member",
+      badgeColor: "#10b981",
+      description: "Cards in Ministry Hub move between stages automatically as you work through your checklist. Here's what happens at each step.",
+      items: [
+        { icon: "✅", text: "Start working: Open your assigned card and check the first item in the checklist. The card will automatically move to IN PROGRESS — no need to drag it yourself." },
+        { icon: "🏁", text: "Finish the task: Check every item in every checklist on the card. Once all items are 100% done, the card moves to DONE/COMPLETED automatically." },
+        { icon: "↩️", text: "Made a mistake? If you uncheck the last item and progress drops to 0%, the card moves back to TO DO automatically." },
+        { icon: "🔒", text: "Board Admin reviews: After a card reaches DONE/COMPLETED, your Leader or Admin will review and approve it. Once approved, the card locks — no further changes can be made." },
+        { icon: "📊", text: "Track your tasks: Head to the Dashboard and check 'My Tasks' — all cards assigned to you are listed there with their current status." },
+        { icon: "💡", text: "Tip: You don't need to move cards manually between lists — the system handles it for you based on checklist progress." },
       ],
     },
   };
@@ -2021,7 +2152,9 @@ function HowItWorksModal({ onClose, isFullAccess }: { onClose: () => void; isFul
         <div className="flex gap-1 px-5 pt-4 pb-0 shrink-0 border-b border-white/6">
           {tabs.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
-              className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold transition-all border-b-2 -mb-px ${tab === t.id ? "text-blue-400 border-blue-500" : "text-gray-500 border-transparent hover:text-gray-300"}`}>
+              className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-bold transition-all border-b-2 -mb-px ${tab === t.id
+                ? t.id === "workflow" ? "text-emerald-400 border-emerald-500" : "text-blue-400 border-blue-500"
+                : "text-gray-500 border-transparent hover:text-gray-300"}`}>
               <span>{t.emoji}</span>{t.label}
             </button>
           ))}
@@ -2029,6 +2162,29 @@ function HowItWorksModal({ onClose, isFullAccess }: { onClose: () => void; isFul
 
         {/* Content */}
         <div className="overflow-y-auto px-5 py-5 space-y-4 flex-1" style={{ scrollbarWidth: "thin", scrollbarColor: "#374151 transparent" }}>
+          {/* Workflow tab: show visual flow diagram */}
+          {tab === "workflow" && (
+            <div className="flex items-center justify-center gap-1 py-2 flex-wrap">
+              {[
+                { label: "Any List", color: "#6b7280", dot: "#9ca3af" },
+                null,
+                { label: "IN PROGRESS", color: "#3b82f6", dot: "#60a5fa" },
+                null,
+                { label: "DONE / COMPLETED", color: "#10b981", dot: "#34d399" },
+                null,
+                { label: "✓ Approved", color: "#f59e0b", dot: "#fbbf24" },
+              ].map((item, i) =>
+                item === null ? (
+                  <span key={i} className="text-gray-600 text-xs font-bold px-1">→</span>
+                ) : (
+                  <span key={i} className="text-[10px] font-bold px-2.5 py-1 rounded-full border"
+                    style={{ background: `${item.color}18`, color: item.dot, borderColor: `${item.color}40` }}>
+                    {item.label}
+                  </span>
+                )
+              )}
+            </div>
+          )}
           <div className="p-3 rounded-xl border" style={{ background: `${c.badgeColor}0d`, borderColor: `${c.badgeColor}22` }}>
             <h3 className="text-sm font-bold text-white mb-1">{c.title}</h3>
             <p className="text-xs leading-relaxed" style={{ color: "#9ca3af" }}>{c.description}</p>
@@ -2055,7 +2211,21 @@ function HowItWorksModal({ onClose, isFullAccess }: { onClose: () => void; isFul
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────
-export default function PlaygroundTrello({ allMembers = [], currentUser, onToast, isFullAccess = true }: Props) {
+export default function PlaygroundTrello({ allMembers = [], currentUser, onToast, isFullAccess = true, deepLinkBoardId, deepLinkCardId }: Props) {
+  // ── Self-fetch members when prop is empty (timing guard) ─────────────────
+  // App.tsx passes allMembers from its cache, but on a fresh page load the
+  // cache may not yet be populated when the user navigates here. This fallback
+  // fetch ensures the Members picker always has data.
+  const [membersList, setMembersList] = useState<any[]>(allMembers);
+  useEffect(() => {
+    // If App already gave us members, use them and keep in sync
+    if (allMembers.length > 0) { setMembersList(allMembers); return; }
+    // Otherwise do our own fetch
+    fetch("/api/members")
+      .then(r => r.ok ? r.json() : [])
+      .then(data => { if (Array.isArray(data) && data.length > 0) setMembersList(data); })
+      .catch(() => {});
+  }, [allMembers]);
   const [boards, setBoards] = useState<Board[]>([]);
   const [lists, setLists] = useState<PgList[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
@@ -2101,16 +2271,99 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
   const [cardRestoreDialog, setCardRestoreDialog] = useState<CardRestoreDialog | null>(null);
   const [undoCard, setUndoCard] = useState<Card | null>(null);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const boardScrollRef = useRef<HTMLDivElement>(null);  // horizontal Kanban scroll container
   const cardInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Board horizontal scroll: mouse-wheel + click-drag-to-pan ──────────────
+  useEffect(() => {
+    const el = boardScrollRef.current;
+    if (!el) return;
+
+    // 1. Mouse wheel → scroll horizontally (vertical wheel delta redirected)
+    const onWheel = (e: WheelEvent) => {
+      // If user is scrolling inside a card column (which has its own vertical scroll)
+      // let the native vertical scroll happen. Only intercept on the board bg itself.
+      const target = e.target as HTMLElement;
+      const inList = target.closest('[data-list-scroll]');
+      if (inList) return;
+      if (e.deltaX !== 0) return; // already horizontal (trackpad) — don't double-apply
+      e.preventDefault();
+      el.scrollLeft += e.deltaY * 1.5;
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+
+    // 2. Click-drag-to-pan (Trello-style)
+    let isDown = false;
+    let startX = 0;
+    let scrollLeft = 0;
+
+    const onMouseDown = (e: MouseEvent) => {
+      // Only pan when clicking directly on the board background, not on a card or list
+      const t = e.target as HTMLElement;
+      if (t.closest('[data-no-pan]')) return; // lists, cards, buttons all have data-no-pan
+      isDown = true;
+      el.style.cursor = 'grabbing';
+      el.style.userSelect = 'none';
+      startX = e.pageX - el.offsetLeft;
+      scrollLeft = el.scrollLeft;
+    };
+    const onMouseLeave = () => { isDown = false; el.style.cursor = ''; el.style.userSelect = ''; };
+    const onMouseUp   = () => { isDown = false; el.style.cursor = ''; el.style.userSelect = ''; };
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isDown) return;
+      e.preventDefault();
+      const x = e.pageX - el.offsetLeft;
+      const walk = (x - startX) * 1.2;
+      el.scrollLeft = scrollLeft - walk;
+    };
+
+    el.addEventListener('mousedown', onMouseDown);
+    el.addEventListener('mouseleave', onMouseLeave);
+    el.addEventListener('mouseup', onMouseUp);
+    el.addEventListener('mousemove', onMouseMove);
+
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+      el.removeEventListener('mousedown', onMouseDown);
+      el.removeEventListener('mouseleave', onMouseLeave);
+      el.removeEventListener('mouseup', onMouseUp);
+      el.removeEventListener('mousemove', onMouseMove);
+    };
+  }, [loading, activeBoard?.id]);  // re-run once board loads & scroll div is in the DOM
 
   const fetchBoards = useCallback(async () => {
     setBoardsLoading(true);
     try { const r = await apiFetch("/planner/boards"); const data = await r.json(); setBoards(Array.isArray(data) ? data.filter((b: Board) => !b.archived) : []); }
-    catch { onToast("error", "Failed to load boards"); }
+catch { onToast("error", "Failed to load boards"); }
     finally { setBoardsLoading(false); }
   }, []);
 
   useEffect(() => { fetchBoards(); }, [fetchBoards]);
+
+  // ── Deep-link: auto-open board when boards are ready ─────────────────────
+  const deepLinkHandledRef = useRef(false);
+  useEffect(() => {
+    if (!deepLinkBoardId || !deepLinkCardId) return;
+    if (boardsLoading || boards.length === 0) return;
+    if (deepLinkHandledRef.current) return;
+    const target = boards.find(b => b.id === deepLinkBoardId);
+    if (!target) return;
+    deepLinkHandledRef.current = true;
+    openBoard(target);
+  }, [deepLinkBoardId, deepLinkCardId, boards, boardsLoading]);
+
+  // ── Deep-link: auto-open the card once board data is loaded ──────────────
+  const cardDeepLinkHandledRef = useRef(false);
+  useEffect(() => {
+    if (!deepLinkCardId || !activeBoard || activeBoard.id !== deepLinkBoardId) return;
+    if (loading || cards.length === 0) return;
+    if (cardDeepLinkHandledRef.current) return;   // ← one-shot: never reopen after first trigger
+    const target = cards.find(c => c.id === deepLinkCardId);
+    if (target) {
+      cardDeepLinkHandledRef.current = true;
+      setSelectedCard(target);
+    }
+  }, [deepLinkCardId, deepLinkBoardId, activeBoard, cards, loading]);
 
   const fetchBoardData = useCallback(async (boardId: string) => {
     setLoading(true);
@@ -2118,7 +2371,7 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
       const [lr, cr] = await Promise.all([apiFetch(`/planner/boards/${boardId}/lists`), apiFetch(`/planner/boards/${boardId}/cards`)]);
       const [ls, cs] = await Promise.all([lr.json(), cr.json()]);
       setLists(Array.isArray(ls) ? ls : []); setCards(Array.isArray(cs) ? cs : []);
-    } catch { onToast("error", "Failed to load board"); } finally { setLoading(false); }
+} catch { onToast("error", "Failed to load board"); } finally { setLoading(false); }
   }, []);
 
   const openBoard = (b: Board) => { setActiveBoard(b); fetchBoardData(b.id); };
@@ -2134,7 +2387,7 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
       // Auto-create default lists sequentially so order is guaranteed: 1→2→3
       await apiFetch(`/planner/boards/${id}/lists`, { method: "POST", body: JSON.stringify({ title: "TO DO" }) });
       await apiFetch(`/planner/boards/${id}/lists`, { method: "POST", body: JSON.stringify({ title: "IN PROGRESS" }) });
-      await apiFetch(`/planner/boards/${id}/lists`, { method: "POST", body: JSON.stringify({ title: "DONE/INCOMPLETE" }) });
+      await apiFetch(`/planner/boards/${id}/lists`, { method: "POST", body: JSON.stringify({ title: "DONE/COMPLETED" }) });
       setNewBoardTitle(""); setNewBoardDescription(""); setShowNewBoard(false);
       // Inject the new board directly so createdBy is preserved in the tile
       setBoards(prev => [nb, ...prev]);
@@ -2144,15 +2397,25 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
         setBoards(prev => prev.map(b => b.id === nb.id ? { ...b, createdBy: nb.createdBy } : b));
       }).catch(() => {});
       openBoard(nb);
-    } catch { onToast("error", "Failed to create board"); }
+} catch { onToast("error", "Failed to create board"); }
     finally { setIsCreatingBoard(false); }
   };
 
   const createList = async () => {
     if (!newListTitle.trim() || !activeBoard || isCreatingList) return;
     setIsCreatingList(true);
-    try { await apiFetch(`/planner/boards/${activeBoard.id}/lists`, { method: "POST", body: JSON.stringify({ title: newListTitle.trim().toUpperCase() }) }); setNewListTitle(""); setAddingList(false); await fetchBoardData(activeBoard.id); }
-    catch { onToast("error", "Failed to create list"); }
+    try {
+      await apiFetch(`/planner/boards/${activeBoard.id}/lists`, { method: "POST", body: JSON.stringify({ title: newListTitle.trim().toUpperCase() }) });
+      setNewListTitle(""); setAddingList(false);
+      await fetchBoardData(activeBoard.id);
+      // Scroll to the new list (always appended at the far right)
+      requestAnimationFrame(() => {
+        if (boardScrollRef.current) {
+          boardScrollRef.current.scrollTo({ left: boardScrollRef.current.scrollWidth, behavior: "smooth" });
+        }
+      });
+    }
+catch { onToast("error", "Failed to create list"); }
     finally { setIsCreatingList(false); }
   };
 
@@ -2161,18 +2424,18 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
     setIsCreatingCard(true);
     try {
       const cap = (s: string) => s.trim().replace(/\b\w/g, c => c.toUpperCase());
-      const r = await apiFetch("/planner/cards", { method: "POST", body: JSON.stringify({ boardId: activeBoard.id, listId, title: cap(newCardTitle.trim()) }) });
+      const r = await apiFetch("/planner/cards", { method: "POST", body: JSON.stringify({ boardId: activeBoard.id, listId, title: cap(newCardTitle.trim()), createdBy: { name: currentUser?.name || "Someone", photo: currentUser?.photo || "" } }) });
       const { id } = await r.json();
       const listTitle = lists.find(l => l.id === listId)?.title ?? "this list";
       apiFetch(`/planner/cards/${id}/activity`, { method: "POST", body: JSON.stringify({ type: "create", actorName: currentUser?.name || "Someone", actorPhoto: currentUser?.photo || "", text: `added this card to ${listTitle}` }) }).catch(() => {});
       setNewCardTitle(""); setAddingCard(null); await fetchBoardData(activeBoard.id);
-    } catch { onToast("error", "Failed to create card"); }
+} catch { onToast("error", "Failed to create card"); }
     finally { setIsCreatingCard(false); }
   };
 
   const archiveList = async (listId: string) => {
-    try { await apiFetch(`/planner/lists/${listId}`, { method: "PUT", body: JSON.stringify({ archived: true }) }); setListMenuId(null); if (activeBoard) await fetchBoardData(activeBoard.id); onToast("success", "List archived"); }
-    catch { onToast("error", "Failed"); }
+try { await apiFetch(`/planner/lists/${listId}`, { method: "PUT", body: JSON.stringify({ archived: true }) }); setListMenuId(null); if (activeBoard) await fetchBoardData(activeBoard.id); onToast("success", "List archived"); }
+catch { onToast("error", "Failed"); }
   };
 
   const deleteList = async (listId: string) => {
@@ -2180,13 +2443,13 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
     setIsDeleting(true);
     setDeleteListConfirm(null);
     try { await apiFetch(`/planner/lists/${listId}`, { method: "DELETE" }); setListMenuId(null); if (activeBoard) await fetchBoardData(activeBoard.id); }
-    catch { onToast("error", "Failed"); }
+catch { onToast("error", "Failed"); }
     finally { setIsDeleting(false); }
   };
 
   const archiveBoard = async (id: string, silent = false) => {
-    try { await apiFetch(`/planner/boards/${id}`, { method: "PUT", body: JSON.stringify({ archived: true }) }); setShowSettings(false); setActiveBoard(null); await fetchBoards(); if (!silent) onToast("success", "Board archived"); }
-    catch { if (!silent) onToast("error", "Failed to archive board"); }
+try { await apiFetch(`/planner/boards/${id}`, { method: "PUT", body: JSON.stringify({ archived: true }) }); setShowSettings(false); setActiveBoard(null); await fetchBoards(); if (!silent) onToast("success", "Board archived"); }
+catch { if (!silent) onToast("error", "Failed to archive board"); }
   };
 
   const archiveCard = async (id: string) => {
@@ -2201,10 +2464,10 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
         if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
         undoTimerRef.current = setTimeout(() => setUndoCard(null), 5000);
       } else {
-        onToast("success", "Card archived");
+onToast("success", "Card archived");
       }
     }
-    catch { onToast("error", "Failed to archive"); }
+catch { onToast("error", "Failed to archive"); }
   };
 
   const restoreCard = async (id: string, forceRestoreList = false) => {
@@ -2220,14 +2483,14 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
           setCardRestoreDialog({ cardId: id, cardTitle: cardToRestore.title, listTitle: archivedParent.title, listId: archivedParent.id });
           return;
         } else if (!archivedParent) {
-          onToast("error", "The original list was deleted. Move the card to an active list first.");
+onToast("error", "The original list was deleted. Move the card to an active list first.");
           return;
         }
         if (forceRestoreList && archivedParent) {
           try {
             await apiFetch(`/planner/lists/${archivedParent.id}`, { method: "PUT", body: JSON.stringify({ archived: false }) });
             setArchivedLists(prev => prev.filter(l => l.id !== archivedParent.id));
-          } catch { onToast("error", "Could not restore list"); return; }
+} catch { onToast("error", "Could not restore list"); return; }
         }
       }
     }
@@ -2237,8 +2500,8 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
       setUndoCard(null);
       if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
       if (activeBoard) await fetchBoardData(activeBoard.id);
-      onToast("success", "Card restored!");
-    } catch { onToast("error", "Failed to restore"); }
+onToast("success", "Card restored!");
+} catch { onToast("error", "Failed to restore"); }
   };
 
   const permanentDeleteCard = async (id: string) => {
@@ -2249,8 +2512,8 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
       await apiFetch(`/planner/cards/${id}`, { method: "DELETE" });
       setArchivedCards(prev => prev.filter(c => c.id !== id));
       if (activeBoard) await fetchBoardData(activeBoard.id);
-      onToast("success", "Card permanently deleted");
-    } catch { onToast("error", "Failed to delete"); }
+onToast("success", "Card permanently deleted");
+} catch { onToast("error", "Failed to delete"); }
     finally { setIsDeleting(false); }
   };
 
@@ -2280,8 +2543,8 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
       await apiFetch(`/planner/lists/${listId}`, { method: "PUT", body: JSON.stringify({ archived: false }) });
       setArchivedLists(prev => prev.filter(l => l.id !== listId));
       if (activeBoard) await fetchBoardData(activeBoard.id);
-      onToast("success", "List restored!");
-    } catch { onToast("error", "Failed to restore list"); }
+onToast("success", "List restored!");
+} catch { onToast("error", "Failed to restore list"); }
   };
 
   const restoreBoard = async (id: string, silent = false) => {
@@ -2289,8 +2552,8 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
       await apiFetch(`/planner/boards/${id}`, { method: "PUT", body: JSON.stringify({ archived: false }) });
       setArchivedBoards(prev => prev.filter(b => b.id !== id));
       await fetchBoards();
-      if (!silent) onToast("success", "Board restored!");
-    } catch { if (!silent) onToast("error", "Failed to restore board"); }
+if (!silent) onToast("success", "Board restored!");
+} catch { if (!silent) onToast("error", "Failed to restore board"); }
   };
 
   const deleteArchivedBoard = async (id: string) => {
@@ -2301,8 +2564,8 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
       await apiFetch(`/planner/boards/${id}`, { method: "DELETE" });
       setArchivedBoards(prev => prev.filter(b => b.id !== id));
       setSelectedArchivedBoards(prev => { const n = new Set(prev); n.delete(id); return n; });
-      onToast("success", "Board permanently deleted");
-    } catch { onToast("error", "Failed to delete board"); }
+onToast("success", "Board permanently deleted");
+} catch { onToast("error", "Failed to delete board"); }
     finally { setIsDeleting(false); }
   };
 
@@ -2315,8 +2578,8 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
       await Promise.all([...selectedArchivedBoards].map(id => apiFetch(`/planner/boards/${id}`, { method: "DELETE" })));
       setArchivedBoards(prev => prev.filter(b => !selectedArchivedBoards.has(b.id)));
       setSelectedArchivedBoards(new Set());
-      onToast("success", `${count} board${count > 1 ? "s" : ""} permanently deleted`);
-    } catch { onToast("error", "Failed to delete some boards"); }
+onToast("success", `${count} board${count > 1 ? "s": ""} permanently deleted`);
+} catch { onToast("error", "Failed to delete some boards"); }
     finally { setIsDeleting(false); }
   };
 
@@ -2324,8 +2587,8 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
     if (isDeleting) return;
     setIsDeleting(true);
     setDeleteActiveBoardCardConfirm(null);
-    try { await apiFetch(`/planner/cards/${id}`, { method: "DELETE" }); setSelectedCard(null); if (activeBoard) await fetchBoardData(activeBoard.id); onToast("success", "Deleted"); }
-    catch { onToast("error", "Failed"); }
+try { await apiFetch(`/planner/cards/${id}`, { method: "DELETE"}); setSelectedCard(null); if (activeBoard) await fetchBoardData(activeBoard.id); onToast("success", "Deleted"); }
+catch { onToast("error", "Failed"); }
     finally { setIsDeleting(false); }
   };
 
@@ -2478,7 +2741,7 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
                   const count = ids.length;
                   for (const id of ids) { await archiveBoard(id, true); }
                   setSelectedBulkBoards(new Set()); setBulkArchiveMode(false); setBulkArchiveConfirm(false);
-                  onToast("success", `${count} board${count > 1 ? 's' : ''} archived`);
+onToast("success", `${count} board${count > 1 ? 's' : ''} archived`);
                 }}
                 className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-black text-sm font-bold rounded-xl transition-colors"
               >
@@ -2637,7 +2900,7 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
                     for (const id of ids) { await restoreBoard(id, true); }
                     setSelectedArchivedBoards(new Set());
                     setBulkRestoreConfirm(false);
-                    onToast("success", `${count} board${count > 1 ? 's' : ''} restored`);
+onToast("success", `${count} board${count > 1 ? 's' : ''} restored`);
                   }}
                   className="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black text-sm font-bold rounded-xl transition-colors">
                   Yes, restore {selectedArchivedBoards.size > 1 ? 'all' : 'it'}
@@ -2813,11 +3076,11 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
         {loading ? (
           <div className="flex items-center justify-center h-full"><div className="w-7 h-7 border-2 border-white border-t-transparent rounded-full animate-spin" /></div>
         ) : (
-          <div className="flex gap-3 overflow-x-auto h-full px-3 py-4 items-start" onClick={() => setListMenuId(null)}>
+          <div ref={boardScrollRef} className="flex gap-3 overflow-x-auto h-full px-3 py-4 items-start" onClick={() => setListMenuId(null)}>
             {lists.map(list => {
               const listCards = boardCards.filter(c => c.listId === list.id);
               return (
-                <div key={list.id} className="flex-shrink-0 w-[300px] flex flex-col rounded-xl self-start" style={{ backgroundColor: "#101204ee" }}>
+                <div key={list.id} data-no-pan className="flex-shrink-0 w-[300px] flex flex-col rounded-xl self-start" style={{ backgroundColor: "#101204ee" }}>
                   {/* List header — Trello style: ALL CAPS, small */}
                   <div className="flex items-center justify-between px-3 pt-2.5 pb-1.5 shrink-0">
                     <span className="font-bold text-white text-[13px] flex-1 leading-tight tracking-wide uppercase">{list.title}</span>
@@ -2888,7 +3151,7 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
                                 {card.members.length > 0 && (
                                   <div className="flex -space-x-1.5">
                                     {card.members.slice(0, 3).map((m, i) => {
-                                      const mem = allMembers.find(x => x.name === m);
+                                      const mem = membersList.find(x => x.name === m);
                                       const mPhoto = mem?.photo || mem?.photoURL || "";
                                       return <div key={i}><Avatar name={m} photo={mPhoto} size={28} /></div>;
                                     })}
@@ -2938,7 +3201,7 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
             {isFullAccess && (
               <div className="flex-shrink-0 w-[300px]">
                 {addingList ? (
-                  <div className="rounded-xl p-2 space-y-2" style={{ backgroundColor: "#101204ee" }}>
+                  <div data-no-pan className="rounded-xl p-2 space-y-2" style={{ backgroundColor: "#101204ee" }}>
                     <input value={newListTitle} onChange={e => setNewListTitle(e.target.value)}
                       onKeyDown={e => { if (e.key === "Enter") createList(); if (e.key === "Escape") { setAddingList(false); setNewListTitle(""); } }}
                       autoFocus placeholder="Enter list name…"
@@ -2963,8 +3226,8 @@ export default function PlaygroundTrello({ allMembers = [], currentUser, onToast
       </div>
 
       {/* Modals */}
-      {selectedCard && <CardModal card={selectedCard} lists={lists} boards={boards} allMembers={allMembers} currentUser={currentUser} customFieldDefs={activeBoard.customFieldDefs ?? []} onClose={() => setSelectedCard(null)} onSave={c => { onCardSaved(c); setSelectedCard(c); }} onDelete={id => setDeleteActiveBoardCardConfirm(id)} onArchive={archiveCard} onMove={() => { setMoveCard(selectedCard); setSelectedCard(null); }} onToast={onToast} isFullAccess={isFullAccess} />}
-      {moveCard && <MoveModal card={moveCard} boards={boards} currentUser={currentUser} allMembers={allMembers} onClose={() => setMoveCard(null)} onMoved={async () => { setMoveCard(null); if (activeBoard) await fetchBoardData(activeBoard.id); }} onToast={onToast} />}
+      {selectedCard && <CardModal card={selectedCard} lists={lists} boards={boards} allMembers={membersList} currentUser={currentUser} customFieldDefs={activeBoard.customFieldDefs ?? []} onClose={() => setSelectedCard(null)} onSave={c => { onCardSaved(c); setSelectedCard(c); }} onDelete={id => setDeleteActiveBoardCardConfirm(id)} onArchive={archiveCard} onMove={() => { setMoveCard(selectedCard); setSelectedCard(null); }} onToast={onToast} isFullAccess={isFullAccess} />}
+      {moveCard && <MoveModal card={moveCard} boards={boards} currentUser={currentUser} allMembers={membersList} onClose={() => setMoveCard(null)} onMoved={async () => { setMoveCard(null); if (activeBoard) await fetchBoardData(activeBoard.id); }} onToast={onToast} />}
       {showSettings && <BoardSettings board={activeBoard} onClose={() => setShowSettings(false)} onSaved={b => { setActiveBoard(b); setBoards(prev => prev.map(x => x.id === b.id ? b : x)); setShowSettings(false); }} onArchive={archiveBoard} onToast={onToast} />}
 
       {/* ── Delete List confirm modal ── */}

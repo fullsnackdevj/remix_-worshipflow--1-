@@ -16,9 +16,11 @@ export interface DashboardViewProps {
   user: any;
   showToast: (type: string, msg: string) => void;
   setCurrentView: (view: string) => void;
+  onNavigateToPlanner?: (opts: { boardId: string; cardId: string }) => void;
   onOpenLineup?: () => void;
   lineupTrackCount?: number;
   isLineupOpen?: boolean;
+  isLibraryOpen?: boolean;
 }
 
 export default function DashboardView({
@@ -35,9 +37,11 @@ export default function DashboardView({
   user,
   showToast,
   setCurrentView,
+  onNavigateToPlanner,
   onOpenLineup,
   lineupTrackCount = 0,
   isLineupOpen = false,
+  isLibraryOpen = false,
 }: DashboardViewProps) {
   return authStatus === "loading" ? (
     /* Auth resolving — show a gentle skeleton so screen isn't blank */
@@ -64,9 +68,15 @@ export default function DashboardView({
       members={allMembers}
       schedules={allSchedules}
       notes={dashboardNotes}
-      onNavigate={(view) => {
+      onNavigate={(view: string, opts?: { boardId?: string; cardId?: string }) => {
         if (view === "admin" && !isAdmin) {
-          showToast("warning", "Only the Admin can access the Admin Panel.");
+showToast("warning", "Only the Admin can access the Admin Panel.");
+          return;
+        }
+        if (view === "planner" && onNavigateToPlanner) {
+          // Pass boardId+cardId for deep-links, or empty strings for landing-page nav
+          // App.tsx uses empty strings as a signal to clear pending deep-link IDs
+          onNavigateToPlanner({ boardId: opts?.boardId ?? "", cardId: opts?.cardId ?? "" });
           return;
         }
         setCurrentView(view);
@@ -77,6 +87,7 @@ export default function DashboardView({
       onOpenLineup={onOpenLineup}
       lineupTrackCount={lineupTrackCount}
       isLineupOpen={isLineupOpen}
+      isLibraryOpen={isLibraryOpen}
     />
   );
 }

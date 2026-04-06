@@ -114,7 +114,7 @@ export default function MembersView({
       writeMembersCache(members);
     } catch (error) {
       console.error("Failed to fetch members", error);
-      showToast("error", "Failed to load members. Please refresh.");
+showToast("error", "Failed to load members. Please refresh.");
       if (!background) setAllMembers([]);
     } finally {
       if (!background) setIsLoadingMembers(false);
@@ -227,7 +227,7 @@ export default function MembersView({
           m.phone.replace(/\D/g, '') === phoneDigits;
       });
       if (duplicate) {
-        showToast("error", `"${duplicate.name}" with the same phone number already exists.`);
+showToast("error", `"${duplicate.name}"with the same phone number already exists.`);
         return;
       }
     }
@@ -298,13 +298,13 @@ export default function MembersView({
 
       setIsEditingMember(false);
       setSelectedMember(null);
-      showToast("success", editingId
+showToast("success", editingId
         ? `Member "${payload.name}" updated successfully!`
         : `Member "${payload.name}" added successfully!`
       );
     } catch (error: any) {
       console.error("Failed to save member", error);
-      showToast("error", error.message || "Failed to save member.");
+showToast("error", error.message || "Failed to save member.");
     } finally {
       setIsSavingMember(false);
     }
@@ -331,7 +331,7 @@ export default function MembersView({
           setIsEditingMember(false);
         }
         closeConfirm();
-        showToast("success", `"${memberName}" removed successfully.`);
+showToast("success", `"${memberName}"removed successfully.`);
 
         // Fire-and-forget: delete on server in background
         try {
@@ -340,7 +340,7 @@ export default function MembersView({
         } catch (error) {
           console.error("Failed to delete member", error);
           // Rollback: re-fetch to restore correct state
-          showToast("error", "Failed to remove member. Restoring list...");
+showToast("error", "Failed to remove member. Restoring list...");
           clearMembersCache();
           fetchMembers();
         }
@@ -354,7 +354,7 @@ export default function MembersView({
     if (!file) return;
     // ── Photo size guard ──────────────────────────────────────────────────────
     if (file.size > MAX_PHOTO_SIZE_MB * 1024 * 1024) {
-      showToast("error", `Photo is too large. Please use an image under ${MAX_PHOTO_SIZE_MB}MB.`);
+showToast("error", `Photo is too large. Please use an image under ${MAX_PHOTO_SIZE_MB}MB.`);
       if (e.target) e.target.value = "";
       return;
     }

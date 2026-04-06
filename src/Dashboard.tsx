@@ -46,11 +46,12 @@ interface Song { id: string; title: string; artist: string; created_at?: string;
 interface Props {
     isAdmin: boolean; userRole: string; userName: string; userPhoto: string; userEmail: string; userId: string;
     songs: Song[]; members: Member[]; schedules: Schedule[]; notes: Note[];
-    onNavigate: (view: "songs" | "members" | "schedule" | "admin") => void;
+    onNavigate: (view: string, opts?: { boardId?: string; cardId?: string }) => void;
     canAddSong?: boolean; canWriteSchedule?: boolean; canAddMember?: boolean;
   onOpenLineup?: () => void;
   lineupTrackCount?: number;
   isLineupOpen?: boolean;
+  isLibraryOpen?: boolean;
 }
 
 // ── Role config — matches App.tsx ROLE_BADGE exactly ──────────────────────────

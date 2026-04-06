@@ -348,7 +348,7 @@ export default function SongsView({
     } catch (error: any) {
       if (error?.name !== "AbortError") {
         console.error("Failed to load songs/tags", error);
-        showToast("error", "Failed to load songs. Please refresh.");
+showToast("error", "Failed to load songs. Please refresh.");
         if (!background) {
           setAllSongs([]);
           setTags([]);
@@ -473,7 +473,7 @@ export default function SongsView({
       if (errors.artist) missing.push("Artist");
       if (errors.tags)   missing.push("At least one Tag");
       if (errors.lyrics) missing.push("Lyrics");
-      showToast("error", `Please fill in: ${missing.join(", ")}.`);
+showToast("error", `Please fill in: ${missing.join(", ")}.`);
       // Focus the first empty field
       if (errors.title)       { songTitleRef.current?.focus(); }
       else if (errors.artist) { songArtistRef.current?.focus(); }
@@ -523,13 +523,13 @@ export default function SongsView({
       // bustCache: true — bypasses stale-while-revalidate so the post-save
       // fetch always hits the network and never serves old cached data
       await fetchSongs({ bustCache: true });
-      showToast("success", isEdit
+showToast("success", isEdit
         ? `Song "${payload.title}" updated successfully!`
         : `Song "${payload.title}" saved successfully!`
       );
     } catch (error: any) {
       console.error("Failed to save song", error);
-      showToast("error", error.message || "Failed to save song. Please check if Firebase is configured correctly.");
+showToast("error", error.message || "Failed to save song. Please check if Firebase is configured correctly.");
     }
   };
 
@@ -553,10 +553,10 @@ export default function SongsView({
           }
           clearSongsCache();
           fetchSongs();
-          showToast("success", "Song deleted successfully.");
+showToast("success", "Song deleted successfully.");
         } catch (error) {
           console.error("Failed to delete song", error);
-          showToast("error", "Failed to delete song. Please try again.");
+showToast("error", "Failed to delete song. Please try again.");
         }
       }
     });
@@ -578,10 +578,10 @@ export default function SongsView({
           setIsSelectionMode(false);
           clearSongsCache();
           fetchSongs();
-          showToast("success", `${selectedSongIds.length} songs deleted successfully.`);
+showToast("success", `${selectedSongIds.length} songs deleted successfully.`);
         } catch (error) {
           console.error("Failed to delete songs", error);
-          showToast("error", "Failed to delete some songs. Please try again.");
+showToast("error", "Failed to delete some songs. Please try again.");
         }
       }
     });
@@ -603,10 +603,10 @@ export default function SongsView({
       });
       setNewTagName("");
       fetchTags();
-      showToast("success", "Tag created!");
+showToast("success", "Tag created!");
     } catch (error) {
       console.error("Failed to create tag", error);
-      showToast("error", "Failed to create tag. Try again.");
+showToast("error", "Failed to create tag. Try again.");
     }
   };
 
@@ -623,10 +623,10 @@ export default function SongsView({
           await fetch(`/api/tags/${id}`, { method: "DELETE" });
           clearSongsCache();
           fetchSongs();
-          showToast("success", "Tag deleted successfully.");
+showToast("success", "Tag deleted successfully.");
         } catch (error) {
           console.error("Failed to delete tag", error);
-          showToast("error", "Failed to delete tag.");
+showToast("error", "Failed to delete tag.");
         }
       }
     });
@@ -715,7 +715,7 @@ export default function SongsView({
       }
     } catch (error) {
       console.error("OCR failed", error);
-      showToast("error", "Failed to extract text from image. Please try again.");
+showToast("error", "Failed to extract text from image. Please try again.");
     } finally {
       setIsOcrLoading(null);
       if (e.target) e.target.value = "";

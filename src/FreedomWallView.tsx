@@ -173,6 +173,7 @@ function NoteCard({
       const dx = t.clientX - touchStart.current.clientX;
       const dy = t.clientY - touchStart.current.clientY;
       if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved.current = true;
+      // Convert screen-pixel delta → canvas-percent delta (no zoom, scale=1)
       const newX = Math.max(0, Math.min(99, touchStart.current.noteX + (dx / CANVAS_W) * 100));
       const newY = Math.max(0, Math.min(99, touchStart.current.noteY + (dy / CANVAS_H) * 100));
       onMoveRef.current(noteId, newX, newY);
@@ -204,6 +205,8 @@ function NoteCard({
       if (!isDragging.current) return;
       const dx = mv.clientX - dragStart.current.mouseX;
       const dy = mv.clientY - dragStart.current.mouseY;
+      // Convert screen-pixel delta → canvas-percent
+      // CANVAS_W/H is the total canvas size; the board renders at scale 1:1
       const newX = Math.max(0, Math.min(99, dragStart.current.noteX + (dx / CANVAS_W) * 100));
       const newY = Math.max(0, Math.min(99, dragStart.current.noteY + (dy / CANVAS_H) * 100));
       if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved.current = true;
@@ -222,15 +225,16 @@ function NoteCard({
 
   return (
     <div
+      data-note-card
       className="absolute select-none group/note"
       style={{
         left, top,
         transform: `rotate(${note.rotation}deg)`,
         transformOrigin: "center top",
         width: 260,
-        zIndex: hovered ? 9999 : (noteRank ?? 1),
-        transition: isDragging.current ? "none" : "z-index 0s",
-        cursor: isAuthor ? "grab" : "default",
+        zIndex: isDragging.current ? 99999 : hovered ? 9999 : (noteRank ?? 1),
+        cursor: isAuthor ? (isDragging.current ? "grabbing" : "grab") : "default",
+        willChange: isDragging.current ? "transform" : undefined,
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -709,7 +713,8 @@ export default function FreedomWallView({ isAdmin, currentUserId, onToast }: Fre
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
-    if (target.closest(".group\\/note") || target.closest("button")) return;
+    // Stop board pan from starting when a note card (or any child) is clicked
+    if (target.closest('[data-note-card]') || target.closest('button')) return;
     isPanning.current = true;
     lastMouse.current = { x: e.clientX, y: e.clientY };
     (e.currentTarget as HTMLElement).style.cursor = "grabbing";

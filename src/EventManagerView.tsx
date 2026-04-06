@@ -92,7 +92,7 @@ export default function EventManagerView({ allMembers = [], onToast }: Props) {
       const res = await fetch(`${API}/event-manager`);
       const data = await res.json();
       setEvents(Array.isArray(data) ? data : []);
-    } catch { onToast("error", "Failed to load events"); }
+} catch { onToast("error", "Failed to load events"); }
     finally { setLoading(false); }
   }, []);
 
@@ -140,21 +140,21 @@ export default function EventManagerView({ allMembers = [], onToast }: Props) {
 
   // ── Save ─────────────────────────────────────────────────────────────────────
   const saveEvent = async () => {
-    if (!fTitle.trim() || !fDate) { onToast("error", "Title and Date are required"); return; }
+if (!fTitle.trim() || !fDate) { onToast("error", "Title and Date are required"); return; }
     setSaving(true);
     const payload = { title: fTitle, eventType: fType, date: fDate, status: fStatus, notes: fNotes, assignedMembers: fMembers, tasks: fTasks };
     try {
       if (panelMode === "create") {
         const res = await fetch(`${API}/event-manager`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
         if (!res.ok) throw new Error();
-        onToast("success", "Event created!");
+onToast("success", "Event created!");
       } else {
         const res = await fetch(`${API}/event-manager/${selectedEvent!.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
         if (!res.ok) throw new Error();
-        onToast("success", "Event updated!");
+onToast("success", "Event updated!");
       }
       await fetchEvents(); closePanel();
-    } catch { onToast("error", "Failed to save event"); }
+} catch { onToast("error", "Failed to save event"); }
     finally { setSaving(false); }
   };
 
@@ -178,10 +178,10 @@ export default function EventManagerView({ allMembers = [], onToast }: Props) {
     setDeleteEventConfirm(null);
     try {
       await fetch(`${API}/event-manager/${id}`, { method: "DELETE" });
-      onToast("success", "Event deleted");
+onToast("success", "Event deleted");
       setEvents(prev => prev.filter(e => e.id !== id));
       if (selectedEvent?.id === id) closePanel();
-    } catch { onToast("error", "Failed to delete"); }
+} catch { onToast("error", "Failed to delete"); }
     finally { setIsDeleting(false); }
   };
 

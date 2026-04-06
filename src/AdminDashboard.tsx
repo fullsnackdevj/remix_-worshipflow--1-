@@ -10,7 +10,7 @@ import {
     Music, Users, Calendar, NotepadText, ChevronRight, Clock,
     Bug, Lightbulb, CheckCircle2, AlertCircle, Shield, Bell, UserCheck,
     AlertTriangle, CheckCheck, Megaphone, Plus, UserPlus, Zap, BarChart3,
-    TrendingUp, ArrowUpRight, Star, Mic2, BookOpen, Radio, ListMusic, Headphones,
+    TrendingUp, ArrowUpRight, Star, Mic2, BookOpen, Radio, ListMusic, Headphones, ListTodo,
 } from "lucide-react";
 
 // Member, ScheduleMember, Schedule are imported from ./types
@@ -26,7 +26,7 @@ let _approvedRolesCache: Record<string, string> | null = null;
 interface Props {
     userName: string; userEmail: string; userId?: string; userPhoto?: string; userRole?: string;
     songs: Song[]; members: Member[]; schedules: Schedule[]; notes: Note[];
-    onNavigate: (view: "songs" | "members" | "schedule" | "admin") => void;
+    onNavigate: (view: string, opts?: { boardId?: string; cardId?: string }) => void;
     broadcasts?: any[]; pendingUsers?: any[]; loadingExtra?: boolean;
     canAddSong?: boolean; canWriteSchedule?: boolean; canAddMember?: boolean;
     onOpenLineup?: () => void;
@@ -266,6 +266,165 @@ function NextServiceTile({ ev, songs, members, myMemberId, onClick }: {
                         ].filter(Boolean).length} serving
                     </p>
                 </div>
+            </div>
+        </Tile>
+    );
+}
+
+// ── My Tasks card ─────────────────────────────────────────────────────────────
+interface TaskItem {
+    boardId: string; boardTitle: string;
+    cardId: string; cardTitle: string;
+    listName: string; completed: boolean;
+    assignedBy?: string;
+}
+
+function MyTasksCard({
+    userName, userEmail, members, onNavigate,
+}: {
+    userName: string; userEmail: string; members: Member[];
+    onNavigate: (view: string, opts?: { boardId?: string; cardId?: string }) => void;
+}) {
+    const [tasks, setTasks] = useState<TaskItem[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    // Resolve the member's exact stored name (used in card.members[]) from email
+    const resolvedName = useMemo(() => {
+        const email = (userEmail || "").toLowerCase().trim();
+        const byEmail = members.find(m => m.email?.toLowerCase().trim() === email);
+        if (byEmail?.name) return byEmail.name.trim();
+        // fallback: use the Firebase display name
+        return (userName || "").trim();
+    }, [userEmail, members, userName]);
+
+    useEffect(() => {
+        if (!resolvedName) { setLoading(false); return; }
+        const nameLower = resolvedName.toLowerCase();
+        const firstName = nameLower.split(" ")[0];
+
+        // Checks whether a name string in card.members[] belongs to this user
+        const isMe = (m: string) => {
+            const ml = m.trim().toLowerCase();
+            return ml === nameLower || ml.startsWith(firstName + " ") || ml === firstName;
+        };
+
+        (async () => {
+            try {
+                const boardsRes = await fetch("/api/planner/boards").then(r => r.json()).catch(() => []);
+                const boards: any[] = Array.isArray(boardsRes) ? boardsRes : [];
+                const items: TaskItem[] = [];
+
+                await Promise.all(boards.map(async (b: any) => {
+                    try {
+                        const [listsRes, cardsRes] = await Promise.all([
+                            fetch(`/api/planner/boards/${b.id}/lists`).then(r => r.json()).catch(() => []),
+                            fetch(`/api/planner/boards/${b.id}/cards`).then(r => r.json()).catch(() => []),
+                        ]);
+                        const lists: any[] = Array.isArray(listsRes) ? listsRes : [];
+                        const cards: any[] = Array.isArray(cardsRes) ? cardsRes : [];
+                        cards.forEach((c: any) => {
+                            if ((c.members ?? []).some((m: string) => isMe(m))) {
+                                const list = lists.find((l: any) => l.id === c.listId);
+                                // Format: "FirstName L." for others, "Self-assigned" for yourself
+                                const formatName = (fullName: string) => {
+                                    const parts = fullName.trim().split(" ");
+                                    if (parts.length === 1) return parts[0];
+                                    return `${parts[0]} ${parts[parts.length - 1][0]}.`;
+                                };
+                                const assignedBy = c.createdBy?.name
+                                    ? (isMe(c.createdBy.name) ? "Self-assigned" : formatName(c.createdBy.name))
+                                    : "Self-assigned"; // old cards have no createdBy — default to self-assigned
+                                items.push({
+                                    boardId: b.id, boardTitle: b.title,
+                                    cardId: c.id, cardTitle: c.title,
+                                    listName: list?.title ?? "",
+                                    completed: !!c.completed,
+                                    assignedBy,
+                                });
+                            }
+                        });
+                    } catch {}
+                }));
+                setTasks(items);
+            } catch {}
+            setLoading(false);
+        })();
+    }, [resolvedName]);
+
+    const todo       = tasks.filter(t => /to.?do|todo/i.test(t.listName));
+    const inProgress = tasks.filter(t => /in.?progress/i.test(t.listName));
+    const done       = tasks.filter(t => /done|complete/i.test(t.listName));
+    const other      = tasks.filter(t => !todo.includes(t) && !inProgress.includes(t) && !done.includes(t));
+    const ordered    = [...inProgress, ...todo, ...other, ...done];
+
+    return (
+        <Tile className="flex flex-col h-full">
+            <CardHeader
+                icon={<ListTodo size={14} className="text-violet-500" />}
+                title="My Tasks"
+                action="Ministry Hub"
+                onAction={() => onNavigate("planner")}
+            />
+            {loading ? (
+                <div className="p-5 space-y-3 animate-pulse">
+                    {[1,2,3].map(i => (
+                        <div key={i} className="flex items-center gap-3">
+                            <div className="w-2 h-2 rounded-full bg-gray-200 dark:bg-gray-700 shrink-0" />
+                            <div className="flex-1 h-3 bg-gray-200 dark:bg-gray-700 rounded" />
+                            <div className="w-16 h-3 bg-gray-200 dark:bg-gray-700 rounded" />
+                        </div>
+                    ))}
+                </div>
+            ) : ordered.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8 gap-2 text-gray-400">
+                    <ListTodo size={22} className="opacity-30" />
+                    <p className="text-sm">No tasks assigned to you</p>
+                    <p className="text-xs text-gray-400/70">Cards assigned to you will appear here</p>
+                </div>
+            ) : (
+                <div className="divide-y divide-gray-100 dark:divide-gray-700 overflow-y-auto flex-1" style={{ maxHeight: 240, scrollbarWidth: 'thin' }}>
+                    {ordered.map(t => {
+                        const isIP   = /in.?progress/i.test(t.listName);
+                        const isDone = /done|complete/i.test(t.listName);
+                        return (
+                            <button
+                                key={t.cardId}
+                                onClick={() => onNavigate("planner", { boardId: t.boardId, cardId: t.cardId })}
+                                className="w-full flex items-start gap-3 px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors text-left group"
+                            >
+                                {/* Status dot */}
+                                <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${
+                                    isDone ? 'bg-emerald-500' : isIP ? 'bg-blue-500 animate-pulse' : 'bg-gray-300 dark:bg-gray-600'
+                                }`} />
+                                <div className="flex-1 min-w-0">
+                                    <p className={`text-sm font-semibold truncate ${
+                                        isDone ? 'line-through text-gray-400' : 'text-gray-900 dark:text-white group-hover:text-indigo-500 dark:group-hover:text-indigo-400'
+                                    }`}>{t.cardTitle}</p>
+                                    <p className="text-xs text-gray-400 truncate mt-0.5">
+                                        <span className="font-medium">{t.boardTitle}</span>
+                                        {t.assignedBy && (
+                                            <span className="ml-1.5">
+                                                {" | "}
+                                                {t.assignedBy === "Self-assigned"
+                                                    ? <span className="text-violet-400 dark:text-violet-400">Self-assigned</span>
+                                                    : <span>Assigned by: <span className="text-gray-300 dark:text-gray-300 font-medium">{t.assignedBy}</span></span>
+                                                }
+                                            </span>
+                                        )}
+                                    </p>
+                                </div>
+                                <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full leading-none mt-1 ${
+                                    isDone ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400'
+                                    : isIP  ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400'
+                                    : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                                }`}>{isDone ? 'Done' : isIP ? 'In Progress' : 'To Do'}</span>
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
+            <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 shrink-0">
+                <p className="text-xs text-gray-400">{tasks.length} task{tasks.length !== 1 ? 's' : ''} assigned · {inProgress.length} in progress</p>
             </div>
         </Tile>
     );
@@ -648,12 +807,13 @@ export default function AdminDashboard({
                 </div>
             )}
 
-            {/* ── Top section: Daily Verse (left) + 2×2 metric tiles (right) ── */}
-            {/* grid: mobile=1col, lg+=2col with 3:2 ratio. Grid cells auto-stretch to equal height */}
-            <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-3">
-                {/* LEFT — Daily Bible Verse fills the full grid cell height */}
+            {/* ── Top section: Verse (left) + My Tasks (center) + 2×2 metric tiles (right) ── */}
+            <div className="grid grid-cols-1 lg:grid-cols-[2fr_1.5fr_1.5fr] gap-3">
+                {/* LEFT — Daily Bible Verse */}
                 <VerseOfTheDay userId={userId} userName={userName.split(" ")[0] || userName} userPhoto="" />
-                {/* RIGHT — 2×2 metric tiles: Songs | Members on top, Events | Issues on bottom */}
+                {/* CENTER — My Tasks */}
+                <MyTasksCard userName={userName} userEmail={userEmail} members={members} onNavigate={onNavigate} />
+                {/* RIGHT — 2×2 metric tiles */}
                 <div className="grid grid-cols-2 gap-3">
                     <MetricTile label="Songs" value={songs.length} sub={`${songsUsed} in services`}
                         iconBg="bg-indigo-100 dark:bg-indigo-900/40" icon={<Music size={15} className="text-indigo-600 dark:text-indigo-400" />}
