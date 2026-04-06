@@ -2257,23 +2257,38 @@ app.patch("/api/freedom-wall/:id/move", async (req, res) => {
 });
 
 // ── PLANNER → CALENDAR INTEGRATION ──────────────────────────────────────────
-// GET /api/planner/my-cards?memberName=...
+// GET /api/planner/my-cards?userEmail=... (preferred) | ?memberName=... (legacy fallback)
 // Returns all non-archived cards that:
-//   1. Have the given member name in their members[] array
+//   1. Have the given user's email in their members[] array
 //   2. Have a dueDate set
 // Also fetches the board title for each card so the calendar can display it.
 app.get("/api/planner/my-cards", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(503).json({ error: "DB unavailable" });
-  const memberName = (req.query.memberName as string || "").trim();
-  if (!memberName) return res.status(400).json({ error: "memberName is required" });
+
+  // Prefer email (matches Firestore members[] which stores emails)
+  const userEmail   = (req.query.userEmail   as string || "").trim().toLowerCase();
+  const memberName  = (req.query.memberName  as string || "").trim(); // legacy fallback
+
+  if (!userEmail && !memberName) return res.status(400).json({ error: "userEmail is required" });
+
   try {
-    // Query cards where members array contains this member name
-    const snap = await firestore
-      .collection("pg_cards")
-      .where("members", "array-contains", memberName)
-      .where("archived", "==", false)
-      .get();
+    let snap;
+    if (userEmail) {
+      // Primary: query by email — this is what members[] stores
+      snap = await firestore
+        .collection("pg_cards")
+        .where("members", "array-contains", userEmail)
+        .where("archived", "==", false)
+        .get();
+    } else {
+      // Legacy fallback: query by display name
+      snap = await firestore
+        .collection("pg_cards")
+        .where("members", "array-contains", memberName)
+        .where("archived", "==", false)
+        .get();
+    }
 
     // Filter to only cards with a dueDate
     const cards = snap.docs
@@ -2285,7 +2300,7 @@ app.get("/api/planner/my-cards", async (req, res) => {
     // Batch-fetch unique board titles (one read per unique boardId)
     const boardIds = [...new Set(cards.map((c: any) => c.boardId as string))];
     const boardSnaps = await Promise.all(
-      boardIds.map(bid => firestore.collection("pg_boards").doc(bid).get())
+      boardIds.map((bid: string) => firestore!.collection("pg_boards").doc(bid).get())
     );
     const boardTitleMap: Record<string, string> = {};
     boardSnaps.forEach(bs => { if (bs.exists) boardTitleMap[bs.id] = (bs.data() as any).title || "Board"; });

@@ -500,12 +500,13 @@ showToast("error", "Could not save acknowledgment. Try again.");
 
   // ── Fetch my assigned Ministry Hub cards ──────────────────────────────────
   useEffect(() => {
-    if (!myMemberProfile?.name) return;
-    fetch(`/api/planner/my-cards?memberName=${encodeURIComponent(myMemberProfile.name)}`)
+    const email = user?.email?.trim().toLowerCase();
+    if (!email) return;
+    fetch(`/api/planner/my-cards?userEmail=${encodeURIComponent(email)}`)
       .then(r => r.ok ? r.json() : [])
       .then(data => { if (Array.isArray(data)) setMyPlannerCards(data); })
       .catch(() => {});
-  }, [myMemberProfile?.name]);
+  }, [user?.email]);
 
   // ── Deep-link: open specific event from notification ─────────────────────
   useEffect(() => {

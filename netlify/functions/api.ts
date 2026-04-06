@@ -3053,6 +3053,53 @@ Rules:
         } catch (e) { return json(500, { error: "Failed to delete note" }); }
     }
 
+    // ── GET /planner/my-cards?userEmail=... ── calendar integration ─────────────
+    if (rawPath === "/planner/my-cards" && method === "GET") {
+        const userEmail  = (event.queryStringParameters?.userEmail  || "").trim().toLowerCase();
+        const memberName = (event.queryStringParameters?.memberName || "").trim(); // legacy fallback
+        if (!userEmail && !memberName) return json(400, { error: "userEmail is required" });
+        try {
+            let snap;
+            if (userEmail) {
+                snap = await firestore.collection("pg_cards")
+                    .where("members", "array-contains", userEmail)
+                    .where("archived", "==", false)
+                    .get();
+            } else {
+                snap = await firestore.collection("pg_cards")
+                    .where("members", "array-contains", memberName)
+                    .where("archived", "==", false)
+                    .get();
+            }
+            const cards = snap.docs
+                .map(d => ({ id: d.id, ...d.data(), createdAt: (d.data().createdAt as any)?.toDate?.()?.toISOString() ?? null } as any))
+                .filter((c: any) => !!c.dueDate && !c.archived);
+
+            if (cards.length === 0) return json(200, []);
+
+            const boardIds = [...new Set<string>(cards.map((c: any) => c.boardId as string))];
+            const boardSnaps = await Promise.all(boardIds.map((bid: string) => firestore.collection("pg_boards").doc(bid).get()));
+            const boardTitleMap: Record<string, string> = {};
+            boardSnaps.forEach(bs => { if (bs.exists) boardTitleMap[bs.id] = (bs.data() as any).title || "Board"; });
+
+            const result = cards.map((c: any) => ({
+                id: c.id,
+                boardId: c.boardId,
+                boardTitle: boardTitleMap[c.boardId] || "Ministry Hub",
+                listId: c.listId,
+                title: c.title,
+                dueDate: c.dueDate,
+                startDate: c.startDate ?? null,
+                completed: c.completed ?? false,
+                members: c.members ?? [],
+            }));
+            return json(200, result);
+        } catch (e: any) {
+            console.error("[GET /planner/my-cards]", e?.message);
+            return json(500, { error: "Failed to fetch assigned cards" });
+        }
+    }
+
     return json(404, { error: "Not found" });
 };
 
