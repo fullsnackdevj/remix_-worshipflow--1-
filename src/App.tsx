@@ -409,6 +409,31 @@ export default function App() {
     currentView,   // ← kept in sync so admin sees the user's last active section
   );
 
+  // 🔗 Deep-link from email: read ?notif=new_event&id=...&date=... on first auth
+  // The "View Schedule →" email button lands here — navigate to the right view and strip params.
+  useEffect(() => {
+    if (!user) return; // wait until authenticated
+    const params = new URLSearchParams(window.location.search);
+    const notif  = params.get("notif");
+    const id     = params.get("id");
+    const date   = params.get("date");
+    if (!notif) return; // no deep-link params, nothing to do
+    // Navigate based on notif type
+    if ((notif === "new_event" || notif === "updated_event") && id && date) {
+      setCurrentView("schedule");
+      setPendingDeepLinkEventId(id);
+      setPendingDeepLinkEventDate(date);
+    } else if (notif === "new_song" && id) {
+      setCurrentView("songs");
+      setPendingNavSongId(id);
+    } else if (notif === "access_request") {
+      setCurrentView("admin");
+    }
+    // Strip params from URL bar so refresh doesn't re-trigger navigation
+    window.history.replaceState({}, "", window.location.pathname);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid]); // run once when user first becomes available
+
   // 🎸 Auto-collapse sidebar when entering Rehearsal mode (needs full width)
   // Desktop/tablet only  — on mobile the sidebar is already a drawer overlay
   useEffect(() => {

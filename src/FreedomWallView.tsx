@@ -129,7 +129,8 @@ function AboutModal({ onClose }: { onClose: () => void }) {
 
 // ── Note Card ─────────────────────────────────────────────────────────────────
 function NoteCard({
-  note, sessionToken, isAdmin, onReact, onDelete, onView, onEdit, onMove, zoom, isNew, noteRank, pan,
+  note, sessionToken, isAdmin, onReact, onDelete, onView, onEdit, onMove, zoom, isNew, noteRank,
+  onDragActivate, onDragDeactivate, activeDragNoteId,
 }: {
   note: FreedomNote; sessionToken: string; isAdmin?: boolean;
   onReact: (id: string, emoji: string) => void;
@@ -139,25 +140,25 @@ function NoteCard({
   onMove: (id: string, x: number, y: number) => void;
   zoom: number;
   isNew?: boolean;
-  noteRank?: number; // 1 = oldest, higher = newer — controls z-index stacking
-  pan: { x: number; y: number }; // current board pan — needed for correct drag math
+  noteRank?: number;
+  onDragActivate: (noteId: string) => void;  // called when this note's hold fires
+  onDragDeactivate: () => void;              // called when drag ends
+  activeDragNoteId: string | null;           // which note (if any) is actively being dragged
 }) {
+  // Is ANOTHER note being dragged right now? Freeze this note.
+  const isFrozen = !!(activeDragNoteId && activeDragNoteId !== note.id);
   const colorScheme = NOTE_COLORS.find((c) => c.bg === note.color) ?? NOTE_COLORS[0];
   const [hovered, setHovered] = useState(false);
-  const [isDraggingState, setIsDraggingState] = useState(false);
-  const isDragging = useRef(false);
-  // dragStart stores the initial mouse position AND the note's canvas-pixel position at drag start
-  const dragStart = useRef({ mouseX: 0, mouseY: 0, notePxX: 0, notePxY: 0 });
+  const [isHolding, setIsHolding] = useState(false);      // true during 380ms hold phase
+  const [isDraggingState, setIsDraggingState] = useState(false); // true once drag is active
+  const isDraggingRef = useRef(false);   // sync version of isDraggingState for event handlers
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const capturedEl = useRef<HTMLDivElement | null>(null);  // element that has pointer capture
+  const capturedId = useRef<number | null>(null);
+  const dragStart = useRef({ startPX: 0, startPY: 0, notePxX: 0, notePxY: 0 });
   const moved = useRef(false);
 
-  // ── Touch drag (mobile) ─────────────────────────────────────────────────────
-  const touchDragActive = useRef(false);
-  // Store note's CANVAS-PIXEL position at touch start (same approach as mouse drag)
-  const touchStart = useRef({ clientX: 0, clientY: 0, notePxX: 0, notePxY: 0 });
-  const onMoveRef = useRef(onMove);
-  useEffect(() => { onMoveRef.current = onMove; }, [onMove]);
-  const panRef = useRef(pan);
-  useEffect(() => { panRef.current = pan; }, [pan]);
+  const HOLD_MS = 380; // ms the user must hold before drag activates
 
   const isAuthor = !!note.authorSessionToken && note.authorSessionToken === sessionToken;
   const canDelete = isAdmin || isAuthor;
@@ -168,75 +169,72 @@ function NoteCard({
   const totalHearts = Object.values(note.reactions).reduce((s, v) => s + v, 0);
   const hasReacted  = note.userReactions.some((r) => r.startsWith(sessionToken + ":"));
 
-  // ── Touch drag (document-level, passive:false so we can preventDefault) ─────
-  // Everyone can drag — isAuthor guard removed
-  useEffect(() => {
-    const noteId = note.id;
-    const onTouchMoveDoc = (e: TouchEvent) => {
-      if (!touchDragActive.current) return;
-      e.preventDefault(); // stop scroll + page pan while dragging a note
-      const t = e.touches[0];
-      const dx = t.clientX - touchStart.current.clientX;
-      const dy = t.clientY - touchStart.current.clientY;
-      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved.current = true;
-      // Absolute canvas-pixel position → percent (same math as mouse drag)
-      const newPxX = touchStart.current.notePxX + dx;
-      const newPxY = touchStart.current.notePxY + dy;
-      const newX = Math.max(0, Math.min(99, (newPxX / CANVAS_W) * 100));
-      const newY = Math.max(0, Math.min(99, (newPxY / CANVAS_H) * 100));
-      onMoveRef.current(noteId, newX, newY);
-    };
-    const onTouchEndDoc = () => {
-      touchDragActive.current = false;
-      // Release the global drag lock so board pan can resume
-      if (typeof window !== 'undefined') (window as any).__fwNoteDragging = false;
-    };
-    document.addEventListener("touchmove", onTouchMoveDoc, { passive: false });
-    document.addEventListener("touchend", onTouchEndDoc);
-    return () => {
-      document.removeEventListener("touchmove", onTouchMoveDoc);
-      document.removeEventListener("touchend", onTouchEndDoc);
-    };
-  }, [note.id]); // re-register when temp-id becomes real id
+  // ── Long-press-to-drag (mobile friendly) ───────────────────────────────────
+  // Phase 1 (onPointerDown): start a 380ms hold timer + show ring feedback.
+  // Phase 2 (timer fires):   activate drag mode — user can now move the note.
+  // Cancel: if the finger moves >8px before timer fires, cancel (was a scroll).
 
-  // ── Drag-to-move (everyone, mouse) ─────────────────────────────────────────
-  const handleDragMouseDown = (e: React.MouseEvent) => {
+  const cancelHold = () => {
+    if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
+    setIsHolding(false);
+  };
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest("button, a, input, select, textarea")) return;
+    if ((window as any).__fwNoteDragging) return; // another note already being dragged
     e.stopPropagation();
-    e.preventDefault();
-    isDragging.current = true;
-    setIsDraggingState(true);
+    e.currentTarget.setPointerCapture(e.pointerId);
+    capturedEl.current = e.currentTarget;
+    capturedId.current = e.pointerId;
     moved.current = false;
-    // Record the note's CANVAS-PIXEL position at drag start so we can compute
-    // correct absolute positions rather than accumulating floating-point drift.
     dragStart.current = {
-      mouseX: e.clientX,
-      mouseY: e.clientY,
+      startPX: e.clientX, startPY: e.clientY,
       notePxX: (note.x / 100) * CANVAS_W,
       notePxY: (note.y / 100) * CANVAS_H,
     };
+    setIsHolding(true);
+    holdTimerRef.current = setTimeout(() => {
+      holdTimerRef.current = null;
+      if (capturedId.current === null) return; // pointer already released
+      isDraggingRef.current = true;
+      setIsDraggingState(true);
+      setIsHolding(false);
+      (window as any).__fwNoteDragging = true;
+      onDragActivate(note.id); // tell parent → show overlay, freeze other notes
+    }, HOLD_MS);
+  };
 
-    const onMouseMove = (mv: MouseEvent) => {
-      if (!isDragging.current) return;
-      const dx = mv.clientX - dragStart.current.mouseX;
-      const dy = mv.clientY - dragStart.current.mouseY;
-      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved.current = true;
-      // Absolute canvas-pixel position → percent
-      const newPxX = dragStart.current.notePxX + dx;
-      const newPxY = dragStart.current.notePxY + dy;
-      const newX = Math.max(0, Math.min(99, (newPxX / CANVAS_W) * 100));
-      const newY = Math.max(0, Math.min(99, (newPxY / CANVAS_H) * 100));
-      onMove(note.id, newX, newY);
-    };
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingRef.current) {
+      // Not in drag mode — check if the finger slid before hold threshold fired
+      if (holdTimerRef.current) {
+        const dx = Math.abs(e.clientX - dragStart.current.startPX);
+        const dy = Math.abs(e.clientY - dragStart.current.startPY);
+        if (dx > 8 || dy > 8) cancelHold(); // finger slid — cancel hold, wasn't a long press
+      }
+      return;
+    }
+    // Drag mode active — move the note
+    const dx = e.clientX - dragStart.current.startPX;
+    const dy = e.clientY - dragStart.current.startPY;
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved.current = true;
+    const newPxX = dragStart.current.notePxX + dx;
+    const newPxY = dragStart.current.notePxY + dy;
+    onMove(note.id,
+      Math.max(0, Math.min(99, (newPxX / CANVAS_W) * 100)),
+      Math.max(0, Math.min(99, (newPxY / CANVAS_H) * 100)),
+    );
+  };
 
-    const onMouseUp = () => {
-      isDragging.current = false;
-      setIsDraggingState(false);
-      document.removeEventListener("mousemove", onMouseMove);
-      document.removeEventListener("mouseup", onMouseUp);
-    };
-
-    document.addEventListener("mousemove", onMouseMove);
-    document.addEventListener("mouseup", onMouseUp);
+  const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    cancelHold();
+    capturedId.current = null;
+    if (!isDraggingRef.current) return; // was just a tap, not a drag
+    isDraggingRef.current = false;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    setIsDraggingState(false);
+    (window as any).__fwNoteDragging = false;
+    onDragDeactivate(); // tell parent → remove overlay, unfreeze all notes
   };
 
   return (
@@ -248,33 +246,28 @@ function NoteCard({
         transform: `rotate(${note.rotation}deg)`,
         transformOrigin: "center top",
         width: 260,
-        zIndex: isDraggingState ? 99999 : hovered ? 9999 : (noteRank ?? 1),
-        cursor: isDraggingState ? "grabbing" : "grab",
+        // Dragging note floats above overlay (99999). Frozen notes sink below (1).
+        zIndex: isDraggingState ? 99999 : isFrozen ? 1 : hovered ? 9999 : (noteRank ?? 1),
+        // Frozen notes are invisible to pointer events — physically cannot be accidentally dragged.
+        pointerEvents: isFrozen ? "none" : "auto",
+        // Fade frozen notes out so the dragging note is the visual focus.
+        opacity: isFrozen ? 0.15 : 1,
+        cursor: isDraggingState ? "grabbing" : isFrozen ? "default" : "grab",
         willChange: isDraggingState ? "transform" : undefined,
-        touchAction: "none", // let our JS handler own all touch events — no browser scroll interference
+        touchAction: "none",
+        outline: isHolding ? "3px solid rgba(99,102,241,0.85)" : isDraggingState ? "2px solid rgba(99,102,241,0.5)" : "none",
+        outlineOffset: "3px",
+        transition: isFrozen
+          ? "opacity 0.2s ease"
+          : isHolding ? "outline 0.38s ease, scale 0.1s" : "outline 0.15s ease, opacity 0.2s ease, scale 0.18s ease",
+        scale: isHolding ? "1.04" : isDraggingState ? "1.06" : "1",
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      onMouseDown={handleDragMouseDown}
-      onTouchStart={(e) => {
-        e.stopPropagation(); // prevent board pan from starting
-        touchDragActive.current = true;
-        moved.current = false;
-        const t = e.touches[0];
-        // Store absolute canvas-pixel position at touch start (identical to mouse drag approach)
-        touchStart.current = {
-          clientX: t.clientX,
-          clientY: t.clientY,
-          notePxX: (note.x / 100) * CANVAS_W,
-          notePxY: (note.y / 100) * CANVAS_H,
-        };
-        // Set global flag so board's handleTouchMove skips panning while we drag
-        (window as any).__fwNoteDragging = true;
-      }}
-      onTouchMove={(e) => {
-        // Stop the React synthetic event from reaching the board's onTouchMove pan handler
-        if (touchDragActive.current) e.stopPropagation();
-      }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
     >
       {/* Pin */}
       <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
@@ -693,6 +686,8 @@ export default function FreedomWallView({ isAdmin, currentUserId, onToast }: Fre
   const [viewingNote, setViewingNote] = useState<FreedomNote | null>(null);
   const [editingNote, setEditingNote] = useState<FreedomNote | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  // Which note is currently being dragged — drives overlay + note freeze
+  const [activeDragNoteId, setActiveDragNoteId] = useState<string | null>(null);
 
   // Pan state + new-note highlight
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -972,17 +967,35 @@ export default function FreedomWallView({ isAdmin, currentUserId, onToast }: Fre
         <div className="absolute" style={{ width: CANVAS_W, height: CANVAS_H, transform: `translate(${pan.x}px, ${pan.y}px)`, transformOrigin: "0 0", willChange: "transform" }}>
           {[...notes]
             .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-            .map((note, idx, arr) => (
+            .map((note, idx) => (
             <React.Fragment key={note.id}>
               <NoteCard note={note} sessionToken={sessionToken} isAdmin={isAdmin}
                 onReact={handleReact} onDelete={handleDelete} onView={setViewingNote}
                 onEdit={setEditingNote} onMove={handleMoveAndSave} zoom={1}
                 isNew={note.id === newNoteId}
                 noteRank={idx + 1}
-                pan={pan}
+                onDragActivate={setActiveDragNoteId}
+                onDragDeactivate={() => setActiveDragNoteId(null)}
+                activeDragNoteId={activeDragNoteId}
               />
             </React.Fragment>
           ))}
+          {/* Drag overlay — INSIDE the canvas stacking context so the dragging note
+              (z-index 99999) is correctly above it, while frozen notes (z-index 1)
+              are below it. Placing it outside would blur the dragging note too. */}
+          {activeDragNoteId && (
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                width: CANVAS_W,
+                height: CANVAS_H,
+                zIndex: 55000,
+                background: "rgba(0,0,0,0.65)",
+                pointerEvents: "none",
+              }}
+            />
+          )}
         </div>
 
         {/* Loading */}

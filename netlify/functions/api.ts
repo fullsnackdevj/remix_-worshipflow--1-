@@ -372,7 +372,7 @@ async function writeNotif(firestore: FirebaseFirestore.Firestore | null, payload
             ...payload, readBy: [], deletedBy: [],
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
         });
-        await sendPush(firestore, { title: payload.message, body: payload.subMessage, actorUserId: payload.actorUserId, targetAudience: payload.targetAudience, type: payload.type, resourceId: payload.resourceId, resourceDate: payload.resourceDate });
+        await sendPush(firestore, { title: payload.message, body: payload.subMessage, actorUserId: payload.actorUserId, targetAudience: payload.targetAudience, targetUserId: payload.targetUserId, type: payload.type, resourceId: payload.resourceId, resourceDate: payload.resourceDate });
     } catch (e) { console.error("notif write failed", e); }
 }
 

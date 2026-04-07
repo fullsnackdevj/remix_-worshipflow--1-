@@ -101,7 +101,7 @@ interface Props {
 // ── LineupPlayer ──────────────────────────────────────────────────────────────
 export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
   const [currentIdx, setCurrentIdx] = useState(0);
-  // On mobile, start in mini so the bottom-snap appears immediately (no backdrop tap-through bug)
+  // Mobile starts in mini — floats bottom-right, fully draggable (same as desktop)
   const [mode, setMode] = useState<PlayerMode>(() =>
     typeof window !== "undefined" && window.innerWidth < 640 ? "mini" : "full"
   );
@@ -120,7 +120,6 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
   );
   const shellRef = useRef<HTMLDivElement>(null);
   const prevMode = useRef<PlayerMode>("full");
-  const isMobileRef = useRef(typeof window !== "undefined" && window.innerWidth < 640);
 
   useEffect(() => {
     if (prevMode.current === "full" && mode !== "full") setDragPos(null);
@@ -400,13 +399,20 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
     );
   };
 
-  // Mobile snap: mini & medium both anchor to the bottom full-width
-  const isMobile = isMobileRef.current;
-  const mobileSnap = isMobile && (mode === "mini" || mode === "medium");
-
+  // Draggable style — mobile snaps to bottom by default, becomes free-floating after first drag.
+  // Desktop always floats bottom-right and is draggable from the start.
+  const isMobileView = (window.visualViewport?.width ?? window.innerWidth) < 640;
+  const mobileDefaultStyle = {
+    bottom: 0, left: 0, right: 0, width: "100%",
+    borderRadius: "16px 16px 0 0",
+    touchAction: "none" as const,
+    maxHeight: mode === "medium" ? "60vh" : undefined,
+  };
   const draggableStyle = dragPos
     ? { left: dragPos.x, top: dragPos.y, right: "auto", bottom: "auto", touchAction: "none" as const, cursor: dragRef.current.dragging ? "grabbing" : "grab", transition: dragRef.current.dragging ? "none" : "left 0.15s, top 0.15s" }
-    : { right: 16, bottom: 16, left: "auto", top: "auto", touchAction: "none" as const, cursor: dragRef.current.dragging ? "grabbing" : "grab" };
+    : isMobileView
+      ? mobileDefaultStyle  // snap to bottom until first drag
+      : { right: 16, bottom: 16, left: "auto", top: "auto", touchAction: "none" as const, cursor: dragRef.current.dragging ? "grabbing" : "grab" };
 
   const playerUI = (
     <>
@@ -419,14 +425,9 @@ export default function LineupPlayer({ tracks, currentUser, onClose }: Props) {
         className="fixed z-[9999] bg-[#0c0c14] shadow-[0_8px_40px_rgba(0,0,0,0.85)] ring-1 ring-white/[0.07] rounded-2xl overflow-hidden flex flex-col"
         style={mode === "full"
           ? { top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: "min(95vw,960px)", maxHeight: "95vh" }
-          : mobileSnap
-            ? {
-                bottom: 0, left: 0, right: 0, width: "100%",
-                borderRadius: "16px 16px 0 0",
-                touchAction: "none" as const,
-                maxHeight: mode === "medium" ? "60vh" : undefined,
-              }
-            : { ...draggableStyle, width: mode === "medium" ? `min(${MEDIUM_W}px, calc(100vw - 16px))` : `min(${MINI_W}px, calc(100vw - 16px))` }}
+          : dragPos
+            ? { ...draggableStyle, width: mode === "medium" ? `min(${MEDIUM_W}px, calc(100vw - 16px))` : `min(${MINI_W}px, calc(100vw - 16px))` }
+            : draggableStyle}
         onPointerDown={onDragStart} onPointerMove={onDragMove} onPointerUp={onDragEnd} onPointerCancel={onDragEnd}
       >
         {/* ── FULL HEADER ─────────────────────────────────────────────── */}
