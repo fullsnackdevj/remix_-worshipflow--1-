@@ -152,10 +152,10 @@ function NoteCard({
 
   // ── Touch drag (mobile) ─────────────────────────────────────────────────────
   const touchDragActive = useRef(false);
-  const touchStart = useRef({ clientX: 0, clientY: 0, noteX: 0, noteY: 0 });
+  // Store note's CANVAS-PIXEL position at touch start (same approach as mouse drag)
+  const touchStart = useRef({ clientX: 0, clientY: 0, notePxX: 0, notePxY: 0 });
   const onMoveRef = useRef(onMove);
   useEffect(() => { onMoveRef.current = onMove; }, [onMove]);
-  // Keep a ref to pan so the touch handler always has the latest value
   const panRef = useRef(pan);
   useEffect(() => { panRef.current = pan; }, [pan]);
 
@@ -179,12 +179,18 @@ function NoteCard({
       const dx = t.clientX - touchStart.current.clientX;
       const dy = t.clientY - touchStart.current.clientY;
       if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved.current = true;
-      // Convert screen-pixel delta → canvas-percent delta (scale=1, no zoom transform)
-      const newX = Math.max(0, Math.min(99, touchStart.current.noteX + (dx / CANVAS_W) * 100));
-      const newY = Math.max(0, Math.min(99, touchStart.current.noteY + (dy / CANVAS_H) * 100));
+      // Absolute canvas-pixel position → percent (same math as mouse drag)
+      const newPxX = touchStart.current.notePxX + dx;
+      const newPxY = touchStart.current.notePxY + dy;
+      const newX = Math.max(0, Math.min(99, (newPxX / CANVAS_W) * 100));
+      const newY = Math.max(0, Math.min(99, (newPxY / CANVAS_H) * 100));
       onMoveRef.current(noteId, newX, newY);
     };
-    const onTouchEndDoc = () => { touchDragActive.current = false; };
+    const onTouchEndDoc = () => {
+      touchDragActive.current = false;
+      // Release the global drag lock so board pan can resume
+      if (typeof window !== 'undefined') (window as any).__fwNoteDragging = false;
+    };
     document.addEventListener("touchmove", onTouchMoveDoc, { passive: false });
     document.addEventListener("touchend", onTouchEndDoc);
     return () => {
@@ -245,6 +251,7 @@ function NoteCard({
         zIndex: isDraggingState ? 99999 : hovered ? 9999 : (noteRank ?? 1),
         cursor: isDraggingState ? "grabbing" : "grab",
         willChange: isDraggingState ? "transform" : undefined,
+        touchAction: "none", // let our JS handler own all touch events — no browser scroll interference
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -254,7 +261,15 @@ function NoteCard({
         touchDragActive.current = true;
         moved.current = false;
         const t = e.touches[0];
-        touchStart.current = { clientX: t.clientX, clientY: t.clientY, noteX: note.x, noteY: note.y };
+        // Store absolute canvas-pixel position at touch start (identical to mouse drag approach)
+        touchStart.current = {
+          clientX: t.clientX,
+          clientY: t.clientY,
+          notePxX: (note.x / 100) * CANVAS_W,
+          notePxY: (note.y / 100) * CANVAS_H,
+        };
+        // Set global flag so board's handleTouchMove skips panning while we drag
+        (window as any).__fwNoteDragging = true;
       }}
       onTouchMove={(e) => {
         // Stop the React synthetic event from reaching the board's onTouchMove pan handler
@@ -757,10 +772,18 @@ export default function FreedomWallView({ isAdmin, currentUserId, onToast }: Fre
     (e.currentTarget as HTMLElement).style.cursor = "grab";
   };
 
-  // Touch pan
+  // Touch pan — skips while a note is being dragged so both don't conflict
   const lastTouch = useRef({ x: 0, y: 0 });
-  const handleTouchStart = (e: React.TouchEvent) => { const t = e.touches[0]; lastTouch.current = { x: t.clientX, y: t.clientY }; };
+  const handleTouchStart = (e: React.TouchEvent) => {
+    // Don't start board pan if the touch landed on a note card
+    const target = e.target as HTMLElement;
+    if (target.closest('[data-note-card]')) return;
+    const t = e.touches[0];
+    lastTouch.current = { x: t.clientX, y: t.clientY };
+  };
   const handleTouchMove = (e: React.TouchEvent) => {
+    // If a note is being dragged, the document-level handler owns this touch — skip board pan
+    if ((window as any).__fwNoteDragging) return;
     const t = e.touches[0];
     const dx = t.clientX - lastTouch.current.x;
     const dy = t.clientY - lastTouch.current.y;
