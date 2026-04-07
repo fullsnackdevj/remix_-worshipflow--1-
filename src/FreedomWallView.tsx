@@ -129,7 +129,7 @@ function AboutModal({ onClose }: { onClose: () => void }) {
 
 // ── Note Card ─────────────────────────────────────────────────────────────────
 function NoteCard({
-  note, sessionToken, isAdmin, onReact, onDelete, onView, onEdit, onMove, zoom, isNew, noteRank,
+  note, sessionToken, isAdmin, onReact, onDelete, onView, onEdit, onMove, zoom, isNew, noteRank, pan,
 }: {
   note: FreedomNote; sessionToken: string; isAdmin?: boolean;
   onReact: (id: string, emoji: string) => void;
@@ -140,11 +140,14 @@ function NoteCard({
   zoom: number;
   isNew?: boolean;
   noteRank?: number; // 1 = oldest, higher = newer — controls z-index stacking
+  pan: { x: number; y: number }; // current board pan — needed for correct drag math
 }) {
   const colorScheme = NOTE_COLORS.find((c) => c.bg === note.color) ?? NOTE_COLORS[0];
   const [hovered, setHovered] = useState(false);
+  const [isDraggingState, setIsDraggingState] = useState(false);
   const isDragging = useRef(false);
-  const dragStart = useRef({ mouseX: 0, mouseY: 0, noteX: 0, noteY: 0 });
+  // dragStart stores the initial mouse position AND the note's canvas-pixel position at drag start
+  const dragStart = useRef({ mouseX: 0, mouseY: 0, notePxX: 0, notePxY: 0 });
   const moved = useRef(false);
 
   // ── Touch drag (mobile) ─────────────────────────────────────────────────────
@@ -152,6 +155,9 @@ function NoteCard({
   const touchStart = useRef({ clientX: 0, clientY: 0, noteX: 0, noteY: 0 });
   const onMoveRef = useRef(onMove);
   useEffect(() => { onMoveRef.current = onMove; }, [onMove]);
+  // Keep a ref to pan so the touch handler always has the latest value
+  const panRef = useRef(pan);
+  useEffect(() => { panRef.current = pan; }, [pan]);
 
   const isAuthor = !!note.authorSessionToken && note.authorSessionToken === sessionToken;
   const canDelete = isAdmin || isAuthor;
@@ -163,8 +169,8 @@ function NoteCard({
   const hasReacted  = note.userReactions.some((r) => r.startsWith(sessionToken + ":"));
 
   // ── Touch drag (document-level, passive:false so we can preventDefault) ─────
+  // Everyone can drag — isAuthor guard removed
   useEffect(() => {
-    if (!isAuthor) return;
     const noteId = note.id;
     const onTouchMoveDoc = (e: TouchEvent) => {
       if (!touchDragActive.current) return;
@@ -173,7 +179,7 @@ function NoteCard({
       const dx = t.clientX - touchStart.current.clientX;
       const dy = t.clientY - touchStart.current.clientY;
       if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved.current = true;
-      // Convert screen-pixel delta → canvas-percent delta (no zoom, scale=1)
+      // Convert screen-pixel delta → canvas-percent delta (scale=1, no zoom transform)
       const newX = Math.max(0, Math.min(99, touchStart.current.noteX + (dx / CANVAS_W) * 100));
       const newY = Math.max(0, Math.min(99, touchStart.current.noteY + (dy / CANVAS_H) * 100));
       onMoveRef.current(noteId, newX, newY);
@@ -185,36 +191,40 @@ function NoteCard({
       document.removeEventListener("touchmove", onTouchMoveDoc);
       document.removeEventListener("touchend", onTouchEndDoc);
     };
-  }, [isAuthor, note.id]); // re-register when temp-id becomes real id
+  }, [note.id]); // re-register when temp-id becomes real id
 
-  // ── Drag-to-move (author only, mouse) ──────────────────────────────────────
+  // ── Drag-to-move (everyone, mouse) ─────────────────────────────────────────
   const handleDragMouseDown = (e: React.MouseEvent) => {
-    if (!isAuthor) return;
     e.stopPropagation();
     e.preventDefault();
     isDragging.current = true;
+    setIsDraggingState(true);
     moved.current = false;
+    // Record the note's CANVAS-PIXEL position at drag start so we can compute
+    // correct absolute positions rather than accumulating floating-point drift.
     dragStart.current = {
       mouseX: e.clientX,
       mouseY: e.clientY,
-      noteX: note.x,
-      noteY: note.y,
+      notePxX: (note.x / 100) * CANVAS_W,
+      notePxY: (note.y / 100) * CANVAS_H,
     };
 
     const onMouseMove = (mv: MouseEvent) => {
       if (!isDragging.current) return;
       const dx = mv.clientX - dragStart.current.mouseX;
       const dy = mv.clientY - dragStart.current.mouseY;
-      // Convert screen-pixel delta → canvas-percent
-      // CANVAS_W/H is the total canvas size; the board renders at scale 1:1
-      const newX = Math.max(0, Math.min(99, dragStart.current.noteX + (dx / CANVAS_W) * 100));
-      const newY = Math.max(0, Math.min(99, dragStart.current.noteY + (dy / CANVAS_H) * 100));
       if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved.current = true;
+      // Absolute canvas-pixel position → percent
+      const newPxX = dragStart.current.notePxX + dx;
+      const newPxY = dragStart.current.notePxY + dy;
+      const newX = Math.max(0, Math.min(99, (newPxX / CANVAS_W) * 100));
+      const newY = Math.max(0, Math.min(99, (newPxY / CANVAS_H) * 100));
       onMove(note.id, newX, newY);
     };
 
     const onMouseUp = () => {
       isDragging.current = false;
+      setIsDraggingState(false);
       document.removeEventListener("mousemove", onMouseMove);
       document.removeEventListener("mouseup", onMouseUp);
     };
@@ -232,15 +242,14 @@ function NoteCard({
         transform: `rotate(${note.rotation}deg)`,
         transformOrigin: "center top",
         width: 260,
-        zIndex: isDragging.current ? 99999 : hovered ? 9999 : (noteRank ?? 1),
-        cursor: isAuthor ? (isDragging.current ? "grabbing" : "grab") : "default",
-        willChange: isDragging.current ? "transform" : undefined,
+        zIndex: isDraggingState ? 99999 : hovered ? 9999 : (noteRank ?? 1),
+        cursor: isDraggingState ? "grabbing" : "grab",
+        willChange: isDraggingState ? "transform" : undefined,
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      onMouseDown={isAuthor ? handleDragMouseDown : undefined}
+      onMouseDown={handleDragMouseDown}
       onTouchStart={(e) => {
-        if (!isAuthor) return;
         e.stopPropagation(); // prevent board pan from starting
         touchDragActive.current = true;
         moved.current = false;
@@ -249,7 +258,7 @@ function NoteCard({
       }}
       onTouchMove={(e) => {
         // Stop the React synthetic event from reaching the board's onTouchMove pan handler
-        if (isAuthor && touchDragActive.current) e.stopPropagation();
+        if (touchDragActive.current) e.stopPropagation();
       }}
     >
       {/* Pin */}
@@ -287,6 +296,21 @@ function NoteCard({
         )}
         {/* Tape */}
         <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-10 h-4 rounded-sm" style={{ background: "rgba(255,220,120,0.42)", border: "1px solid rgba(255,200,80,0.25)" }} />
+
+        {/* "My note" badge — only visible to the author, top-left corner */}
+        {isAuthor && (
+          <div
+            className="absolute top-1.5 left-2 flex items-center gap-0.5 pointer-events-none"
+            style={{
+              background: "rgba(139,92,246,0.18)",
+              border: "1px solid rgba(139,92,246,0.35)",
+              borderRadius: 6,
+              padding: "1px 5px",
+            }}
+          >
+            <span style={{ fontSize: 8, fontWeight: 700, color: "#a78bfa", letterSpacing: "0.04em", lineHeight: 1.6 }}>MY NOTE</span>
+          </div>
+        )}
 
         {/* Heart top-right — interactive for others, read-only count for own */}
         {isAuthor ? (
@@ -932,6 +956,7 @@ export default function FreedomWallView({ isAdmin, currentUserId, onToast }: Fre
                 onEdit={setEditingNote} onMove={handleMoveAndSave} zoom={1}
                 isNew={note.id === newNoteId}
                 noteRank={idx + 1}
+                pan={pan}
               />
             </React.Fragment>
           ))}

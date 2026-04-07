@@ -302,7 +302,7 @@ function duplicateSignalSummary(score: number, t: number, a: number, tag: number
 // Send FCM push to relevant devices
 async function sendPush(firestore: FirebaseFirestore.Firestore | null, payload: {
     title: string; body: string; actorUserId?: string; targetAudience: string;
-    type?: string; resourceId?: string; resourceDate?: string;
+    targetUserId?: string; type?: string; resourceId?: string; resourceDate?: string;
 }) {
     if (!firestore) return;
     try {
@@ -315,7 +315,10 @@ async function sendPush(firestore: FirebaseFirestore.Firestore | null, payload: 
             const role: string = data.role || "member";
             const tokenUserId: string = data.userId || "";
             if (!token) return;
+            // Never push to the actor themselves
             if (payload.actorUserId && tokenUserId === payload.actorUserId) return;
+            // Direct push — only send to the specific target user
+            if (payload.targetUserId && tokenUserId !== payload.targetUserId) return;
             if (payload.targetAudience === "admin_only" && role !== "admin") return;
             if (payload.targetAudience === "non_member" && role === "member") return;
             tokens.push(token);
@@ -1929,9 +1932,10 @@ Rules:
                     notes: notes || "",
                     updated_at: admin.firestore.FieldValue.serverTimestamp(),
                 });
-                const { actorName: aN2 = "Someone", actorPhoto: aP2 = "", actorUserId: aU2 = "" } = body;
-                const dl2 = new Date(date + "T00:00:00").toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
-                writeNotif(firestore, { type: "updated_event", message: `${aN2} updated an event`, subMessage: `📅 ${eventName || "Event"} — ${dl2}`, actorName: aN2, actorPhoto: aP2, actorUserId: aU2, targetAudience: "all", resourceId: id, resourceType: "event", resourceDate: date });
+                // ── Update is SILENT — no bell notification, no push.
+                // The author already sees the toast from the frontend.
+                // Notifications fire ONLY on create (new_event) and the manual
+                // "Notify Team" button — preventing spam on every save.
                 return json(200, { success: true });
             } catch (err) {
                 console.error(err);
@@ -1988,7 +1992,9 @@ Rules:
                 await docRef.update(updatePayload);
                 const updated = [...acksNow, ackEntry];
 
-                // Send bell notification ONLY on first-ever ack from this user
+                // Send bell + push ONLY on first-ever ack — targeted directly at the event creator.
+                // "your" is correct because we now use targetAudience: "direct" + targetUserId,
+                // so only the creator sees it. Push is also filtered by targetUserId.
                 const creatorUid: string = sched.created_by_uid ?? "";
                 if (!alreadyNotified && creatorUid && creatorUid !== userId) {
                     const evName = sched.eventName || (sched.serviceType === "sunday" ? "Sunday Service" : "Midweek Service");
@@ -2002,8 +2008,8 @@ Rules:
                         actorName: userName,
                         actorPhoto: photo,
                         actorUserId: userId,
-                        targetAudience: "all",
-                        targetUserId: creatorUid,
+                        targetAudience: "direct",   // ← only goes to the creator in the bell
+                        targetUserId: creatorUid,   // ← targeted bell + push to creator only
                         resourceId: id,
                         resourceType: "event",
                         resourceDate: sched.date,
@@ -3006,17 +3012,15 @@ Rules:
         } catch (e) { return json(500, { error: "Failed to react" }); }
     }
 
-    // PATCH /freedom-wall/:id/move
+    // PATCH /freedom-wall/:id/move — anyone can reposition notes (drag is open to all)
     const fwMoveMatch = rawPath.match(/^\/freedom-wall\/([^/]+)\/move$/);
     if (fwMoveMatch && method === "PATCH") {
         const nid = fwMoveMatch[1];
-        const { x: nx, y: ny, sessionToken: st } = body;
+        const { x: nx, y: ny } = body;
         if (typeof nx !== "number" || typeof ny !== "number") return json(400, { error: "x and y are required numbers" });
         try {
             const doc = await firestore.collection("freedomWall").doc(nid).get();
             if (!doc.exists) return json(404, { error: "Note not found" });
-            const isAuthor = st && doc.data()?.authorSessionToken && doc.data()?.authorSessionToken === st;
-            if (!isAuthor) return json(403, { error: "Only the author can move this note" });
             await firestore.collection("freedomWall").doc(nid).update({ x: nx, y: ny });
             return json(200, { success: true });
         } catch { return json(500, { error: "Failed to move note" }); }
@@ -3053,25 +3057,40 @@ Rules:
         } catch (e) { return json(500, { error: "Failed to delete note" }); }
     }
 
-    // ── GET /planner/my-cards?userEmail=... ── calendar integration ─────────────
+    // ── GET /planner/my-cards?userEmail=...&memberName=... ── calendar integration
     if (rawPath === "/planner/my-cards" && method === "GET") {
         const userEmail  = (event.queryStringParameters?.userEmail  || "").trim().toLowerCase();
-        const memberName = (event.queryStringParameters?.memberName || "").trim(); // legacy fallback
-        if (!userEmail && !memberName) return json(400, { error: "userEmail is required" });
+        const memberName = (event.queryStringParameters?.memberName || "").trim();
+        if (!userEmail && !memberName) return json(400, { error: "userEmail or memberName is required" });
         try {
-            let snap;
-            if (userEmail) {
-                snap = await firestore.collection("pg_cards")
-                    .where("members", "array-contains", userEmail)
-                    .where("archived", "==", false)
-                    .get();
-            } else {
-                snap = await firestore.collection("pg_cards")
-                    .where("members", "array-contains", memberName)
-                    .where("archived", "==", false)
-                    .get();
+            // Cards store members as display names. Run both queries and merge.
+            const queries: Promise<FirebaseFirestore.QuerySnapshot>[] = [];
+            if (memberName) {
+                queries.push(
+                    firestore.collection("pg_cards")
+                        .where("members", "array-contains", memberName)
+                        .where("archived", "==", false)
+                        .get()
+                );
             }
-            const cards = snap.docs
+            if (userEmail) {
+                queries.push(
+                    firestore.collection("pg_cards")
+                        .where("members", "array-contains", userEmail)
+                        .where("archived", "==", false)
+                        .get()
+                );
+            }
+            const snaps = await Promise.all(queries);
+            // Merge and deduplicate
+            const seenIds = new Set<string>();
+            const allDocs: FirebaseFirestore.QueryDocumentSnapshot[] = [];
+            for (const snap of snaps) {
+                for (const doc of snap.docs) {
+                    if (!seenIds.has(doc.id)) { seenIds.add(doc.id); allDocs.push(doc); }
+                }
+            }
+            const cards = allDocs
                 .map(d => ({ id: d.id, ...d.data(), createdAt: (d.data().createdAt as any)?.toDate?.()?.toISOString() ?? null } as any))
                 .filter((c: any) => !!c.dueDate && !c.archived);
 

@@ -499,14 +499,21 @@ showToast("error", "Could not save acknowledgment. Try again.");
   }, []);
 
   // ── Fetch my assigned Ministry Hub cards ──────────────────────────────────
+  // Cards store members as display names (not emails), so we query by memberName.
+  // We also pass userEmail as a secondary key in case some cards were stored with email.
   useEffect(() => {
     const email = user?.email?.trim().toLowerCase();
     if (!email) return;
-    fetch(`/api/planner/my-cards?userEmail=${encodeURIComponent(email)}`)
+    // myMemberProfile.name is the display name stored in cards' members[] array
+    const memberName = myMemberProfile?.name?.trim() ?? "";
+    const params = new URLSearchParams();
+    params.set("userEmail", email);
+    if (memberName) params.set("memberName", memberName);
+    fetch(`/api/planner/my-cards?${params.toString()}`)
       .then(r => r.ok ? r.json() : [])
       .then(data => { if (Array.isArray(data)) setMyPlannerCards(data); })
       .catch(() => {});
-  }, [user?.email]);
+  }, [user?.email, myMemberProfile?.name]);
 
   // ── Deep-link: open specific event from notification ─────────────────────
   useEffect(() => {

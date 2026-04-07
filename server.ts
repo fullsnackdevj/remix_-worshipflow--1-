@@ -482,11 +482,13 @@ app.get("/api/notifications", async (req, res) => {
       if (userId && n["actorUserId"] === userId) return false;
       // Soft-deleted for this user
       if (n["_deletedBy"].includes(userId)) return false;
+      // Personal / targeted notification — only visible to the specific user
+      if (n["targetUserId"]) return n["targetUserId"] === userId;
       // Audience filter
       if (n["targetAudience"] === "all") return true;
       if (n["targetAudience"] === "admin_only") return role === "admin";
       if (n["targetAudience"] === "non_member") return role !== "member";
-      // Direct: only the specific recipient sees this
+      // Direct (Planner): only the specific recipient sees this
       if (n["targetAudience"] === "direct") return n["recipientId"] === userId;
       return false;
     });
@@ -1173,20 +1175,8 @@ app.put("/api/schedules/:id", async (req, res) => {
       updated_at: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    // Fire-and-forget notification
-    const { actorName: aN2 = "Someone", actorPhoto: aP2 = "", actorUserId: aU2 = "" } = req.body;
-    const dateLabel2 = new Date(date + "T00:00:00").toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
-    writeNotification(firestore, {
-      type: "updated_event",
-      message: `${aN2} updated an event`,
-      subMessage: `📅 ${eventName || "Event"} — ${dateLabel2}`,
-      actorName: aN2, actorPhoto: aP2, actorUserId: aU2,
-      targetAudience: "all",
-      resourceId: id,
-      resourceType: "event",
-      resourceDate: date,
-    });
-
+    // ── Update is SILENT — no bell, no push. Author sees toast on frontend only.
+    // Notifications only fire on create and the manual "Notify Team" button.
     res.json({ success: true });
   } catch (error) {
     console.error(error);
@@ -2237,67 +2227,77 @@ app.delete("/api/freedom-wall/:id", async (req, res) => {
   } catch (e) { res.status(500).json({ error: "Failed to delete note" }); }
 });
 
-// PATCH /api/freedom-wall/:id/move — author-only note position update
+// PATCH /api/freedom-wall/:id/move — anyone can reposition notes (drag is open to all)
+// Edit and delete remain author/admin restricted.
 app.patch("/api/freedom-wall/:id/move", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(503).json({ error: "DB unavailable" });
-  const { x, y, sessionToken } = req.body;
+  const { x, y } = req.body;
   if (typeof x !== "number" || typeof y !== "number") {
     return res.status(400).json({ error: "x and y are required numbers" });
   }
   try {
     const doc = await firestore.collection("freedomWall").doc(req.params.id).get();
     if (!doc.exists) return res.status(404).json({ error: "Note not found" });
-    const data = doc.data()!;
-    const isAuthor = sessionToken && data.authorSessionToken && data.authorSessionToken === sessionToken;
-    if (!isAuthor) return res.status(403).json({ error: "Only the author can move this note" });
     await firestore.collection("freedomWall").doc(req.params.id).update({ x, y });
     res.json({ success: true });
   } catch { res.status(500).json({ error: "Failed to move note" }); }
 });
 
-// ── PLANNER → CALENDAR INTEGRATION ──────────────────────────────────────────
-// GET /api/planner/my-cards?userEmail=... (preferred) | ?memberName=... (legacy fallback)
-// Returns all non-archived cards that:
-//   1. Have the given user's email in their members[] array
-//   2. Have a dueDate set
-// Also fetches the board title for each card so the calendar can display it.
+// GET /api/planner/my-cards — calendar integration
+// Cards store members as display names. We support both memberName and userEmail queries
+// and merge the results to handle mixed-format data in Firestore.
 app.get("/api/planner/my-cards", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(503).json({ error: "DB unavailable" });
 
-  // Prefer email (matches Firestore members[] which stores emails)
-  const userEmail   = (req.query.userEmail   as string || "").trim().toLowerCase();
-  const memberName  = (req.query.memberName  as string || "").trim(); // legacy fallback
+  const userEmail  = (req.query.userEmail  as string || "").trim().toLowerCase();
+  const memberName = (req.query.memberName as string || "").trim();
 
-  if (!userEmail && !memberName) return res.status(400).json({ error: "userEmail is required" });
+  if (!userEmail && !memberName) return res.status(400).json({ error: "userEmail or memberName is required" });
 
   try {
-    let snap;
+    // Run both queries in parallel and merge — cards may store name OR email in members[]
+    const queries: Promise<FirebaseFirestore.QuerySnapshot>[] = [];
+    if (memberName) {
+      queries.push(
+        firestore.collection("pg_cards")
+          .where("members", "array-contains", memberName)
+          .where("archived", "==", false)
+          .get()
+      );
+    }
     if (userEmail) {
-      // Primary: query by email — this is what members[] stores
-      snap = await firestore
-        .collection("pg_cards")
-        .where("members", "array-contains", userEmail)
-        .where("archived", "==", false)
-        .get();
-    } else {
-      // Legacy fallback: query by display name
-      snap = await firestore
-        .collection("pg_cards")
-        .where("members", "array-contains", memberName)
-        .where("archived", "==", false)
-        .get();
+      queries.push(
+        firestore.collection("pg_cards")
+          .where("members", "array-contains", userEmail)
+          .where("archived", "==", false)
+          .get()
+      );
+    }
+
+    const snaps = await Promise.all(queries);
+
+    // Merge and deduplicate by card ID
+    const seenIds = new Set<string>();
+    const allDocs: FirebaseFirestore.QueryDocumentSnapshot[] = [];
+    for (const snap of snaps) {
+      for (const doc of snap.docs) {
+        if (!seenIds.has(doc.id)) {
+          seenIds.add(doc.id);
+          allDocs.push(doc);
+        }
+      }
     }
 
     // Filter to only cards with a dueDate
-    const cards = snap.docs
+    const cards = allDocs
       .map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? null } as any))
       .filter((c: any) => !!c.dueDate && !c.archived);
 
     if (cards.length === 0) return res.json([]);
 
-    // Batch-fetch unique board titles (one read per unique boardId)
+    // Batch-fetch unique board titles
     const boardIds = [...new Set(cards.map((c: any) => c.boardId as string))];
     const boardSnaps = await Promise.all(
       boardIds.map((bid: string) => firestore!.collection("pg_boards").doc(bid).get())
@@ -2305,7 +2305,6 @@ app.get("/api/planner/my-cards", async (req, res) => {
     const boardTitleMap: Record<string, string> = {};
     boardSnaps.forEach(bs => { if (bs.exists) boardTitleMap[bs.id] = (bs.data() as any).title || "Board"; });
 
-    // Attach boardTitle to each card
     const result = cards.map((c: any) => ({
       id: c.id,
       boardId: c.boardId,
