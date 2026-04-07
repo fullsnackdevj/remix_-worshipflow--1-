@@ -1460,13 +1460,14 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
         </header>
 
 
-        {/* Content Area */}
-        <main className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-900">
+        {/* Content Area — overflow-x MUST be hidden to prevent Freedom Wall's
+             4000px canvas from bleeding into the rest of the app layout */}
+        <main className="flex-1 overflow-y-auto overflow-x-hidden bg-gray-50 dark:bg-gray-900">
           <div className="flex flex-col h-full">
-            <div className={`view-enter flex-1 overflow-auto ${
+            <div className={`view-enter flex-1 overflow-x-hidden ${
                 currentView === "freedom-wall"
-                  ? "p-0 flex flex-col"
-                  : "p-4 sm:p-6"
+                  ? "overflow-y-hidden p-0 flex flex-col"
+                  : "overflow-y-auto p-4 sm:p-6"
               }`}>
               <Suspense fallback={null}>
 
