@@ -1610,17 +1610,25 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                             </div>
                           )}
                           <div className="space-y-0.5 max-h-44 overflow-y-auto pr-1">
-                            {muCandidates.map(m => {
-                              const memberRoles: string[] = ((m as any).roles || []).filter((r: string) => r.trim());
+                          {muCandidates.map(m => {
+                              // Only show the member's INSTRUMENT roles in the picker (not ALL roles).
+                              // A member like Jamielyn may have ["Backup Singer", "Rhythm Guitar"] —
+                              // we must only offer the instrument role in the musician section.
+                              const allRoles: string[] = ((m as any).roles || []).filter((r: string) => r.trim());
+                              const instrumentRoles = allRoles.filter(r => INSTRUMENTALIST_ROLES.includes(r));
+                              // Fall back to all roles if no specific instrument role found
+                              const memberRoles = instrumentRoles.length > 0 ? instrumentRoles : allRoles;
                               const isPending = pendingRolePick?.m.id === m.id;
                               return (
                                 <div key={m.id}>
                                   <button type="button"
                                     onClick={() => {
                                       if (memberRoles.length <= 1) {
+                                        // Single instrument role → add immediately, no picker needed
                                         setEditSchedMusicians(prev => [...prev, { memberId: m.id, name: m.name, photo: m.photo, role: memberRoles[0] || "Musician" }]);
                                         setPendingRolePick(null);
                                       } else {
+                                        // Multiple instrument roles → show picker (toggle)
                                         setPendingRolePick(isPending ? null : { m, roles: memberRoles });
                                       }
                                     }}
