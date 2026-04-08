@@ -3178,6 +3178,73 @@ Rules:
         } catch (e) { return json(500, { error: "Failed to delete draft" }); }
     }
 
+    // ─── BIBLE GATEWAY PROXY ───────────────────────────────────────────────────
+    // GET /bible/gateway?book=John&chapter=3&version=NIV
+    if (rawPath === "/bible/gateway" && method === "GET") {
+        const book    = event.queryStringParameters?.book;
+        const chapter = event.queryStringParameters?.chapter;
+        const version = event.queryStringParameters?.version ?? "NIV";
+        if (!book || !chapter) return json(400, { error: "Missing book or chapter" });
+
+        try {
+            const search = encodeURIComponent(`${book} ${chapter}`);
+            const ver    = version.replace(/[^A-Z0-9]/gi, "");
+            const url    = `https://www.biblegateway.com/passage/?search=${search}&version=${ver}&interface=print`;
+
+            const bgRes = await fetch(url, {
+                headers: {
+                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36",
+                    "Accept": "text/html,application/xhtml+xml",
+                    "Accept-Language": "en-US,en;q=0.9,tl;q=0.8",
+                },
+            });
+            if (!bgRes.ok) return json(502, { error: "BibleGateway unavailable" });
+
+            let html = await bgRes.text();
+
+            // Strip footnotes, cross-references
+            html = html.replace(/<sup[^>]*class="footnote"[^>]*>[\s\S]*?<\/sup>/gi, "");
+            html = html.replace(/<sup[^>]*data-fn[^>]*>[\s\S]*?<\/sup>/gi, "");
+            html = html.replace(/<sup[^>]*class="crossreference"[^>]*>[\s\S]*?<\/sup>/gi, "");
+
+            // Mark verse 1 (chapter number span)
+            html = html.replace(/<span[^>]*class="chapternum"[^>]*>\d+\s*<\/span>/gi, "||VERSE_1||");
+
+            // Mark verse numbers
+            html = html.replace(/<sup[^>]*class="versenum"[^>]*>(\d+)\s*<\/sup>/gi, "||VERSE_$1||");
+
+            // Strip all remaining tags
+            html = html.replace(/<[^>]+>/g, " ");
+
+            // Decode HTML entities
+            html = html
+                .replace(/&amp;/g, "&").replace(/&nbsp;/g, " ")
+                .replace(/&ldquo;/g, "\u201c").replace(/&rdquo;/g, "\u201d")
+                .replace(/&lsquo;/g, "\u2018").replace(/&rsquo;/g, "\u2019")
+                .replace(/&mdash;/g, "\u2014").replace(/&ndash;/g, "\u2013")
+                .replace(/&#039;/g, "'").replace(/&quot;/g, '"');
+
+            // Remove orphaned cross-reference letters like (A), (B), (AB)
+            html = html.replace(/\s*\(\s*[A-Z]+\s*\)\s*/g, " ");
+
+            // Split by verse markers and collect verses
+            const parts = html.split(/\|\|VERSE_(\d+)\|\|/);
+            const verses: { verse: number; text: string }[] = [];
+            for (let i = 1; i < parts.length; i += 2) {
+                const verseNum = parseInt(parts[i], 10);
+                const text     = (parts[i + 1] || "").replace(/\s+/g, " ").trim();
+                if (text) verses.push({ verse: verseNum, text });
+            }
+
+            if (verses.length === 0) return json(404, { error: "No verses parsed" });
+            verses.sort((a, b) => a.verse - b.verse);
+            return json(200, { verses });
+        } catch (e: any) {
+            console.error("[bible/gateway]", e?.message ?? e);
+            return json(500, { error: "Proxy error" });
+        }
+    }
+
     return json(404, { error: "Not found" });
 
 };
