@@ -3119,7 +3119,67 @@ Rules:
         }
     }
 
+
+    // ─── PREACHING DRAFTS ──────────────────────────────────────────────────────
+
+    // GET /preaching-drafts?userId=...
+    if (rawPath === "/preaching-drafts" && method === "GET") {
+        const userId = event.queryStringParameters?.userId;
+        if (!userId) return json(400, { error: "userId required" });
+        try {
+            // No orderBy — avoids composite index requirement; sort in-memory
+            const snap = await firestore.collection("preachingDrafts")
+                .where("authorId", "==", userId)
+                .limit(100)
+                .get();
+            const docs = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+            docs.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
+            return json(200, docs);
+        } catch (e: any) {
+            console.error("[preaching-drafts GET]", e?.message ?? e);
+            return json(500, { error: "Failed to fetch drafts", detail: e?.message });
+        }
+    }
+
+    // POST /preaching-drafts — create new draft
+    if (rawPath === "/preaching-drafts" && method === "POST") {
+        try {
+            const { id, ...rest } = body;
+            const now = new Date().toISOString();
+            if (id) {
+                await firestore.collection("preachingDrafts").doc(id).set({ ...rest, id, createdAt: now, updatedAt: now });
+                return json(200, { id });
+            } else {
+                const ref = await firestore.collection("preachingDrafts").add({ ...rest, createdAt: now, updatedAt: now });
+                return json(200, { id: ref.id });
+            }
+        } catch (e) { return json(500, { error: "Failed to create draft" }); }
+    }
+
+    // PUT /preaching-drafts/:id — update existing draft
+    const preachingDraftMatch = rawPath.match(/^\/preaching-drafts\/([^/]+)$/);
+    if (preachingDraftMatch && method === "PUT") {
+        const draftId = preachingDraftMatch[1];
+        try {
+            const ref = firestore.collection("preachingDrafts").doc(draftId);
+            const snap = await ref.get();
+            if (!snap.exists) return json(404, { error: "Draft not found" });
+            await ref.update({ ...body, updatedAt: new Date().toISOString() });
+            return json(200, { ok: true });
+        } catch (e) { return json(500, { error: "Failed to update draft" }); }
+    }
+
+    // DELETE /preaching-drafts/:id
+    if (preachingDraftMatch && method === "DELETE") {
+        const draftId = preachingDraftMatch[1];
+        try {
+            await firestore.collection("preachingDrafts").doc(draftId).delete();
+            return json(200, { ok: true });
+        } catch (e) { return json(500, { error: "Failed to delete draft" }); }
+    }
+
     return json(404, { error: "Not found" });
+
 };
 
 // ─── PLAYGROUND TRELLO (appended below closing brace intentionally via script) ─

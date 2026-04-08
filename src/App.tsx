@@ -28,6 +28,7 @@ const SongsView        = lazy(() => import("./SongsView"));
 const MembersView      = lazy(() => import("./MembersView"));
 const TeamNotesView    = lazy(() => import("./TeamNotesView"));
 const FreedomWallView  = lazy(() => import("./FreedomWallView"));
+const PreachingView    = lazy(() => import("./PreachingView"));
 // AutoTextarea & DatePicker are tiny UI primitives — import statically to avoid extra chunk round-trips
 import AutoTextarea from "./AutoTextarea";
 import DatePicker from "./DatePicker";
@@ -316,7 +317,7 @@ export default function App() {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
   const [isDarkMode, setIsDarkMode] = useState(true);
-  const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "playground" | "admin" | "team-notes" | "rehearsal" | "freedom-wall">("dashboard");
+  const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "playground" | "admin" | "team-notes" | "rehearsal" | "freedom-wall" | "preaching">("dashboard");
 
   // ── New-module glow: glows until user first visits the module ────────────
   // To add a future new module: add a new useState with its own localStorage key
@@ -1102,7 +1103,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                 } ${isSidebarCollapsed ? "justify-center" : ""}`}
               title="Song Management"
             >
-              <BookOpen size={20} className="shrink-0" />
+              <Music size={20} className="shrink-0" />
               {!isSidebarCollapsed && <span>Song Management</span>}
             </button>
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Song Management</span>}
@@ -1269,21 +1270,45 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
             </div>
           )}
 
-          {/* Preaching — disabled / coming soon */}
+          {/* Preaching — Admin only; everyone else sees Coming Soon */}
           <div className="relative group/tip">
-            <div
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium opacity-40 cursor-not-allowed select-none text-gray-500 dark:text-gray-500 ${isSidebarCollapsed ? "justify-center" : ""}`}
-              title="Preaching — Coming Soon"
-            >
-              <Mic2 size={20} className="shrink-0" />
-              {!isSidebarCollapsed && (
-                <span className="flex items-center gap-2">
-                  Preaching
-                  <span className="text-[10px] font-bold uppercase tracking-wider bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded-full">Soon</span>
-                </span>
-              )}
-            </div>
-            {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Preaching (Soon)</span>}
+            {isRoleAdmin ? (
+              // Admin: full access button
+              <button
+                onClick={() => { setCurrentView("preaching"); setIsMobileMenuOpen(false); }}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium transition-all ${
+                  currentView === "preaching"
+                    ? "bg-indigo-600/20 text-indigo-400"
+                    : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800/60 hover:text-gray-800 dark:hover:text-gray-200"
+                } ${isSidebarCollapsed ? "justify-center" : ""}`}
+                title="Preaching"
+              >
+                <BookOpen size={20} className="shrink-0" />
+                {!isSidebarCollapsed && (
+                  <span className="flex items-center gap-2">
+                    Preaching
+                    <span className="text-[10px] font-bold uppercase tracking-wider bg-indigo-500/20 text-indigo-400 px-1.5 py-0.5 rounded-full">New</span>
+                  </span>
+                )}
+              </button>
+            ) : (
+              // Non-admin: disabled Coming Soon state
+              <div
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium cursor-not-allowed opacity-40 ${
+                  isSidebarCollapsed ? "justify-center" : ""
+                }`}
+                title="Coming Soon — Admin only"
+              >
+                <BookOpen size={20} className="shrink-0 text-gray-400" />
+                {!isSidebarCollapsed && (
+                  <span className="flex items-center gap-2 text-gray-400">
+                    Preaching
+                    <span className="text-[10px] font-bold uppercase tracking-wider bg-gray-500/20 text-gray-500 px-1.5 py-0.5 rounded-full">Soon</span>
+                  </span>
+                )}
+              </div>
+            )}
+            {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">{isRoleAdmin ? "Preaching" : "Preaching (Admin only)"}</span>}
           </div>
         </nav>
 
@@ -1337,7 +1362,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                 }
               }}
               className={[
-                currentView === "songs" || currentView === "members" || currentView === "schedule"
+                currentView === "songs" || currentView === "members" || currentView === "schedule" || currentView === "freedom-wall" || currentView === "preaching"
                   ? "lg:hidden"   // desktop sidebar-accessible views — mobile only
                   : "",           // detached views — always visible
                 "flex items-center gap-1 py-1.5 pl-1 pr-3 rounded-xl font-semibold",
@@ -1353,7 +1378,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
 
           <div className="flex-1 flex items-center min-w-0">
             <h1 className="text-base sm:text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap truncate">
-              {currentView === "dashboard" ? "Dashboard" : currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : currentView === "playground" ? "Playground" : currentView === "planner" ? "Ministry Hub" : currentView === "team-notes" ? "Notes" : currentView === "rehearsal" ? "Rehearsal" : currentView === "freedom-wall" ? "Freedom Wall" : "Song Management"}
+              {currentView === "dashboard" ? "Dashboard" : currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : currentView === "playground" ? "Playground" : currentView === "planner" ? "Ministry Hub" : currentView === "team-notes" ? "Notes" : currentView === "rehearsal" ? "Rehearsal" : currentView === "freedom-wall" ? "Freedom Wall" : currentView === "preaching" ? "Preaching" : "Song Management"}
             </h1>
           </div>
           <div className="flex items-center gap-2">
@@ -1490,7 +1515,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
         <main className="flex-1 overflow-y-auto overflow-x-hidden bg-gray-50 dark:bg-gray-900">
           <div className="flex flex-col h-full">
             <div className={`view-enter flex-1 overflow-x-hidden ${
-                currentView === "freedom-wall"
+                currentView === "freedom-wall" || currentView === "preaching"
                   ? "overflow-y-hidden p-0 flex flex-col"
                   : "overflow-y-auto p-4 sm:p-6"
               }`}>
@@ -1686,6 +1711,25 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                   currentUserId={user?.uid ?? null}
                   onToast={showToast}
                 />
+              ) : currentView === "preaching" ? (
+                isRoleAdmin ? (
+                  <PreachingView
+                    currentUser={{ uid: user?.uid ?? "", name: user?.displayName || user?.email || "", email: user?.email || "", photo: user?.photoURL || "" }}
+                    onToast={showToast}
+                  />
+                ) : (
+                  // Non-admin locked screen
+                  <div className="flex flex-col items-center justify-center h-full gap-4 px-6 text-center">
+                    <div className="w-16 h-16 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                      <BookOpen size={28} className="text-gray-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-gray-700 dark:text-gray-300">Preaching Module</h2>
+                      <p className="text-sm text-gray-500 dark:text-gray-500 mt-1">This module is coming soon. Only Admins have access during the preview period.</p>
+                    </div>
+                    <span className="px-4 py-1.5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-xs font-bold uppercase tracking-wider">Coming Soon</span>
+                  </div>
+                )
               ) : null}
               </Suspense>
             </div>

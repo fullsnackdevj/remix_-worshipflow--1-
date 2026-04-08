@@ -2120,6 +2120,134 @@ app.post("/api/planner/cards/:id/activity", async (req, res) => {
   } catch (e) { if (!res.headersSent) res.status(500).json({ error: "Failed" }); }
 });
 
+// ── BIBLE GATEWAY PROXY ───────────────────────────────────────────────────────
+// GET /api/bible/gateway?book=John&chapter=3&version=MBBTAG
+// Proxies BibleGateway print interface and returns clean verse JSON.
+app.get("/api/bible/gateway", async (req: any, res: any) => {
+  if (res.headersSent) return;
+  const { book, chapter, version } = req.query as Record<string, string>;
+  if (!book || !chapter) return res.status(400).json({ error: "Missing book or chapter" });
+
+  try {
+    const search = encodeURIComponent(`${book} ${chapter}`);
+    const ver    = (version || "MBBTAG").replace(/[^A-Z0-9]/gi, "");
+    const url    = `https://www.biblegateway.com/passage/?search=${search}&version=${ver}&interface=print`;
+
+    const bgRes = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml",
+        "Accept-Language": "en-US,en;q=0.9,tl;q=0.8",
+      },
+    });
+    if (!bgRes.ok) return res.status(502).json({ error: "BibleGateway unavailable" });
+
+    let html = await bgRes.text();
+
+    // 1. Strip all non-verse sup elements (footnotes, cross-references, etc.)
+    html = html.replace(/<sup[^>]*class="footnote"[^>]*>[\s\S]*?<\/sup>/gi, "");
+    html = html.replace(/<sup[^>]*data-fn[^>]*>[\s\S]*?<\/sup>/gi, "");
+    html = html.replace(/<sup[^>]*class="crossreference"[^>]*>[\s\S]*?<\/sup>/gi, "");
+
+    // 2. Mark chapter-start (verse 1) — <span class="chapternum">3 </span>
+    html = html.replace(/<span[^>]*class="chapternum"[^>]*>\d+\s*<\/span>/gi, "||VERSE_1||");
+
+    // 3. Mark verse numbers — <sup class="versenum">N </sup>
+    html = html.replace(/<sup[^>]*class="versenum"[^>]*>(\d+)\s*<\/sup>/gi, "||VERSE_$1||");
+
+    // 4. Strip all remaining tags
+    html = html.replace(/<[^>]+>/g, " ");
+
+    // 5. Decode common HTML entities
+    html = html
+      .replace(/&amp;/g, "&").replace(/&nbsp;/g, " ")
+      .replace(/&ldquo;/g, "\u201c").replace(/&rdquo;/g, "\u201d")
+      .replace(/&lsquo;/g, "\u2018").replace(/&rsquo;/g, "\u2019")
+      .replace(/&mdash;/g, "\u2014").replace(/&ndash;/g, "\u2013")
+      .replace(/&#039;/g, "'").replace(/&quot;/g, '"');
+
+    // 6. Clean up any surviving orphaned cross-reference letters like (A), (B), (AB), (AC)...
+    html = html.replace(/\s*\(\s*[A-Z]+\s*\)\s*/g, " ");
+
+    // 7. Split by verse markers and collect
+    const parts  = html.split(/\|\|VERSE_(\d+)\|\|/);
+    const verses: { verse: number; text: string }[] = [];
+    for (let i = 1; i < parts.length; i += 2) {
+      const verseNum = parseInt(parts[i], 10);
+      const text     = (parts[i + 1] || "").replace(/\s+/g, " ").trim();
+      if (text) verses.push({ verse: verseNum, text });
+    }
+
+    if (verses.length === 0) return res.status(404).json({ error: "No verses parsed" });
+    verses.sort((a, b) => a.verse - b.verse);
+    return res.json({ verses });
+  } catch (e) {
+    if (!res.headersSent) res.status(500).json({ error: "Proxy error" });
+  }
+});
+
+// ── PREACHING DRAFTS ──────────────────────────────────────────────────────────
+
+// GET /api/preaching-drafts?userId=... — list user's drafts, newest first
+app.get("/api/preaching-drafts", async (req, res) => {
+  const firestore = getDb();
+  const userId = req.query.userId as string;
+  if (!firestore || !userId) return res.json([]);
+  try {
+    // No orderBy — avoids needing a composite Firestore index; sort in-memory instead
+    const snap = await firestore.collection("preachingDrafts")
+      .where("authorId", "==", userId)
+      .limit(100)
+      .get();
+    const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as any[];
+    docs.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
+    res.json(docs);
+  } catch (e: any) {
+    console.error("[preaching-drafts GET]", e?.message ?? e);
+    if (!res.headersSent) res.status(500).json({ error: "Failed", detail: e?.message });
+  }
+});
+
+// POST /api/preaching-drafts — create new draft
+app.post("/api/preaching-drafts", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  try {
+    const { id, ...rest } = req.body;
+    const now = new Date().toISOString();
+    if (id) {
+      await firestore.collection("preachingDrafts").doc(id).set({ ...rest, id, createdAt: now, updatedAt: now });
+      res.json({ id });
+    } else {
+      const ref = await firestore.collection("preachingDrafts").add({ ...rest, createdAt: now, updatedAt: now });
+      res.json({ id: ref.id });
+    }
+  } catch (e) { if (!res.headersSent) res.status(500).json({ error: "Failed" }); }
+});
+
+// PUT /api/preaching-drafts/:id — update existing draft
+app.put("/api/preaching-drafts/:id", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  try {
+    const ref = firestore.collection("preachingDrafts").doc(req.params.id);
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ error: "Draft not found" });
+    await ref.update({ ...req.body, updatedAt: new Date().toISOString() });
+    res.json({ ok: true });
+  } catch (e) { if (!res.headersSent) res.status(500).json({ error: "Failed" }); }
+});
+
+// DELETE /api/preaching-drafts/:id — remove draft
+app.delete("/api/preaching-drafts/:id", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  try {
+    await firestore.collection("preachingDrafts").doc(req.params.id).delete();
+    res.json({ ok: true });
+  } catch (e) { if (!res.headersSent) res.status(500).json({ error: "Failed" }); }
+});
+
 // ── FREEDOM WALL ─────────────────────────────────────────────────────────────
 
 // GET /api/freedom-wall — fetch all notes, newest first

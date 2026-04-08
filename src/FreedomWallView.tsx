@@ -714,13 +714,28 @@ export default function FreedomWallView({ isAdmin, currentUserId, onToast }: Fre
     return () => clearInterval(interval);
   }, [fetchNotes]);
 
-  // ── Center canvas on load ──────────────────────────────────────────────────
+  // ── Center canvas on load (fallback for empty board) ─────────────────────
+  const initialPanDone = useRef(false);
   useEffect(() => {
     if (!boardRef.current) return;
     const { clientWidth: w, clientHeight: h } = boardRef.current;
+    // Default: geometric center of canvas (shows while notes are loading)
     setPan({ x: w / 2 - CANVAS_W / 2, y: h / 2 - CANVAS_H / 2 });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── After first load: pan to the centroid of all notes ────────────────────
+  // This ensures mobile opens at the cluster of notes, not an empty area.
+  useEffect(() => {
+    if (loading || notes.length === 0 || initialPanDone.current || !boardRef.current) return;
+    initialPanDone.current = true;
+    const { clientWidth: bw, clientHeight: bh } = boardRef.current;
+    const avgX = notes.reduce((s, n) => s + n.x, 0) / notes.length;
+    const avgY = notes.reduce((s, n) => s + n.y, 0) / notes.length;
+    const cx = (avgX / 100) * CANVAS_W;
+    const cy = (avgY / 100) * CANVAS_H;
+    setPan({ x: bw / 2 - cx - 130, y: bh / 2 - cy - 125 });
+  }, [loading, notes]);
 
   // ── Pan to note — centers the note in the viewport ────────────────────────
   const panToNote = useCallback((x: number, y: number) => {

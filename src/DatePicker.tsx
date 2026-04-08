@@ -1,14 +1,16 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { ChevronLeft, ChevronRight, ChevronDown, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown, X, CalendarDays } from "lucide-react";
 
 interface DatePickerProps {
-  value: string;          // "YYYY-MM-DD" or ""
+  value: string;
   onChange: (val: string) => void;
   max?: string;
   min?: string;
   placeholder?: string;
   error?: boolean;
   icon?: React.ReactNode;
+  dropdownAlign?: "left" | "right";
+  variant?: "default" | "inline"; // inline = compact dark pill for canvas use
 }
 
 const MONTHS = [
@@ -38,6 +40,8 @@ export default function DatePicker({
   placeholder = "Select date",
   error = false,
   icon,
+  dropdownAlign = "left",
+  variant = "default",
 }: DatePickerProps) {
   const today = new Date();
   const todayYMD = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" }); // YYYY-MM-DD in PH timezone
@@ -100,44 +104,75 @@ export default function DatePicker({
   return (
     <div ref={containerRef} className="relative">
       {/* ── Trigger ── */}
-      <button
-        type="button"
-        onClick={handleOpen}
-        className={[
-          "w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border text-left text-sm font-medium transition-all",
-          "bg-white dark:bg-gray-800",
-          error
-            ? "border-red-400 ring-2 ring-red-200 dark:ring-red-900/40"
-            : open
-              ? "border-indigo-500 ring-2 ring-indigo-500/20 dark:ring-indigo-500/20"
-              : "border-gray-300 dark:border-gray-600 hover:border-indigo-400 dark:hover:border-indigo-500",
-        ].join(" ")}
-      >
-        <span className="shrink-0 text-gray-400 dark:text-gray-500 text-base leading-none">
-          {icon ?? "🎂"}
-        </span>
-        <span className={`flex-1 ${value ? "text-gray-900 dark:text-gray-100" : "text-gray-400 dark:text-gray-500"}`}>
-          {formatDisplay(value) || placeholder}
-        </span>
-        <span className="flex items-center gap-1">
+      {variant === "inline" ? (
+        // Compact dark pill — for canvas/dark-bg contexts
+        <button
+          type="button"
+          onClick={handleOpen}
+          className="flex items-center gap-1.5 whitespace-nowrap transition-all active:scale-95"
+          style={{
+            padding: "4px 10px",
+            borderRadius: 8,
+            fontSize: 11,
+            fontWeight: 600,
+            background: open ? "rgba(245,158,11,0.18)" : "rgba(245,158,11,0.08)",
+            border: `1px solid ${open ? "rgba(245,158,11,0.4)" : "rgba(245,158,11,0.18)"}`,
+            color: value ? "rgba(251,191,36,0.95)" : "rgba(245,158,11,0.5)",
+          }}
+        >
+          <CalendarDays size={11} />
+          <span>{value ? formatDisplay(value) : placeholder}</span>
           {value && (
-            <span
-              role="button"
-              onClick={e => { e.stopPropagation(); onChange(""); }}
-              className="p-0.5 text-gray-300 dark:text-gray-600 hover:text-red-400 transition-colors rounded cursor-pointer"
-            >
-              <X size={13} />
+            <span role="button" onClick={e => { e.stopPropagation(); onChange(""); }}
+              style={{ marginLeft: 2, color: "rgba(245,158,11,0.4)" }}
+              className="hover:text-red-400 transition-colors cursor-pointer">
+              <X size={10} />
             </span>
           )}
-          <ChevronDown size={15} className={`text-gray-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
-        </span>
-      </button>
+          <ChevronDown size={11} style={{ opacity: 0.5 }} className={`transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+        </button>
+      ) : (
+        // Standard form-style trigger
+        <button
+          type="button"
+          onClick={handleOpen}
+          className={[
+            "w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border text-left text-sm font-medium transition-all",
+            "bg-white dark:bg-gray-800",
+            error
+              ? "border-red-400 ring-2 ring-red-200 dark:ring-red-900/40"
+              : open
+                ? "border-indigo-500 ring-2 ring-indigo-500/20 dark:ring-indigo-500/20"
+                : "border-gray-300 dark:border-gray-600 hover:border-indigo-400 dark:hover:border-indigo-500",
+          ].join(" ")}
+        >
+          <span className="shrink-0 text-gray-400 dark:text-gray-500 text-base leading-none">
+            {icon ?? "🎂"}
+          </span>
+          <span className={`flex-1 ${value ? "text-gray-900 dark:text-gray-100" : "text-gray-400 dark:text-gray-500"}`}>
+            {formatDisplay(value) || placeholder}
+          </span>
+          <span className="flex items-center gap-1">
+            {value && (
+              <span
+                role="button"
+                onClick={e => { e.stopPropagation(); onChange(""); }}
+                className="p-0.5 text-gray-300 dark:text-gray-600 hover:text-red-400 transition-colors rounded cursor-pointer"
+              >
+                <X size={13} />
+              </span>
+            )}
+            <ChevronDown size={15} className={`text-gray-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+          </span>
+        </button>
+      )}
 
       {/* ── Dropdown ── */}
       {open && (
         <div className={[
           "absolute z-[300] top-full mt-2",
-          "min-w-[280px] w-full max-w-[340px]",   // responsive: fills parent, capped at 340px
+          dropdownAlign === "right" ? "right-0" : "left-0",
+          "min-w-[280px] max-w-[340px]",
           "bg-white dark:bg-gray-900",
           "border border-gray-200 dark:border-gray-700",
           "rounded-2xl shadow-2xl overflow-hidden",
