@@ -2181,7 +2181,7 @@ export default function PreachingView({ currentUser, onToast }: Props) {
   const [saving, setSaving] = useState(false);
   const [loadingDrafts, setLoadingDrafts] = useState(true);
   const [bibleOpen, setBibleOpen] = useState(true);
-  const [draftsOpen, setDraftsOpen] = useState(false); // collapsed by default — +New opens it
+  const [draftsOpen, setDraftsOpen] = useState(true); // open by default so +New is always visible
   const [freeCanvasOpen, setFreeCanvasOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState<"canvas" | "bible" | "sermons">("sermons");
   const [infoOpen, setInfoOpen] = useState(false);
