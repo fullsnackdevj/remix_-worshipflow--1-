@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   Mic2, BookOpen, Plus, Save, Clock, FileText, ChevronDown,
   ChevronUp, Trash2, X, BookMarked, Lightbulb, Heart, Star,
   PlusCircle, Check, Loader2, RefreshCw, List, GripVertical, CalendarDays,
   ChevronLeft, ChevronRight, PanelRight, PanelLeft, CornerDownLeft, Eye, EyeOff, Printer, PenLine,
-  SendHorizonal,
+  SendHorizonal, CheckCircle2, Info,
 } from "lucide-react";
 import DatePicker from "./DatePicker";
 
@@ -40,6 +41,8 @@ interface SermonDraft {
   previewHidden: { serviceInfo?: boolean; titleSection?: boolean; introduction?: boolean; mainPassage?: boolean; keyPoints?: boolean; freeNotes?: boolean; collectedVerses?: boolean; application?: boolean; closingPrayer?: boolean; };
   createdAt: string;
   updatedAt: string;
+  status?: 'draft' | 'submitted';
+  submissionVersion?: number; // increments each time the draft is re-submitted
 }
 
 // ── Field targeting for verse insertion ──────────────────────────────────────
@@ -94,6 +97,24 @@ const TRANSLATIONS = [
   { label: "MBB",  slug: "MBBTAG", api: "bgw", full: "Magandang Balita Biblia" },
 ];
 
+// Tagalog book names for MBB (Magandang Balita Biblia) — same order as BIBLE_BOOKS
+const MBB_BOOK_NAMES = [
+  "Genesis", "Exodo", "Levitico", "Mga Bilang", "Deuteronomio",
+  "Josue", "Mga Hukom", "Ruth", "1 Samuel", "2 Samuel",
+  "1 Hari", "2 Hari", "1 Cronica", "2 Cronica", "Ezra",
+  "Nehemias", "Ester", "Job", "Mga Awit", "Mga Kawikaan",
+  "Mangangaral", "Awit ng mga Awit", "Isaias", "Jeremias", "Panaghoy",
+  "Ezekiel", "Daniel", "Hosea", "Joel", "Amos",
+  "Obadias", "Jonas", "Micas", "Nahum", "Habakuk",
+  "Sofonias", "Hageo", "Zacarias", "Malaquias",
+  "Mateo", "Marcos", "Lucas", "Juan", "Mga Gawa",
+  "Mga Romano", "1 Corinto", "2 Corinto", "Galacia", "Efeso",
+  "Filipos", "Colosas", "1 Tesalonica", "2 Tesalonica",
+  "1 Timoteo", "2 Timoteo", "Tito", "Filemon",
+  "Mga Hebreo", "Santiago", "1 Pedro", "2 Pedro",
+  "1 Juan", "2 Juan", "3 Juan", "Judas", "Apocalipsis",
+];
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const wordCount = (t: string) => t.trim() ? t.trim().split(/\s+/).length : 0;
 const estimatedMinutes = (wc: number) => Math.ceil(wc / 130);
@@ -123,20 +144,30 @@ function BiblePanel({
   const [error, setError] = useState<string | null>(null);
   const [verseNum, setVerseNum] = useState("");
   const [addedSet, setAddedSet] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState("");
+  // -- Global Bible search state
+  const [globalResults, setGlobalResults] = useState<{ reference: string; text: string }[]>([]);
+  const [globalTotal, setGlobalTotal] = useState(0);
+  const [globalPage, setGlobalPage] = useState(1);
+  const [globalLoading, setGlobalLoading] = useState(false);
+  const [globalError, setGlobalError] = useState<string | null>(null);
+  const [globalMode, setGlobalMode] = useState(false); // true = showing whole-Bible search results
+  const [lastGlobalQuery, setLastGlobalQuery] = useState("");
   const book = BIBLE_BOOKS[bookIdx];
   const chapterCount = Array.from({ length: book.chapters }, (_, i) => i + 1);
+  // UI display name: Tagalog for MBB, English for all others
+  const displayBookName = translation.slug === "MBBTAG" ? MBB_BOOK_NAMES[bookIdx] : book.name;
 
-  /** Strip footnotes and BibleGateway chapter-end artifacts from scraped text */
   const cleanText = (raw: string) =>
-    raw
-      .replace(/\s+/g, " ")
+    raw.replace(/\s+/g, " ")
       .replace(/\s*Footnotes\b.*/i, "")
       .replace(/\s*\bNext\s*$/i, "")
       .replace(/\s*\bPrevious\s*$/i, "")
       .trim();
 
   const fetchChapter = useCallback(async () => {
-    setLoading(true); setError(null); setVerses([]); setVerseNum("");
+    setLoading(true); setError(null); setVerses([]); setVerseNum(""); setSearchQuery("");
+    setGlobalMode(false); setGlobalResults([]); setGlobalTotal(0);
     try {
       let parsed: BibleVerse[] = [];
       if (translation.api === "bible-api") {
@@ -146,22 +177,15 @@ function BiblePanel({
         if (!res.ok) throw new Error();
         const data = await res.json();
         if (data.error) throw new Error(data.error);
-        parsed = (data.verses ?? []).map((v: any) => ({
-          verse: v.verse,
-          text: cleanText(v.text ?? ""),
-        }));
+        parsed = (data.verses ?? []).map((v: any) => ({ verse: v.verse, text: cleanText(v.text ?? "") }));
       } else {
-        // BibleGateway proxy
         const res = await fetch(
           `/api/bible/gateway?book=${encodeURIComponent(book.name)}&chapter=${chapter}&version=${translation.slug}`
         );
         if (!res.ok) throw new Error();
         const data = await res.json();
         if (data.error) throw new Error(data.error);
-        parsed = (data.verses ?? []).map((v: any) => ({
-          verse: v.verse,
-          text: cleanText(v.text ?? ""),
-        }));
+        parsed = (data.verses ?? []).map((v: any) => ({ verse: v.verse, text: cleanText(v.text ?? "") }));
       }
       setVerses(parsed.filter(v => v.text.length > 0).sort((a, b) => a.verse - b.verse));
     } catch {
@@ -172,124 +196,444 @@ function BiblePanel({
 
   useEffect(() => { fetchChapter(); }, [fetchChapter]);
 
+  // ── Whole-Bible search
+  const doGlobalSearch = useCallback(async (q: string, page = 1) => {
+    if (q.trim().length < 2) return;
+    setGlobalLoading(true); setGlobalError(null); setGlobalMode(true);
+    setLastGlobalQuery(q.trim()); setGlobalPage(page);
+    try {
+      const res = await fetch(`/api/bible/search?q=${encodeURIComponent(q.trim())}&version=${translation.slug}&page=${page}`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setGlobalResults(data.results ?? []);
+      setGlobalTotal(data.total ?? 0);
+    } catch {
+      setGlobalError("Search failed. Check your connection and try again.");
+      setGlobalResults([]);
+    }
+    setGlobalLoading(false);
+  }, [translation.slug]);
+
+  // Reference jump OR global search on Enter
+  const handleSearchKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Enter") return;
+    const q = searchQuery.trim();
+    if (!q) return;
+    // Smart-jump: "John 3:16" or "Juan 3:16"
+    const refMatch = q.match(/^([1-3]?\s*[a-zA-Z]+(?:\s+[a-zA-Z]+)?)\s+(\d+)(?::(\d+))?$/i);
+    if (refMatch) {
+      const bookName = refMatch[1].trim().toLowerCase();
+      const chNum = parseInt(refMatch[2]);
+      const vNum = refMatch[3] ?? "";
+      // Check English names and Tagalog names
+      const found = BIBLE_BOOKS.findIndex((b, i) =>
+        b.name.toLowerCase().startsWith(bookName) ||
+        MBB_BOOK_NAMES[i].toLowerCase().startsWith(bookName)
+      );
+      if (found >= 0) {
+        setBookIdx(found);
+        setChapter(Math.min(chNum, BIBLE_BOOKS[found].chapters));
+        setVerseNum(vNum);
+        setSearchQuery("");
+        setGlobalMode(false);
+        return;
+      }
+    }
+    // Not a reference — full Bible search
+    doGlobalSearch(q, 1);
+  };
+
+  const clearGlobalSearch = () => {
+    setGlobalMode(false); setGlobalResults([]); setGlobalTotal(0);
+    setSearchQuery(""); setLastGlobalQuery("");
+  };
+
   const handleCollect = (ref: string, text: string) => {
     onCollect({ ref, text, translation: translation.label });
     setAddedSet(prev => new Set(prev).add(ref));
     setTimeout(() => setAddedSet(prev => { const n = new Set(prev); n.delete(ref); return n; }), 1500);
   };
 
+  const q = searchQuery.toLowerCase().trim();
   const num = parseInt(verseNum);
-  const displayItems = verses
+  const allItems = verses
     .filter(v => !verseNum || v.verse === num)
     .map(v => ({ verse: v.verse, text: v.text, ref: `${book.name} ${chapter}:${v.verse}` }));
+  const displayItems = q ? allItems.filter(item => item.text.toLowerCase().includes(q)) : allItems;
 
   const selectStyle: React.CSSProperties = {
-    background: "rgba(255,255,255,0.07)", color: "#e2e8f0",
-    border: "1px solid rgba(255,255,255,0.1)", outline: "none",
+    background: "rgba(255,255,255,0.06)", color: "#e2e8f0",
+    border: "1px solid rgba(255,255,255,0.09)", outline: "none",
   };
 
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden" style={{ background: "#0c0c18" }}>
-      {/* Panel header */}
-      <div style={PANEL_HEADER}>
-        <div className="flex items-center gap-2">
-          <BookOpen size={13} className="text-indigo-400" />
-          <span className="text-[13px] font-bold" style={{ color: "rgba(255,255,255,0.7)" }}>Bible</span>
+    <div className="flex flex-col h-full w-full overflow-hidden" style={{ background: "#0a0a16" }}>
+      {/* Header — matches Sermons/Canvas style */}
+      <div className="flex items-center justify-between px-4"
+        style={{ minHeight: 56, borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
+
+        {/* Branding */}
+        <div className="flex items-center gap-2.5">
+          <div className="flex items-center justify-center rounded-xl"
+            style={{ width: 32, height: 32, background: "linear-gradient(135deg,rgba(99,102,241,0.25),rgba(16,185,129,0.12))", border: "1px solid rgba(99,102,241,0.3)" }}>
+            <BookOpen size={16} style={{ color: "#818cf8" }} />
+          </div>
+          <div>
+            <p className="text-[15px] font-bold leading-tight" style={{ color: "rgba(255,255,255,0.88)" }}>Bible</p>
+            <p className="text-[10px] font-semibold" style={{ color: "rgba(255,255,255,0.28)", letterSpacing: "0.04em" }}>
+              {displayBookName} {chapter} · {translation.label}
+            </p>
+          </div>
         </div>
-        <button onClick={onClose} className="p-1.5 rounded-lg transition-colors" title="Collapse Bible panel"
-          style={{ color: "rgba(255,255,255,0.3)" }}
+
+        {/* Collapse */}
+        <button onClick={onClose}
+          className="flex items-center justify-center rounded-xl transition-all active:scale-95"
+          style={{ width: 36, height: 36, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.35)" }}
+          title="Collapse Bible panel"
           onMouseEnter={e => (e.currentTarget.style.color = "rgba(255,255,255,0.7)")}
-          onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.3)")}>
-          <PanelRight size={14} />
+          onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.35)")}>
+          <PanelRight size={16} />
         </button>
       </div>
 
-      <div className="px-3 pt-3 pb-2 shrink-0">
+      {/* Controls */}
+      <div className="px-4 pt-4 pb-2 shrink-0 space-y-2.5">
         {/* Translation tabs */}
-        <div className="flex gap-1 p-1 rounded-lg mb-3" style={{ background: "rgba(255,255,255,0.05)" }}>
+        <div className="flex gap-1 p-1 rounded-xl" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
           {TRANSLATIONS.map(t => (
             <button key={t.slug} onClick={() => setTranslation(t)}
-              className="flex-1 py-1.5 text-[12px] font-bold rounded-md transition-all"
-              style={{ background: translation.slug === t.slug ? "rgba(99,102,241,0.85)" : "transparent", color: translation.slug === t.slug ? "#fff" : "rgba(255,255,255,0.4)" }}
+              className="flex-1 py-2 text-[12px] font-bold rounded-lg transition-all"
+              style={{
+                background: translation.slug === t.slug ? "linear-gradient(135deg,rgba(99,102,241,0.9),rgba(139,92,246,0.8))" : "transparent",
+                color: translation.slug === t.slug ? "#fff" : "rgba(255,255,255,0.4)",
+                boxShadow: translation.slug === t.slug ? "0 2px 8px rgba(99,102,241,0.3)" : "none",
+              }}
               title={t.full}>{t.label}</button>
           ))}
         </div>
 
         {/* Book + Chapter + Verse */}
-        <div className="flex gap-2 mb-2">
+        <div className="flex gap-2">
           <div className="relative flex-1">
-            <select value={bookIdx} onChange={e => { setBookIdx(+e.target.value); setChapter(1); setVerseNum(""); }}
-              className="w-full appearance-none text-[13px] font-medium px-2.5 py-2 rounded-lg pr-7 truncate"
-              style={selectStyle}>
-              {BIBLE_BOOKS.map((b, i) => <option key={b.name} value={i} style={{ background: "#16162a" }}>{b.name}</option>)}
+            <select value={bookIdx} onChange={e => { setBookIdx(+e.target.value); setChapter(1); setVerseNum(""); setSearchQuery(""); }}
+              className="w-full appearance-none font-semibold px-3 py-2.5 rounded-xl truncate"
+              style={{ ...selectStyle, fontSize: 14 }}>
+              {BIBLE_BOOKS.map((b, i) => (
+                <option key={b.name} value={i} style={{ background: "#12121e" }}>
+                  {translation.slug === "MBBTAG" ? MBB_BOOK_NAMES[i] : b.name}
+                </option>
+              ))}
             </select>
-            <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-white/30 pointer-events-none" />
+            <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "rgba(255,255,255,0.25)" }} />
           </div>
-          <div className="relative w-[52px]">
-            <select value={chapter} onChange={e => { setChapter(+e.target.value); setVerseNum(""); }}
-              className="w-full appearance-none text-[13px] font-medium px-2 py-2 rounded-lg pr-5"
-              style={selectStyle}>
-              {chapterCount.map(c => <option key={c} value={c} style={{ background: "#16162a" }}>{c}</option>)}
+          <div className="relative" style={{ width: 62 }}>
+            <select value={chapter} onChange={e => { setChapter(+e.target.value); setVerseNum(""); setSearchQuery(""); }}
+              className="w-full appearance-none font-semibold px-2 py-2.5 rounded-xl text-center"
+              style={{ ...selectStyle, fontSize: 14 }}>
+              {chapterCount.map(c => <option key={c} value={c} style={{ background: "#12121e" }}>{c}</option>)}
             </select>
-            <ChevronDown size={11} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-white/30 pointer-events-none" />
+            <ChevronDown size={12} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "rgba(255,255,255,0.25)" }} />
           </div>
-          {/* Verse dropdown — matches chapter select style */}
-          <div className="relative w-[52px]">
-            <select value={verseNum} onChange={e => setVerseNum(e.target.value)}
-              className="w-full appearance-none text-xs font-medium px-2 py-2 rounded-lg pr-5"
-              style={selectStyle}>
-              <option value="" style={{ background: "#16162a" }}>v.</option>
-              {verses.map(v => <option key={v.verse} value={v.verse} style={{ background: "#16162a" }}>{v.verse}</option>)}
+          <div className="relative" style={{ width: 62 }}>
+            <select value={verseNum} onChange={e => { setVerseNum(e.target.value); setSearchQuery(""); }}
+              className="w-full appearance-none font-semibold px-2 py-2.5 rounded-xl text-center"
+              style={{ ...selectStyle, fontSize: 14 }}>
+              <option value="" style={{ background: "#12121e" }}>v.</option>
+              {verses.map(v => <option key={v.verse} value={v.verse} style={{ background: "#12121e" }}>{v.verse}</option>)}
             </select>
-            <ChevronDown size={11} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-white/30 pointer-events-none" />
+            <ChevronDown size={12} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "rgba(255,255,255,0.25)" }} />
           </div>
         </div>
+
+        {/* 🔍 Keyword search / Reference jump */}
+        <div className="relative flex items-center">
+          <List size={14} className="absolute left-3.5 pointer-events-none" style={{ color: "rgba(99,102,241,0.5)" }} />
+          <input
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            onKeyDown={handleSearchKey}
+            placeholder={`Search or jump "John 3:16"`}
+            className="w-full text-[13px] py-3 pl-9 pr-9 rounded-xl transition-all outline-none"
+            style={{
+              background: "rgba(255,255,255,0.05)",
+              border: searchQuery ? "1px solid rgba(99,102,241,0.45)" : "1px solid rgba(255,255,255,0.07)",
+              color: "rgba(255,255,255,0.8)",
+            }}
+          />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery("")}
+              className="absolute right-3.5 flex items-center justify-center"
+              style={{ color: "rgba(255,255,255,0.3)" }}>
+              <X size={13} />
+            </button>
+          )}
+        </div>
+        {/* "Press Enter" hint when typing non-reference query */}
+        {searchQuery && !globalMode && (
+          <p className="text-[10px] text-center mt-1.5" style={{ color: "rgba(99,102,241,0.5)" }}>
+            Press ⏎ Enter to search all 66 books
+          </p>
+        )}
       </div>
 
-      <div className="px-3 py-1.5 shrink-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-        <p className="text-[11px] font-bold tracking-widest uppercase" style={{ color: "rgba(99,102,241,0.65)" }}>
-          {book.name} · {chapter}
-        </p>
+      {/* Sticky label — shows chapter context OR global search context */}
+      <div className="px-4 py-2 shrink-0 flex items-center justify-between"
+        style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: globalMode ? "rgba(99,102,241,0.04)" : "rgba(255,255,255,0.015)" }}>
+        {globalMode ? (
+          <span className="text-[11px] font-bold tracking-widest uppercase" style={{ color: "rgba(99,102,241,0.7)" }}>
+            🔍 Whole Bible · "{lastGlobalQuery}" · {translation.label}
+          </span>
+        ) : (
+          <span className="text-[11px] font-bold tracking-widest uppercase" style={{ color: "rgba(99,102,241,0.7)" }}>
+            {displayBookName} {chapter} · {translation.label}
+          </span>
+        )}
+        {globalMode ? (
+          globalLoading ? <Loader2 size={11} className="animate-spin" style={{ color: "rgba(99,102,241,0.5)" }} /> :
+          globalTotal > 0 ? <span className="text-[10px] font-semibold" style={{ color: "rgba(255,255,255,0.2)" }}>{globalTotal.toLocaleString()} results</span> : null
+        ) : (
+          !loading && verses.length > 0 && (
+            <span className="text-[10px] font-semibold" style={{ color: "rgba(255,255,255,0.2)" }}>
+              {q ? `${displayItems.length} / ` : ""}{verses.length} vs
+            </span>
+          )
+        )}
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 py-2 space-y-0.5"
-        style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.08) transparent" }}>
-        {loading && <div className="flex justify-center py-10"><Loader2 size={18} className="animate-spin text-indigo-400" /></div>}
-        {error && (
-          <div className="text-center py-6">
-            <p className="text-xs text-red-400 mb-2">{error}</p>
-            <button onClick={fetchChapter} className="text-xs text-indigo-400 flex items-center gap-1 mx-auto">
-              <RefreshCw size={10} /> Retry
+      {/* ── GLOBAL SEARCH RESULTS PANEL ── */}
+      {globalMode ? (
+        <div className="flex-1 overflow-y-auto"
+          style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.07) transparent", paddingBottom: 80, paddingLeft: 16, paddingRight: 16 }}>
+
+          {/* Search loading skeleton */}
+          {globalLoading && (
+            <div className="py-4 space-y-4">
+              {[1,2,3,4,5,6].map(i => (
+                <div key={i} className="rounded-2xl p-4 animate-pulse" style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                  <div className="rounded h-2.5 w-1/3 mb-3" style={{ background: "rgba(99,102,241,0.15)" }} />
+                  <div className="rounded h-3 w-full mb-1.5" style={{ background: "rgba(255,255,255,0.06)" }} />
+                  <div className="rounded h-3 w-4/5" style={{ background: "rgba(255,255,255,0.04)" }} />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Search error */}
+          {globalError && !globalLoading && (
+            <div className="flex flex-col items-center py-10 px-4">
+              <div className="rounded-2xl mb-3 flex items-center justify-center"
+                style={{ width: 44, height: 44, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.18)" }}>
+                <RefreshCw size={18} style={{ color: "rgba(239,68,68,0.6)" }} />
+              </div>
+              <p className="text-[12px] font-semibold mb-1" style={{ color: "rgba(239,68,68,0.8)" }}>Search failed</p>
+              <p className="text-[11px] mb-3 text-center" style={{ color: "rgba(255,255,255,0.2)" }}>{globalError}</p>
+              <button onClick={() => doGlobalSearch(lastGlobalQuery, globalPage)}
+                className="flex items-center gap-1.5 rounded-full px-4 py-2 text-[12px] font-semibold transition-all active:scale-95"
+                style={{ background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)", color: "#a5b4fc" }}>
+                <RefreshCw size={12} /> Try again
+              </button>
+            </div>
+          )}
+
+          {/* No results */}
+          {!globalLoading && !globalError && globalResults.length === 0 && (
+            <div className="flex flex-col items-center py-12 px-4">
+              <p className="text-3xl mb-3">📭</p>
+              <p className="text-[13px] font-semibold" style={{ color: "rgba(255,255,255,0.3)" }}>No results found</p>
+              <p className="text-[11px] mt-1 text-center" style={{ color: "rgba(255,255,255,0.15)" }}>Try a different keyword or translation</p>
+            </div>
+          )}
+
+          {/* Results list */}
+          {!globalLoading && globalResults.map((result, idx) => {
+            const hlReg = lastGlobalQuery.trim().length > 1
+              ? new RegExp(`(${lastGlobalQuery.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
+              : null;
+            const hlText = hlReg
+              ? result.text.replace(hlReg, '<mark style="background:rgba(99,102,241,0.3);color:#e0e7ff;border-radius:3px;padding:0 2px">$1</mark>')
+              : result.text;
+            const ref = result.reference || "";
+            const isAdded = addedSet.has(ref);
+            return (
+              <div key={`${ref}-${idx}`} className="my-2 rounded-2xl transition-all"
+                style={{
+                  background: isAdded ? "rgba(16,185,129,0.06)" : "rgba(255,255,255,0.025)",
+                  border: isAdded ? "1px solid rgba(16,185,129,0.2)" : "1px solid rgba(255,255,255,0.06)",
+                  padding: "12px 14px",
+                }}>
+                {/* Reference badge */}
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ background: "rgba(99,102,241,0.15)", color: "#a5b4fc", letterSpacing: "0.03em" }}>
+                    {ref} · {translation.label}
+                  </span>
+                </div>
+                {/* Highlighted text */}
+                <p className="text-[13px] leading-relaxed mb-3" style={{ color: "rgba(255,255,255,0.82)" }}
+                  dangerouslySetInnerHTML={{ __html: hlText }} />
+                {/* Actions */}
+                <div className="flex items-center gap-2 justify-end">
+                  <button onClick={() => handleCollect(ref, result.text)}
+                    className="flex items-center gap-1 rounded-full transition-all active:scale-95"
+                    style={{ height: 28, paddingLeft: 10, paddingRight: 10, fontSize: 11, fontWeight: 700,
+                      background: isAdded ? "rgba(16,185,129,0.15)" : "rgba(99,102,241,0.15)",
+                      border: isAdded ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(99,102,241,0.25)",
+                      color: isAdded ? "#34d399" : "#a5b4fc" }}>
+                    {isAdded ? <CheckCircle2 size={11} /> : <Plus size={11} />}
+                    {isAdded ? "Saved" : "Collect"}
+                  </button>
+                  {onInsert && (
+                    <button onClick={() => onInsert(ref, result.text, translation.label)}
+                      className="flex items-center gap-1 rounded-full transition-all active:scale-95"
+                      style={{ height: 28, paddingLeft: 10, paddingRight: 10, fontSize: 11, fontWeight: 700,
+                        background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.25)", color: "#fbbf24" }}>
+                      <CornerDownLeft size={11} /> Insert
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Pagination */}
+          {!globalLoading && globalResults.length > 0 && (
+            <div className="flex items-center justify-between py-4">
+              <button
+                disabled={globalPage <= 1}
+                onClick={() => doGlobalSearch(lastGlobalQuery, globalPage - 1)}
+                className="flex items-center gap-1.5 rounded-full px-4 py-2 text-[12px] font-semibold transition-all active:scale-95 disabled:opacity-30"
+                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.5)" }}>
+                ← Prev
+              </button>
+              <span className="text-[11px]" style={{ color: "rgba(255,255,255,0.2)" }}>Page {globalPage}</span>
+              <button
+                disabled={globalPage * 25 >= globalTotal}
+                onClick={() => doGlobalSearch(lastGlobalQuery, globalPage + 1)}
+                className="flex items-center gap-1.5 rounded-full px-4 py-2 text-[12px] font-semibold transition-all active:scale-95 disabled:opacity-30"
+                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.5)" }}>
+                Next →
+              </button>
+            </div>
+          )}
+
+          {/* Clear search button */}
+          <div className="flex justify-center pt-2 pb-4">
+            <button onClick={clearGlobalSearch}
+              className="flex items-center gap-1.5 rounded-full px-4 py-2 text-[12px] font-semibold transition-all active:scale-95"
+              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.3)" }}>
+              <X size={11} /> Back to chapter view
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>{/* Chapter verse list */}
+        <div className="flex-1 overflow-y-auto"
+        style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.07) transparent", paddingBottom: 80, paddingLeft: 16, paddingRight: 16 }}>
+
+        {/* Skeleton loader */}
+        {loading && (
+          <div className="px-4 py-4 space-y-4">
+            {[1,2,3,4,5].map(i => (
+              <div key={i} className="flex gap-3 animate-pulse">
+                <div className="rounded w-5 h-4 shrink-0 mt-1" style={{ background: "rgba(255,255,255,0.07)" }} />
+                <div className="flex-1 space-y-1.5">
+                  <div className="rounded h-3 w-full" style={{ background: "rgba(255,255,255,0.06)" }} />
+                  <div className="rounded h-3 w-4/5" style={{ background: "rgba(255,255,255,0.04)" }} />
+                  {i % 2 === 0 && <div className="rounded h-3 w-2/3" style={{ background: "rgba(255,255,255,0.03)" }} />}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Error state */}
+        {error && !loading && (
+          <div className="flex flex-col items-center py-10 px-4">
+            <div className="rounded-2xl mb-3 flex items-center justify-center"
+              style={{ width: 44, height: 44, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.18)" }}>
+              <RefreshCw size={18} style={{ color: "rgba(239,68,68,0.6)" }} />
+            </div>
+            <p className="text-[12px] font-semibold mb-1" style={{ color: "rgba(239,68,68,0.8)" }}>Failed to load</p>
+            <p className="text-[11px] mb-3 text-center" style={{ color: "rgba(255,255,255,0.2)" }}>{error}</p>
+            <button onClick={fetchChapter}
+              className="flex items-center gap-1.5 rounded-full px-4 py-2 text-[12px] font-semibold transition-all active:scale-95"
+              style={{ background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)", color: "#a5b4fc" }}>
+              <RefreshCw size={12} /> Try again
             </button>
           </div>
         )}
+
+        {/* No search match */}
+        {!loading && !error && q && displayItems.length === 0 && verses.length > 0 && (
+          <div className="flex flex-col items-center py-10 px-4">
+            <p className="text-2xl mb-2">🔍</p>
+            <p className="text-[12px] font-semibold" style={{ color: "rgba(255,255,255,0.3)" }}>No verses match</p>
+            <p className="text-[11px] mt-1 text-center" style={{ color: "rgba(255,255,255,0.15)" }}>Try a different keyword or clear the search</p>
+          </div>
+        )}
+
+        {/* Verses */}
         {displayItems.map((item, idx) => {
           const isAdded = addedSet.has(item.ref);
+          const highlighted = q
+            ? item.text.replace(
+                new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'),
+                '<mark style="background:rgba(99,102,241,0.3);color:#e0e7ff;border-radius:3px;padding:0 2px">$1</mark>'
+              )
+            : null;
           return (
-            <div key={item.ref}>
-              {idx > 0 && (
-                <div style={{ borderTop: "1px solid rgba(255,255,255,0.3)", marginTop: 6, marginBottom: 6 }} />
-              )}
-              <div className="group flex gap-2 py-2 px-1.5 rounded-lg transition-all"
-                style={{ background: "transparent" }}
-                onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")}
-                onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-                <span className="text-[12px] font-bold shrink-0 mt-0.5 w-5 text-right" style={{ color: "#6366f1" }}>{item.verse}</span>
-                <p className="text-[14px] leading-relaxed flex-1" style={{ color: "rgba(255,255,255,0.82)" }}>{item.text}</p>
-                <div className="flex flex-col gap-1 shrink-0 self-start">
-                  {/* Collect into verse list */}
+            <div key={item.ref} className="my-1">
+              {idx > 0 && <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)", marginBottom: 4 }} />}
+              <div className="group flex gap-3 py-3.5 px-3 rounded-2xl transition-all"
+                style={{
+                  background: isAdded ? "rgba(16,185,129,0.06)" : "transparent",
+                  border: isAdded ? "1px solid rgba(16,185,129,0.15)" : "1px solid transparent",
+                }}
+                onMouseEnter={e => !isAdded && (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
+                onMouseLeave={e => !isAdded && (e.currentTarget.style.background = "transparent")}>
+
+                {/* Verse number */}
+                <span className="text-[15px] font-black shrink-0 mt-0.5 w-6 text-right"
+                  style={{ color: isAdded ? "#10b981" : "rgba(99,102,241,0.85)" }}>
+                  {item.verse}
+                </span>
+
+                {/* Text */}
+                <div className="flex-1 min-w-0">
+                  {highlighted
+                    ? <p className="text-[15px] leading-[1.7]" style={{ color: "rgba(255,255,255,0.88)" }}
+                        dangerouslySetInnerHTML={{ __html: highlighted }} />
+                    : <p className="text-[15px] leading-[1.7]" style={{ color: "rgba(255,255,255,0.88)" }}>{item.text}</p>
+                  }
+                  <p className="text-[11px] mt-1.5 font-semibold tracking-wide" style={{ color: "rgba(255,255,255,0.25)" }}>
+                    {item.ref} · {translation.label}
+                  </p>
+                </div>
+
+                {/* Actions */}
+                <div className="flex flex-col gap-2 shrink-0 self-start pt-0.5">
                   <button onClick={() => handleCollect(item.ref, item.text)}
-                    className="transition-all"
-                    title="Add to collection"
-                    style={{ color: isAdded ? "#10b981" : "rgba(99,102,241,0.8)", transform: isAdded ? "scale(1.15)" : "scale(1)" }}>
+                    className="transition-all flex items-center justify-center rounded-full"
+                    title={isAdded ? "Added!" : "Collect verse"}
+                    style={{
+                      width: 34, height: 34,
+                      background: isAdded ? "rgba(16,185,129,0.18)" : "rgba(99,102,241,0.12)",
+                      border: isAdded ? "1px solid rgba(16,185,129,0.4)" : "1px solid rgba(99,102,241,0.25)",
+                      color: isAdded ? "#10b981" : "rgba(99,102,241,0.9)",
+                    }}>
                     {isAdded ? <Check size={15} /> : <PlusCircle size={15} />}
                   </button>
-                  {/* Insert at cursor */}
                   {onInsert && (
                     <button onClick={() => onInsert(item.ref, item.text, translation.label)}
-                      className="transition-all hover:scale-110 active:scale-95"
-                      title="Insert at cursor in canvas"
-                      style={{ color: "rgba(245,158,11,0.65)" }}>
+                      className="transition-all active:scale-90 flex items-center justify-center rounded-full"
+                      title="Insert at cursor"
+                      style={{
+                        width: 34, height: 34,
+                        background: "rgba(245,158,11,0.08)",
+                        border: "1px solid rgba(245,158,11,0.2)",
+                        color: "rgba(245,158,11,0.8)",
+                      }}>
                       <CornerDownLeft size={14} />
                     </button>
                   )}
@@ -299,9 +643,12 @@ function BiblePanel({
           );
         })}
       </div>
+      </>
+      )}
     </div>
   );
 }
+
 
 // ── Sermon Preview Modal ──────────────────────────────────────────────────────
 function SermonPreviewModal({ draft, onClose }: { draft: SermonDraft; onClose: () => void }) {
@@ -454,36 +801,45 @@ function SermonPreviewModal({ draft, onClose }: { draft: SermonDraft; onClose: (
     <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.1em", color: "#aaa" }}>{txt}</span>
   );
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: "rgba(0,0,0,0.6)", padding: "24px 16px" }}>
-      <div className="w-full max-w-xl rounded-xl shadow-2xl flex flex-col" style={{ background: "#fff", maxHeight: "90vh" }}>
-
-        {/* Toolbar */}
-        <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: "1px solid #e5e7eb" }}>
-          <div className="flex items-center gap-2">
-            <Eye size={15} style={{ color: "#555" }} />
-            <span className="text-sm font-semibold" style={{ color: "#111" }}>Sermon Brief</span>
-            <span className="text-xs" style={{ color: "#aaa" }}>· for slide designer</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={handleCopy}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:bg-gray-100"
-              style={{ color: "#555", border: "1px solid #e5e7eb" }}>Copy Text</button>
-            <button onClick={handlePrint}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:bg-gray-100"
-              style={{ color: "#555", border: "1px solid #e5e7eb" }}>
-              <Printer size={12} /> Print
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center"
+      style={{ background: "rgba(0,0,0,0.65)" }}>
+      {/* Full-screen on mobile, centered card on sm+ */}
+      <div className="w-full sm:max-w-xl sm:rounded-xl sm:mx-4 shadow-2xl flex flex-col"
+        style={{ background: "#fff", height: "100dvh", maxHeight: "100dvh",
+                 /* sm+ override applied via Tailwind class below */ }}
+      >
+        {/* Toolbar — mobile-friendly 2-row layout */}
+        <div className="shrink-0" style={{ borderBottom: "1px solid #e5e7eb" }}>
+          {/* Row 1: title + close — pt accounts for iOS notch/status bar */}
+          <div className="flex items-center justify-between px-4 pb-2" style={{ paddingTop: "max(16px, env(safe-area-inset-top, 16px))" }}>
+            <div className="flex items-center gap-2">
+              <Eye size={15} style={{ color: "#555" }} />
+              <div>
+                <span className="text-sm font-semibold block" style={{ color: "#111" }}>Sermon Brief</span>
+                <span className="text-[11px] block" style={{ color: "#aaa" }}>for slide designer</span>
+              </div>
+            </div>
+            <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 active:bg-gray-200" style={{ color: "#888" }}>
+              <X size={18} />
             </button>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100" style={{ color: "#aaa" }}>
-              <X size={15} />
+          </div>
+          {/* Row 2: action buttons */}
+          <div className="flex gap-2 px-4 pb-3">
+            <button onClick={handleCopy}
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all active:scale-95"
+              style={{ color: "#555", border: "1px solid #e5e7eb", background: "#f9fafb" }}>Copy Text</button>
+            <button onClick={handlePrint}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all active:scale-95"
+              style={{ color: "#555", border: "1px solid #e5e7eb", background: "#f9fafb" }}>
+              <Printer size={14} /> <span className="hidden sm:inline">Print</span>
             </button>
           </div>
         </div>
 
         {/* Scrollable content */}
         <div className="overflow-y-auto flex-1" style={{ scrollbarWidth: "thin", scrollbarColor: "#e5e7eb transparent" }}>
-        <div className="px-8 py-8" style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif", color: "#111", lineHeight: 1.8 }}>
+        <div className="px-5 sm:px-8 py-6 sm:py-8" style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif", color: "#111", lineHeight: 1.8 }}>
 
           {/* Service info bar — above title */}
           {!h.serviceInfo && (draft.serviceType || draft.scheduledDate) && (
@@ -651,7 +1007,7 @@ function SermonPreviewModal({ draft, onClose }: { draft: SermonDraft; onClose: (
 
       </div>
     </div>
-  );
+  , document.body);
 }
 
 // ── Free Canvas ───────────────────────────────────────────────────────────────
@@ -797,25 +1153,25 @@ function SectionBlock({ icon, label, color = "#6366f1", children, defaultOpen = 
   const open = isControlled ? controlledOpen : internalOpen;
   const toggle = isControlled ? (onToggle ?? (() => {})) : () => setInternalOpen(o => !o);
   return (
-    <div className="rounded-xl mb-3" style={{ border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.025)", overflow: "visible" }}>
-      <div className="w-full flex items-center" style={{ background: open ? "rgba(255,255,255,0.03)" : "transparent" }}>
-        {/* Eye visibility toggle */}
+    <div className="rounded-2xl mb-3" style={{ border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.025)", overflow: "visible" }}>
+      <div className="w-full flex items-center" style={{ background: open ? "rgba(255,255,255,0.03)" : "transparent", borderRadius: "inherit" }}>
+        {/* Eye visibility toggle — fixed 48px wide column */}
         {onToggleVisible && (
           <button onClick={onToggleVisible} title={visible ? "Hide from preview" : "Show in preview"}
-            className="pl-3 pr-1 py-3 flex-shrink-0 transition-all"
-            style={{ color: visible ? "rgba(99,102,241,0.55)" : "rgba(255,255,255,0.18)" }}>
-            {visible ? <Eye size={13} /> : <EyeOff size={13} />}
+            className="flex-shrink-0 flex items-center justify-center transition-all"
+            style={{ color: visible ? "rgba(99,102,241,0.65)" : "rgba(255,255,255,0.18)", width: 48, height: 56 }}>
+            {visible ? <Eye size={16} /> : <EyeOff size={16} />}
           </button>
         )}
-        <button onClick={toggle} className="flex-1 flex items-center justify-between px-3 py-3 transition-all">
-          <div className="flex items-center gap-2.5">
-            <span style={{ color }}>{icon}</span>
-            <span className="text-[13px] font-bold uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.65)" }}>{label}</span>
+        <button onClick={toggle} className="flex-1 flex items-center justify-between py-3.5 pr-5 transition-all" style={{ paddingLeft: onToggleVisible ? 0 : 18, minHeight: 56 }}>
+          <div className="flex items-center gap-3.5">
+            <span style={{ color, display: 'flex', alignItems: 'center' }}>{icon}</span>
+            <span className="text-[13px] font-bold uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.65)" }}>{label}</span>
           </div>
           <span style={{ color: "rgba(255,255,255,0.25)" }}>{open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</span>
         </button>
       </div>
-      {open && <div className="px-4 pb-4 pt-1">{children}</div>}
+      {open && <div className="px-5 pb-5 pt-2">{children}</div>}
     </div>
   );
 }
@@ -824,6 +1180,7 @@ function SectionBlock({ icon, label, color = "#6366f1", children, defaultOpen = 
 function SermonCanvas({
   draft, onChange, onSave, saving, collectedVerses, onRemoveVerse,
   bibleOpen, draftsOpen, onToggleBible, onToggleDrafts, onFieldFocus,
+  openSection, onSetSection,
 }: {
   draft: SermonDraft;
   onChange: (f: keyof SermonDraft, v: any) => void;
@@ -836,11 +1193,12 @@ function SermonCanvas({
   onToggleBible: () => void;
   onToggleDrafts: () => void;
   onFieldFocus: (el: HTMLTextAreaElement | HTMLInputElement, target: FieldTarget) => void;
+  openSection: string | null;
+  onSetSection: (key: string | null) => void;
 }) {
   const [previewOpen, setPreviewOpen] = useState(false);
-  // Single open-section tracker — only one accordion open at a time
-  const [openSection, setOpenSection] = useState<string | null>(null);
-  const toggleSection = (key: string) => setOpenSection(s => s === key ? null : key);
+  // openSection is now controlled externally (lifted up to PreachingView)
+  const toggleSection = (key: string) => onSetSection(openSection === key ? null : key);
   // Convenience aliases for the two hand-rolled accordions
   const serviceInfoOpen = openSection === "serviceInfo";
   const headerOpen = openSection === "mainTitle";
@@ -886,74 +1244,84 @@ function SermonCanvas({
   return (
     <>
       <div className="flex flex-col h-full min-h-0 overflow-hidden">
-      {/* Top bar */}
-      <div className="flex items-center justify-between px-5 py-3 shrink-0"
-        style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "#0e0e1c" }}>
-        <div className="flex items-center gap-2">
-          <Mic2 size={15} className="text-amber-400" />
-          <span className="text-sm font-bold text-white">Sermon Prep</span>
+      {/* Top bar — matches Sermons header style */}
+      <div className="flex items-center justify-between px-4 shrink-0"
+        style={{ minHeight: 56, borderBottom: "1px solid rgba(255,255,255,0.06)", background: "#0e0e1c" }}>
 
-          {/* Panel toggle buttons — only shown when panel collapsed */}
-          {!bibleOpen && (
-            <span className="text-[10px] font-semibold" style={{ color: "rgba(255,255,255,0.3)" }}>Bible hidden</span>
-          )}
-        </div>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 text-[12px]" style={{ color: "rgba(255,255,255,0.3)" }}>
-              <Clock size={11} />
-              <span>~{totalWords} words · {estimatedMinutes(totalWords)} min</span>
-            </div>
-            <button onClick={() => setPreviewOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-95 hover:scale-105"
-              style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.6)", border: "1px solid rgba(255,255,255,0.1)" }}
-              title="Preview sermon">
-              <Eye size={12} /> Preview
-            </button>
-            <button onClick={onSave} disabled={saving}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-95"
-              style={{ background: "rgba(99,102,241,0.85)", color: "#fff", opacity: saving ? 0.7 : 1 }}>
-              {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
-              {saving ? "Saving…" : "Save Draft"}
-            </button>
+        {/* Branding */}
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="flex items-center justify-center rounded-xl flex-shrink-0"
+            style={{ width: 32, height: 32, background: "linear-gradient(135deg,rgba(245,158,11,0.25),rgba(99,102,241,0.15))", border: "1px solid rgba(245,158,11,0.3)" }}>
+            <Mic2 size={16} style={{ color: "#fbbf24" }} />
           </div>
+          <div>
+            <p className="text-[15px] font-bold leading-tight" style={{ color: "rgba(255,255,255,0.88)" }}>Creating Preaching Draft</p>
+            <p className="text-[10px] font-semibold" style={{ color: "rgba(255,255,255,0.28)", letterSpacing: "0.04em" }}>
+              ~{totalWords}w · {estimatedMinutes(totalWords)}m read
+            </p>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Preview */}
+          <button onClick={() => setPreviewOpen(true)}
+            className="flex items-center justify-center rounded-xl transition-all active:scale-95"
+            style={{ width: 36, height: 36, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.5)" }}
+            title="Preview sermon">
+            <Eye size={16} />
+          </button>
+          {/* Save */}
+          <button onClick={onSave} disabled={saving}
+            className="flex items-center gap-1.5 rounded-xl transition-all active:scale-95"
+            style={{
+              height: 36, paddingLeft: 16, paddingRight: 16,
+              background: saving ? "rgba(99,102,241,0.5)" : "linear-gradient(135deg,rgba(99,102,241,0.9),rgba(139,92,246,0.8))",
+              boxShadow: saving ? "none" : "0 2px 10px rgba(99,102,241,0.35)",
+              color: "#fff", fontSize: 13, fontWeight: 700, opacity: saving ? 0.7 : 1,
+            }}>
+            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+            <span>{saving ? "Saving…" : "Save"}</span>
+          </button>
+        </div>
       </div>
 
       {/* Canvas scroll */}
-      <div className="flex-1 overflow-y-auto px-6 pt-5 pb-12"
+      <div className="flex-1 overflow-y-auto px-4 pt-4 pb-12"
         style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.08) transparent" }}>
 
         {/* ── SERVICE INFO ACCORDION ── */}
         <div className="mb-3 rounded-xl"
           style={{ border: "1px solid rgba(245,158,11,0.15)", background: "linear-gradient(135deg, rgba(245,158,11,0.05), rgba(52,211,153,0.03))", overflow: "visible" }}>
 
-          {/* Header row */}
-          <div className="flex items-center w-full" style={{ background: serviceInfoOpen ? "rgba(255,255,255,0.02)" : "transparent" }}>
-            {/* Eye toggle */}
+          {/* Header row — matches SectionBlock layout */}
+          <div className="w-full flex items-center" style={{ background: serviceInfoOpen ? "rgba(255,255,255,0.03)" : "transparent", borderRadius: "inherit" }}>
+            {/* Eye toggle — fixed 44×48px column */}
             <button
               onClick={() => onChange('previewHidden', { ...(draft.previewHidden || {}), serviceInfo: !draft.previewHidden?.serviceInfo })}
               title={draft.previewHidden?.serviceInfo ? 'Show in preview' : 'Hide from preview'}
-              className="pl-3 pr-1 py-3 flex-shrink-0 transition-all"
-              style={{ color: draft.previewHidden?.serviceInfo ? 'rgba(255,255,255,0.18)' : 'rgba(245,158,11,0.5)' }}>
-              {draft.previewHidden?.serviceInfo ? <EyeOff size={13} /> : <Eye size={13} />}
+              className="flex-shrink-0 flex items-center justify-center transition-all"
+              style={{ color: draft.previewHidden?.serviceInfo ? 'rgba(255,255,255,0.18)' : 'rgba(245,158,11,0.55)', width: 44, height: 48 }}>
+              {draft.previewHidden?.serviceInfo ? <EyeOff size={15} /> : <Eye size={15} />}
             </button>
             {/* Expand toggle */}
             <button onClick={() => toggleSection("serviceInfo")}
-              className="flex-1 flex items-center justify-between px-3 py-3 min-w-0">
-              <div className="flex items-center gap-2">
-                <CalendarDays size={13} className="text-amber-400/70" />
-                <span className="text-[13px] font-bold uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.6)" }}>Service Info</span>
+              className="flex-1 flex items-center justify-between py-3 pr-4 transition-all" style={{ paddingLeft: 0 }}>
+              <div className="flex items-center gap-3">
+                <span style={{ color: "rgba(245,158,11,0.75)", display: 'flex', alignItems: 'center' }}><CalendarDays size={14} /></span>
+                <span className="text-[12px] font-bold uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.6)" }}>Service Info</span>
               </div>
-              <span style={{ color: "rgba(255,255,255,0.25)" }}>
-                {serviceInfoOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              <span style={{ color: "rgba(255,255,255,0.2)" }}>
+                {serviceInfoOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
               </span>
             </button>
           </div>
 
-          {/* Expanded content */}
+          {/* Expanded content — stacks vertically on mobile, side-by-side on sm+ */}
           {serviceInfoOpen && (
-            <div className="px-5 pb-5 pt-3 flex flex-wrap gap-5" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+            <div className="px-5 pb-5 pt-3 grid grid-cols-2 gap-4" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
               {/* Date */}
-              <div>
+              <div className="min-w-0">
                 <div className="flex items-center gap-1.5 mb-2">
                   <CalendarDays size={10} style={{ color: "rgba(245,158,11,0.7)" }} />
                   <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "rgba(245,158,11,0.7)" }}>Preaching Schedule</span>
@@ -968,7 +1336,7 @@ function SermonCanvas({
                 />
               </div>
               {/* Service Type */}
-              <div>
+              <div className="min-w-0">
                 <div className="flex items-center gap-1.5 mb-2">
                   <Mic2 size={10} style={{ color: "rgba(52,211,153,0.7)" }} />
                   <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "rgba(52,211,153,0.7)" }}>Service Type</span>
@@ -977,10 +1345,13 @@ function SermonCanvas({
                   value={draft.serviceType || ''}
                   onChange={e => onChange('serviceType', e.target.value)}
                   style={{
+                    width: '100%',
+                    height: 40,
+                    boxSizing: 'border-box',
                     background: draft.serviceType ? 'rgba(52,211,153,0.1)' : 'rgba(255,255,255,0.06)',
                     color: draft.serviceType ? 'rgba(52,211,153,0.95)' : 'rgba(255,255,255,0.35)',
                     border: `1px solid ${draft.serviceType ? 'rgba(52,211,153,0.25)' : 'rgba(255,255,255,0.1)'}`,
-                    borderRadius: 8, padding: '7px 12px', fontSize: 13, fontWeight: 600, outline: 'none', cursor: 'pointer',
+                    borderRadius: 8, padding: '0 12px', fontSize: 14, fontWeight: 600, outline: 'none', cursor: 'pointer',
                   }}>
                   <option value="" disabled style={{ background: '#12122a', color: '#666' }}>Set Service Type</option>
                   <option value="Mid-Week Service" style={{ background: '#12122a', color: '#fff' }}>Mid-Week Service</option>
@@ -996,27 +1367,25 @@ function SermonCanvas({
         <div className="mb-4 rounded-xl"
           style={{ border: "1px solid rgba(99,102,241,0.15)", background: "linear-gradient(135deg, rgba(99,102,241,0.06), rgba(139,92,246,0.04))", overflow: "visible" }}>
 
-          {/* Accordion header row */}
-          <div className="flex items-center w-full" style={{ background: headerOpen ? "rgba(255,255,255,0.02)" : "transparent" }}>
-
-            {/* Eye toggle */}
+          {/* Accordion header row — matches SectionBlock layout */}
+          <div className="w-full flex items-center" style={{ background: headerOpen ? "rgba(255,255,255,0.03)" : "transparent", borderRadius: "inherit" }}>
+            {/* Eye toggle — fixed 44×48px column */}
             <button
               onClick={() => onChange('previewHidden', { ...(draft.previewHidden || {}), titleSection: !draft.previewHidden?.titleSection })}
               title={draft.previewHidden?.titleSection ? 'Show in preview' : 'Hide from preview'}
-              className="pl-3 pr-1 py-3 flex-shrink-0 transition-all"
-              style={{ color: draft.previewHidden?.titleSection ? 'rgba(255,255,255,0.18)' : 'rgba(99,102,241,0.55)' }}>
-              {draft.previewHidden?.titleSection ? <EyeOff size={13} /> : <Eye size={13} />}
+              className="flex-shrink-0 flex items-center justify-center transition-all"
+              style={{ color: draft.previewHidden?.titleSection ? 'rgba(255,255,255,0.18)' : 'rgba(99,102,241,0.65)', width: 44, height: 48 }}>
+              {draft.previewHidden?.titleSection ? <EyeOff size={15} /> : <Eye size={15} />}
             </button>
-
             {/* Expand/collapse toggle */}
             <button onClick={() => toggleSection("mainTitle")}
-              className="flex-1 flex items-center justify-between px-3 py-3 min-w-0">
-              <div className="flex items-center gap-2 shrink-0">
-                <BookOpen size={13} className="text-indigo-400" />
-                <span className="text-xs font-bold uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.55)" }}>Main Title</span>
+              className="flex-1 flex items-center justify-between py-3 pr-4 transition-all" style={{ paddingLeft: 0 }}>
+              <div className="flex items-center gap-3">
+                <span style={{ color: "rgba(99,102,241,0.85)", display: 'flex', alignItems: 'center' }}><BookOpen size={14} /></span>
+                <span className="text-[12px] font-bold uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.6)" }}>Main Title</span>
               </div>
-              <span style={{ color: "rgba(255,255,255,0.25)", flexShrink: 0 }}>
-                {headerOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              <span style={{ color: "rgba(255,255,255,0.2)", flexShrink: 0 }}>
+                {headerOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
               </span>
             </button>
           </div>
@@ -1024,25 +1393,27 @@ function SermonCanvas({
           {/* Expanded content */}
           {headerOpen && (
             <div className="px-5 pb-5 pt-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-              {/* Title */}
-              <input
-                type="text" value={draft.title}
-                onChange={e => onChange("title", e.target.value)}
-                onFocus={e => onFieldFocus(e.currentTarget, { type: "draft", field: "title" })}
+              {/* Title — textarea so long titles wrap */}
+              <textarea
+                value={draft.title}
+                onChange={e => { onChange("title", e.target.value); e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px"; }}
+                onFocus={e => { onFieldFocus(e.currentTarget, { type: "draft", field: "title" }); e.currentTarget.style.height = "auto"; e.currentTarget.style.height = e.currentTarget.scrollHeight + "px"; }}
                 placeholder="Sermon title…"
-                className="w-full font-bold bg-transparent border-none outline-none text-white placeholder-white/20 leading-tight"
-                style={{ fontSize: 28, caretColor: "#6366f1", marginBottom: 4 }}
+                rows={1}
+                className="w-full font-bold bg-transparent border-none outline-none text-white placeholder-white/20 leading-tight resize-none overflow-hidden"
+                style={{ fontSize: 26, caretColor: "#6366f1", marginBottom: 4, lineHeight: 1.3 }}
               />
               {/* Thin separator */}
               <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", marginBottom: 10 }} />
-              {/* Subtitle */}
-              <input
-                type="text" value={draft.subtitle}
-                onChange={e => onChange("subtitle", e.target.value)}
-                onFocus={e => onFieldFocus(e.currentTarget, { type: "draft", field: "subtitle" })}
+              {/* Subtitle — textarea so long subtitles wrap */}
+              <textarea
+                value={draft.subtitle}
+                onChange={e => { onChange("subtitle", e.target.value); e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px"; }}
+                onFocus={e => { onFieldFocus(e.currentTarget, { type: "draft", field: "subtitle" }); e.currentTarget.style.height = "auto"; e.currentTarget.style.height = e.currentTarget.scrollHeight + "px"; }}
                 placeholder="Subtitle (optional)…"
-                className="w-full bg-transparent border-none outline-none placeholder-white/15"
-                style={{ fontSize: 15, color: "rgba(255,255,255,0.4)", caretColor: "#6366f1", marginBottom: 14 }}
+                rows={1}
+                className="w-full bg-transparent border-none outline-none placeholder-white/15 resize-none overflow-hidden"
+                style={{ fontSize: 15, color: "rgba(255,255,255,0.4)", caretColor: "#6366f1", marginBottom: 14, lineHeight: 1.5 }}
               />
               {/* Scriptures — multi-row */}
               {(() => {
@@ -1052,31 +1423,37 @@ function SermonCanvas({
                 return (
                   <div className="flex flex-col gap-2">
                     {scriptureList.map((s, idx) => (
-                      <div key={s.id} className="flex items-center gap-2 rounded-xl px-3 py-2"
+                      <div key={s.id} className="rounded-xl px-3 py-2.5"
                         style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.15)" }}>
-                        <BookMarked size={13} className="text-indigo-400 shrink-0" />
-                        {idx === 0 && (
-                          <span className="text-[10px] font-bold uppercase tracking-widest shrink-0"
-                            style={{ color: "rgba(99,102,241,0.7)" }}>Scripture</span>
-                        )}
-                        {idx > 0 && (
-                          <span className="text-[10px] font-bold uppercase tracking-widest shrink-0"
-                            style={{ color: "rgba(99,102,241,0.45)" }}>+Verse</span>
-                        )}
-                        <span style={{ color: "rgba(99,102,241,0.3)", fontSize: 11 }}>·</span>
-                        <input
-                          type="text" value={s.text}
+                        {/* Label row */}
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <BookMarked size={12} className="text-indigo-400 shrink-0" />
+                          {idx === 0 && (
+                            <span className="text-[11px] font-bold uppercase tracking-widest"
+                              style={{ color: "rgba(99,102,241,0.7)" }}>Scripture</span>
+                          )}
+                          {idx > 0 && (
+                            <span className="text-[11px] font-bold uppercase tracking-widest"
+                              style={{ color: "rgba(99,102,241,0.45)" }}>+Verse</span>
+                          )}
+                        </div>
+                        {/* Textarea + buttons row */}
+                        <div className="flex items-start gap-2">
+                        <textarea
+                          value={s.text}
                           onChange={e => {
                             const updated = scriptureList.map((x, i) => i === idx ? { ...x, text: e.target.value } : x);
                             onChange('scriptures', updated);
                             if (idx === 0) onChange('mainVerse', e.target.value);
+                            e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px";
                           }}
                           placeholder={idx === 0 ? "e.g. John 3:16-17" : "e.g. Romans 8:28"}
-                          onFocus={e => onFieldFocus(e.currentTarget, { type: "draft", field: "scriptures", scriptureIdx: idx })}
-                          className="flex-1 bg-transparent border-none outline-none placeholder-white/20 min-w-0"
-                          style={{ fontSize: 14, color: "rgba(165,180,252,0.9)", caretColor: "#6366f1" }}
+                          onFocus={e => { onFieldFocus(e.currentTarget, { type: "draft", field: "scriptures", scriptureIdx: idx }); e.currentTarget.style.height = "auto"; e.currentTarget.style.height = e.currentTarget.scrollHeight + "px"; }}
+                          rows={1}
+                          className="flex-1 bg-transparent border-none outline-none placeholder-white/20 min-w-0 resize-none overflow-hidden"
+                          style={{ fontSize: 15, color: "rgba(165,180,252,0.9)", caretColor: "#6366f1", lineHeight: 1.6 }}
                         />
-                        {/* Remove button — visible red pill, only shown when 2+ rows */}
+                        {/* Remove button */}
                         {scriptureList.length > 1 && (
                           <button
                             type="button"
@@ -1086,17 +1463,17 @@ function SermonCanvas({
                               if (idx === 0) onChange('mainVerse', updated[0]?.text ?? '');
                             }}
                             title="Remove this verse"
-                            className="shrink-0 flex items-center justify-center rounded-full transition-all hover:scale-110"
+                            className="shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90 mt-0.5"
                             style={{
-                              width: 20, height: 20, minWidth: 20,
+                              width: 28, height: 28, minWidth: 28,
                               background: "rgba(239,68,68,0.18)",
                               border: "1px solid rgba(239,68,68,0.4)",
                               color: "#f87171",
-                              fontSize: 14, fontWeight: 700, lineHeight: 1,
+                              fontSize: 16, fontWeight: 700, lineHeight: 1,
                             }}
                           >−</button>
                         )}
-                        {/* Add button — visible indigo pill, only on last row */}
+                        {/* Add button */}
                         {idx === scriptureList.length - 1 && (
                           <button
                             type="button"
@@ -1105,16 +1482,17 @@ function SermonCanvas({
                               onChange('scriptures', [...scriptureList, newEntry]);
                             }}
                             title="Add another verse"
-                            className="shrink-0 flex items-center justify-center rounded-full transition-all hover:scale-110"
+                            className="shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90 mt-0.5"
                             style={{
-                              width: 20, height: 20, minWidth: 20,
+                              width: 28, height: 28, minWidth: 28,
                               background: "rgba(99,102,241,0.25)",
                               border: "1px solid rgba(99,102,241,0.5)",
                               color: "#a5b4fc",
-                              fontSize: 16, fontWeight: 700, lineHeight: 1,
+                              fontSize: 18, fontWeight: 700, lineHeight: 1,
                             }}
                           >+</button>
                         )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1160,25 +1538,31 @@ function SermonCanvas({
           visible={!(draft.previewHidden?.keyPoints)}
           onToggleVisible={() => onChange('previewHidden', { ...(draft.previewHidden || {}), keyPoints: !draft.previewHidden?.keyPoints })}>
           <div className="space-y-3">
-            <input type="text" value={draft.keyPointsTitle}
-              onChange={e => onChange("keyPointsTitle", e.target.value)}
-              onFocus={e => onFieldFocus(e.currentTarget, { type: "draft", field: "keyPointsTitle" })}
+            {/* Key Points section title */}
+            <textarea
+              value={draft.keyPointsTitle}
+              rows={1}
+              onChange={e => { onChange("keyPointsTitle", e.target.value); e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px"; }}
+              onFocus={e => { onFieldFocus(e.currentTarget, { type: "draft", field: "keyPointsTitle" }); e.currentTarget.style.height = "auto"; e.currentTarget.style.height = e.currentTarget.scrollHeight + "px"; }}
               placeholder="Key Points Title… (e.g. How to love like Jesus)"
-              className="w-full px-3 py-2.5 text-[14px] font-semibold rounded-lg placeholder-white/25"
-              style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.18)", color: "#fde68a", outline: "none" }} />
-            <div className="space-y-3">
+              className="w-full px-3 py-3 text-[16px] font-semibold rounded-lg placeholder-white/25 resize-none overflow-hidden"
+              style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.18)", color: "#fde68a", outline: "none", lineHeight: 1.5 }} />
+            <div className="space-y-4">
               {draft.keyPoints.map((kp, i) => (
-                <div key={kp.id} className="rounded-lg p-3" style={{ background: "rgba(245,158,11,0.05)", border: "1px solid rgba(245,158,11,0.12)" }}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <GripVertical size={12} className="text-white/20" />
-                    <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "#f59e0b" }}>Point {i + 1}</span>
-                    <button onClick={() => removeKeyPoint(kp.id)} className="ml-auto text-white/20 hover:text-red-400 transition-colors"><X size={12} /></button>
+                <div key={kp.id} className="rounded-xl p-4" style={{ background: "rgba(245,158,11,0.05)", border: "1px solid rgba(245,158,11,0.15)" }}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-[13px] font-bold uppercase tracking-wider" style={{ color: "#f59e0b" }}>Point {i + 1}</span>
+                    <button onClick={() => removeKeyPoint(kp.id)} className="ml-auto p-1.5 rounded-lg text-white/20 hover:text-red-400 hover:bg-red-500/10 transition-all"><X size={14} /></button>
                   </div>
-                  <input type="text" value={kp.heading} onChange={e => updateKeyPoint(kp.id, "heading", e.target.value)}
-                    onFocus={e => onFieldFocus(e.currentTarget, { type: "kp", kpId: kp.id, kpField: "heading" })}
+                  {/* Heading — auto-grow textarea */}
+                  <textarea
+                    value={kp.heading}
+                    rows={1}
+                    onChange={e => { updateKeyPoint(kp.id, "heading", e.target.value); e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px"; }}
+                    onFocus={e => { onFieldFocus(e.currentTarget, { type: "kp", kpId: kp.id, kpField: "heading" }); e.currentTarget.style.height = "auto"; e.currentTarget.style.height = e.currentTarget.scrollHeight + "px"; }}
                     placeholder="Point heading… (e.g. Love one another)"
-                    className="w-full px-2.5 py-2 text-[14px] font-semibold rounded-lg mb-2 placeholder-white/25"
-                    style={{ background: "rgba(255,255,255,0.04)", border: "none", color: "#fff", outline: "none" }} />
+                    className="w-full px-3 py-2.5 text-[16px] font-semibold rounded-lg mb-3 placeholder-white/25 resize-none overflow-hidden"
+                    style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.06)", color: "#fff", outline: "none", lineHeight: 1.5 }} />
                   {/* Key Point Scriptures — multi-row */}
                   {(() => {
                     const kpList = (kp.scriptures && kp.scriptures.length > 0)
@@ -1191,45 +1575,54 @@ function SermonCanvas({
                           <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "rgba(99,102,241,0.65)" }}>Scripture</span>
                         </div>
                         {kpList.map((sv, sidx) => (
-                          <div key={sv.id} className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5"
+                          <div key={sv.id} className="rounded-lg px-3 py-2.5"
                             style={{ background: "rgba(99,102,241,0.06)", border: "1px solid rgba(99,102,241,0.15)" }}>
-                            {sidx > 0 && (
-                              <span className="text-[9px] font-bold uppercase tracking-widest shrink-0" style={{ color: "rgba(99,102,241,0.4)" }}>+v</span>
-                            )}
-                            <input
-                              type="text" value={sv.text}
-                              onChange={e => {
-                                const updated = kpList.map((x, xi) => xi === sidx ? { ...x, text: e.target.value } : x);
-                                updateKeyPointScriptures(kp.id, updated);
-                              }}
-                              onFocus={e => onFieldFocus(e.currentTarget, { type: "kp", kpId: kp.id, kpField: "scripture", kpScriptureIdx: sidx })}
-                              placeholder={sidx === 0 ? "e.g. John 13:34-35" : "e.g. Romans 5:8"}
-                              className="flex-1 bg-transparent border-none outline-none placeholder-white/25 min-w-0 text-[13px]"
-                              style={{ color: "#a5b4fc" }}
-                            />
-                            {/* Remove button */}
-                            {kpList.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const updated = kpList.filter((_, xi) => xi !== sidx);
+                            {/* Label */}
+                            <div className="flex items-center gap-1 mb-1.5">
+                              {sidx === 0
+                                ? <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "rgba(99,102,241,0.65)" }}>Scripture</span>
+                                : <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "rgba(99,102,241,0.4)" }}>+Verse</span>
+                              }
+                            </div>
+                            {/* Textarea + action buttons */}
+                            <div className="flex items-start gap-2">
+                              <textarea
+                                value={sv.text}
+                                rows={1}
+                                onChange={e => {
+                                  const updated = kpList.map((x, xi) => xi === sidx ? { ...x, text: e.target.value } : x);
                                   updateKeyPointScriptures(kp.id, updated);
+                                  e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px";
                                 }}
-                                title="Remove verse"
-                                className="shrink-0 flex items-center justify-center rounded-full transition-all hover:scale-110"
-                                style={{ width: 16, height: 16, minWidth: 16, background: "rgba(239,68,68,0.18)", border: "1px solid rgba(239,68,68,0.4)", color: "#f87171", fontSize: 12, fontWeight: 700, lineHeight: 1 }}
-                              >−</button>
-                            )}
-                            {/* Add button — last row only */}
-                            {sidx === kpList.length - 1 && (
-                              <button
-                                type="button"
-                                onClick={() => updateKeyPointScriptures(kp.id, [...kpList, { id: uid(), text: '' }])}
-                                title="Add another verse"
-                                className="shrink-0 flex items-center justify-center rounded-full transition-all hover:scale-110"
-                                style={{ width: 16, height: 16, minWidth: 16, background: "rgba(99,102,241,0.25)", border: "1px solid rgba(99,102,241,0.5)", color: "#a5b4fc", fontSize: 14, fontWeight: 700, lineHeight: 1 }}
-                              >+</button>
-                            )}
+                                onFocus={e => { onFieldFocus(e.currentTarget, { type: "kp", kpId: kp.id, kpField: "scripture", kpScriptureIdx: sidx }); e.currentTarget.style.height = "auto"; e.currentTarget.style.height = e.currentTarget.scrollHeight + "px"; }}
+                                placeholder={sidx === 0 ? "e.g. John 13:34-35" : "e.g. Romans 5:8"}
+                                className="flex-1 bg-transparent border-none outline-none placeholder-white/25 min-w-0 resize-none overflow-hidden"
+                                style={{ color: "#a5b4fc", fontSize: 15, lineHeight: 1.6 }}
+                              />
+                              {/* Remove button */}
+                              {kpList.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const updated = kpList.filter((_, xi) => xi !== sidx);
+                                    updateKeyPointScriptures(kp.id, updated);
+                                  }}
+                                  title="Remove verse"
+                                  className="shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90 mt-0.5"
+                                  style={{ width: 28, height: 28, minWidth: 28, background: "rgba(239,68,68,0.18)", border: "1px solid rgba(239,68,68,0.4)", color: "#f87171", fontSize: 16, fontWeight: 700, lineHeight: 1 }}
+                                >−</button>
+                              )}
+                              {/* Add button */}
+                              {sidx === kpList.length - 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => updateKeyPointScriptures(kp.id, [...kpList, { id: uid(), text: '' }])}
+                                  title="Add another verse"
+                                  className="shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90 mt-0.5"
+                                  style={{ width: 28, height: 28, minWidth: 28, background: "rgba(99,102,241,0.25)", border: "1px solid rgba(99,102,241,0.5)", color: "#a5b4fc", fontSize: 18, fontWeight: 700, lineHeight: 1 }}
+                                >+</button>
+                              )}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -1249,15 +1642,15 @@ function SermonCanvas({
                   <textarea value={kp.body} onChange={e => updateKeyPoint(kp.id, "body", e.target.value)}
                     onFocus={e => onFieldFocus(e.currentTarget, { type: "kp", kpId: kp.id, kpField: "body" })}
                     placeholder="Expand your thoughts, illustrations, supporting ideas…"
-                    rows={3} className="placeholder-white/25"
-                    style={{ ...textareaStyle, minHeight: 70, fontSize: 14, background: "rgba(255,255,255,0.03)", border: "none" }} />
+                    rows={4} className="placeholder-white/25"
+                    style={{ ...textareaStyle, minHeight: 110, fontSize: 15, lineHeight: 1.85, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }} />
                 </div>
               ))}
             </div>
             <button onClick={addKeyPoint}
-              className="w-full py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-1.5 transition-all hover:opacity-80"
-              style={{ background: "rgba(245,158,11,0.08)", border: "1px dashed rgba(245,158,11,0.25)", color: "#f59e0b" }}>
-              <Plus size={12} /> Add Key Point
+              className="w-full py-3 rounded-xl text-[15px] font-semibold flex items-center justify-center gap-2 transition-all active:scale-98 hover:opacity-90"
+              style={{ background: "rgba(245,158,11,0.08)", border: "1px dashed rgba(245,158,11,0.3)", color: "#f59e0b" }}>
+              <Plus size={15} /> Add Key Point
             </button>
           </div>
         </SectionBlock>
@@ -1324,114 +1717,364 @@ function SermonCanvas({
   );
 }
 
-// ── Draft List Sidebar ────────────────────────────────────────────────────────
-function DraftList({ drafts, activeDraftId, onSelect, onNew, onDelete, onSubmit, onClose, currentUserName }:
+// ── Reusable Confirm Modal ───────────────────────────────────────────────────
+function ConfirmModal({
+  open, title, message, detail,
+  confirmLabel = "Confirm", confirmColor = "#ef4444",
+  onConfirm, onCancel, loading = false,
+}: {
+  open: boolean; title: string; message: string; detail?: string;
+  confirmLabel?: string; confirmColor?: string;
+  onConfirm: () => void; onCancel: () => void; loading?: boolean;
+}) {
+  if (!open) return null;
+  return (
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center px-4"
+      style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)" }}
+      onClick={onCancel}
+    >
+      <div
+        className="w-full max-w-sm rounded-2xl overflow-hidden"
+        style={{ background: "#141622", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 24px 64px rgba(0,0,0,0.7)" }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header strip */}
+        <div className="px-5 pt-5 pb-4">
+          <p className="font-bold text-white" style={{ fontSize: 15, letterSpacing: "-0.01em" }}>{title}</p>
+          <p className="mt-1.5" style={{ fontSize: 13, color: "rgba(255,255,255,0.55)", lineHeight: 1.5 }}>{message}</p>
+          {detail && <p className="mt-1" style={{ fontSize: 12, color: "rgba(255,255,255,0.3)" }}>{detail}</p>}
+        </div>
+        {/* Actions */}
+        <div className="flex gap-2 px-5 pb-5">
+          <button
+            onClick={onCancel}
+            disabled={loading}
+            className="flex-1 rounded-xl font-semibold transition-all active:scale-95"
+            style={{ height: 42, fontSize: 13, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.6)" }}
+          >Cancel</button>
+          <button
+            onClick={onConfirm}
+            disabled={loading}
+            className="flex-1 rounded-xl font-semibold transition-all active:scale-95 flex items-center justify-center gap-2"
+            style={{ height: 42, fontSize: 13, background: confirmColor, border: "none", color: "#fff", opacity: loading ? 0.7 : 1 }}
+          >
+            {loading && <Loader2 size={14} className="animate-spin" />}
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Preaching Info Modal ──────────────────────────────────────────────────────
+function PreachingInfoModal({ onClose }: { onClose: () => void }) {
+  const [tab, setTab] = useState<"about" | "workflow" | "integration">("about");
+  const tabs = [
+    { id: "about" as const, label: "About", emoji: "📖" },
+    { id: "workflow" as const, label: "How It Works", emoji: "⚡" },
+    { id: "integration" as const, label: "Design Requests", emoji: "🎨" },
+  ];
+  const content = {
+    about: {
+      title: "Your Personal Sermon Workspace",
+      description: "The Preaching module is your always-available digital sermon notebook — accessible on mobile, tablet, or laptop, wherever the Spirit leads.",
+      color: "#818cf8",
+      items: [
+        { icon: "📱", text: "Cross-device access — open the app on any device and your sermon outlines are always right where you left them." },
+        { icon: "📝", text: "Create structured sermon drafts with organized sections: Main Title, Introduction, Main Passage, Key Points, Free Notes, Application, and Closing Prayer." },
+        { icon: "📖", text: "Built-in Bible reference panel — search and insert Bible verses directly into any section of your sermon without leaving the app." },
+        { icon: "⚡", text: "Auto-save keeps your work safe as you type — no manual saving required." },
+        { icon: "🖨️", text: "Print-ready layout — generate a clean, formatted copy of your sermon outline for easy reference in the pulpit." },
+        { icon: "🔒", text: "Your drafts are private and only visible to you. Submitted sermons go to the Design Requests queue." },
+      ],
+    },
+    workflow: {
+      title: "Sermon Draft Workflow",
+      description: "From blank page to Sunday morning — here's how to use the Preaching module step by step.",
+      color: "#34d399",
+      items: [
+        { icon: "➕", text: "Tap '+ New' to create a fresh sermon draft. Give it a title, set the preaching schedule date, and choose the service type." },
+        { icon: "✍️", text: "Fill in each section at your own pace — the canvas saves automatically. Come back anytime to continue." },
+        { icon: "📚", text: "Use the Bible panel on the right to search verses by keyword or jump to a specific reference (e.g. 'John 3:16'). Add verses with one tap to the right section." },
+        { icon: "👁️", text: "Use the eye icon to preview your complete sermon outline — formatted and ready to review or print." },
+        { icon: "📤", text: "When your outline is ready, click 'Submit to Design Requests'. Your Audio/Tech team will immediately receive it." },
+        { icon: "↩️", text: "If edits are needed after submission, your team can 'Recall' the sermon back to your drafts for revisions." },
+      ],
+    },
+    integration: {
+      title: "How Preaching → Design Requests Works",
+      description: "The Preaching module is directly integrated with the Design Requests queue for your Audio/Tech and slide design team.",
+      color: "#a78bfa",
+      items: [
+        { icon: "🔗", text: "When you submit a sermon draft, it instantly appears in the 'Design Requests' module — visible only to Admin and Audio/Tech roles." },
+        { icon: "🎨", text: "Your slide designer opens Design Requests, expands your sermon, and can copy the full outline with one click to paste into Canva or any presentation tool." },
+        { icon: "🛡️", text: "Non Audio/Tech roles (Members, Musicians, Leaders) cannot see the Design Requests module — it's exclusively for your design and tech team." },
+        { icon: "🔁", text: "If the design team needs more details, they can 'Recall' the sermon back to your drafts. You'll see it reappear as an editable draft." },
+        { icon: "📋", text: "All sermon data is transferred: title, scripture references, key points, illustrations, application, and closing prayer — everything the designer needs." },
+        { icon: "💡", text: "Even if you can't produce slides yourself, this workflow ensures your message is beautifully presented — just outline here, submit, and the team handles the rest." },
+      ],
+    },
+  };
+  const c = content[tab];
+  return (
+    <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/75 backdrop-blur-sm px-4" onClick={e => e.target === e.currentTarget && onClose()}>
+      <style>{`@keyframes preachingInfoPulse { 0%,100%{box-shadow:0 0 0 3px rgba(99,102,241,0.2),0 0 16px rgba(99,102,241,0.3)} 50%{box-shadow:0 0 0 5px rgba(99,102,241,0.35),0 0 24px rgba(99,102,241,0.55)} }`}</style>
+      <div className="w-full max-w-lg bg-[#0f0f1c] rounded-2xl border border-white/10 shadow-2xl overflow-hidden flex flex-col" style={{ maxHeight: "90vh", boxShadow: "0 0 0 1px rgba(99,102,241,0.2), 0 32px 80px rgba(0,0,0,0.7)" }}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-white/8 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, rgba(99,102,241,0.25), rgba(139,92,246,0.2))", border: "1px solid rgba(99,102,241,0.35)" }}>
+              <Mic2 size={20} style={{ color: "#818cf8" }} />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-white">How Preaching Module Works</h2>
+              <p className="text-[11px]" style={{ color: "rgba(255,255,255,0.35)" }}>Your digital sermon workspace</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-xl transition-colors" style={{ color: "rgba(255,255,255,0.4)" }}>
+            <X size={16} />
+          </button>
+        </div>
+        {/* Tabs */}
+        <div className="flex gap-1 px-5 pt-4 pb-0 shrink-0 border-b border-white/6">
+          {tabs.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-bold transition-all border-b-2 -mb-px ${tab === t.id ? "text-indigo-400 border-indigo-500" : "text-gray-500 border-transparent hover:text-gray-300"}`}>
+              <span>{t.emoji}</span>{t.label}
+            </button>
+          ))}
+        </div>
+        {/* Content */}
+        <div className="overflow-y-auto px-5 py-5 space-y-3 flex-1" style={{ scrollbarWidth: "thin", scrollbarColor: "#374151 transparent" }}>
+          <div className="p-3 rounded-xl border" style={{ background: `${c.color}10`, borderColor: `${c.color}25` }}>
+            <h3 className="text-sm font-bold text-white mb-1">{c.title}</h3>
+            <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.5)" }}>{c.description}</p>
+          </div>
+          <div className="space-y-2">
+            {c.items.map((item, i) => (
+              <div key={i} className="flex items-start gap-3 p-3 rounded-xl border" style={{ background: "rgba(255,255,255,0.03)", borderColor: "rgba(255,255,255,0.06)" }}>
+                <span className="text-base leading-none mt-0.5 shrink-0">{item.icon}</span>
+                <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.65)" }}>{item.text}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* Footer */}
+        <div className="px-5 py-4 border-t border-white/8 shrink-0">
+          <button onClick={onClose} className="w-full py-2.5 rounded-xl text-sm font-bold text-white transition-all active:scale-95" style={{ background: "linear-gradient(135deg, #6366f1, #7c3aed)" }}>
+            Got it, let's preach!
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+function DraftList({ drafts, activeDraftId, onSelect, onNew, onDelete, onSubmit, onRecallEdit, onPreview, onClose, onInfo, infoGlowing, currentUserName }:
   { drafts: SermonDraft[]; activeDraftId: string | null; onSelect: (id: string) => void;
     onNew: () => void; onDelete: (id: string) => void; onSubmit: (id: string) => void;
-    onClose: () => void; currentUserName: string }) {
+    onRecallEdit: (id: string) => void; onPreview: (id: string) => void;
+    onClose: () => void; onInfo: () => void; infoGlowing: boolean; currentUserName: string }) {
   const [tab, setTab] = useState<'drafts' | 'submitted'>('drafts');
 
-  const tabStyle = (active: boolean) => ({
-    flex: 1, paddingTop: 6, paddingBottom: 6, fontSize: 11, fontWeight: 700,
-    letterSpacing: '0.06em', textTransform: 'uppercase' as const,
-    background: 'none', border: 'none', cursor: 'pointer',
-    color: active ? '#a5b4fc' : 'rgba(255,255,255,0.25)',
-    borderBottom: active ? '2px solid #6366f1' : '2px solid transparent',
-    transition: 'all 0.15s',
-  });
+  const submitted = drafts.filter(d => d.status === 'submitted');
+  const draftItems = drafts.filter(d => d.status !== 'submitted');
 
   return (
     <div className="flex flex-col h-full w-full overflow-hidden" style={{ background: "#090913" }}>
-      {/* Header */}
-      <div style={PANEL_HEADER}>
-        <div className="flex items-center gap-2">
-          <Mic2 size={13} className="text-indigo-400" />
-          <span className="text-xs font-bold" style={{ color: "rgba(255,255,255,0.7)" }}>Preaching</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <button onClick={onNew} className="p-1 rounded-lg transition-all hover:scale-110"
-            style={{ background: "rgba(99,102,241,0.2)", color: "#a5b4fc" }} title="New sermon draft">
-            <Plus size={12} />
+
+      {/* ── Header ─────────────────────────── */}
+      <div className="flex items-center justify-between px-4"
+        style={{ minHeight: 56, borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
+        {/* Branding — Info icon replaces Mic; glows until first click */}
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={onInfo}
+            title="How Preaching Module Works"
+            className="flex items-center justify-center rounded-xl transition-all active:scale-95 shrink-0"
+            style={{
+              width: 32, height: 32,
+              background: infoGlowing ? "linear-gradient(135deg,rgba(99,102,241,0.3),rgba(139,92,246,0.2))" : "linear-gradient(135deg,rgba(99,102,241,0.12),rgba(139,92,246,0.08))",
+              border: `1px solid ${infoGlowing ? "rgba(99,102,241,0.5)" : "rgba(99,102,241,0.2)"}`,
+              color: infoGlowing ? "#a5b4fc" : "#818cf8",
+              animation: infoGlowing ? "newModulePulse 2s ease-in-out infinite" : "none",
+              boxShadow: infoGlowing ? "0 0 0 2px rgba(99,102,241,0.2), 0 0 12px rgba(99,102,241,0.25)" : "none",
+            }}>
+            <Info size={15} />
           </button>
-          <button onClick={onClose} className="p-1.5 rounded-lg transition-colors" title="Collapse panel"
-            style={{ color: "rgba(255,255,255,0.3)" }}
+          <div>
+            <p className="text-[15px] font-bold leading-tight" style={{ color: "rgba(255,255,255,0.88)" }}>Preaching</p>
+            <p className="text-[10px] font-semibold" style={{ color: "rgba(255,255,255,0.28)", letterSpacing: "0.04em" }}>
+              {draftItems.length} draft{draftItems.length !== 1 ? 's' : ''}
+            </p>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-2">
+          {/* New Sermon — prominent CTA */}
+          <button onClick={onNew}
+            className="flex items-center gap-1.5 rounded-xl transition-all active:scale-95"
+            style={{
+              height: 36, paddingLeft: 14, paddingRight: 14,
+              background: "linear-gradient(135deg,rgba(99,102,241,0.85),rgba(139,92,246,0.75))",
+              boxShadow: "0 2px 10px rgba(99,102,241,0.35)",
+              color: "#fff", fontSize: 13, fontWeight: 700,
+            }}
+            title="New sermon draft">
+            <Plus size={15} />
+            <span>New</span>
+          </button>
+          {/* Collapse */}
+          <button onClick={onClose}
+            className="flex items-center justify-center rounded-xl transition-all active:scale-95"
+            style={{ width: 36, height: 36, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.35)" }}
+            title="Collapse panel"
             onMouseEnter={e => (e.currentTarget.style.color = "rgba(255,255,255,0.7)")}
-            onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.3)")}>
-            <PanelRight size={14} />
+            onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.35)")}>
+            <PanelRight size={16} />
           </button>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)', paddingLeft: 8, paddingRight: 8 }}>
-        <button style={tabStyle(tab === 'drafts')} onClick={() => setTab('drafts')}>Drafts</button>
-        <button style={tabStyle(tab === 'submitted')} onClick={() => setTab('submitted')}>Submitted</button>
+      {/* ── Tabs ───────────────────────────── */}
+      <div className="flex shrink-0" style={{ borderBottom: '2px solid rgba(255,255,255,0.06)' }}>
+        {(['drafts', 'submitted'] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)}
+            className="flex-1 flex items-center justify-center gap-1.5 transition-all"
+            style={{
+              height: 46,
+              fontSize: 13, fontWeight: 700,
+              letterSpacing: '0.05em', textTransform: 'uppercase',
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: tab === t ? '#a5b4fc' : 'rgba(255,255,255,0.28)',
+              borderBottom: tab === t ? '2px solid #6366f1' : '2px solid transparent',
+              marginBottom: -2,
+            }}>
+            {t === 'drafts' ? <PenLine size={13} /> : <SendHorizonal size={13} />}
+            {t === 'drafts' ? `Drafts${draftItems.length > 0 ? ` (${draftItems.length})` : ''}` : 'Submitted'}
+          </button>
+        ))}
       </div>
 
       {/* Tab content */}
-      <div className="flex-1 overflow-y-auto px-2 py-2"
-        style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.06) transparent" }}>
+      <div className="flex-1 overflow-y-auto py-3"
+        style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.06) transparent", paddingLeft: 16, paddingRight: 16 }}>
 
         {/* ── DRAFTS ── */}
         {tab === 'drafts' && (
           <>
-            {drafts.length === 0 && (
-              <div className="text-center py-8 px-3">
-                <Mic2 size={18} className="text-white/10 mx-auto mb-2" />
-                <p className="text-[10px] text-white/20">No drafts yet. Start one!</p>
+            {draftItems.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-12 px-4">
+                <div className="flex items-center justify-center rounded-2xl mb-3"
+                  style={{ width: 48, height: 48, background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.12)" }}>
+                  <Mic2 size={20} style={{ color: "rgba(99,102,241,0.35)" }} />
+                </div>
+                <p className="text-[12px] font-semibold" style={{ color: "rgba(255,255,255,0.25)" }}>No drafts yet</p>
+                <p className="text-[11px] mt-1 text-center" style={{ color: "rgba(255,255,255,0.12)" }}>Tap the + button above to start your first sermon draft.</p>
               </div>
             )}
-            {drafts.map(d => (
+            {draftItems.map(d => (
               <div key={d.id} onClick={() => onSelect(d.id)}
-                className="w-full text-left px-3 py-2.5 rounded-xl mb-1 cursor-pointer group transition-all relative"
+                className="w-full text-left rounded-2xl mb-2.5 cursor-pointer group transition-all relative overflow-hidden"
                 style={{
-                  background: activeDraftId === d.id ? "rgba(99,102,241,0.18)" : "transparent",
-                  border: activeDraftId === d.id ? "1px solid rgba(99,102,241,0.3)" : "1px solid transparent",
-                }}
-                onMouseEnter={e => { if (activeDraftId !== d.id) e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
-                onMouseLeave={e => { if (activeDraftId !== d.id) e.currentTarget.style.background = "transparent"; }}>
-                <p className="text-[13px] font-semibold truncate text-white/80 pr-12">{d.title || "Untitled Sermon"}</p>
-                {d.subtitle && <p className="text-[11px] truncate mt-0.5 pr-12" style={{ color: "rgba(255,255,255,0.3)" }}>{d.subtitle}</p>}
-                {(d.scriptures?.[0]?.text || d.mainVerse) && (
-                  <p className="text-[11px] truncate mt-0.5" style={{ color: "rgba(99,102,241,0.65)" }}>
-                    {d.scriptures?.[0]?.text || d.mainVerse}
-                    {(d.scriptures?.length ?? 0) > 1 && ` +${d.scriptures!.length - 1} more`}
-                  </p>
+                  background: activeDraftId === d.id
+                    ? "linear-gradient(135deg, rgba(99,102,241,0.18) 0%, rgba(139,92,246,0.1) 100%)"
+                    : "rgba(255,255,255,0.03)",
+                  border: activeDraftId === d.id
+                    ? "1px solid rgba(99,102,241,0.35)"
+                    : "1px solid rgba(255,255,255,0.06)",
+                  boxShadow: activeDraftId === d.id ? "0 4px 20px rgba(99,102,241,0.12)" : "none",
+                }}>
+                {/* Active indicator bar */}
+                {activeDraftId === d.id && (
+                  <div className="absolute left-0 top-0 bottom-0" style={{ width: 3, background: "linear-gradient(180deg, #6366f1, #8b5cf6)", borderRadius: "2px 0 0 2px" }} />
                 )}
-                {(d.scheduledDate || d.serviceType) && (
-                  <div className="mt-2 pt-2" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-                    {d.scheduledDate && (
-                      <p className="text-[11px]" style={{ color: "rgba(245,158,11,0.8)" }}>
-                        {new Date(d.scheduledDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                <div className="px-4 pt-3 pb-3" style={{ paddingLeft: activeDraftId === d.id ? 16 : 16 }}>
+                  {/* Title row */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold truncate leading-tight"
+                        style={{ fontSize: 14, color: activeDraftId === d.id ? "#fff" : "rgba(255,255,255,0.8)", letterSpacing: "0.01em" }}>
+                        {d.title || "Untitled Sermon"}
                       </p>
-                    )}
-                    {d.serviceType && (
-                      <p className="text-[11px] mt-0.5 font-semibold" style={{ color: "rgba(52,211,153,0.65)" }}>
-                        {d.serviceType}
-                      </p>
-                    )}
+                      {d.subtitle && (
+                        <p className="truncate mt-0.5"
+                          style={{ fontSize: 11, color: "rgba(255,255,255,0.38)", letterSpacing: "0.03em", textTransform: "uppercase", fontWeight: 600 }}>
+                          {d.subtitle}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                )}
-                {/* Action buttons — appear on hover */}
-                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                  {/* Submit (send to team) */}
-                  <button
-                    onClick={e => { e.stopPropagation(); onSubmit(d.id); }}
-                    title="Submit to team"
-                    className="flex items-center justify-center rounded-full transition-all hover:scale-110"
-                    style={{ width: 22, height: 22, background: "rgba(99,102,241,0.25)", border: "1px solid rgba(99,102,241,0.4)", color: "#a5b4fc" }}
-                  >
-                    <SendHorizonal size={10} />
-                  </button>
-                  {/* Delete */}
-                  <button
-                    onClick={e => { e.stopPropagation(); onDelete(d.id); }}
-                    title="Delete draft"
-                    className="flex items-center justify-center rounded-full transition-all hover:scale-110"
-                    style={{ width: 22, height: 22, background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", color: "#f87171" }}
-                  >
-                    <Trash2 size={10} />
-                  </button>
+
+                  {/* Scripture pill */}
+                  {(d.scriptures?.[0]?.text || d.mainVerse) && (
+                    <div className="mt-2 flex items-center gap-1.5">
+                      <BookOpen size={10} style={{ color: "rgba(99,102,241,0.6)", flexShrink: 0 }} />
+                      <p className="text-[11px] truncate" style={{ color: "rgba(99,102,241,0.75)", fontWeight: 500 }}>
+                        {d.scriptures?.[0]?.text || d.mainVerse}
+                        {(d.scriptures?.length ?? 0) > 1 && <span style={{ color: "rgba(99,102,241,0.45)" }}> +{d.scriptures!.length - 1}</span>}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Meta row: date + service type */}
+                  {(d.scheduledDate || d.serviceType) && (
+                    <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+                      {d.scheduledDate && (
+                        <span className="flex items-center gap-1 rounded-full px-2 py-0.5"
+                          style={{ background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.2)" }}>
+                          <CalendarDays size={9} style={{ color: "rgba(245,158,11,0.8)" }} />
+                          <span style={{ fontSize: 10, color: "rgba(245,158,11,0.9)", fontWeight: 600, letterSpacing: "0.02em" }}>
+                            {new Date(d.scheduledDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                          </span>
+                        </span>
+                      )}
+                      {d.serviceType && (
+                        <span className="flex items-center gap-1 rounded-full px-2 py-0.5"
+                          style={{ background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.2)" }}>
+                          <span style={{ fontSize: 10, color: "rgba(52,211,153,0.9)", fontWeight: 600, letterSpacing: "0.02em" }}>
+                            {d.serviceType}
+                          </span>
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Action buttons — always visible at bottom right */}
+                  <div className="flex items-center justify-between gap-1.5 mt-3 pt-2.5"
+                    style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                    {/* Preview eye */}
+                    <button
+                      onClick={e => { e.stopPropagation(); onPreview(d.id); }}
+                      title="Preview sermon"
+                      className="flex items-center justify-center rounded-full transition-all active:scale-95"
+                      style={{ width: 28, height: 28, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.4)" }}
+                    >
+                      <Eye size={12} />
+                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={e => { e.stopPropagation(); onSubmit(d.id); }}
+                        title="Submit to team"
+                        className="flex items-center gap-1.5 rounded-full px-3 transition-all active:scale-95"
+                        style={{ height: 28, background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)", color: "#a5b4fc", fontSize: 11, fontWeight: 600 }}
+                      >
+                        <SendHorizonal size={11} /> Submit
+                      </button>
+                      <button
+                        onClick={e => { e.stopPropagation(); onDelete(d.id); }}
+                        title="Delete draft"
+                        className="flex items-center justify-center rounded-full transition-all active:scale-95"
+                        style={{ width: 28, height: 28, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", color: "#f87171" }}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             ))}
@@ -1440,14 +2083,71 @@ function DraftList({ drafts, activeDraftId, onSelect, onNew, onDelete, onSubmit,
 
         {/* ── SUBMITTED ── */}
         {tab === 'submitted' && (
-          <div className="text-center py-10 px-3">
-            <div className="mx-auto mb-3 flex items-center justify-center rounded-full"
-              style={{ width: 40, height: 40, background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.15)" }}>
-              <SendHorizonal size={16} style={{ color: "rgba(99,102,241,0.4)" }} />
-            </div>
-            <p className="text-[11px] font-semibold" style={{ color: "rgba(255,255,255,0.25)" }}>No submitted sermons yet</p>
-            <p className="text-[10px] mt-1" style={{ color: "rgba(255,255,255,0.12)" }}>Submitted sermons will appear here for team monitoring.</p>
-          </div>
+          <>
+            {submitted.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-12 px-4">
+                <div className="flex items-center justify-center rounded-2xl mb-3"
+                  style={{ width: 48, height: 48, background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.15)" }}>
+                  <SendHorizonal size={20} style={{ color: "rgba(52,211,153,0.4)" }} />
+                </div>
+                <p className="text-[12px] font-semibold" style={{ color: "rgba(255,255,255,0.25)" }}>No submitted sermons yet</p>
+                <p className="text-[11px] mt-1 text-center" style={{ color: "rgba(255,255,255,0.12)" }}>Submitted sermons will appear here for team monitoring.</p>
+              </div>
+            )}
+            {submitted.map(d => (
+              <div key={d.id}
+                className="w-full text-left rounded-2xl mb-2.5 overflow-hidden"
+                style={{ background: "rgba(52,211,153,0.04)", border: "1px solid rgba(52,211,153,0.15)" }}>
+                <div className="px-4 pt-3 pb-3">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <Check size={10} style={{ color: "#34d399" }} />
+                    <span style={{ fontSize: 10, color: "#34d399", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>Submitted</span>
+                  </div>
+                  <p className="font-bold truncate" style={{ fontSize: 14, color: "rgba(255,255,255,0.8)" }}>{d.title || "Untitled Sermon"}</p>
+                  {d.subtitle && <p className="truncate mt-0.5" style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", textTransform: "uppercase", fontWeight: 600, letterSpacing: "0.03em" }}>{d.subtitle}</p>}
+                  {(d.scheduledDate || d.serviceType) && (
+                    <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+                      {d.scheduledDate && (
+                        <span className="flex items-center gap-1 rounded-full px-2 py-0.5"
+                          style={{ background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.2)" }}>
+                          <CalendarDays size={9} style={{ color: "rgba(245,158,11,0.8)" }} />
+                          <span style={{ fontSize: 10, color: "rgba(245,158,11,0.9)", fontWeight: 600 }}>
+                            {new Date(d.scheduledDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                          </span>
+                        </span>
+                      )}
+                      {d.serviceType && (
+                        <span className="rounded-full px-2 py-0.5"
+                          style={{ background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.2)", fontSize: 10, color: "rgba(52,211,153,0.9)", fontWeight: 600 }}>
+                          {d.serviceType}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {/* Action row */}
+                  <div className="flex items-center gap-1.5 mt-3 pt-2.5"
+                    style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                    <button
+                      onClick={e => { e.stopPropagation(); onPreview(d.id); }}
+                      title="Preview sermon"
+                      className="flex items-center justify-center rounded-full transition-all active:scale-95"
+                      style={{ width: 28, height: 28, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.4)" }}
+                    >
+                      <Eye size={12} />
+                    </button>
+                    <button
+                      onClick={e => { e.stopPropagation(); onRecallEdit(d.id); }}
+                      title="Recall & Edit"
+                      className="flex items-center gap-1.5 rounded-full px-3 flex-1 justify-center transition-all active:scale-95"
+                      style={{ height: 28, background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.28)", color: "#fbbf24", fontSize: 11, fontWeight: 600 }}
+                    >
+                      <PenLine size={11} /> Edit
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </>
         )}
 
       </div>
@@ -1481,9 +2181,30 @@ export default function PreachingView({ currentUser, onToast }: Props) {
   const [saving, setSaving] = useState(false);
   const [loadingDrafts, setLoadingDrafts] = useState(true);
   const [bibleOpen, setBibleOpen] = useState(true);
-  const [draftsOpen, setDraftsOpen] = useState(true);
+  const [draftsOpen, setDraftsOpen] = useState(false); // collapsed by default — +New opens it
   const [freeCanvasOpen, setFreeCanvasOpen] = useState(false);
-  const [mobileTab, setMobileTab] = useState<"canvas" | "bible" | "sermons">("canvas");
+  const [mobileTab, setMobileTab] = useState<"canvas" | "bible" | "sermons">("sermons");
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [infoGlowing, setInfoGlowing] = useState(() => !localStorage.getItem("wf_preaching_info_seen"));
+  // Lifted accordion state — controlled here so handleInsertVerse can open the right section
+  const [openSection, setOpenSection] = useState<string | null>(null);
+  // Preview modal — can be opened from the draft list directly
+  const [previewDraftId, setPreviewDraftId] = useState<string | null>(null);
+  const previewDraft = previewDraftId ? drafts.find(d => d.id === previewDraftId) ?? null : null;
+  // ── Confirm modal state ──────────────────────────────────────────────────────
+  const [confirmState, setConfirmState] = useState<{
+    open: boolean; title: string; message: string; detail?: string;
+    confirmLabel: string; confirmColor: string;
+    onConfirm: () => void;
+    loading: boolean;
+  }>({
+    open: false, title: "", message: "", confirmLabel: "Confirm",
+    confirmColor: "#ef4444", onConfirm: () => {}, loading: false,
+  });
+  const showConfirm = (opts: Omit<typeof confirmState, "open" | "loading">) =>
+    setConfirmState({ ...opts, open: true, loading: false });
+  const closeConfirm = () => setConfirmState(s => ({ ...s, open: false }));
+  const setConfirmLoading = (v: boolean) => setConfirmState(s => ({ ...s, loading: v }));
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastFocusedEl     = useRef<HTMLTextAreaElement | HTMLInputElement | null>(null);
   const lastFocusedTarget = useRef<FieldTarget | null>(null);
@@ -1514,7 +2235,12 @@ export default function PreachingView({ currentUser, onToast }: Props) {
           })),
         }));
         setDrafts(migrated);
-        if (migrated.length > 0 && !activeDraftId) setActiveDraftId(migrated[0].id);
+        // Only auto-select EDITABLE (non-submitted) drafts — submitted drafts should NOT unlock the panel
+        const editableDrafts = migrated.filter(d => d.status !== 'submitted');
+        if (editableDrafts.length > 0 && !activeDraftId) setActiveDraftId(editableDrafts[0].id);
+        // Open the drafts panel only if there are editable drafts to show
+        if (editableDrafts.length > 0) setDraftsOpen(true);
+        else if (migrated.length > 0) setDraftsOpen(true); // still show panel for submitted tab
       }
     } catch { /* silently */ }
     setLoadingDrafts(false);
@@ -1526,6 +2252,7 @@ export default function PreachingView({ currentUser, onToast }: Props) {
     const draft = EMPTY_DRAFT(currentUser.uid, userName);
     setDrafts(prev => [draft, ...prev]);
     setActiveDraftId(draft.id);
+    setDraftsOpen(true); // reveal the panel so they can see the new draft in the list
     // Immediately persist so it survives a refresh
     try {
       await fetch("/api/preaching-drafts", {
@@ -1566,19 +2293,107 @@ export default function PreachingView({ currentUser, onToast }: Props) {
   const handleDelete = async (id: string) => {
     const draft = draftsRef.current.find(d => d.id === id);
     const title = draft?.title || "Untitled Sermon";
-    if (!window.confirm(`Delete "${title}"? This cannot be undone.`)) return;
-    setDrafts(prev => prev.filter(d => d.id !== id));
-    if (activeDraftId === id) setActiveDraftId(drafts.find(d => d.id !== id)?.id ?? null);
-    try {
-      await fetch(`/api/preaching-drafts/${id}`, { method: "DELETE" });
-      onToast?.("success", `"${title}" deleted.`);
-    } catch { onToast?.("error", "Could not delete draft."); }
+    showConfirm({
+      title: "Delete Sermon Draft",
+      message: `"${title}" will be permanently deleted.`,
+      detail: "This action cannot be undone.",
+      confirmLabel: "Delete",
+      confirmColor: "#ef4444",
+      onConfirm: async () => {
+        setConfirmLoading(true);
+        // Remove from state first, then figure out next selection
+        const remaining = draftsRef.current.filter(d => d.id !== id);
+        setDrafts(remaining);
+        // Only select an editable (non-submitted) draft as next active; otherwise go to null (locked state)
+        if (activeDraftId === id) {
+          const nextEditable = remaining.find(d => d.status !== 'submitted');
+          setActiveDraftId(nextEditable?.id ?? null);
+        }
+        try {
+          await fetch(`/api/preaching-drafts/${id}`, { method: "DELETE" });
+          onToast?.("success", `"${title}" deleted.`);
+        } catch { onToast?.("error", "Could not delete draft."); }
+        closeConfirm();
+      },
+    });
   };
 
-  // Submit draft to team — stub for future integration
-  const handleSubmitDraft = (id: string) => {
+  // Submit draft to team → moves it to Design Requests for Audio/Tech
+  const handleSubmitDraft = async (id: string) => {
     const draft = drafts.find(d => d.id === id);
-    onToast?.("info", `"${draft?.title || "Untitled"}" — Submit to team coming soon!`);
+    const title = draft?.title || "Untitled Sermon";
+    showConfirm({
+      title: "Submit to Design Requests",
+      message: `"${title}" will be sent to the Design Requests queue for your Audio/Tech team.`,
+      detail: "It will be removed from your Drafts list.",
+      confirmLabel: "Submit",
+      confirmColor: "#6366f1",
+      onConfirm: async () => {
+        setConfirmLoading(true);
+        try {
+          const res = await fetch(`/api/preaching-drafts/${id}/status`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              status: "submitted",
+              submittedBy: currentUser.uid,
+              submittedByName: userName,
+            }),
+          });
+          if (!res.ok) throw new Error("Server error");
+          const json = await res.json();
+          const newVersion: number = json.submissionVersion ?? 1;
+          // Mark draft as submitted with version in local state (stays visible in Submitted tab)
+          setDrafts(prev => prev.map(d => d.id === id
+            ? { ...d, status: "submitted" as const, submissionVersion: newVersion }
+            : d
+          ));
+          if (activeDraftId === id) {
+            const remaining = draftsRef.current.filter(d => d.id !== id && d.status !== 'submitted');
+            setActiveDraftId(remaining[0]?.id ?? null);
+          }
+          onToast?.("success", newVersion > 1
+            ? `"${title}" re-submitted — Audio/Tech will see the Latest Version ✅`
+            : `"${title}" submitted to Design Requests ✅`
+          );
+        } catch {
+          onToast?.("error", "Could not submit draft. Please try again.");
+        }
+        closeConfirm();
+      },
+    });
+  };
+
+  // Recall a submitted draft back to 'draft' and open it for editing
+  const handleRecallEdit = (id: string) => {
+    const draft = drafts.find(d => d.id === id);
+    const title = draft?.title || "Untitled Sermon";
+    showConfirm({
+      title: "Edit Submitted Sermon",
+      message: `"${title}" will be recalled back to your Drafts so you can make changes.`,
+      detail: "It will be removed from the Design Requests queue until you re-submit.",
+      confirmLabel: "Edit Draft",
+      confirmColor: "#f59e0b",
+      onConfirm: async () => {
+        setConfirmLoading(true);
+        try {
+          const res = await fetch(`/api/preaching-drafts/${id}/status`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: "draft" }),
+          });
+          if (!res.ok) throw new Error("Server error");
+          // Update local state: set status back to draft, keep submissionVersion intact
+          // so next re-submit still shows 'Latest Version' badge
+          setDrafts(prev => prev.map(d => d.id === id ? { ...d, status: "draft" as const } : d));
+          setActiveDraftId(id);
+          onToast?.("success", `"${title}" is back in Drafts — ready to edit!`);
+        } catch {
+          onToast?.("error", "Could not recall draft. Please try again.");
+        }
+        closeConfirm();
+      },
+    });
   };
 
   const handleCollect = (verse: CollectedVerse) => {
@@ -1596,6 +2411,21 @@ export default function PreachingView({ currentUser, onToast }: Props) {
     const formatted = `${ref} ${translation} - ${text}`;
     const el     = lastFocusedEl.current;
     const target = lastFocusedTarget.current;
+
+    // Map the focused target → accordion section key so we can open it
+    const sectionForTarget = (t: FieldTarget | null): string | null => {
+      if (!t) return "mainPassage";
+      if (t.type === "kp") return "keyPoints";
+      switch (t.field) {
+        case "scriptures": case "mainVerse": return "mainTitle";
+        case "introduction":   return "introduction";
+        case "mainPassage":    return "mainPassage";
+        case "freeNotes":      return "freeNotes";
+        case "application":    return "application";
+        case "closingPrayer":  return "closingPrayer";
+        default:               return "mainPassage";
+      }
+    };
 
     if (el && target) {
       const pos    = el.selectionStart ?? el.value.length;
@@ -1645,12 +2475,15 @@ export default function PreachingView({ currentUser, onToast }: Props) {
       requestAnimationFrame(() => { el.focus(); el.setSelectionRange(newPos, newPos); });
       onToast?.('success', `${ref} inserted`);
     } else {
-      // Fallback: no field focused yet — append to main passage
-      const cur = (activeDraft?.mainPassage ?? '').trimEnd();
-      handleChange('mainPassage', cur + (cur ? '\n\n' : '') + formatted + '\n');
-      onToast?.('info', `${ref} appended to Main Passage`);
+      // No field is focused — warn the user instead of silently appending
+      onToast?.('error',
+        '⚠️ Click inside a field first (e.g. Introduction, Key Points) — then insert the verse there.'
+      );
+      return; // bail out — don’t insert anywhere
     }
+    // Switch to canvas tab and open the correct accordion
     setMobileTab('canvas');
+    setOpenSection(sectionForTarget(target));
   };
 
   useEffect(() => () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); }, []);
@@ -1663,21 +2496,16 @@ export default function PreachingView({ currentUser, onToast }: Props) {
           <Loader2 size={24} className="animate-spin text-indigo-400" />
         </div>
       ) : !activeDraft ? (
-        <div className="flex-1 flex items-center justify-center">
+        <div className="flex-1 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.12)" }}>
           <div className="text-center px-8">
             <div className="w-16 h-20 rounded-2xl flex items-center justify-center mx-auto mb-5"
-              style={{ background: "linear-gradient(135deg, rgba(99,102,241,0.2), rgba(139,92,246,0.15))", border: "1px solid rgba(99,102,241,0.2)" }}>
-              <BookOpen size={28} className="text-indigo-400" />
+              style={{ background: "linear-gradient(135deg, rgba(99,102,241,0.12), rgba(139,92,246,0.08))", border: "1px solid rgba(99,102,241,0.15)" }}>
+              <BookOpen size={28} className="opacity-30" style={{ color: "#818cf8" }} />
             </div>
-            <h2 className="text-xl font-bold text-white mb-2">Preaching Prep</h2>
-            <p className="text-sm mb-6" style={{ color: "rgba(255,255,255,0.3)" }}>
-              Start a new sermon draft to begin preparing your message.
+            <h2 className="text-xl font-bold mb-2" style={{ color: "rgba(255,255,255,0.25)" }}>Canvas Locked</h2>
+            <p className="text-sm mb-6" style={{ color: "rgba(255,255,255,0.18)" }}>
+              Click <span style={{ color: "rgba(99,102,241,0.7)", fontWeight: 700 }}>+ New</span> in the sidebar to create your sermon draft.
             </p>
-            <button onClick={handleNew}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm mx-auto transition-all hover:scale-105 active:scale-95"
-              style={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6)", color: "#fff" }}>
-              <Plus size={16} /> New Sermon Draft
-            </button>
           </div>
         </div>
       ) : null}
@@ -1685,6 +2513,7 @@ export default function PreachingView({ currentUser, onToast }: Props) {
   );
 
   return (
+    <>
     <div className="flex flex-col flex-1 h-full min-h-0 overflow-hidden" style={{ background: "#0e0e1c" }}>
 
       {/* ══════════ DESKTOP layout lg+ ══════════ */}
@@ -1692,12 +2521,16 @@ export default function PreachingView({ currentUser, onToast }: Props) {
 
         {/* My Sermons sidebar — left collapsible */}
         {draftsOpen ? (
-          <div className="flex h-full shrink-0 flex-col" style={{ width: 220, borderRight: "1px solid rgba(255,255,255,0.06)" }}>
+          <div className="flex h-full shrink-0 flex-col" style={{ width: 300, borderRight: "1px solid rgba(255,255,255,0.06)" }}>
             <DraftList
               drafts={drafts} activeDraftId={activeDraftId}
               onSelect={id => { setActiveDraftId(id); }}
               onNew={handleNew} onDelete={handleDelete} onSubmit={handleSubmitDraft}
+              onRecallEdit={handleRecallEdit}
+              onPreview={id => setPreviewDraftId(id)}
               onClose={() => setDraftsOpen(false)}
+              onInfo={() => { setInfoOpen(true); if (infoGlowing) { localStorage.setItem('wf_preaching_info_seen','1'); setInfoGlowing(false); } }}
+              infoGlowing={infoGlowing}
               currentUserName={currentUser?.name || ""}
             />
           </div>
@@ -1725,27 +2558,35 @@ export default function PreachingView({ currentUser, onToast }: Props) {
           ) : freeCanvasOpen ? (
             <FreeCanvas onClose={() => setFreeCanvasOpen(false)} />
           ) : !activeDraft ? (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-center px-8">
-                <div className="w-16 h-20 rounded-2xl flex items-center justify-center mx-auto mb-5"
-                  style={{ background: "linear-gradient(135deg, rgba(99,102,241,0.2), rgba(139,92,246,0.15))", border: "1px solid rgba(99,102,241,0.2)" }}>
-                  <BookOpen size={28} className="text-indigo-400" />
+            <div className="relative flex-1 overflow-hidden">
+              {/* Grayed accordion skeleton — visible but disabled */}
+              <div className="absolute inset-0 overflow-hidden px-4 pt-4 space-y-3 opacity-[0.12] pointer-events-none select-none" aria-hidden="true">
+                {/* Dummy canvas header */}
+                <div className="flex items-center justify-between px-4 mb-2" style={{ height: 45, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                  <div className="h-4 w-48 rounded-full" style={{ background: "rgba(255,255,255,0.15)" }} />
+                  <div className="h-8 w-20 rounded-xl" style={{ background: "rgba(99,102,241,0.3)" }} />
                 </div>
-                <h2 className="text-xl font-bold text-white mb-2">Preaching Prep</h2>
-                <p className="text-sm mb-6" style={{ color: "rgba(255,255,255,0.3)" }}>
-                  Start a new sermon draft to begin preparing your message.
-                </p>
-                <div className="flex flex-col items-center gap-3">
-                  <button onClick={handleNew}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all hover:scale-105 active:scale-95"
-                    style={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6)", color: "#fff" }}>
-                    <Plus size={16} /> New Sermon Draft
-                  </button>
-                  <button onClick={() => setFreeCanvasOpen(true)}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all hover:scale-105 active:scale-95"
-                    style={{ background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.1)" }}>
-                    <Plus size={16} /> Create in Free Canvas
-                  </button>
+                {["SERVICE INFO","MAIN TITLE","INTRODUCTION","MAIN PASSAGE","KEY POINTS","FREE NOTES & ILLUSTRATIONS","APPLICATION / CHALLENGE","END / CLOSING PRAYER"].map(label => (
+                  <div key={label} className="rounded-2xl flex items-center gap-4 px-5"
+                    style={{ height: 56, background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                    <div className="w-4 h-4 rounded-full" style={{ background: "rgba(255,255,255,0.2)" }} />
+                    <span className="text-[13px] font-bold uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.5)" }}>{label}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Frosted-glass overlay */}
+              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center"
+                style={{ background: "rgba(10,10,22,0.75)", backdropFilter: "blur(8px)" }}>
+                <div className="text-center px-8 max-w-sm">
+                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5"
+                    style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)" }}>
+                    <BookOpen size={26} style={{ color: "rgba(99,102,241,0.4)" }} />
+                  </div>
+                  <h2 className="text-[18px] font-bold mb-2" style={{ color: "rgba(255,255,255,0.4)" }}>Canvas is Locked</h2>
+                  <p className="text-[13px] leading-relaxed" style={{ color: "rgba(255,255,255,0.22)" }}>
+                    Click <span style={{ color: "#818cf8", fontWeight: 700 }}>+ New</span> in the left panel to create your sermon draft and unlock all editing tools.
+                  </p>
                 </div>
               </div>
             </div>
@@ -1757,6 +2598,7 @@ export default function PreachingView({ currentUser, onToast }: Props) {
               bibleOpen={bibleOpen} draftsOpen={draftsOpen}
               onToggleBible={() => setBibleOpen(true)} onToggleDrafts={() => setDraftsOpen(true)}
               onFieldFocus={(el, tgt) => { lastFocusedEl.current = el; lastFocusedTarget.current = tgt; }}
+              openSection={openSection} onSetSection={setOpenSection}
             />
           )}
         </div>
@@ -1764,8 +2606,23 @@ export default function PreachingView({ currentUser, onToast }: Props) {
 
         {/* Bible — right collapsible */}
         {bibleOpen ? (
-          <div className="flex w-[290px] xl:w-[320px] h-full shrink-0 flex-col"
-            style={{ borderLeft: "1px solid rgba(255,255,255,0.06)" }}>
+          <div className="flex h-full shrink-0 flex-col" style={{ width: 300, borderLeft: "1px solid rgba(255,255,255,0.06)", position: "relative" }}>
+            {/* Disabled overlay when no draft is active */}
+            {!activeDraft && (
+              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center"
+                style={{ background: "rgba(10,10,22,0.82)", backdropFilter: "blur(4px)", borderLeft: "1px solid rgba(255,255,255,0.06)" }}>
+                <div className="flex flex-col items-center gap-3 px-6 text-center">
+                  <div className="flex items-center justify-center rounded-2xl"
+                    style={{ width: 52, height: 52, background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.15)" }}>
+                    <BookOpen size={22} style={{ color: "rgba(99,102,241,0.35)" }} />
+                  </div>
+                  <p className="text-[13px] font-bold" style={{ color: "rgba(255,255,255,0.25)" }}>Bible Locked</p>
+                  <p className="text-[11px] leading-relaxed" style={{ color: "rgba(255,255,255,0.15)" }}>
+                    Create a draft first to unlock the Bible panel and start inserting verses.
+                  </p>
+                </div>
+              </div>
+            )}
             <BiblePanel onCollect={handleCollect} onClose={() => setBibleOpen(false)}
             onInsert={handleInsertVerse} />
           </div>
@@ -1840,6 +2697,7 @@ export default function PreachingView({ currentUser, onToast }: Props) {
                   onToggleBible={() => setMobileTab("bible")}
                   onToggleDrafts={() => setMobileTab("sermons")}
                   onFieldFocus={(el, tgt) => { lastFocusedEl.current = el; lastFocusedTarget.current = tgt; }}
+                  openSection={openSection} onSetSection={setOpenSection}
                 />
               )}
             </div>
@@ -1860,7 +2718,11 @@ export default function PreachingView({ currentUser, onToast }: Props) {
               onSelect={id => { setActiveDraftId(id); setMobileTab("canvas"); }}
               onNew={() => { handleNew(); setMobileTab("canvas"); }}
               onDelete={handleDelete} onSubmit={handleSubmitDraft}
+              onRecallEdit={id => { handleRecallEdit(id); setMobileTab("canvas"); }}
+              onPreview={id => setPreviewDraftId(id)}
               onClose={() => setMobileTab("canvas")}
+              onInfo={() => { setInfoOpen(true); if (infoGlowing) { localStorage.setItem('wf_preaching_info_seen','1'); setInfoGlowing(false); } }}
+              infoGlowing={infoGlowing}
               currentUserName={currentUser?.name || ""}
             />
           )}
@@ -1871,8 +2733,8 @@ export default function PreachingView({ currentUser, onToast }: Props) {
           style={{ background: "#090913", borderTop: "1px solid rgba(255,255,255,0.08)",
             paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
           {([
-          { id: "canvas"  as const, icon: <FileText size={22} />,  label: "Canvas" },
             { id: "sermons" as const, icon: <Mic2 size={22} />,     label: "Sermons" },
+            { id: "canvas"  as const, icon: <FileText size={22} />,  label: "Canvas" },
             { id: "bible"   as const, icon: <BookOpen size={22} />, label: "Bible" },
           ]).map(tab => {
             const active = mobileTab === tab.id;
@@ -1894,5 +2756,32 @@ export default function PreachingView({ currentUser, onToast }: Props) {
         </div>
       </div>
     </div>
+
+    {/* ── Confirm Modal ── */}
+    <ConfirmModal
+      open={confirmState.open}
+      title={confirmState.title}
+      message={confirmState.message}
+      detail={confirmState.detail}
+      confirmLabel={confirmState.confirmLabel}
+      confirmColor={confirmState.confirmColor}
+      loading={confirmState.loading}
+      onConfirm={confirmState.onConfirm}
+      onCancel={closeConfirm}
+    />
+
+    {/* ── Preview Modal (from draft list eye button) ── */}
+    {previewDraft && (
+      <SermonPreviewModal
+        draft={previewDraft}
+        onClose={() => setPreviewDraftId(null)}
+      />
+    )}
+
+    {/* ── Preaching Info Modal ── */}
+    {infoOpen && (
+      <PreachingInfoModal onClose={() => setInfoOpen(false)} />
+    )}
+    </>
   );
 }

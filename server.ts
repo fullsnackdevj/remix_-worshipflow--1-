@@ -2186,7 +2186,73 @@ app.get("/api/bible/gateway", async (req: any, res: any) => {
   }
 });
 
+// ── BIBLE SEARCH PROXY ────────────────────────────────────────────────────────
+// GET /api/bible/search?q=born+again&version=NIV&page=1
+// Proxies BibleGateway quicksearch and returns parsed verse results.
+app.get("/api/bible/search", async (req: any, res: any) => {
+  if (res.headersSent) return;
+  const { q, version, page } = req.query as Record<string, string>;
+  if (!q || q.trim().length < 2) return res.status(400).json({ error: "Query too short" });
+
+  try {
+    const ver      = (version || "NIV").replace(/[^A-Z0-9]/gi, "");
+    const pageNum  = Math.max(1, parseInt(page || "1", 10));
+    const startAt  = (pageNum - 1) * 25 + 1;
+    const url      = `https://www.biblegateway.com/quicksearch/?search=${encodeURIComponent(q.trim())}&version=${ver}&resultspp=25&startnum=${startAt}&interface=print`;
+
+    const bgRes = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml",
+        "Accept-Language": "en-US,en;q=0.9,tl;q=0.8",
+      },
+    });
+    if (!bgRes.ok) return res.status(502).json({ error: "BibleGateway unavailable" });
+
+    const html = await bgRes.text();
+
+    // Parse total results count — "N Bible Results"
+    const totalMatch = html.match(/(\d[\d,]*)\s+(?:Bible\s+)?Results?/i);
+    const total = totalMatch ? parseInt(totalMatch[1].replace(/,/g, ""), 10) : 0;
+
+    // Each result is an <li class="row bible-item" data-osis="...">
+    // Reference: <a class="bible-item-title">Genesis 5:22</a>
+    // Text: <div class="bible-item-text ...">...</div>
+    const results: { reference: string; text: string }[] = [];
+
+    const liReg = /<li[^>]*class="[^"]*bible-item[^"]*"[^>]*>([\s\S]*?)<\/li>/gi;
+    let liMatch;
+    while ((liMatch = liReg.exec(html)) !== null) {
+      const cell = liMatch[1];
+
+      // Reference from .bible-item-title link text
+      const refMatch = cell.match(/<a[^>]*bible-item-title[^>]*>([^<]+)<\/a>/i);
+      const reference = refMatch ? refMatch[1].trim() : "";
+
+      // Text from .bible-item-text — strip <b> bold wrappers (highlighting), other tags, extras
+      let textRaw = cell.replace(/<b>/gi, "").replace(/<\/b>/gi, "");
+      const textBlockMatch = textRaw.match(/<div[^>]*bible-item-text[^>]*>([\s\S]*?)<div[^>]*bible-item-extras/i);
+      let text = (textBlockMatch ? textBlockMatch[1] : textRaw)
+        .replace(/<[^>]+>/g, " ")
+        .replace(/&amp;/g, "&").replace(/&nbsp;/g, " ")
+        .replace(/&ldquo;/g, "\u201c").replace(/&rdquo;/g, "\u201d")
+        .replace(/&lsquo;/g, "\u2018").replace(/&rsquo;/g, "\u2019")
+        .replace(/&mdash;/g, "\u2014").replace(/&ndash;/g, "\u2013")
+        .replace(/&#039;/g, "'").replace(/&quot;/g, '"')
+        .replace(/\s*\(\s*[A-Z]+\s*\)\s*/g, " ")
+        .replace(/\s+/g, " ").trim();
+
+      if (reference && text && text.length > 5) results.push({ reference, text });
+    }
+
+    return res.json({ results, total, page: pageNum, perPage: 25 });
+  } catch (e) {
+    if (!res.headersSent) res.status(500).json({ error: "Search proxy error" });
+  }
+});
+
 // ── PREACHING DRAFTS ──────────────────────────────────────────────────────────
+
 
 // GET /api/preaching-drafts?userId=... — list user's drafts, newest first
 app.get("/api/preaching-drafts", async (req, res) => {
@@ -2246,6 +2312,62 @@ app.delete("/api/preaching-drafts/:id", async (req, res) => {
     await firestore.collection("preachingDrafts").doc(req.params.id).delete();
     res.json({ ok: true });
   } catch (e) { if (!res.headersSent) res.status(500).json({ error: "Failed" }); }
+});
+
+// PATCH /api/preaching-drafts/:id/status — submit or recall a draft
+// body: { status: 'submitted' | 'draft', submittedBy?: string, submittedByName?: string }
+app.patch("/api/preaching-drafts/:id/status", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  try {
+    const ref = firestore.collection("preachingDrafts").doc(req.params.id);
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ error: "Draft not found" });
+    const { status, submittedBy, submittedByName } = req.body as {
+      status: string; submittedBy?: string; submittedByName?: string;
+    };
+    const updateData: Record<string, any> = {
+      status,
+      updatedAt: new Date().toISOString(),
+    };
+    if (status === "submitted") {
+      updateData.submittedAt = new Date().toISOString();
+      updateData.submittedBy = submittedBy ?? "";
+      updateData.submittedByName = submittedByName ?? "";
+      // Increment version counter each time submitted
+      const prevVersion: number = (snap.data()?.submissionVersion ?? 0) as number;
+      updateData.submissionVersion = prevVersion + 1;
+    } else {
+      // recalled back to draft — clear submission metadata but keep version counter
+      // so the next re-submit still shows 'Latest Version' badge
+      updateData.submittedAt = null;
+      updateData.submittedBy = null;
+      updateData.submittedByName = null;
+    }
+    await ref.update(updateData);
+    res.json({ ok: true, submissionVersion: updateData.submissionVersion });
+  } catch (e: any) {
+    console.error("[preaching-drafts PATCH status]", e?.message ?? e);
+    if (!res.headersSent) res.status(500).json({ error: "Failed" });
+  }
+});
+
+// GET /api/preaching-drafts/submitted — all submitted drafts (Audio/Tech + Admin view)
+app.get("/api/preaching-drafts/submitted", async (_req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.json([]);
+  try {
+    const snap = await firestore.collection("preachingDrafts")
+      .where("status", "==", "submitted")
+      .limit(100)
+      .get();
+    const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as any[];
+    docs.sort((a, b) => (b.submittedAt ?? b.updatedAt ?? "").localeCompare(a.submittedAt ?? a.updatedAt ?? ""));
+    res.json(docs);
+  } catch (e: any) {
+    console.error("[preaching-drafts/submitted GET]", e?.message ?? e);
+    if (!res.headersSent) res.status(500).json({ error: "Failed" });
+  }
 });
 
 // ── FREEDOM WALL ─────────────────────────────────────────────────────────────

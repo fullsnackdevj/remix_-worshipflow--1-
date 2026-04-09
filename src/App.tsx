@@ -28,12 +28,13 @@ const SongsView        = lazy(() => import("./SongsView"));
 const MembersView      = lazy(() => import("./MembersView"));
 const TeamNotesView    = lazy(() => import("./TeamNotesView"));
 const FreedomWallView  = lazy(() => import("./FreedomWallView"));
-const PreachingView    = lazy(() => import("./PreachingView"));
+const PreachingView       = lazy(() => import("./PreachingView"));
+const DesignRequestsView  = lazy(() => import("./DesignRequestsView"));
 // AutoTextarea & DatePicker are tiny UI primitives — import statically to avoid extra chunk round-trips
 import AutoTextarea from "./AutoTextarea";
 import DatePicker from "./DatePicker";
 
-import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, BookOpen, LayoutGrid, Mic2, Copy, Pencil, Shield, Mail, Bell, Lock, AlertTriangle, CheckCircle, HelpCircle, FlaskConical, NotebookPen, SquareKanban, Feather } from "lucide-react";
+import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, BookOpen, LayoutGrid, Mic2, Copy, Pencil, Shield, Mail, Bell, Lock, AlertTriangle, CheckCircle, HelpCircle, FlaskConical, NotebookPen, SquareKanban, Feather, Palette } from "lucide-react";
 import { Song, Tag, Member, ScheduleMember, Schedule } from "./types";
 import LineupPlayer, { LineupTrack, CurrentUser } from "./LineupPlayer";
 import SongsLibraryPlayer, { LibraryTrack } from "./SongsLibraryPlayer";
@@ -317,14 +318,21 @@ export default function App() {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
   const [isDarkMode, setIsDarkMode] = useState(true);
-  const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "playground" | "admin" | "team-notes" | "rehearsal" | "freedom-wall" | "preaching">("dashboard");
+  const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "playground" | "admin" | "team-notes" | "rehearsal" | "freedom-wall" | "preaching" | "design-requests">("dashboard");
+  // Bump this key every time user navigates to Design Requests — forces a remount + fresh fetch
+  const [designRequestsKey, setDesignRequestsKey] = useState(0);
+  useEffect(() => { if (currentView === "design-requests") setDesignRequestsKey(k => k + 1); }, [currentView]);
 
   // ── New-module glow: glows until user first visits the module ────────────
   // To add a future new module: add a new useState with its own localStorage key
   const [unseenPlanner, setUnseenPlanner] = useState(() => !localStorage.getItem("wf_seen_planner"));
   const [unseenFreedomWall, setUnseenFreedomWall] = useState(() => !localStorage.getItem("wf_seen_freedom_wall"));
+  const [unseenPreaching, setUnseenPreaching] = useState(() => !localStorage.getItem("wf_seen_preaching"));
+  const [unseenDesignRequests, setUnseenDesignRequests] = useState(() => !localStorage.getItem("wf_seen_design_requests"));
   const markPlannerSeen = () => { if (unseenPlanner) { localStorage.setItem("wf_seen_planner", "1"); setUnseenPlanner(false); } };
   const markFreedomWallSeen = () => { if (unseenFreedomWall) { localStorage.setItem("wf_seen_freedom_wall", "1"); setUnseenFreedomWall(false); } };
+  const markPreachingSeen = () => { if (unseenPreaching) { localStorage.setItem("wf_seen_preaching", "1"); setUnseenPreaching(false); } };
+  const markDesignRequestsSeen = () => { if (unseenDesignRequests) { localStorage.setItem("wf_seen_design_requests", "1"); setUnseenDesignRequests(false); } };
 
   // ── Planner deep-link state (from calendar task card ⇒ open specific card) ──
   const [pendingPlannerBoardId, setPendingPlannerBoardId] = useState<string | null>(null);
@@ -333,7 +341,7 @@ export default function App() {
   // 📱 Auto-open mobile sidebar when there are unseen new modules
   // Only on mobile (< 1024px). Stops once all modules are seen.
   useEffect(() => {
-    const hasUnseen = unseenPlanner || unseenFreedomWall;
+    const hasUnseen = unseenPlanner || unseenFreedomWall || unseenPreaching || unseenDesignRequests;
     if (hasUnseen && window.innerWidth < 1024) {
       // Small delay so the app finishes the initial render before sliding the drawer open
       const t = setTimeout(() => setIsMobileMenuOpen(true), 400);
@@ -1234,6 +1242,39 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
             </button>
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Freedom Wall</span>}
           </div>
+
+          {/* Design Requests — Audio/Tech + Admin only */}
+          {(isRoleAdmin || effectiveRole === "audio_tech") && (
+            <div className="relative group/tip">
+              <button
+                onClick={() => { setCurrentView("design-requests"); setIsMobileMenuOpen(false); markDesignRequestsSeen(); }}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all font-medium ${
+                  currentView === "design-requests"
+                    ? "bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300"
+                    : unseenDesignRequests
+                      ? "text-violet-400 dark:text-violet-300 hover:bg-violet-900/20"
+                      : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
+                } ${isSidebarCollapsed ? "justify-center" : ""}`}
+                style={unseenDesignRequests && currentView !== "design-requests" ? {
+                  boxShadow: "0 0 0 1px rgba(167,139,250,0.4), 0 0 12px rgba(167,139,250,0.25)",
+                  animation: "newModulePulse 2s ease-in-out infinite",
+                } : {}}
+                title="Design Requests"
+              >
+                <span className="relative shrink-0">
+                  <Palette size={20} />
+                  {unseenDesignRequests && currentView !== "design-requests" && (
+                    <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-violet-400 border border-[#1a1f2e]" />
+                  )}
+                </span>
+                {!isSidebarCollapsed && <span>Design Requests</span>}
+                {!isSidebarCollapsed && unseenDesignRequests && currentView !== "design-requests" && (
+                  <span className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-400 border border-violet-500/30">NEW</span>
+                )}
+              </button>
+              {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Design Requests</span>}
+            </div>
+          )}
           {isRoleAdmin && (
             <div className="relative group/tip">
               <button
@@ -1273,21 +1314,34 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
           {/* Preaching — Admin only; everyone else sees Coming Soon */}
           <div className="relative group/tip">
             {isRoleAdmin ? (
-              // Admin: full access button
+              // Admin: full access button with glow
               <button
-                onClick={() => { setCurrentView("preaching"); setIsMobileMenuOpen(false); }}
+                onClick={() => { setCurrentView("preaching"); setIsMobileMenuOpen(false); markPreachingSeen(); }}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium transition-all ${
                   currentView === "preaching"
                     ? "bg-indigo-600/20 text-indigo-400"
-                    : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800/60 hover:text-gray-800 dark:hover:text-gray-200"
+                    : unseenPreaching
+                      ? "text-indigo-400 dark:text-indigo-300 hover:bg-indigo-900/20"
+                      : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800/60 hover:text-gray-800 dark:hover:text-gray-200"
                 } ${isSidebarCollapsed ? "justify-center" : ""}`}
+                style={unseenPreaching && currentView !== "preaching" ? {
+                  boxShadow: "0 0 0 1px rgba(99,102,241,0.4), 0 0 12px rgba(99,102,241,0.25)",
+                  animation: "newModulePulse 2s ease-in-out infinite",
+                } : {}}
                 title="Preaching"
               >
-                <BookOpen size={20} className="shrink-0" />
+                <span className="relative shrink-0">
+                  <BookOpen size={20} />
+                  {unseenPreaching && currentView !== "preaching" && (
+                    <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-indigo-400 border border-[#1a1f2e]" />
+                  )}
+                </span>
                 {!isSidebarCollapsed && (
                   <span className="flex items-center gap-2">
                     Preaching
-                    <span className="text-[10px] font-bold uppercase tracking-wider bg-indigo-500/20 text-indigo-400 px-1.5 py-0.5 rounded-full">New</span>
+                    {unseenPreaching && currentView !== "preaching" && (
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">NEW</span>
+                    )}
                   </span>
                 )}
               </button>
@@ -1297,13 +1351,13 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium cursor-not-allowed opacity-40 ${
                   isSidebarCollapsed ? "justify-center" : ""
                 }`}
-                title="Coming Soon — Admin only"
+                title="Preaching — Admin only"
               >
                 <BookOpen size={20} className="shrink-0 text-gray-400" />
                 {!isSidebarCollapsed && (
                   <span className="flex items-center gap-2 text-gray-400">
                     Preaching
-                    <span className="text-[10px] font-bold uppercase tracking-wider bg-gray-500/20 text-gray-500 px-1.5 py-0.5 rounded-full">Soon</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider bg-gray-500/20 text-gray-500 px-1.5 py-0.5 rounded-full">Admin</span>
                   </span>
                 )}
               </div>
@@ -1378,7 +1432,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
 
           <div className="flex-1 flex items-center min-w-0">
             <h1 className="text-base sm:text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap truncate">
-              {currentView === "dashboard" ? "Dashboard" : currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : currentView === "playground" ? "Playground" : currentView === "planner" ? "Ministry Hub" : currentView === "team-notes" ? "Notes" : currentView === "rehearsal" ? "Rehearsal" : currentView === "freedom-wall" ? "Freedom Wall" : currentView === "preaching" ? "Preaching" : "Song Management"}
+              {currentView === "dashboard" ? "Dashboard" : currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : currentView === "playground" ? "Playground" : currentView === "planner" ? "Ministry Hub" : currentView === "team-notes" ? "Notes" : currentView === "rehearsal" ? "Rehearsal" : currentView === "freedom-wall" ? "Freedom Wall" : currentView === "preaching" ? "Preaching" : currentView === "design-requests" ? "Design Requests" : "Song Management"}
             </h1>
           </div>
           <div className="flex items-center gap-2">
@@ -1515,7 +1569,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
         <main className="flex-1 overflow-y-auto overflow-x-hidden bg-gray-50 dark:bg-gray-900">
           <div className="flex flex-col h-full">
             <div className={`view-enter flex-1 overflow-x-hidden ${
-                currentView === "freedom-wall" || currentView === "preaching"
+                currentView === "freedom-wall" || currentView === "preaching" || currentView === "design-requests"
                   ? "overflow-y-hidden p-0 flex flex-col"
                   : "overflow-y-auto p-4 sm:p-6"
               }`}>
@@ -1711,6 +1765,25 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                   currentUserId={user?.uid ?? null}
                   onToast={showToast}
                 />
+              ) : currentView === "design-requests" ? (
+                (isRoleAdmin || effectiveRole === "audio_tech") ? (
+                  <DesignRequestsView
+                    key={designRequestsKey}
+                    currentUserId={user?.uid ?? ""}
+                    isAdmin={isRoleAdmin}
+                    onToast={showToast}
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full gap-4 px-6 text-center">
+                    <div className="w-16 h-16 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                      <Palette size={28} className="text-gray-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-gray-700 dark:text-gray-300">Design Requests</h2>
+                      <p className="text-sm text-gray-500 dark:text-gray-500 mt-1">This section is for Audio / Tech team members.</p>
+                    </div>
+                  </div>
+                )
               ) : currentView === "preaching" ? (
                 isRoleAdmin ? (
                   <PreachingView

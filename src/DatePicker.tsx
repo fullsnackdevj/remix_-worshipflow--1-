@@ -105,31 +105,37 @@ export default function DatePicker({
     <div ref={containerRef} className="relative">
       {/* ── Trigger ── */}
       {variant === "inline" ? (
-        // Compact dark pill — for canvas/dark-bg contexts
+        // Compact dark pill — for canvas/dark-bg contexts — full-width to match adjacent fields
         <button
           type="button"
           onClick={handleOpen}
-          className="flex items-center gap-1.5 whitespace-nowrap transition-all active:scale-95"
+          className="w-full flex items-center justify-between gap-2 transition-all active:scale-[0.99]"
           style={{
-            padding: "4px 10px",
+            height: 40,
+            boxSizing: "border-box",
+            padding: "0 12px",
             borderRadius: 8,
-            fontSize: 11,
+            fontSize: 14,
             fontWeight: 600,
-            background: open ? "rgba(245,158,11,0.18)" : "rgba(245,158,11,0.08)",
-            border: `1px solid ${open ? "rgba(245,158,11,0.4)" : "rgba(245,158,11,0.18)"}`,
-            color: value ? "rgba(251,191,36,0.95)" : "rgba(245,158,11,0.5)",
+            background: open ? "rgba(245,158,11,0.15)" : value ? "rgba(245,158,11,0.08)" : "rgba(255,255,255,0.06)",
+            border: `1px solid ${open ? "rgba(245,158,11,0.35)" : value ? "rgba(245,158,11,0.2)" : "rgba(255,255,255,0.1)"}`,
+            color: value ? "rgba(251,191,36,0.95)" : "rgba(255,255,255,0.35)",
           }}
         >
-          <CalendarDays size={11} />
-          <span>{value ? formatDisplay(value) : placeholder}</span>
-          {value && (
-            <span role="button" onClick={e => { e.stopPropagation(); onChange(""); }}
-              style={{ marginLeft: 2, color: "rgba(245,158,11,0.4)" }}
-              className="hover:text-red-400 transition-colors cursor-pointer">
-              <X size={10} />
-            </span>
-          )}
-          <ChevronDown size={11} style={{ opacity: 0.5 }} className={`transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+          <div className="flex items-center gap-2">
+            <CalendarDays size={14} style={{ color: value ? "rgba(245,158,11,0.7)" : "rgba(255,255,255,0.25)" }} />
+            <span>{value ? formatDisplay(value) : placeholder}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {value && (
+              <span role="button" onClick={e => { e.stopPropagation(); onChange(""); }}
+                style={{ color: "rgba(245,158,11,0.4)" }}
+                className="hover:text-red-400 transition-colors cursor-pointer">
+                <X size={13} />
+              </span>
+            )}
+            <ChevronDown size={14} style={{ opacity: 0.4 }} className={`transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+          </div>
         </button>
       ) : (
         // Standard form-style trigger

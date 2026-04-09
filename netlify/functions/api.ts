@@ -3178,6 +3178,56 @@ Rules:
         } catch (e) { return json(500, { error: "Failed to delete draft" }); }
     }
 
+    // PATCH /preaching-drafts/:id/status — submit or recall
+    const preachingStatusMatch = rawPath.match(/^\/preaching-drafts\/([^/]+)\/status$/);
+    if (preachingStatusMatch && method === "PATCH") {
+        const draftId = preachingStatusMatch[1];
+        try {
+            const ref = firestore.collection("preachingDrafts").doc(draftId);
+            const snap = await ref.get();
+            if (!snap.exists) return json(404, { error: "Draft not found" });
+            const { status, submittedBy, submittedByName } = body as {
+                status: string; submittedBy?: string; submittedByName?: string;
+            };
+            const updateData: Record<string, any> = {
+                status,
+                updatedAt: new Date().toISOString(),
+            };
+            if (status === "submitted") {
+                updateData.submittedAt = new Date().toISOString();
+                updateData.submittedBy = submittedBy ?? "";
+                updateData.submittedByName = submittedByName ?? "";
+                // Increment version counter each time submitted
+                const prevVersion: number = (snap.data()?.submissionVersion ?? 0) as number;
+                updateData.submissionVersion = prevVersion + 1;
+            } else {
+                // recalled back to draft — clear metadata but keep version counter
+                updateData.submittedAt = null;
+                updateData.submittedBy = null;
+                updateData.submittedByName = null;
+            }
+            await ref.update(updateData);
+            return json(200, { ok: true, submissionVersion: updateData.submissionVersion });
+        } catch (e: any) {
+            return json(500, { error: "Failed to update status" });
+        }
+    }
+
+    // GET /preaching-drafts/submitted — all submitted drafts (Audio/Tech + Admin)
+    if (rawPath === "/preaching-drafts/submitted" && method === "GET") {
+        try {
+            const snap = await firestore.collection("preachingDrafts")
+                .where("status", "==", "submitted")
+                .limit(100)
+                .get();
+            const docs = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+            docs.sort((a, b) => (b.submittedAt ?? b.updatedAt ?? "").localeCompare(a.submittedAt ?? a.updatedAt ?? ""));
+            return json(200, docs);
+        } catch (e: any) {
+            return json(500, { error: "Failed to fetch submitted drafts" });
+        }
+    }
+
     // ─── BIBLE GATEWAY PROXY ───────────────────────────────────────────────────
     // GET /bible/gateway?book=John&chapter=3&version=NIV
     if (rawPath === "/bible/gateway" && method === "GET") {
@@ -3242,6 +3292,62 @@ Rules:
         } catch (e: any) {
             console.error("[bible/gateway]", e?.message ?? e);
             return json(500, { error: "Proxy error" });
+        }
+    }
+
+    // GET /bible/search?q=born+again&version=NIV&page=1
+    if (rawPath === "/bible/search" && method === "GET") {
+        const q       = event.queryStringParameters?.q;
+        const version = event.queryStringParameters?.version ?? "NIV";
+        const pageNum = Math.max(1, parseInt(event.queryStringParameters?.page ?? "1", 10));
+        if (!q || q.trim().length < 2) return json(400, { error: "Query too short" });
+
+        try {
+            const ver     = version.replace(/[^A-Z0-9]/gi, "");
+            const startAt = (pageNum - 1) * 25 + 1;
+            const url     = `https://www.biblegateway.com/quicksearch/?search=${encodeURIComponent(q.trim())}&version=${ver}&resultspp=25&startnum=${startAt}&interface=print`;
+
+            const bgRes = await fetch(url, {
+                headers: {
+                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36",
+                    "Accept": "text/html,application/xhtml+xml",
+                    "Accept-Language": "en-US,en;q=0.9,tl;q=0.8",
+                },
+            });
+            if (!bgRes.ok) return json(502, { error: "BibleGateway unavailable" });
+
+            const html = await bgRes.text();
+
+            const totalMatch = html.match(/(\d[\d,]*)\s+(?:Bible\s+)?Results?/i);
+            const total = totalMatch ? parseInt(totalMatch[1].replace(/,/g, ""), 10) : 0;
+
+            const results: { reference: string; text: string }[] = [];
+            const liReg = /<li[^>]*class="[^"]*bible-item[^"]*"[^>]*>([\s\S]*?)<\/li>/gi;
+            let liMatch;
+            while ((liMatch = liReg.exec(html)) !== null) {
+                const cell = liMatch[1];
+                const refMatch = cell.match(/<a[^>]*bible-item-title[^>]*>([^<]+)<\/a>/i);
+                const reference = refMatch ? refMatch[1].trim() : "";
+
+                let textRaw = cell.replace(/<b>/gi, "").replace(/<\/b>/gi, "");
+                const textBlockMatch = textRaw.match(/<div[^>]*bible-item-text[^>]*>([\s\S]*?)<div[^>]*bible-item-extras/i);
+                let text = (textBlockMatch ? textBlockMatch[1] : textRaw)
+                    .replace(/<[^>]+>/g, " ")
+                    .replace(/&amp;/g, "&").replace(/&nbsp;/g, " ")
+                    .replace(/&ldquo;/g, "\u201c").replace(/&rdquo;/g, "\u201d")
+                    .replace(/&lsquo;/g, "\u2018").replace(/&rsquo;/g, "\u2019")
+                    .replace(/&mdash;/g, "\u2014").replace(/&ndash;/g, "\u2013")
+                    .replace(/&#039;/g, "'").replace(/&quot;/g, '"')
+                    .replace(/\s*\(\s*[A-Z]+\s*\)\s*/g, " ")
+                    .replace(/\s+/g, " ").trim();
+
+                if (reference && text && text.length > 5) results.push({ reference, text });
+            }
+
+            return json(200, { results, total, page: pageNum, perPage: 25 });
+        } catch (e: any) {
+            console.error("[bible/search]", e?.message ?? e);
+            return json(500, { error: "Search proxy error" });
         }
     }
 
