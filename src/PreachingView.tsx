@@ -2664,23 +2664,38 @@ export default function PreachingView({ currentUser, onToast }: Props) {
               ) : freeCanvasOpen ? (
                 <FreeCanvas onClose={() => setFreeCanvasOpen(false)} />
               ) : !activeDraft ? (
-                <div className="flex-1 flex items-center justify-center">
-                  <div className="text-center px-8">
-                    <div className="w-16 h-20 rounded-2xl flex items-center justify-center mx-auto mb-5"
-                      style={{ background: "linear-gradient(135deg, rgba(99,102,241,0.2), rgba(139,92,246,0.15))", border: "1px solid rgba(99,102,241,0.2)" }}>
-                      <BookOpen size={28} className="text-indigo-400" />
+                <div className="relative flex-1 overflow-hidden">
+                  {/* Grayed skeleton */}
+                  <div className="absolute inset-0 overflow-hidden px-4 pt-4 space-y-3 opacity-[0.12] pointer-events-none select-none" aria-hidden="true">
+                    <div className="flex items-center justify-between px-4 mb-2" style={{ height: 45, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                      <div className="h-4 w-48 rounded-full" style={{ background: "rgba(255,255,255,0.15)" }} />
+                      <div className="h-8 w-20 rounded-xl" style={{ background: "rgba(99,102,241,0.3)" }} />
                     </div>
-                    <h2 className="text-xl font-bold text-white mb-2">Preaching Prep</h2>
-                    <p className="text-sm mb-6" style={{ color: "rgba(255,255,255,0.3)" }}>
-                      Start a new sermon draft to begin preparing your message.
-                    </p>
-                    <div className="flex flex-col items-center gap-3">
+                    {["SERVICE INFO","MAIN TITLE","INTRODUCTION","MAIN PASSAGE","KEY POINTS"].map(label => (
+                      <div key={label} className="rounded-2xl flex items-center gap-4 px-5"
+                        style={{ height: 56, background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                        <div className="w-4 h-4 rounded-full" style={{ background: "rgba(255,255,255,0.2)" }} />
+                        <span className="text-[13px] font-bold uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.5)" }}>{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Frosted lock overlay */}
+                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center"
+                    style={{ background: "rgba(10,10,22,0.75)", backdropFilter: "blur(8px)" }}>
+                    <div className="text-center px-8 max-w-sm">
+                      <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5"
+                        style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)" }}>
+                        <BookOpen size={26} style={{ color: "rgba(99,102,241,0.4)" }} />
+                      </div>
+                      <h2 className="text-[18px] font-bold mb-2" style={{ color: "rgba(255,255,255,0.4)" }}>Canvas is Locked</h2>
+                      <p className="text-[13px] leading-relaxed mb-6" style={{ color: "rgba(255,255,255,0.22)" }}>
+                        Tap <span style={{ color: "#818cf8", fontWeight: 700 }}>+ New</span> to create your sermon draft and unlock all editing tools.
+                      </p>
                       <button onClick={handleNew}
-                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all active:scale-95"
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all active:scale-95 mx-auto"
                         style={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6)", color: "#fff" }}>
                         <Plus size={16} /> New Sermon Draft
                       </button>
-
                     </div>
                   </div>
                 </div>
@@ -2701,11 +2716,26 @@ export default function PreachingView({ currentUser, onToast }: Props) {
 
           {/* BIBLE TAB */}
           {mobileTab === "bible" && (
-            <BiblePanel
-              onCollect={v => { handleCollect(v); setMobileTab("canvas"); }}
-              onClose={() => setMobileTab("canvas")}
-              onInsert={handleInsertVerse}
-            />
+            !activeDraft ? (
+              <div className="flex-1 flex items-center justify-center h-full" style={{ background: "#0e0e1c" }}>
+                <div className="text-center px-8">
+                  <div className="flex items-center justify-center rounded-2xl mb-4 mx-auto"
+                    style={{ width: 56, height: 56, background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)" }}>
+                    <BookOpen size={24} style={{ color: "rgba(99,102,241,0.35)" }} />
+                  </div>
+                  <p className="text-[16px] font-bold mb-2" style={{ color: "rgba(255,255,255,0.35)" }}>Bible Locked</p>
+                  <p className="text-[13px] leading-relaxed" style={{ color: "rgba(255,255,255,0.18)" }}>
+                    Create a draft first to unlock the Bible panel and start inserting verses.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <BiblePanel
+                onCollect={v => { handleCollect(v); setMobileTab("canvas"); }}
+                onClose={() => setMobileTab("canvas")}
+                onInsert={handleInsertVerse}
+              />
+            )
           )}
           {/* SERMONS TAB */}
           {mobileTab === "sermons" && (
