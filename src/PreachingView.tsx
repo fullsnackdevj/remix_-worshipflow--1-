@@ -2680,11 +2680,7 @@ export default function PreachingView({ currentUser, onToast }: Props) {
                         style={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6)", color: "#fff" }}>
                         <Plus size={16} /> New Sermon Draft
                       </button>
-                      <button onClick={() => setFreeCanvasOpen(true)}
-                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all active:scale-95"
-                        style={{ background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.1)" }}>
-                        <Plus size={16} /> Create in Free Canvas
-                      </button>
+
                     </div>
                   </div>
                 </div>
