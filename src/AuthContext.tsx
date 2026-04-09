@@ -1,8 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import {
     onAuthStateChanged,
-    signInWithRedirect,
-    getRedirectResult,
+    signInWithPopup,
     signOut,
     User,
 } from "firebase/auth";
@@ -29,11 +28,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [userRole, setUserRole] = useState<string>("member");
 
     useEffect(() => {
-        // Handle result after Google redirect sign-in
-        getRedirectResult(auth).catch((err) => {
-            console.error("Redirect sign-in error:", err);
-        });
-
         const unsub = onAuthStateChanged(auth, async (u) => {
             if (!u) {
                 setUser(null);
@@ -77,7 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const signInWithGoogle = async () => {
         try {
-            await signInWithRedirect(auth, googleProvider);
+            await signInWithPopup(auth, googleProvider);
         } catch (err: any) {
             console.error("Sign-in error:", err);
         }
