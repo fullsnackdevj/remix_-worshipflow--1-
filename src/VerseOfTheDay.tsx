@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { BookOpen, Heart, ChevronDown, ChevronUp, Copy, Check, Loader2 } from "lucide-react";
 import { VERSES } from "./verseData";
+import { useTheme } from "./ThemeContext";
 
 interface Props { userId: string; userName: string; userPhoto: string; }
 
@@ -32,6 +33,8 @@ function dayOfYear() {
 export default function VerseOfTheDay({ userId }: Props) {
     const [dateKey, setDateKey] = useState(todayKey);
     const verse = VERSES[(dayOfYear() - 1 + VERSES.length) % VERSES.length];
+    const { theme } = useTheme();
+    const isLuxury = theme === "luxury";
 
     const [reactions, setReactions] = useState<Record<string, string[]>>({});
     const [showInsight, setShowInsight] = useState(true);
@@ -163,7 +166,11 @@ export default function VerseOfTheDay({ userId }: Props) {
 
 
     return (
-        <div className="rounded-2xl bg-gradient-to-br from-indigo-950/80 via-indigo-900/60 to-violet-900/40 border border-indigo-500/20 shadow-xl overflow-hidden h-full">
+        <div className={`rounded-2xl border shadow-xl overflow-hidden h-full ${
+            isLuxury
+                ? "border border-blue-500/15"
+                : "bg-gradient-to-br from-indigo-950/80 via-indigo-900/60 to-violet-900/40 border-indigo-500/20"
+        }`} style={isLuxury ? { background: "linear-gradient(135deg, rgba(0,0,0,0.98) 0%, rgba(8,14,36,0.96) 60%, rgba(0,8,24,0.94) 100%)" } : undefined}>
 
             {/* Header */}
             <div className="flex items-center justify-between px-5 pt-4 pb-2">
@@ -171,10 +178,10 @@ export default function VerseOfTheDay({ userId }: Props) {
                     <div className="w-7 h-7 rounded-lg bg-indigo-500/20 flex items-center justify-center">
                         <BookOpen size={14} className="text-indigo-300" />
                     </div>
-                    <span className="text-xs font-bold uppercase tracking-widest text-indigo-300">Verse of the Day</span>
+                    <span className={`text-xs font-bold uppercase tracking-widest ${isLuxury ? "text-blue-300" : "text-indigo-300"}`}>Verse of the Day</span>
                 </div>
                 <div className="flex items-center gap-2">
-                    <span className="text-[11px] text-indigo-400/70 font-medium">
+                    <span className={`text-[11px] font-medium ${isLuxury ? "text-blue-400/70" : "text-indigo-400/70"}`}>
                         {new Date().toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric" })}
                     </span>
                     {/* Copy button */}
@@ -204,27 +211,31 @@ export default function VerseOfTheDay({ userId }: Props) {
                 <blockquote className="text-white text-sm sm:text-base font-medium leading-relaxed mb-2">
                     "{verse.text}"
                 </blockquote>
-                <p className="text-indigo-300 text-xs font-bold tracking-wide">— {verse.ref} (NIV)</p>
+                <p className={`text-xs font-bold tracking-wide ${isLuxury ? "text-blue-300" : "text-indigo-300"}`}>— {verse.ref} (NIV)</p>
             </div>
 
             {/* Insight toggle */}
             <div className="px-5 pb-4">
                 <button
                     onClick={() => setShowInsight(v => !v)}
-                    className="flex items-center gap-1.5 text-xs font-semibold text-indigo-300 hover:text-indigo-200 transition-colors"
+                    className={`flex items-center gap-1.5 text-xs font-semibold transition-colors ${isLuxury ? "text-blue-300 hover:text-blue-200" : "text-indigo-300 hover:text-indigo-200"}`}
                 >
                     <Heart size={12} />
                     {showInsight ? "Hide" : "Read"} Insight
                     {showInsight ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                 </button>
                 {showInsight && (
-                    <div className="mt-2 p-3 rounded-xl bg-white/5 border border-indigo-400/10">
-                        <p className="text-sm text-indigo-100/90 leading-relaxed">{verse.insight}</p>
+                    <div className={`mt-2 p-3 rounded-xl bg-white/5 ${isLuxury ? "border border-blue-400/10" : "border border-indigo-400/10"}`}>
+                        <p className={`text-sm leading-relaxed ${isLuxury ? "text-blue-100/90" : "text-indigo-100/90"}`}>{verse.insight}</p>
                         {verse.cross.length > 0 && (
                             <div className="mt-2 flex flex-wrap gap-1.5">
-                                <span className="text-[10px] text-indigo-400 font-semibold uppercase tracking-wider">Cross refs:</span>
+                                <span className={`text-[10px] font-semibold uppercase tracking-wider ${isLuxury ? "text-blue-400" : "text-indigo-400"}`}>Cross refs:</span>
                                 {verse.cross.map(c => (
-                                    <span key={c} className="text-[11px] font-semibold text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded-full">{c}</span>
+                                    <span key={c} className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                                        isLuxury
+                                            ? "text-blue-300 bg-blue-500/10 border border-blue-500/20"
+                                            : "text-indigo-300 bg-indigo-500/10 border border-indigo-500/20"
+                                    }`}>{c}</span>
                                 ))}
                             </div>
                         )}
@@ -259,7 +270,7 @@ export default function VerseOfTheDay({ userId }: Props) {
                     );
                 })}
                 {totalReactions > 0 && (
-                    <span className="text-[11px] text-indigo-400 ml-1">
+                    <span className={`text-[11px] ml-1 ${isLuxury ? "text-blue-400" : "text-indigo-400"}`}>
                         {totalReactions} reaction{totalReactions !== 1 ? "s" : ""}
                     </span>
                 )}

@@ -7,21 +7,222 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   WORSHIPFLOW DESIGN TOKENS
+   All inline-styled modules read these CSS custom properties.
+   Switching html[data-theme="luxury"] flips the entire visual system instantly.
+   ─────────────────────────────────────────────────────────────────────────────
+
+   TOKEN GUIDE
+   --wf-c1     rgb components of primary accent    (for rgba(var(--wf-c1),α))
+   --wf-c2     rgb components of secondary accent
+   --wf-c3     rgb components of tertiary accent
+   --wf-c1-hex full hex of primary accent          (for borders, caretColor, etc.)
+   --wf-c2-hex full hex of secondary accent
+   --wf-c3-hex full hex of tertiary accent
+   --wf-c1-grd gradient pair for accent buttons
+   --wf-bg1…8  dark surface backgrounds (bg1=darkest, bg8=lightest panel)
+   --wf-at…3   accent text colors
+   --wf-overlay dark modal/panel overlay
+   --wf-section-accent  preaching section indicator
+   ───────────────────────────────────────────────────────────────────────────── */
+
+:root,
+html:not([data-theme="luxury"]) {
+  /* ── Accent family: Indigo/Violet ──────────────────────────────────────── */
+  --wf-c1: 99,102,241;         /* indigo-500  #6366f1  (rgba components) */
+  --wf-c2: 139,92,246;         /* violet-500  #8b5cf6  */
+  --wf-c3: 167,139,250;        /* violet-400  #a78bfa  */
+  --wf-c1-hex: #6366f1;        /* primary accent hex */
+  --wf-c2-hex: #8b5cf6;        /* secondary accent hex */
+  --wf-c3-hex: #a78bfa;        /* tertiary accent hex */
+  --wf-c1-grd: linear-gradient(135deg, #6366f1, #8b5cf6); /* button gradient */
+
+  /* ── Surface backgrounds ───────────────────────────────────────────────── */
+  --wf-bg1: #0a0a16;           /* Preaching: sidebar bg */
+  --wf-bg2: #12121e;           /* Preaching: select option bg */
+  --wf-bg3: #141622;           /* Design: modal/card bg */
+  --wf-bg4: #0f1117;           /* Design: page bg */
+  --wf-bg5: #090913;           /* Preaching: outer wrapper */
+  --wf-bg6: #0e0e1c;           /* Preaching: canvas bg */
+  --wf-bg7: #12122a;           /* Preaching: service type options */
+  --wf-bg8: #1a1b2e;           /* Generic dark panel */
+
+  /* ── Accent text ───────────────────────────────────────────────────────── */
+  --wf-at:  #818cf8;
+  --wf-at2: #a5b4fc;
+  --wf-at3: #a78bfa;
+
+  /* ── Overlays & borders ────────────────────────────────────────────────── */
+  --wf-overlay: rgba(10,10,22,0.75);
+  --wf-tab-border: #6366f1;
+}
+
+html[data-theme="luxury"] {
+  /* ── Accent family: Electric Blue ──────────────────────────────────────── */
+  --wf-c1: 59,130,246;         /* blue-500    #3b82f6  */
+  --wf-c2: 37,99,235;          /* blue-600    #2563eb  */
+  --wf-c3: 96,165,250;         /* blue-400    #60a5fa  */
+  --wf-c1-hex: #3b82f6;
+  --wf-c2-hex: #2563eb;
+  --wf-c3-hex: #60a5fa;
+  --wf-c1-grd: linear-gradient(135deg, #1e40af, #3b82f6);
+
+  /* ── Surface backgrounds → pure blacks ─────────────────────────────────── */
+  --wf-bg1: #000;
+  --wf-bg2: #080808;
+  --wf-bg3: #0c0c0c;
+  --wf-bg4: #000;
+  --wf-bg5: #000;
+  --wf-bg6: #000;
+  --wf-bg7: #080808;
+  --wf-bg8: #111;
+
+  /* ── Accent text → blue tones ──────────────────────────────────────────── */
+  --wf-at:  #60a5fa;
+  --wf-at2: #93c5fd;
+  --wf-at3: #60a5fa;
+
+  /* ── Overlays & borders ────────────────────────────────────────────────── */
+  --wf-overlay: rgba(0,0,0,0.85);
+  --wf-tab-border: #3b82f6;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   BLUSH THEME TOKENS  (data-theme="blush")
+   Accent: Deep Rose #db2777 → Pink-500 #ec4899 → Champagne #f472b6
+   Surfaces: Same pure-black OLED base as Luxury
+   ───────────────────────────────────────────────────────────────────────────── */
+html[data-theme="blush"] {
+  /* ── Accent family: Blush Pink ──────────────────────────────────────────── */
+  --wf-c1: 236,72,153;          /* pink-500    #ec4899  */
+  --wf-c2: 219,39,119;          /* pink-600    #db2777  */
+  --wf-c3: 244,114,182;         /* pink-400    #f472b6  */
+  --wf-c1-hex: #ec4899;
+  --wf-c2-hex: #db2777;
+  --wf-c3-hex: #f472b6;
+  --wf-c1-grd: linear-gradient(135deg, #9d174d, #ec4899); /* Deep Rose → Pink */
+
+  /* ── Surface backgrounds → same pure blacks as Luxury ───────────────────── */
+  --wf-bg1: #000;
+  --wf-bg2: #080808;
+  --wf-bg3: #0c0c0c;
+  --wf-bg4: #000;
+  --wf-bg5: #000;
+  --wf-bg6: #000;
+  --wf-bg7: #080808;
+  --wf-bg8: #111;
+
+  /* ── Accent text → Pink / Champagne tones ───────────────────────────────── */
+  --wf-at:  #f472b6;   /* pink-400 — primary accent labels */
+  --wf-at2: #fbcfe8;   /* pink-200 — champagne soft text   */
+  --wf-at3: #f472b6;   /* pink-400 — tertiary labels       */
+
+  /* ── Overlays & borders ────────────────────────────────────────────────── */
+  --wf-overlay: rgba(0,0,0,0.85);
+  --wf-tab-border: #ec4899;
+}
+
 body {
   @apply antialiased text-gray-900 bg-gray-50 dark:text-gray-100 dark:bg-gray-900;
   overflow-x: hidden;          /* prevent horizontal drag / canvas bleed */
   overscroll-behavior: none;   /* stop iOS rubber-band horizontal bounce */
 }
 
-/* ── View transition — triggered by key={currentView} in App.tsx ─────────── */
+/* ── View transition — springy premium feel ─────────────────────────────── */
 @keyframes viewFadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(12px) scale(0.99); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);    }
 }
 .view-enter {
-  animation: viewFadeIn 0.18s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+  animation: viewFadeIn 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
   will-change: opacity, transform;
 }
+
+/* ── Staggered list items — add class stagger-{1..8} to child elements ───── */
+@keyframes staggerFadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.stagger-1 { animation: staggerFadeUp 0.32s cubic-bezier(0.34,1.56,0.64,1) 0.04s both; }
+.stagger-2 { animation: staggerFadeUp 0.32s cubic-bezier(0.34,1.56,0.64,1) 0.10s both; }
+.stagger-3 { animation: staggerFadeUp 0.32s cubic-bezier(0.34,1.56,0.64,1) 0.16s both; }
+.stagger-4 { animation: staggerFadeUp 0.32s cubic-bezier(0.34,1.56,0.64,1) 0.22s both; }
+.stagger-5 { animation: staggerFadeUp 0.32s cubic-bezier(0.34,1.56,0.64,1) 0.28s both; }
+.stagger-6 { animation: staggerFadeUp 0.32s cubic-bezier(0.34,1.56,0.64,1) 0.34s both; }
+.stagger-7 { animation: staggerFadeUp 0.32s cubic-bezier(0.34,1.56,0.64,1) 0.40s both; }
+.stagger-8 { animation: staggerFadeUp 0.32s cubic-bezier(0.34,1.56,0.64,1) 0.46s both; }
+
+/* ── Card hover lift — add .hover-lift to any card ───────────────────────── */
+.hover-lift {
+  transition: transform 0.22s cubic-bezier(0.34,1.56,0.64,1),
+              box-shadow 0.22s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-3px) scale(1.01);
+  box-shadow: 0 12px 32px rgba(99,102,241,0.18), 0 2px 8px rgba(0,0,0,0.12);
+}
+
+/* ── Glow pulse on interactive stat cards ────────────────────────────────── */
+@keyframes statGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(99,102,241,0); }
+  50%       { box-shadow: 0 0 18px 4px rgba(99,102,241,0.15); }
+}
+.stat-glow:hover {
+  animation: statGlow 1.8s ease-in-out infinite;
+}
+
+/* ── Float — for empty-state icons ──────────────────────────────────────── */
+@keyframes float {
+  0%, 100% { transform: translateY(0px);  }
+  50%       { transform: translateY(-8px); }
+}
+.float { animation: float 3.2s ease-in-out infinite; }
+
+/* ── Shimmer skeleton — upgrade over plain animate-pulse ─────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.04) 25%,
+    rgba(255,255,255,0.10) 50%,
+    rgba(255,255,255,0.04) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+  border-radius: 8px;
+}
+
+/* ── Slide in from bottom — for modals, bottom sheets ───────────────────── */
+@keyframes slideUpSpring {
+  from { opacity: 0; transform: translateY(24px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);    }
+}
+.modal-enter {
+  animation: slideUpSpring 0.32s cubic-bezier(0.34,1.56,0.64,1) forwards;
+}
+
+/* ── Fade-in scale — for dropdown menus, tooltips ───────────────────────── */
+@keyframes fadeInScale {
+  from { opacity: 0; transform: scale(0.93) translateY(-4px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0);     }
+}
+.dropdown-enter {
+  animation: fadeInScale 0.18s cubic-bezier(0.34,1.56,0.64,1) forwards;
+  transform-origin: top right;
+}
+
+/* ── Sidebar nav item hover glow ─────────────────────────────────────────── */
+.nav-item {
+  transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+.nav-item:hover {
+  transform: translateX(2px);
+}
+
 
 /* ── New-module sidebar glow pulse ─────────────────────────────────────────── */
 @keyframes newModulePulse {
@@ -285,3 +486,312 @@ button.no-scale:active {
     font-size: max(16px, 1em) !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LUXURY BLACK THEME  (data-theme="luxury")
+   ──────────────────────────────────────────────────────────────────────────
+   Accent: Electric Blue #3B82F6 / #60A5FA
+   Surfaces: Pure black #000 / Elevated #0c0c0c / Panel #1a1a1a
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Smooth theme transition ──────────────────────────────────────────────── */
+body { transition: background-color 0.4s ease, color 0.3s ease; }
+
+/* ── Body background ─────────────────────────────────────────────────────── */
+html[data-theme="luxury"].dark body { background-color: #000 !important; }
+
+/* ── Gray surface overrides ──────────────────────────────────────────────── */
+html[data-theme="luxury"] :is(.dark *).dark\:bg-gray-950,
+html[data-theme="luxury"] :is(.dark *).dark\:bg-gray-900 { background-color: #000 !important; }
+html[data-theme="luxury"] :is(.dark *).dark\:bg-gray-800 { background-color: #0c0c0c !important; }
+html[data-theme="luxury"] :is(.dark *).dark\:bg-gray-700 { background-color: #1a1a1a !important; }
+html[data-theme="luxury"] :is(.dark *).dark\:bg-gray-600 { background-color: #242424 !important; }
+
+/* hover variants */
+html[data-theme="luxury"] :is(.dark *).dark\:hover\:bg-gray-800:hover { background-color: #111 !important; }
+html[data-theme="luxury"] :is(.dark *).dark\:hover\:bg-gray-700\/30:hover { background-color: rgba(255,255,255,0.04) !important; }
+
+/* ── Borders → subtle blue-tinted dark lines ─────────────────────────────── */
+html[data-theme="luxury"] :is(.dark *).dark\:border-gray-700 { border-color: rgba(59,130,246,0.1) !important; }
+html[data-theme="luxury"] :is(.dark *).dark\:border-gray-600 { border-color: rgba(59,130,246,0.18) !important; }
+html[data-theme="luxury"] :is(.dark *).dark\:divide-gray-700 > * + * { border-color: rgba(59,130,246,0.08) !important; }
+
+/* ── Indigo solid backgrounds → Electric Blue ────────────────────────────── */
+html[data-theme="luxury"] :is(.dark *).dark\:bg-indigo-900\/40,
+html[data-theme="luxury"] :is(.dark *).dark\:bg-indigo-900\/30,
+html[data-theme="luxury"] :is(.dark *).dark\:bg-indigo-900\/15,
+html[data-theme="luxury"] :is(.dark *).dark\:bg-indigo-900\/10 { background-color: rgba(59,130,246,0.08) !important; }
+html[data-theme="luxury"] .bg-indigo-600,
+html[data-theme="luxury"] :is(.dark *).dark\:bg-indigo-600 { background-color: #2563eb !important; }
+html[data-theme="luxury"] .bg-indigo-500,
+html[data-theme="luxury"] :is(.dark *).dark\:bg-indigo-500 { background-color: #3b82f6 !important; }
+html[data-theme="luxury"] .bg-indigo-50,
+html[data-theme="luxury"] :is(.dark *).dark\:bg-indigo-50 { background-color: rgba(59,130,246,0.06) !important; }
+html[data-theme="luxury"] :is(.dark *).dark\:bg-violet-900\/20 { background-color: rgba(59,130,246,0.05) !important; }
+
+/* ── Indigo text → Electric Blue ────────────────────────────────────────── */
+html[data-theme="luxury"] .text-indigo-600,
+html[data-theme="luxury"] :is(.dark *).dark\:text-indigo-400,
+html[data-theme="luxury"] :is(.dark *).dark\:text-indigo-300 { color: #60a5fa !important; }
+html[data-theme="luxury"] .text-indigo-500 { color: #3b82f6 !important; }
+html[data-theme="luxury"] :is(.dark *).dark\:text-violet-300,
+html[data-theme="luxury"] .text-violet-500 { color: #60a5fa !important; }
+
+/* ── Indigo borders → Electric Blue ─────────────────────────────────────── */
+html[data-theme="luxury"] :is(.dark *).dark\:border-indigo-800\/50,
+html[data-theme="luxury"] :is(.dark *).dark\:border-indigo-800\/30,
+html[data-theme="luxury"] :is(.dark *).dark\:border-indigo-700 { border-color: rgba(59,130,246,0.22) !important; }
+html[data-theme="luxury"] .border-indigo-500,
+html[data-theme="luxury"] .border-indigo-600 { border-color: rgba(59,130,246,0.4) !important; }
+html[data-theme="luxury"] :is(.dark *).dark\:border-violet-800\/30 { border-color: rgba(59,130,246,0.15) !important; }
+html[data-theme="luxury"] :is(.dark *).focus\:ring-indigo-500:focus,
+html[data-theme="luxury"] :is(.dark *).focus\:ring-indigo-400:focus { --tw-ring-color: rgba(59,130,246,0.45) !important; }
+
+/* ── Sidebar nav pill ─────────────────────────────────────────────────────── */
+html[data-theme="luxury"] .bg-indigo-500.dark\:bg-indigo-400 { background-color: #3b82f6 !important; }
+
+/* ── White card surface ──────────────────────────────────────────────────── */
+html[data-theme="luxury"] :is(.dark *).dark\:bg-white { background-color: #111 !important; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   GRADIENT OVERRIDES — covers ALL 34 gradient instances in the codebase
+   Strategy: target the exact class-pair combination and override background-image
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Avatar / icon gradients (indigo-500→purple-600, indigo-400→purple-500, etc.) */
+html[data-theme="luxury"] .from-indigo-500.to-purple-600,
+html[data-theme="luxury"] .from-indigo-400.to-purple-500,
+html[data-theme="luxury"] .from-indigo-400.to-violet-500,
+html[data-theme="luxury"] .from-indigo-500.to-violet-600,
+html[data-theme="luxury"] .from-violet-400.to-indigo-600 {
+  background-image: linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%) !important;
+}
+
+/* ── Primary action button gradient (from-indigo-600 to-purple-600/violet-600) */
+html[data-theme="luxury"] .from-indigo-600.to-purple-600,
+html[data-theme="luxury"] .from-indigo-600.to-violet-600,
+html[data-theme="luxury"] .from-indigo-600.to-indigo-700 {
+  background-image: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%) !important;
+}
+html[data-theme="luxury"] .hover\:from-indigo-500:hover,
+html[data-theme="luxury"] .hover\:from-indigo-700:hover { --tw-gradient-from: #2563eb !important; }
+html[data-theme="luxury"] .hover\:to-purple-500:hover,
+html[data-theme="luxury"] .hover\:to-violet-700:hover { --tw-gradient-to: #1d4ed8 !important; }
+
+/* ── BirthdatePromptModal / ProfileSetupModal header (from-indigo-600 to-violet-600) */
+html[data-theme="luxury"] .from-indigo-600.to-violet-600 {
+  background-image: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%) !important;
+}
+
+/* ── Progress bar gradient (indigo-400→violet-500, indigo-500→violet-500) */
+html[data-theme="luxury"] .from-indigo-400.to-violet-500,
+html[data-theme="luxury"] .from-indigo-500.to-violet-500 {
+  background-image: linear-gradient(to right, #3b82f6 0%, #60a5fa 100%) !important;
+}
+
+/* ── EventManagerView buttons (indigo-500→violet-600, indigo-600→violet-700) */
+html[data-theme="luxury"] .from-indigo-500.to-violet-600 {
+  background-image: linear-gradient(to right, #2563eb 0%, #3b82f6 100%) !important;
+}
+
+/* ── TeamNotesView active tab (indigo-600→violet-600) */
+html[data-theme="luxury"] .from-indigo-600.to-violet-600 {
+  background-image: linear-gradient(to right, #1e3a8a 0%, #2563eb 100%) !important;
+}
+
+/* ── Decorative stripe (indigo-500 via-purple-500 to-pink-500) → muted */
+html[data-theme="luxury"] .from-indigo-500.to-pink-500,
+html[data-theme="luxury"] .from-pink-500.to-indigo-500 {
+  background-image: linear-gradient(to right, #1e3a8a 0%, #3b82f6 50%, #1d4ed8 100%) !important;
+}
+
+/* ── MembersView profile header (indigo-500 via-purple-500 to-rose-400) */
+html[data-theme="luxury"] .from-indigo-500.to-rose-400 {
+  background-image: linear-gradient(to right, #1e3a8a 0%, #2563eb 60%, #1d4ed8 100%) !important;
+}
+
+/* ── VerseOfTheDay card background (indigo-950/80 via indigo-900/60 to violet-900/40) */
+html[data-theme="luxury"] .from-indigo-950\/80 {
+  /* Targets the VerseOfTheDay outer card */
+  background-image: linear-gradient(135deg, rgba(0,0,0,0.95) 0%, rgba(10,15,30,0.9) 50%, rgba(0,5,20,0.85) 100%) !important;
+  border-color: rgba(59,130,246,0.15) !important;
+}
+
+/* Also target the VerseOfTheDay card specifically via compound class */
+html[data-theme="luxury"] .bg-gradient-to-br.from-indigo-950\/80 {
+  background-image: linear-gradient(to bottom right, rgba(0,0,0,0.96), rgba(8,12,28,0.9), rgba(0,5,18,0.88)) !important;
+}
+
+/* ── RehearsalView / AdminDashboard active button (indigo-500→violet-600) ── */
+html[data-theme="luxury"] .from-indigo-500.to-violet-600 {
+  background-image: linear-gradient(to bottom right, #2563eb, #3b82f6) !important;
+  box-shadow: 0 4px 14px rgba(59,130,246,0.3) !important;
+}
+
+/* ── Scrollbar ────────────────────────────────────────────────────────────── */
+html[data-theme="luxury"] *::-webkit-scrollbar-thumb { background: rgba(59,130,246,0.3) !important; }
+html[data-theme="luxury"] *::-webkit-scrollbar-thumb:hover { background: rgba(59,130,246,0.55) !important; }
+
+/* ── Hover lift glow ─────────────────────────────────────────────────────── */
+html[data-theme="luxury"] .hover-lift:hover {
+  box-shadow: 0 12px 32px rgba(59,130,246,0.12), 0 2px 8px rgba(0,0,0,0.5) !important;
+}
+html[data-theme="luxury"] .stat-glow:hover {
+  animation: luxuryStatGlow 1.8s ease-in-out infinite !important;
+}
+@keyframes luxuryStatGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(59,130,246,0); }
+  50%       { box-shadow: 0 0 24px 6px rgba(59,130,246,0.15); }
+}
+
+/* ── Shadow indigo → shadow blue ─────────────────────────────────────────── */
+html[data-theme="luxury"] .shadow-indigo-500\/30 { box-shadow: 0 4px 14px rgba(59,130,246,0.25) !important; }
+html[data-theme="luxury"] .shadow-indigo-500\/20 { box-shadow: 0 8px 24px rgba(59,130,246,0.15) !important; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   BLUSH THEME  (data-theme="blush")
+   ──────────────────────────────────────────────────────────────────────────
+   Accent: Deep Rose #db2777 → Pink-500 #ec4899 → Champagne #f472b6
+   Surfaces: Pure OLED Black (same as Luxury)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Body background ─────────────────────────────────────────────────────── */
+html[data-theme="blush"].dark body { background-color: #000 !important; }
+
+/* ── Gray surface overrides ──────────────────────────────────────────────── */
+html[data-theme="blush"] :is(.dark *).dark\:bg-gray-950,
+html[data-theme="blush"] :is(.dark *).dark\:bg-gray-900 { background-color: #000 !important; }
+html[data-theme="blush"] :is(.dark *).dark\:bg-gray-800 { background-color: #0c0c0c !important; }
+html[data-theme="blush"] :is(.dark *).dark\:bg-gray-700 { background-color: #1a1a1a !important; }
+html[data-theme="blush"] :is(.dark *).dark\:bg-gray-600 { background-color: #242424 !important; }
+
+/* hover variants */
+html[data-theme="blush"] :is(.dark *).dark\:hover\:bg-gray-800:hover { background-color: #111 !important; }
+html[data-theme="blush"] :is(.dark *).dark\:hover\:bg-gray-700\/30:hover { background-color: rgba(255,255,255,0.04) !important; }
+
+/* ── Borders → subtle rose-tinted dark lines ─────────────────────────────── */
+html[data-theme="blush"] :is(.dark *).dark\:border-gray-700 { border-color: rgba(236,72,153,0.10) !important; }
+html[data-theme="blush"] :is(.dark *).dark\:border-gray-600 { border-color: rgba(236,72,153,0.18) !important; }
+html[data-theme="blush"] :is(.dark *).dark\:divide-gray-700 > * + * { border-color: rgba(236,72,153,0.08) !important; }
+
+/* ── Indigo solid backgrounds → Blush Pink ───────────────────────────────── */
+html[data-theme="blush"] :is(.dark *).dark\:bg-indigo-900\/40,
+html[data-theme="blush"] :is(.dark *).dark\:bg-indigo-900\/30,
+html[data-theme="blush"] :is(.dark *).dark\:bg-indigo-900\/15,
+html[data-theme="blush"] :is(.dark *).dark\:bg-indigo-900\/10 { background-color: rgba(236,72,153,0.08) !important; }
+html[data-theme="blush"] .bg-indigo-600,
+html[data-theme="blush"] :is(.dark *).dark\:bg-indigo-600 { background-color: #db2777 !important; }
+html[data-theme="blush"] .bg-indigo-500,
+html[data-theme="blush"] :is(.dark *).dark\:bg-indigo-500 { background-color: #ec4899 !important; }
+html[data-theme="blush"] .bg-indigo-50,
+html[data-theme="blush"] :is(.dark *).dark\:bg-indigo-50 { background-color: rgba(236,72,153,0.06) !important; }
+html[data-theme="blush"] :is(.dark *).dark\:bg-violet-900\/20 { background-color: rgba(236,72,153,0.05) !important; }
+
+/* ── Indigo text → Blush Pink ────────────────────────────────────────────── */
+html[data-theme="blush"] .text-indigo-600,
+html[data-theme="blush"] :is(.dark *).dark\:text-indigo-400,
+html[data-theme="blush"] :is(.dark *).dark\:text-indigo-300 { color: #f472b6 !important; }
+html[data-theme="blush"] .text-indigo-500 { color: #ec4899 !important; }
+html[data-theme="blush"] :is(.dark *).dark\:text-violet-300,
+html[data-theme="blush"] .text-violet-500 { color: #f472b6 !important; }
+
+/* ── Indigo borders → Blush Pink ─────────────────────────────────────────── */
+html[data-theme="blush"] :is(.dark *).dark\:border-indigo-800\/50,
+html[data-theme="blush"] :is(.dark *).dark\:border-indigo-800\/30,
+html[data-theme="blush"] :is(.dark *).dark\:border-indigo-700 { border-color: rgba(236,72,153,0.22) !important; }
+html[data-theme="blush"] .border-indigo-500,
+html[data-theme="blush"] .border-indigo-600 { border-color: rgba(236,72,153,0.40) !important; }
+html[data-theme="blush"] :is(.dark *).dark\:border-violet-800\/30 { border-color: rgba(236,72,153,0.15) !important; }
+html[data-theme="blush"] :is(.dark *).focus\:ring-indigo-500:focus,
+html[data-theme="blush"] :is(.dark *).focus\:ring-indigo-400:focus { --tw-ring-color: rgba(236,72,153,0.45) !important; }
+
+/* ── Sidebar nav pill ─────────────────────────────────────────────────────── */
+html[data-theme="blush"] .bg-indigo-500.dark\:bg-indigo-400 { background-color: #ec4899 !important; }
+
+/* ── White card surface ──────────────────────────────────────────────────── */
+html[data-theme="blush"] :is(.dark *).dark\:bg-white { background-color: #111 !important; }
+
+/* ─── GRADIENT OVERRIDES ────────────────────────────────────────────────────
+   All indigo/violet/purple gradients → Deep Rose → Blush transitions        */
+
+/* ── Avatar / icon gradients */
+html[data-theme="blush"] .from-indigo-500.to-purple-600,
+html[data-theme="blush"] .from-indigo-400.to-purple-500,
+html[data-theme="blush"] .from-indigo-400.to-violet-500,
+html[data-theme="blush"] .from-indigo-500.to-violet-600,
+html[data-theme="blush"] .from-violet-400.to-indigo-600 {
+  background-image: linear-gradient(135deg, #be185d 0%, #f472b6 100%) !important;
+}
+
+/* ── Primary action button gradient */
+html[data-theme="blush"] .from-indigo-600.to-purple-600,
+html[data-theme="blush"] .from-indigo-600.to-violet-600,
+html[data-theme="blush"] .from-indigo-600.to-indigo-700 {
+  background-image: linear-gradient(135deg, #9d174d 0%, #ec4899 100%) !important;
+}
+html[data-theme="blush"] .hover\:from-indigo-500:hover,
+html[data-theme="blush"] .hover\:from-indigo-700:hover { --tw-gradient-from: #db2777 !important; }
+html[data-theme="blush"] .hover\:to-purple-500:hover,
+html[data-theme="blush"] .hover\:to-violet-700:hover { --tw-gradient-to: #9d174d !important; }
+
+/* ── Profile / modal header gradient */
+html[data-theme="blush"] .from-indigo-600.to-violet-600 {
+  background-image: linear-gradient(135deg, #831843 0%, #db2777 100%) !important;
+}
+
+/* ── Progress bar gradient */
+html[data-theme="blush"] .from-indigo-400.to-violet-500,
+html[data-theme="blush"] .from-indigo-500.to-violet-500 {
+  background-image: linear-gradient(to right, #ec4899 0%, #fbcfe8 100%) !important;
+}
+
+/* ── EventManagerView / action buttons */
+html[data-theme="blush"] .from-indigo-500.to-violet-600 {
+  background-image: linear-gradient(to right, #db2777 0%, #ec4899 100%) !important;
+}
+
+/* ── Decorative stripe */
+html[data-theme="blush"] .from-indigo-500.to-pink-500,
+html[data-theme="blush"] .from-pink-500.to-indigo-500 {
+  background-image: linear-gradient(to right, #831843 0%, #ec4899 50%, #be185d 100%) !important;
+}
+
+/* ── MembersView profile header */
+html[data-theme="blush"] .from-indigo-500.to-rose-400 {
+  background-image: linear-gradient(to right, #831843 0%, #db2777 60%, #be185d 100%) !important;
+}
+
+/* ── VerseOfTheDay card — "Blush Smoke" */
+html[data-theme="blush"] .from-indigo-950\/80 {
+  background-image: linear-gradient(135deg, rgba(0,0,0,0.95) 0%, rgba(30,5,15,0.90) 50%, rgba(15,0,5,0.85) 100%) !important;
+  border-color: rgba(236,72,153,0.15) !important;
+}
+html[data-theme="blush"] .bg-gradient-to-br.from-indigo-950\/80 {
+  background-image: linear-gradient(to bottom right, rgba(0,0,0,0.96), rgba(28,5,12,0.90), rgba(12,0,5,0.88)) !important;
+}
+
+/* ── Active button glow */
+html[data-theme="blush"] .from-indigo-500.to-violet-600 {
+  background-image: linear-gradient(to bottom right, #db2777, #ec4899) !important;
+  box-shadow: 0 4px 14px rgba(236,72,153,0.35) !important;
+}
+
+/* ── Scrollbar ────────────────────────────────────────────────────────────── */
+html[data-theme="blush"] *::-webkit-scrollbar-thumb { background: rgba(236,72,153,0.30) !important; }
+html[data-theme="blush"] *::-webkit-scrollbar-thumb:hover { background: rgba(236,72,153,0.55) !important; }
+
+/* ── Hover lift glow ─────────────────────────────────────────────────────── */
+html[data-theme="blush"] .hover-lift:hover {
+  box-shadow: 0 12px 32px rgba(236,72,153,0.12), 0 2px 8px rgba(0,0,0,0.5) !important;
+}
+html[data-theme="blush"] .stat-glow:hover {
+  animation: blushStatGlow 1.8s ease-in-out infinite !important;
+}
+@keyframes blushStatGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(236,72,153,0); }
+  50%       { box-shadow: 0 0 24px 6px rgba(236,72,153,0.15); }
+}
+
+/* ── Shadow indigo → shadow blush ────────────────────────────────────────── */
+html[data-theme="blush"] .shadow-indigo-500\/30 { box-shadow: 0 4px 14px rgba(236,72,153,0.30) !important; }
+html[data-theme="blush"] .shadow-indigo-500\/20 { box-shadow: 0 8px 24px rgba(236,72,153,0.18) !important; }

@@ -118,7 +118,7 @@ function MetricTile({ label, value, sub, iconBg, icon, onClick }: {
     label: string; value: number; sub: string; iconBg: string; icon: React.ReactNode; onClick?: () => void;
 }) {
     return (
-        <Tile className="p-4 flex flex-col justify-between" onClick={onClick}>
+        <Tile className="p-4 flex flex-col justify-between hover-lift stat-glow" onClick={onClick}>
             <div className="flex items-start justify-between">
                 <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${iconBg}`}>{icon}</div>
                 <ArrowUpRight size={13} className="text-gray-300 dark:text-gray-600 mt-0.5" />
@@ -377,7 +377,7 @@ function MyTasksCard({
                 </div>
             ) : ordered.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-8 gap-2 text-gray-400">
-                    <ListTodo size={22} className="opacity-30" />
+                    <ListTodo size={22} className="opacity-30 float" />
                     <p className="text-sm">No tasks assigned to you</p>
                     <p className="text-xs text-gray-400/70">Cards assigned to you will appear here</p>
                 </div>
@@ -470,7 +470,7 @@ function TopListenersCard({ currentUserId }: { currentUserId: string }) {
                 </div>
             ) : entries.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-10 gap-2 text-gray-400">
-                    <Headphones size={24} className="opacity-30" />
+                    <Headphones size={24} className="opacity-30 float" />
                     <p className="text-sm">No listens recorded yet</p>
                     <p className="text-xs text-gray-400/70">Finish a song in the Lineup Player to appear here</p>
                 </div>
@@ -813,19 +813,27 @@ export default function AdminDashboard({
                 <VerseOfTheDay userId={userId} userName={userName.split(" ")[0] || userName} userPhoto="" />
                 {/* CENTER — My Tasks */}
                 <MyTasksCard userName={userName} userEmail={userEmail} members={members} onNavigate={onNavigate} />
-                {/* RIGHT — 2×2 metric tiles */}
+            {/* RIGHT — 2×2 metric tiles */}
                 <div className="grid grid-cols-2 gap-3">
+                    <div className="stagger-1">
                     <MetricTile label="Songs" value={songs.length} sub={`${songsUsed} in services`}
                         iconBg="bg-indigo-100 dark:bg-indigo-900/40" icon={<Music size={15} className="text-indigo-600 dark:text-indigo-400" />}
                         onClick={() => onNavigate("songs")} />
+                    </div>
+                    <div className="stagger-2">
                     <MetricTile label="Members" value={members.length} sub={`${members.filter(m => m.status !== "inactive").length} active`}
                         iconBg="bg-violet-100 dark:bg-violet-900/40" icon={<Users size={15} className="text-violet-600 dark:text-violet-400" />}
                         onClick={() => onNavigate("members")} />
+                    </div>
+                    <div className="stagger-3">
                     <MetricTile label="Events" value={totalEvents} sub={`${upcomingEvents.length} upcoming`}
                         iconBg="bg-emerald-100 dark:bg-emerald-900/40" icon={<Zap size={15} className="text-emerald-600 dark:text-emerald-400" />}
                         onClick={() => onNavigate("schedule")} />
+                    </div>
+                    <div className="stagger-4">
                     <MetricTile label="Issues" value={openBugs + openFeqs} sub={`${openBugs} bugs · ${openFeqs} req`}
                         iconBg="bg-amber-100 dark:bg-amber-900/40" icon={<AlertCircle size={15} className="text-amber-600 dark:text-amber-400" />} />
+                    </div>
                 </div>
             </div>
 
@@ -841,12 +849,11 @@ export default function AdminDashboard({
 
                 {/* ── ROW 1 ─────────────────────────── */}
 
-                {/* Top Song Lineup Listeners — first card in the grid */}
-                <TopListenersCard currentUserId={userId} />
+                {/* Top Song Lineup Listeners */}
+                <div className="stagger-3"><TopListenersCard currentUserId={userId} /></div>
 
-                {/* Church Events — NextServiceTile renders its own Tile with h-full;
-                     no outer Tile wrapper needed so h-full correctly fills the grid row */}
-                <NextServiceTile ev={nextEvent} songs={songs} members={members} myMemberId={myMemberId} onClick={() => onNavigate("schedule")} />
+                {/* Church Events */}
+                <div className="stagger-4"><NextServiceTile ev={nextEvent} songs={songs} members={members} myMemberId={myMemberId} onClick={() => onNavigate("schedule")} /></div>
 
                 {/* Upcoming Events — current + next month, including birthdays */}
                 {(() => {

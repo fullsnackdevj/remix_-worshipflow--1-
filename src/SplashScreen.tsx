@@ -21,7 +21,7 @@ export default function SplashScreen() {
                 style={{
                     width: "280px",
                     height: "280px",
-                    background: "radial-gradient(circle, #6366f1 0%, #8b5cf6 50%, transparent 100%)",
+                    background: "radial-gradient(circle, var(--wf-c1-hex) 0%, var(--wf-c2-hex) 50%, transparent 100%)",
                     top: "50%",
                     left: "50%",
                     transform: "translate(-50%, -58%)",
@@ -43,7 +43,7 @@ export default function SplashScreen() {
                         style={{
                             width: "96px",
                             height: "96px",
-                            background: "linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%)",
+                            background: "linear-gradient(135deg, var(--wf-c1-hex) 0%, var(--wf-c2-hex) 50%, #a855f7 100%)",
                             boxShadow: "0 0 0 1px rgba(99,102,241,0.3), 0 20px 60px rgba(99,102,241,0.4), 0 0 40px rgba(139,92,246,0.3)",
                         }}
                     >

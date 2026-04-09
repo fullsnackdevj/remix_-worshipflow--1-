@@ -2069,7 +2069,7 @@ function HowItWorksModal({ onClose, isFullAccess }: { onClose: () => void; isFul
     boards: {
       title: "Boards — What You Can See",
       badge: "Member",
-      badgeColor: "#8b5cf6",
+      badgeColor: "var(--wf-c2-hex)",
       description: "A Board is a ministry workspace created by your Leader or Admin. Each board is a project or ongoing effort — you can browse all boards here in Ministry Hub.",
       items: [
         { icon: "👀", text: "You can view all boards and see everything inside them — lists, cards, assignments, and comments." },
@@ -2083,7 +2083,7 @@ function HowItWorksModal({ onClose, isFullAccess }: { onClose: () => void; isFul
     lists: {
       title: "Lists — Understanding the Workflow",
       badge: "Member",
-      badgeColor: "#8b5cf6",
+      badgeColor: "var(--wf-c2-hex)",
       description: "Inside every board you'll see columns called Lists. They represent stages — usually TO DO, IN PROGRESS, and DONE/COMPLETED. They show where tasks stand.",
       items: [
         { icon: "📋", text: "Lists are columns that represent different stages of a ministry project's workflow." },
@@ -2096,7 +2096,7 @@ function HowItWorksModal({ onClose, isFullAccess }: { onClose: () => void; isFul
     cards: {
       title: "Cards — Your Tasks & Assignments",
       badge: "Member",
-      badgeColor: "#8b5cf6",
+      badgeColor: "var(--wf-c2-hex)",
       description: "Cards are individual tasks inside a list. This is where you'll find your personal assignments, deadlines, and updates from your team.",
       items: [
         { icon: "👤", text: "Look for cards with your name or avatar — those are tasks assigned directly to you." },
@@ -2201,7 +2201,7 @@ function HowItWorksModal({ onClose, isFullAccess }: { onClose: () => void; isFul
 
         {/* Footer */}
         <div className="px-5 py-4 border-t border-white/8 shrink-0">
-          <button onClick={onClose} className="w-full py-2.5 rounded-xl text-sm font-bold text-white transition-all active:scale-95" style={{ background: `linear-gradient(135deg, ${isFullAccess ? "#3b82f6, #1d4ed8" : "#7c3aed, #4c1d95"})` }}>
+          <button onClick={onClose} className="w-full py-2.5 rounded-xl text-sm font-bold text-white transition-all active:scale-95" style={{ background: `linear-gradient(135deg, ${isFullAccess ? "#3b82f6, #1d4ed8" : "var(--wf-c2-hex), #4c1d95"})` }}>
             Got it, let's go! 🚀
           </button>
         </div>

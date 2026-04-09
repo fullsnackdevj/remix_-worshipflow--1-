@@ -72,7 +72,7 @@ function ConfirmModal({
     >
       <div
         className="w-full max-w-sm rounded-2xl overflow-hidden"
-        style={{ background: "#141622", border: "1px solid rgba(255,255,255,0.12)", boxShadow: "0 24px 64px rgba(0,0,0,0.8)" }}
+        style={{ background: "var(--wf-bg3)", border: "1px solid rgba(255,255,255,0.12)", boxShadow: "0 24px 64px rgba(0,0,0,0.8)" }}
         onClick={e => e.stopPropagation()}
       >
         {/* Icon strip */}
@@ -115,7 +115,7 @@ function Section({ icon, label, children }: { icon: React.ReactNode; label: stri
   return (
     <div className="mb-5">
       <div className="flex items-center gap-2 mb-2">
-        <span style={{ color: "rgba(99,102,241,0.7)", display: "flex" }}>{icon}</span>
+        <span style={{ color: "rgba(var(--wf-c1),0.7)", display: "flex" }}>{icon}</span>
         <span style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.35)", textTransform: "uppercase", letterSpacing: "0.08em" }}>{label}</span>
       </div>
       <div style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", lineHeight: 1.65 }}>{children}</div>
@@ -250,7 +250,7 @@ export default function DesignRequestsView({ currentUserId, isAdmin, onToast }: 
     <>
     <div
       className="flex flex-col h-full overflow-hidden"
-      style={{ background: "linear-gradient(160deg, #0f1117 0%, #111827 100%)", minHeight: 0 }}
+      style={{ background: "linear-gradient(160deg, var(--wf-bg4) 0%, var(--wf-bg4) 100%)", minHeight: 0 }}
     >
       {/* ── Header ── */}
       <div
@@ -260,9 +260,9 @@ export default function DesignRequestsView({ currentUserId, isAdmin, onToast }: 
         <div className="flex items-center gap-3">
           <div
             className="flex items-center justify-center rounded-xl"
-            style={{ width: 40, height: 40, background: "linear-gradient(135deg, rgba(99,102,241,0.25), rgba(168,85,247,0.25))", border: "1.5px solid rgba(99,102,241,0.4)" }}
+            style={{ width: 40, height: 40, background: "linear-gradient(135deg, rgba(var(--wf-c1),0.25), rgba(var(--wf-c2),0.25))", border: "1.5px solid rgba(var(--wf-c1),0.4)" }}
           >
-            <Palette size={20} style={{ color: "#a78bfa" }} />
+            <Palette size={20} style={{ color: "var(--wf-at3)" }} />
           </div>
           <div>
             <h1 style={{ fontSize: 18, fontWeight: 800, color: "#fff", letterSpacing: "-0.02em" }}>
@@ -281,11 +281,11 @@ export default function DesignRequestsView({ currentUserId, isAdmin, onToast }: 
             className="flex items-center justify-center rounded-full transition-all active:scale-95"
             style={{
               width: 36, height: 36,
-              background: infoGlowing ? "rgba(167,139,250,0.15)" : "rgba(255,255,255,0.05)",
-              border: `1px solid ${infoGlowing ? "rgba(167,139,250,0.4)" : "rgba(255,255,255,0.1)"}`,
-              color: infoGlowing ? "#a78bfa" : "rgba(255,255,255,0.5)",
+              background: infoGlowing ? "rgba(var(--wf-c3),0.15)" : "rgba(255,255,255,0.05)",
+              border: `1px solid ${infoGlowing ? "rgba(var(--wf-c3),0.4)" : "rgba(255,255,255,0.1)"}`,
+              color: infoGlowing ? "var(--wf-at3)" : "rgba(255,255,255,0.5)",
               animation: infoGlowing ? "newModulePulse 2s ease-in-out infinite" : "none",
-              boxShadow: infoGlowing ? "0 0 0 1px rgba(167,139,250,0.25), 0 0 10px rgba(167,139,250,0.2)" : "none",
+              boxShadow: infoGlowing ? "0 0 0 1px rgba(var(--wf-c3),0.25), 0 0 10px rgba(var(--wf-c3),0.2)" : "none",
             }}
           >
             <Info size={16} />
@@ -306,9 +306,9 @@ export default function DesignRequestsView({ currentUserId, isAdmin, onToast }: 
       {/* ── Banner ── */}
       <div
         className="flex-shrink-0 mx-4 mt-3 mb-2 rounded-xl px-4 py-3 flex items-start gap-3"
-        style={{ background: "rgba(99,102,241,0.07)", border: "1px solid rgba(99,102,241,0.18)" }}
+        style={{ background: "rgba(var(--wf-c1),0.07)", border: "1px solid rgba(var(--wf-c1),0.18)" }}
       >
-        <Palette size={16} style={{ color: "#818cf8", marginTop: 1, flexShrink: 0 }} />
+        <Palette size={16} style={{ color: "var(--wf-at)", marginTop: 1, flexShrink: 0 }} />
         <p style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", lineHeight: 1.5 }}>
           Sermons submitted by the preacher will appear here. Review them to prepare slides, graphics, and presentation materials.
         </p>
@@ -331,8 +331,8 @@ export default function DesignRequestsView({ currentUserId, isAdmin, onToast }: 
         {!loading && items.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 px-4">
             <div className="flex items-center justify-center rounded-3xl mb-4"
-              style={{ width: 64, height: 64, background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.15)" }}>
-              <InboxIcon size={28} style={{ color: "rgba(99,102,241,0.4)" }} />
+              style={{ width: 64, height: 64, background: "rgba(var(--wf-c1),0.08)", border: "1px solid rgba(var(--wf-c1),0.15)" }}>
+              <InboxIcon size={28} style={{ color: "rgba(var(--wf-c1),0.4)" }} />
             </div>
             <p className="font-bold text-center" style={{ fontSize: 15, color: "rgba(255,255,255,0.3)" }}>No design requests yet</p>
             <p className="text-center mt-1" style={{ fontSize: 12, color: "rgba(255,255,255,0.15)" }}>
@@ -353,8 +353,8 @@ export default function DesignRequestsView({ currentUserId, isAdmin, onToast }: 
               className="rounded-2xl mb-3 overflow-hidden transition-all"
               style={{
                 background: "rgba(255,255,255,0.025)",
-                border: "1px solid rgba(99,102,241,0.2)",
-                boxShadow: isExpanded ? "0 0 0 1px rgba(99,102,241,0.3), 0 8px 32px rgba(0,0,0,0.4)" : "none",
+                border: "1px solid rgba(var(--wf-c1),0.2)",
+                boxShadow: isExpanded ? "0 0 0 1px rgba(var(--wf-c1),0.3), 0 8px 32px rgba(0,0,0,0.4)" : "none",
               }}
             >
               {/* Card Header — always visible */}
@@ -406,10 +406,10 @@ export default function DesignRequestsView({ currentUserId, isAdmin, onToast }: 
                 {/* Scripture pill */}
                 {scriptureText && (
                   <div className="flex items-center gap-1.5 mt-2">
-                    <BookOpen size={10} style={{ color: "rgba(99,102,241,0.6)", flexShrink: 0 }} />
-                    <p style={{ fontSize: 11, color: "rgba(99,102,241,0.8)", fontWeight: 500 }} className="truncate">
+                    <BookOpen size={10} style={{ color: "rgba(var(--wf-c1),0.6)", flexShrink: 0 }} />
+                    <p style={{ fontSize: 11, color: "rgba(var(--wf-c1),0.8)", fontWeight: 500 }} className="truncate">
                       {scriptureText}
-                      {hasMore && <span style={{ color: "rgba(99,102,241,0.4)" }}> +{item.scriptures!.length - 1}</span>}
+                      {hasMore && <span style={{ color: "rgba(var(--wf-c1),0.4)" }}> +{item.scriptures!.length - 1}</span>}
                     </p>
                   </div>
                 )}
@@ -418,9 +418,9 @@ export default function DesignRequestsView({ currentUserId, isAdmin, onToast }: 
                 <div className="flex items-center gap-2 mt-2.5 flex-wrap">
                   {item.submittedByName && (
                     <span className="flex items-center gap-1 rounded-full px-2 py-0.5"
-                      style={{ background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.2)" }}>
-                      <User2 size={9} style={{ color: "rgba(99,102,241,0.7)" }} />
-                      <span style={{ fontSize: 10, color: "rgba(99,102,241,0.85)", fontWeight: 600 }}>{item.submittedByName}</span>
+                      style={{ background: "rgba(var(--wf-c1),0.1)", border: "1px solid rgba(var(--wf-c1),0.2)" }}>
+                      <User2 size={9} style={{ color: "rgba(var(--wf-c1),0.7)" }} />
+                      <span style={{ fontSize: 10, color: "rgba(var(--wf-c1),0.85)", fontWeight: 600 }}>{item.submittedByName}</span>
                     </span>
                   )}
                   {item.scheduledDate && (
@@ -507,7 +507,7 @@ export default function DesignRequestsView({ currentUserId, isAdmin, onToast }: 
                       <ul className="space-y-1">
                         {item.scriptures.map((s, i) => (
                           <li key={s.id || i} className="flex items-start gap-2">
-                            <span style={{ color: "rgba(99,102,241,0.5)", fontWeight: 700, fontSize: 11, marginTop: 1, flexShrink: 0 }}>•</span>
+                            <span style={{ color: "rgba(var(--wf-c1),0.5)", fontWeight: 700, fontSize: 11, marginTop: 1, flexShrink: 0 }}>•</span>
                             <span>{s.text}</span>
                           </li>
                         ))}
@@ -536,14 +536,14 @@ export default function DesignRequestsView({ currentUserId, isAdmin, onToast }: 
                         {item.keyPoints.map((kp, idx) => (
                           <div key={kp.id || idx}
                             className="rounded-xl px-3 py-2.5"
-                            style={{ background: "rgba(99,102,241,0.06)", border: "1px solid rgba(99,102,241,0.12)" }}>
+                            style={{ background: "rgba(var(--wf-c1),0.06)", border: "1px solid rgba(var(--wf-c1),0.12)" }}>
                             {kp.heading && (
                               <p className="font-bold mb-1" style={{ fontSize: 13, color: "rgba(255,255,255,0.85)" }}>
                                 {idx + 1}. {kp.heading}
                               </p>
                             )}
                             {(kp.scriptures?.length ?? 0) > 0 && kp.scriptures[0]?.text && (
-                              <p className="mb-1" style={{ fontSize: 11, color: "rgba(99,102,241,0.75)", fontStyle: "italic" }}>
+                              <p className="mb-1" style={{ fontSize: 11, color: "rgba(var(--wf-c1),0.75)", fontStyle: "italic" }}>
                                 {kp.scriptures.map(s => s.text).filter(Boolean).join(" • ")}
                               </p>
                             )}
@@ -583,9 +583,9 @@ export default function DesignRequestsView({ currentUserId, isAdmin, onToast }: 
                       <div className="space-y-2">
                         {item.collectedVerses!.map((v, i) => (
                           <div key={i} className="rounded-lg px-3 py-2"
-                            style={{ background: "rgba(168,85,247,0.06)", border: "1px solid rgba(168,85,247,0.12)" }}>
+                            style={{ background: "rgba(var(--wf-c2),0.06)", border: "1px solid rgba(var(--wf-c2),0.12)" }}>
                             <div className="flex items-center gap-1.5 mb-0.5">
-                              <span style={{ fontSize: 10, fontWeight: 700, color: "rgba(168,85,247,0.8)" }}>{v.ref}</span>
+                              <span style={{ fontSize: 10, fontWeight: 700, color: "rgba(var(--wf-c2),0.8)" }}>{v.ref}</span>
                               <span style={{ fontSize: 9, color: "rgba(255,255,255,0.2)", fontWeight: 600 }}>·</span>
                               <span style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", fontWeight: 600 }}>{v.translation}</span>
                             </div>
@@ -636,7 +636,7 @@ function DesignRequestsInfoModal({ onClose }: { onClose: () => void }) {
     about: {
       title: "Design Requests — Your Sermon-to-Slide Pipeline",
       description: "Design Requests is the exclusive workspace for Admin and Audio/Tech team members. It receives submitted sermons from the Preaching module and helps you prepare beautiful slides and presentations.",
-      color: "#a78bfa",
+      color: "var(--wf-at3)",
       items: [
         { icon: "🔒", text: "This module is only visible to Admin and Audio/Tech roles — other team members cannot access it." },
         { icon: "📥", text: "Sermons submitted by the preacher appear here automatically — no manual uploading required." },
@@ -662,7 +662,7 @@ function DesignRequestsInfoModal({ onClose }: { onClose: () => void }) {
     integration: {
       title: "Integration with Preaching Module",
       description: "Design Requests and Preaching are two sides of the same system — here's how they connect.",
-      color: "#818cf8",
+      color: "var(--wf-at)",
       items: [
         { icon: "📤", text: "The preacher creates their outline in the Preaching module and clicks 'Submit to Design Requests'." },
         { icon: "⚡", text: "The sermon instantly appears here with a 'Submitted' badge and the submission timestamp." },
@@ -676,12 +676,12 @@ function DesignRequestsInfoModal({ onClose }: { onClose: () => void }) {
   const c = content[tab];
   return (
     <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/75 backdrop-blur-sm px-4" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="w-full max-w-lg bg-[#0f0f1c] rounded-2xl border border-white/10 shadow-2xl overflow-hidden flex flex-col" style={{ maxHeight: "90vh", boxShadow: "0 0 0 1px rgba(167,139,250,0.2), 0 32px 80px rgba(0,0,0,0.7)" }}>
+      <div className="w-full max-w-lg bg-[#0f0f1c] rounded-2xl border border-white/10 shadow-2xl overflow-hidden flex flex-col" style={{ maxHeight: "90vh", boxShadow: "0 0 0 1px rgba(var(--wf-c3),0.2), 0 32px 80px rgba(0,0,0,0.7)" }}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-white/8 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, rgba(99,102,241,0.25), rgba(168,85,247,0.2))", border: "1px solid rgba(167,139,250,0.35)" }}>
-              <Palette size={20} style={{ color: "#a78bfa" }} />
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, rgba(var(--wf-c1),0.25), rgba(var(--wf-c2),0.2))", border: "1px solid rgba(var(--wf-c3),0.35)" }}>
+              <Palette size={20} style={{ color: "var(--wf-at3)" }} />
             </div>
             <div>
               <h2 className="text-sm font-bold text-white">How Design Requests Works</h2>
@@ -718,7 +718,7 @@ function DesignRequestsInfoModal({ onClose }: { onClose: () => void }) {
         </div>
         {/* Footer */}
         <div className="px-5 py-4 border-t border-white/8 shrink-0">
-          <button onClick={onClose} className="w-full py-2.5 rounded-xl text-sm font-bold text-white transition-all active:scale-95" style={{ background: "linear-gradient(135deg, #7c3aed, #6366f1)" }}>
+          <button onClick={onClose} className="w-full py-2.5 rounded-xl text-sm font-bold text-white transition-all active:scale-95" style={{ background: "var(--wf-c1-grd)" }}>
             Got it, ready to design!
           </button>
         </div>

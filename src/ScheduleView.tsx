@@ -1852,7 +1852,7 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                           <div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>🎙️ Backup Singers</div>
                           {editSchedBackupSingers.map((m, i) => (
                             <div key={i} style={{ color: "#1e293b", fontSize: 13, fontWeight: 500, marginTop: 4 }}>
-                              {m.name}{m.role ? <span style={{ color: "#7c3aed", fontSize: 11, fontWeight: 600, marginLeft: 4 }}>({m.role})</span> : null}
+                              {m.name}{m.role ? <span style={{ color: "var(--wf-c2-hex)", fontSize: 11, fontWeight: 600, marginLeft: 4 }}>({m.role})</span> : null}
                             </div>
                           ))}
                         </div>

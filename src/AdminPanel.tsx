@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "./AuthContext";
-import { UserPlus, Trash2, Shield, Users, Loader2, Check, X, Clock, UserCheck, Pencil, ShieldCheck, ShieldAlert, Megaphone, Plus, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, Eye, Sparkles, User, Guitar, Mic2, ClipboardList, Sliders, Wrench, ThumbsUp, FlaskConical, Mail, Activity, Wifi, WifiOff, Timer, RefreshCw, SquareKanban } from "lucide-react";
+import { useTheme } from "./ThemeContext";
+import { UserPlus, Trash2, Shield, Users, Loader2, Check, X, Clock, UserCheck, Pencil, ShieldCheck, ShieldAlert, Megaphone, Plus, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, Eye, Sparkles, User, Guitar, Mic2, ClipboardList, Sliders, Wrench, ThumbsUp, FlaskConical, Mail, Activity, Wifi, WifiOff, Timer, RefreshCw, SquareKanban, Palette, CheckCircle2 } from "lucide-react";
 import AutoTextarea from "./AutoTextarea";
 import DateTimePicker from "./DateTimePicker";
 
@@ -429,7 +430,8 @@ export default function AdminPanel({
     onConfirm?: (msg: string, onOk: () => void) => void;
 }) {
     const { isAdmin, user } = useAuth();
-    const [activeTab, setActiveTab] = useState<"team" | "planner" | "broadcasts" | "birthdays" | "activity">("team");
+    const { theme, setTheme } = useTheme();
+    const [activeTab, setActiveTab] = useState<"team" | "planner" | "broadcasts" | "birthdays" | "activity" | "appearance">("team");
     const [members, setMembers] = useState<any[]>([]);
     const [users, setUsers] = useState<ApprovedUser[]>([]);
     const [pending, setPending] = useState<PendingUser[]>([]);
@@ -820,6 +822,9 @@ export default function AdminPanel({
                                 <span className="flex items-center justify-center w-4 h-4 rounded-full bg-emerald-500 text-white text-[9px] font-bold">{activityData.online.length}</span>
                             )}
                         </span>
+                    </button>
+                    <button onClick={() => setActiveTab("appearance")} className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${activeTab === "appearance" ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"}`}>
+                        <span className="flex items-center gap-1.5"><Palette size={14} /> Appearance</span>
                     </button>
                 </div>
             </div>
@@ -1271,7 +1276,7 @@ export default function AdminPanel({
                                                 {granted && (
                                                     <div
                                                         className="planner-ring-spin absolute inset-0 rounded-full"
-                                                        style={{ background: 'conic-gradient(from 0deg, #7c3aed, #a855f7, #ec4899, #f43f5e, #ea580c, #7c3aed)', zIndex: 0 }}
+                                                        style={{ background: 'conic-gradient(from 0deg, var(--wf-c2-hex), #a855f7, #ec4899, #f43f5e, #ea580c, var(--wf-c2-hex))', zIndex: 0 }}
                                                     />
                                                 )}
                                                 <div
@@ -1663,6 +1668,126 @@ export default function AdminPanel({
                             )}
                             <p className="text-center text-[10px] text-gray-600">Preview only — no action taken</p>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── APPEARANCE TAB ─────────────────────────────────────────────── */}
+            {activeTab === "appearance" && (
+                <div className="space-y-6">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center shrink-0">
+                            <Palette size={18} className="text-indigo-600 dark:text-indigo-400" />
+                        </div>
+                        <div>
+                            <h3 className="text-base font-bold text-gray-900 dark:text-white">App Theme</h3>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Choose a look & feel. Saved to this device only.</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        {/* Default Purple */}
+                        <button onClick={() => setTheme("default")}
+                            className={`text-left rounded-2xl border-2 overflow-hidden transition-all duration-200 ${theme === "default" ? "border-indigo-500 shadow-lg shadow-indigo-500/20" : "border-gray-200 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-600"}`}>
+                            <div className="h-28 w-full relative overflow-hidden" style={{ background: "linear-gradient(135deg,#0e0f1a 0%,#1a1b2e 50%,#0f0f20 100%)" }}>
+                                <div className="absolute inset-0 p-3 flex flex-col gap-2">
+                                    <div className="flex gap-1.5">
+                                        <div className="w-16 h-2.5 rounded-full bg-indigo-500/80" /><div className="w-10 h-2.5 rounded-full bg-indigo-900/60" />
+                                    </div>
+                                    <div className="flex gap-2 mt-1">
+                                        <div className="w-14 h-10 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center"><div className="w-4 h-4 rounded-full bg-indigo-500/70" /></div>
+                                        <div className="flex-1 space-y-1.5"><div className="h-2 w-3/4 rounded-full bg-white/10" /><div className="h-2 w-1/2 rounded-full bg-white/6" /></div>
+                                    </div>
+                                    <div className="flex gap-1 mt-1">
+                                        <div className="h-1.5 flex-1 rounded-full bg-indigo-600/50" /><div className="h-1.5 flex-1 rounded-full bg-violet-600/40" /><div className="h-1.5 flex-1 rounded-full bg-indigo-900/40" />
+                                    </div>
+                                </div>
+                                <div className="absolute bottom-2 left-3 flex gap-1.5">
+                                    <span className="w-3 h-3 rounded-full bg-indigo-500" /><span className="w-3 h-3 rounded-full bg-violet-600" /><span className="w-3 h-3 rounded-full" style={{ background: "#1a1b2e" }} />
+                                </div>
+                            </div>
+                            <div className="p-4 bg-white dark:bg-gray-800">
+                                <div className="flex items-start justify-between">
+                                    <div><p className="text-sm font-bold text-gray-900 dark:text-white">Default Purple</p><p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Dark indigo · Violet accents</p></div>
+                                    {theme === "default" && <CheckCircle2 size={18} className="text-indigo-500 shrink-0 mt-0.5" />}
+                                </div>
+                            </div>
+                        </button>
+
+                        {/* Luxury Black */}
+                        <button onClick={() => setTheme("luxury")}
+                            className={`text-left rounded-2xl border-2 overflow-hidden transition-all duration-200 ${theme === "luxury" ? "border-blue-500/70 shadow-lg shadow-blue-500/15" : "border-gray-200 dark:border-gray-700 hover:border-blue-400/50 dark:hover:border-blue-600/40"}`}>
+                            <div className="h-28 w-full relative overflow-hidden" style={{ background: "linear-gradient(135deg,#000 0%,#0c0c0c 60%,#050505 100%)" }}>
+                                <div className="absolute inset-0 p-3 flex flex-col gap-2">
+                                    <div className="flex gap-1.5">
+                                        <div className="w-16 h-2.5 rounded-full" style={{ background: "rgba(59,130,246,.85)" }} /><div className="w-10 h-2.5 rounded-full" style={{ background: "rgba(59,130,246,.2)" }} />
+                                    </div>
+                                    <div className="flex gap-2 mt-1">
+                                        <div className="w-14 h-10 rounded-xl border flex items-center justify-center" style={{ background: "rgba(59,130,246,.08)", borderColor: "rgba(59,130,246,.3)" }}><div className="w-4 h-4 rounded-full" style={{ background: "rgba(59,130,246,.7)" }} /></div>
+                                        <div className="flex-1 space-y-1.5"><div className="h-2 w-3/4 rounded-full" style={{ background: "rgba(255,255,255,.08)" }} /><div className="h-2 w-1/2 rounded-full" style={{ background: "rgba(255,255,255,.04)" }} /></div>
+                                    </div>
+                                    <div className="flex gap-1 mt-1">
+                                        <div className="h-1.5 flex-1 rounded-full" style={{ background: "rgba(59,130,246,.65)" }} /><div className="h-1.5 flex-1 rounded-full" style={{ background: "rgba(59,130,246,.35)" }} /><div className="h-1.5 flex-1 rounded-full" style={{ background: "rgba(59,130,246,.15)" }} />
+                                    </div>
+                                </div>
+                                <div className="absolute bottom-2 left-3 flex gap-1.5">
+                                    <span className="w-3 h-3 rounded-full" style={{ background: "#60a5fa" }} /><span className="w-3 h-3 rounded-full" style={{ background: "#2563eb" }} /><span className="w-3 h-3 rounded-full border" style={{ background: "#0c0c0c", borderColor: "rgba(59,130,246,.4)" }} />
+                                </div>
+                                <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide" style={{ background: "rgba(59,130,246,.12)", border: "1px solid rgba(59,130,246,.4)", color: "#60a5fa" }}>✦ LUXURY</div>
+                            </div>
+                            <div className="p-4 bg-white dark:bg-gray-800">
+                                <div className="flex items-start justify-between">
+                                    <div><p className="text-sm font-bold text-gray-900 dark:text-white">Luxury Black</p><p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">True black · Electric Blue accents</p></div>
+                                    {theme === "luxury" && <CheckCircle2 size={18} className="shrink-0 mt-0.5 text-blue-400" />}
+                                </div>
+                            </div>
+                        </button>
+
+                        {/* Blush */}
+                        <button onClick={() => setTheme("blush")}
+                            className={`text-left rounded-2xl border-2 overflow-hidden transition-all duration-200 ${theme === "blush" ? "border-pink-500/70 shadow-lg" : "border-gray-200 dark:border-gray-700 hover:border-pink-400/50 dark:hover:border-pink-600/40"}`}
+                            style={theme === "blush" ? { boxShadow: "0 8px 24px rgba(236,72,153,0.18)" } : {}}>
+                            <div className="h-28 w-full relative overflow-hidden" style={{ background: "linear-gradient(135deg,#000 0%,#0c0005 60%,#050005 100%)" }}>
+                                <div className="absolute inset-0 p-3 flex flex-col gap-2">
+                                    <div className="flex gap-1.5">
+                                        <div className="w-16 h-2.5 rounded-full" style={{ background: "rgba(236,72,153,.85)" }} /><div className="w-10 h-2.5 rounded-full" style={{ background: "rgba(236,72,153,.2)" }} />
+                                    </div>
+                                    <div className="flex gap-2 mt-1">
+                                        <div className="w-14 h-10 rounded-xl border flex items-center justify-center" style={{ background: "rgba(236,72,153,.08)", borderColor: "rgba(236,72,153,.3)" }}><div className="w-4 h-4 rounded-full" style={{ background: "rgba(236,72,153,.7)" }} /></div>
+                                        <div className="flex-1 space-y-1.5"><div className="h-2 w-3/4 rounded-full" style={{ background: "rgba(255,255,255,.08)" }} /><div className="h-2 w-1/2 rounded-full" style={{ background: "rgba(255,255,255,.04)" }} /></div>
+                                    </div>
+                                    <div className="flex gap-1 mt-1">
+                                        <div className="h-1.5 flex-1 rounded-full" style={{ background: "rgba(236,72,153,.75)" }} /><div className="h-1.5 flex-1 rounded-full" style={{ background: "rgba(219,39,119,.45)" }} /><div className="h-1.5 flex-1 rounded-full" style={{ background: "rgba(157,23,77,.3)" }} />
+                                    </div>
+                                </div>
+                                <div className="absolute bottom-2 left-3 flex gap-1.5">
+                                    <span className="w-3 h-3 rounded-full" style={{ background: "#f472b6" }} /><span className="w-3 h-3 rounded-full" style={{ background: "#ec4899" }} /><span className="w-3 h-3 rounded-full" style={{ background: "#fbcfe8" }} />
+                                </div>
+                                <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide" style={{ background: "rgba(236,72,153,.12)", border: "1px solid rgba(236,72,153,.4)", color: "#f472b6" }}>✦ BLUSH</div>
+                            </div>
+                            <div className="p-4 bg-white dark:bg-gray-800">
+                                <div className="flex items-start justify-between">
+                                    <div><p className="text-sm font-bold text-gray-900 dark:text-white">Blush</p><p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">True black · Deep Rose accents</p></div>
+                                    {theme === "blush" && <CheckCircle2 size={18} className="shrink-0 mt-0.5" style={{ color: "#f472b6" }} />}
+                                </div>
+                            </div>
+                        </button>
+                    </div>
+
+                    <div className={`flex items-center gap-3 px-4 py-3.5 rounded-2xl border text-sm ${
+                        theme === "luxury" ? "border-blue-500/20 bg-blue-500/5 text-blue-400"
+                        : theme === "blush" ? "border-pink-500/20 bg-pink-500/5 text-pink-400"
+                        : "border-indigo-500/20 bg-indigo-500/5 text-indigo-600 dark:text-indigo-400"
+                    }`}>
+                        <span className="text-base">{theme === "luxury" ? "✦" : theme === "blush" ? "✿" : "◈"}</span>
+                        <span className="font-semibold">{theme === "luxury" ? "Luxury Black" : theme === "blush" ? "Blush" : "Default Purple"}</span>
+                        <span className="text-gray-500 dark:text-gray-400 font-normal">is active.</span>
+                        <span className="ml-auto text-[11px] text-gray-400">Saved to device</span>
+                    </div>
+
+                    <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-gray-100 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700">
+                        <Sparkles size={13} className="text-gray-400 shrink-0 mt-0.5" />
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Each team member can set their own theme preference — it only affects their own device.</p>
                     </div>
                 </div>
             )}

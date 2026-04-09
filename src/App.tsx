@@ -227,7 +227,7 @@ function UserMenu({ simulatedRole, onRoleSwitch, plannerAccess }: { simulatedRol
                 style={{
                   width: 32,
                   height: 32,
-                  border: plannerAccess ? 'none' : '2px solid #6366f1',
+                  border: plannerAccess ? 'none' : '2px solid var(--wf-c1-hex)',
                   position: 'relative',
                   zIndex: 1,
                   flexShrink: 0,
@@ -240,7 +240,7 @@ function UserMenu({ simulatedRole, onRoleSwitch, plannerAccess }: { simulatedRol
         <ChevronDown size={14} className="text-gray-400 hidden sm:block" />
       </button>
       {open && (
-        <div className="fixed top-[64px] sm:absolute sm:top-full sm:mt-2 right-2 sm:right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50 py-1 overflow-hidden" style={{ width: "min(256px, calc(100vw - 1rem))" }}>
+        <div className="fixed top-[64px] sm:absolute sm:top-full sm:mt-2 right-2 sm:right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50 py-1 overflow-hidden dropdown-enter" style={{ width: "min(256px, calc(100vw - 1rem))" }}>
           {/* Identity */}
           <div className="px-3 py-2.5 border-b border-gray-100 dark:border-gray-700">
             <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{user.displayName}</p>
@@ -1218,13 +1218,13 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
               onClick={() => { setCurrentView("freedom-wall"); setIsMobileMenuOpen(false); markFreedomWallSeen(); }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all font-medium ${
                 currentView === "freedom-wall"
-                  ? "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300"
+                  ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
                   : unseenFreedomWall
-                    ? "text-amber-400 dark:text-amber-300 hover:bg-amber-900/20"
+                    ? "text-indigo-400 dark:text-indigo-300 hover:bg-indigo-900/20"
                     : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:white"
               } ${isSidebarCollapsed ? "justify-center" : ""}`}
               style={unseenFreedomWall && currentView !== "freedom-wall" ? {
-                boxShadow: "0 0 0 1px rgba(251,191,36,0.35), 0 0 12px rgba(251,191,36,0.2)",
+                boxShadow: "0 0 0 1px rgba(99,102,241,0.4), 0 0 12px rgba(99,102,241,0.25)",
                 animation: "newModulePulse 2s ease-in-out infinite",
               } : {}}
               title="Freedom Wall"
@@ -1232,12 +1232,12 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
               <span className="relative shrink-0">
                 <Feather size={20} />
                 {unseenFreedomWall && currentView !== "freedom-wall" && (
-                  <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400 border border-[#1a1f2e]" />
+                  <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-indigo-400 border border-[#1a1f2e]" />
                 )}
               </span>
               {!isSidebarCollapsed && <span>Freedom Wall</span>}
               {!isSidebarCollapsed && unseenFreedomWall && currentView !== "freedom-wall" && (
-                <span className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">NEW</span>
+                <span className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">NEW</span>
               )}
             </button>
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Freedom Wall</span>}
@@ -1256,7 +1256,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                       : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
                 } ${isSidebarCollapsed ? "justify-center" : ""}`}
                 style={unseenDesignRequests && currentView !== "design-requests" ? {
-                  boxShadow: "0 0 0 1px rgba(167,139,250,0.4), 0 0 12px rgba(167,139,250,0.25)",
+                  boxShadow: "0 0 0 1px rgba(var(--wf-c3),0.4), 0 0 12px rgba(var(--wf-c3),0.25)",
                   animation: "newModulePulse 2s ease-in-out infinite",
                 } : {}}
                 title="Design Requests"
@@ -1273,41 +1273,6 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                 )}
               </button>
               {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Design Requests</span>}
-            </div>
-          )}
-          {isRoleAdmin && (
-            <div className="relative group/tip">
-              <button
-                onClick={() => { setCurrentView("playground"); setIsMobileMenuOpen(false); }}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${
-                  currentView === "playground"
-                    ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
-                    : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:white"
-                } ${isSidebarCollapsed ? "justify-center" : ""}`}
-                title="Playground"
-              >
-                <FlaskConical size={20} className="shrink-0" />
-                {!isSidebarCollapsed && <span>Playground</span>}
-              </button>
-              {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Playground</span>}
-            </div>
-          )}
-
-          {/* Admin Panel — admin only, always hidden for QA Specialist */}
-          {isRoleAdmin && !isQA && (
-            <div className="relative group/tip">
-              <button
-                onClick={() => { setCurrentView("admin"); setIsMobileMenuOpen(false); }}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "admin"
-                  ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300"
-                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-                  } ${isSidebarCollapsed ? "justify-center" : ""}`}
-                title="Team Access"
-              >
-                <Shield size={20} className="shrink-0" />
-                {!isSidebarCollapsed && <span>Team Access</span>}
-              </button>
-              {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Team Access</span>}
             </div>
           )}
 
@@ -1364,6 +1329,24 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
             )}
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">{isRoleAdmin ? "Preaching" : "Preaching (Admin only)"}</span>}
           </div>
+
+          {/* Admin Panel — admin only, always hidden for QA Specialist */}
+          {isRoleAdmin && !isQA && (
+            <div className="relative group/tip">
+              <button
+                onClick={() => { setCurrentView("admin"); setIsMobileMenuOpen(false); }}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "admin"
+                  ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300"
+                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                  } ${isSidebarCollapsed ? "justify-center" : ""}`}
+                title="Team Access"
+              >
+                <Shield size={20} className="shrink-0" />
+                {!isSidebarCollapsed && <span>Team Access</span>}
+              </button>
+              {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Team Access</span>}
+            </div>
+          )}
         </nav>
 
         <div className="p-3 border-t border-gray-200 dark:border-gray-800 flex items-center justify-center gap-2">

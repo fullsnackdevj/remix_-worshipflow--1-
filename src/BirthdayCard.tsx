@@ -36,10 +36,10 @@ const ROLE_THEMES: Record<string, RoleTheme> = {
   },
   leader: {
     label: "Worship Leader", emoji: "🎤",
-    headerStyle: { background: "linear-gradient(135deg, #4338ca 0%, #7c3aed 100%)" },
-    ringColor: "#818cf8", verseColor: "border-indigo-400",
+    headerStyle: { background: "linear-gradient(135deg, #4338ca 0%, var(--wf-c2-hex) 100%)" },
+    ringColor: "var(--wf-at)", verseColor: "border-indigo-400",
     pillBg: "bg-indigo-500/20", pillText: "text-indigo-300",
-    btnStyle: { background: "linear-gradient(135deg, #4338ca, #7c3aed)" },
+    btnStyle: { background: "linear-gradient(135deg, #4338ca, var(--wf-c2-hex))" },
     reactionTint: "bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300",
     message: "Your voice carries the presence of God into our worship every single week. Leading us is your calling!",
     verse: "\"Shout for joy to the LORD, all the earth. Worship the LORD with gladness; come before him with joyful songs.\"",
@@ -92,7 +92,7 @@ const ROLE_THEMES: Record<string, RoleTheme> = {
   member: {
     label: "Member", emoji: "🙏",
     headerStyle: { background: "linear-gradient(135deg, #4338ca 0%, #6d28d9 100%)" },
-    ringColor: "#818cf8", verseColor: "border-indigo-400",
+    ringColor: "var(--wf-at)", verseColor: "border-indigo-400",
     pillBg: "bg-indigo-500/20", pillText: "text-indigo-300",
     btnStyle: { background: "linear-gradient(135deg, #4338ca, #6d28d9)" },
     reactionTint: "bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300",

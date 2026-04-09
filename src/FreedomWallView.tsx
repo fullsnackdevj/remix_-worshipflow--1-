@@ -271,7 +271,7 @@ function NoteCard({
     >
       {/* Pin */}
       <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
-        <Pin color={isAuthor && !isAdmin ? "#7c3aed" : "#b45309"} />
+        <Pin color={isAuthor && !isAdmin ? "var(--wf-c2-hex)" : "#b45309"} />
       </div>
 
       {/* Note paper */}
@@ -316,7 +316,7 @@ function NoteCard({
               padding: "1px 5px",
             }}
           >
-            <span style={{ fontSize: 8, fontWeight: 700, color: "#a78bfa", letterSpacing: "0.04em", lineHeight: 1.6 }}>MY NOTE</span>
+            <span style={{ fontSize: 8, fontWeight: 700, color: "var(--wf-c3-hex)", letterSpacing: "0.04em", lineHeight: 1.6 }}>MY NOTE</span>
           </div>
         )}
 
@@ -388,7 +388,7 @@ function NoteCard({
               className={`p-1 rounded-full transition-all ${hovered ? "opacity-100" : "opacity-0 group-hover/note:opacity-100"} ${isAdmin ? "bg-red-500/20 hover:bg-red-500/40" : "bg-violet-500/20 hover:bg-violet-500/40"}`}
               title={isAdmin ? "Remove note (Admin)" : "Delete my note"}
             >
-              <Trash2 size={10} style={{ color: isAdmin ? "#dc2626" : "#8b5cf6" }} />
+              <Trash2 size={10} style={{ color: isAdmin ? "#dc2626" : "var(--wf-c2-hex)" }} />
             </button>
           )}
         </div>
@@ -413,7 +413,7 @@ function NoteFullViewModal({ note, sessionToken, isAdmin, onClose, onReact, onDe
   return (
     <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/75 backdrop-blur-sm px-4" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="relative w-full max-w-lg">
-        <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-10 pointer-events-none"><Pin color={isAuthor && !isAdmin ? "#7c3aed" : "#b45309"} /></div>
+        <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-10 pointer-events-none"><Pin color={isAuthor && !isAdmin ? "var(--wf-c2-hex)" : "#b45309"} /></div>
         <div className="rounded-2xl shadow-2xl pt-6" style={{ background: colorScheme.bg, border: `2px solid ${colorScheme.border}` }}>
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-14 h-4 rounded-b-sm" style={{ background: "rgba(255,220,120,0.45)", border: "1px solid rgba(255,200,80,0.3)" }} />
           <div className="flex items-center justify-between px-5 pb-2">
@@ -449,15 +449,15 @@ function NoteFullViewModal({ note, sessionToken, isAdmin, onClose, onReact, onDe
               {/* Edit — author only, touch-friendly */}
               {isAuthor && onEdit && (
                 <button onClick={() => { onEdit(note); onClose(); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all hover:scale-105 active:scale-95" style={{ background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.25)" }}>
-                  <Pencil size={13} style={{ color: "#8b5cf6" }} />
-                  <span className="text-xs font-semibold" style={{ color: "#8b5cf6" }}>Edit</span>
+                  <Pencil size={13} style={{ color: "var(--wf-c2-hex)" }} />
+                  <span className="text-xs font-semibold" style={{ color: "var(--wf-c2-hex)" }}>Edit</span>
                 </button>
               )}
             </div>
             {canDelete && (
               <button onClick={() => { onDelete(note.id); onClose(); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all hover:scale-105" style={{ background: isAdmin ? "rgba(239,68,68,0.1)" : "rgba(139,92,246,0.1)", border: `1px solid ${isAdmin ? "rgba(239,68,68,0.25)" : "rgba(139,92,246,0.25)"}` }}>
-                <Trash2 size={13} style={{ color: isAdmin ? "#dc2626" : "#8b5cf6" }} />
-                <span className="text-xs font-semibold" style={{ color: isAdmin ? "#dc2626" : "#8b5cf6" }}>{isAdmin ? "Remove" : "Delete"}</span>
+                <Trash2 size={13} style={{ color: isAdmin ? "#dc2626" : "var(--wf-c2-hex)" }} />
+                <span className="text-xs font-semibold" style={{ color: isAdmin ? "#dc2626" : "var(--wf-c2-hex)" }}>{isAdmin ? "Remove" : "Delete"}</span>
               </button>
             )}
           </div>
@@ -605,7 +605,7 @@ function ViewAllModal({ notes, sessionToken, isAdmin, onClose, onView, onReact, 
                   onClick={() => { onView(note); }}
                 >
                   {/* Pin */}
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 pointer-events-none"><Pin color={isAuthor ? "#7c3aed" : "#b45309"} /></div>
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 pointer-events-none"><Pin color={isAuthor ? "var(--wf-c2-hex)" : "#b45309"} /></div>
                   {/* Tape */}
                   <div className="absolute top-0 left-1/2 -translate-x-1/2 w-10 h-3 rounded-b-sm" style={{ background: "rgba(255,220,120,0.45)" }} />
 
@@ -659,7 +659,7 @@ function ViewAllModal({ notes, sessionToken, isAdmin, onClose, onView, onReact, 
                         style={{ background: isAdmin ? "rgba(239,68,68,0.15)" : "rgba(139,92,246,0.15)" }}
                         title={isAdmin ? "Remove (Admin)" : "Delete my note"}
                       >
-                        <Trash2 size={10} style={{ color: isAdmin ? "#dc2626" : "#8b5cf6" }} />
+                        <Trash2 size={10} style={{ color: isAdmin ? "#dc2626" : "var(--wf-c2-hex)" }} />
                       </button>
                     )}
                   </div>

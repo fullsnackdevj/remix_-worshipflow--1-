@@ -1,59 +1,57 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
+import React, { createContext, useContext, useState, useCallback } from "react";
 
-export type AppTheme = "default" | "nordvpn" | "glass";
+// ── Available themes ──────────────────────────────────────────────────────────
+export type AppTheme = "default" | "luxury" | "blush";
 
-const THEMES: AppTheme[] = ["default", "nordvpn", "glass"];
+const THEMES: AppTheme[] = ["default", "luxury", "blush"];
 
 interface ThemeContextValue {
-  theme: AppTheme;
-  cycleTheme: () => void;
-  setTheme: (t: AppTheme) => void;
+    theme: AppTheme;
+    setTheme: (t: AppTheme) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
-  theme: "default",
-  cycleTheme: () => {},
-  setTheme: () => {},
+    theme: "default",
+    setTheme: () => {},
 });
 
 const STORAGE_KEY = "wf_ui_theme";
 
 function applyToDOM(t: AppTheme) {
-  const html = document.documentElement;
-  if (t === "default") {
-    html.removeAttribute("data-theme");
-  } else {
-    html.setAttribute("data-theme", t);
-  }
+    const html = document.documentElement;
+    if (t === "default") {
+        html.removeAttribute("data-theme");
+    } else {
+        html.setAttribute("data-theme", t);
+    }
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<AppTheme>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) as AppTheme | null;
-    const t = THEMES.includes(saved as AppTheme) ? (saved as AppTheme) : "default";
-    // Apply synchronously during initialisation — before first paint — to prevent white flash
-    applyToDOM(t);
-    return t;
-  });
+    const [theme, setThemeState] = useState<AppTheme>(() => {
+        try {
+            const saved = localStorage.getItem(STORAGE_KEY) as AppTheme | null;
+            const t = THEMES.includes(saved as AppTheme) ? (saved as AppTheme) : "default";
+            // Apply synchronously during initialisation to prevent flash
+            applyToDOM(t);
+            return t;
+        } catch {
+            return "default";
+        }
+    });
 
-  const setTheme = useCallback((t: AppTheme) => {
-    applyToDOM(t);
-    localStorage.setItem(STORAGE_KEY, t);
-    setThemeState(t);
-  }, []);
+    const setTheme = useCallback((t: AppTheme) => {
+        applyToDOM(t);
+        try { localStorage.setItem(STORAGE_KEY, t); } catch { /* noop */ }
+        setThemeState(t);
+    }, []);
 
-  const cycleTheme = useCallback(() => {
-    const idx = THEMES.indexOf(theme);
-    setTheme(THEMES[(idx + 1) % THEMES.length]);
-  }, [theme, setTheme]);
-
-  return (
-    <ThemeContext.Provider value={{ theme, cycleTheme, setTheme }}>
-      {children}
-    </ThemeContext.Provider>
-  );
+    return (
+        <ThemeContext.Provider value={{ theme, setTheme }}>
+            {children}
+        </ThemeContext.Provider>
+    );
 }
 
 export function useTheme() {
-  return useContext(ThemeContext);
+    return useContext(ThemeContext);
 }

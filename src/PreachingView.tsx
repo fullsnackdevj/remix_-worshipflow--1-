@@ -268,7 +268,7 @@ function BiblePanel({
   };
 
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden" style={{ background: "#0a0a16" }}>
+    <div className="flex flex-col h-full w-full overflow-hidden" style={{ background: "var(--wf-bg1)" }}>
       {/* Header — matches Sermons/Canvas style */}
       <div className="flex items-center justify-between px-4"
         style={{ minHeight: 56, borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
@@ -276,8 +276,8 @@ function BiblePanel({
         {/* Branding */}
         <div className="flex items-center gap-2.5">
           <div className="flex items-center justify-center rounded-xl"
-            style={{ width: 32, height: 32, background: "linear-gradient(135deg,rgba(99,102,241,0.25),rgba(16,185,129,0.12))", border: "1px solid rgba(99,102,241,0.3)" }}>
-            <BookOpen size={16} style={{ color: "#818cf8" }} />
+            style={{ width: 32, height: 32, background: "linear-gradient(135deg,rgba(var(--wf-c1),0.25),rgba(16,185,129,0.12))", border: "1px solid rgba(var(--wf-c1),0.3)" }}>
+            <BookOpen size={16} style={{ color: "var(--wf-at)" }} />
           </div>
           <div>
             <p className="text-[15px] font-bold leading-tight" style={{ color: "rgba(255,255,255,0.88)" }}>Bible</p>
@@ -306,9 +306,9 @@ function BiblePanel({
             <button key={t.slug} onClick={() => setTranslation(t)}
               className="flex-1 py-2 text-[12px] font-bold rounded-lg transition-all"
               style={{
-                background: translation.slug === t.slug ? "linear-gradient(135deg,rgba(99,102,241,0.9),rgba(139,92,246,0.8))" : "transparent",
+                background: translation.slug === t.slug ? "linear-gradient(135deg,rgba(var(--wf-c1),0.9),rgba(var(--wf-c2),0.8))" : "transparent",
                 color: translation.slug === t.slug ? "#fff" : "rgba(255,255,255,0.4)",
-                boxShadow: translation.slug === t.slug ? "0 2px 8px rgba(99,102,241,0.3)" : "none",
+                boxShadow: translation.slug === t.slug ? "0 2px 8px rgba(var(--wf-c1),0.3)" : "none",
               }}
               title={t.full}>{t.label}</button>
           ))}
@@ -321,7 +321,7 @@ function BiblePanel({
               className="w-full appearance-none font-semibold px-3 py-2.5 rounded-xl truncate"
               style={{ ...selectStyle, fontSize: 14 }}>
               {BIBLE_BOOKS.map((b, i) => (
-                <option key={b.name} value={i} style={{ background: "#12121e" }}>
+                <option key={b.name} value={i} style={{ background: "var(--wf-bg2)" }}>
                   {translation.slug === "MBBTAG" ? MBB_BOOK_NAMES[i] : b.name}
                 </option>
               ))}
@@ -332,7 +332,7 @@ function BiblePanel({
             <select value={chapter} onChange={e => { setChapter(+e.target.value); setVerseNum(""); setSearchQuery(""); }}
               className="w-full appearance-none font-semibold px-2 py-2.5 rounded-xl text-center"
               style={{ ...selectStyle, fontSize: 14 }}>
-              {chapterCount.map(c => <option key={c} value={c} style={{ background: "#12121e" }}>{c}</option>)}
+              {chapterCount.map(c => <option key={c} value={c} style={{ background: "var(--wf-bg2)" }}>{c}</option>)}
             </select>
             <ChevronDown size={12} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "rgba(255,255,255,0.25)" }} />
           </div>
@@ -340,8 +340,8 @@ function BiblePanel({
             <select value={verseNum} onChange={e => { setVerseNum(e.target.value); setSearchQuery(""); }}
               className="w-full appearance-none font-semibold px-2 py-2.5 rounded-xl text-center"
               style={{ ...selectStyle, fontSize: 14 }}>
-              <option value="" style={{ background: "#12121e" }}>v.</option>
-              {verses.map(v => <option key={v.verse} value={v.verse} style={{ background: "#12121e" }}>{v.verse}</option>)}
+              <option value="" style={{ background: "var(--wf-bg2)" }}>v.</option>
+              {verses.map(v => <option key={v.verse} value={v.verse} style={{ background: "var(--wf-bg2)" }}>{v.verse}</option>)}
             </select>
             <ChevronDown size={12} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "rgba(255,255,255,0.25)" }} />
           </div>
@@ -349,7 +349,7 @@ function BiblePanel({
 
         {/* 🔍 Keyword search / Reference jump */}
         <div className="relative flex items-center">
-          <List size={14} className="absolute left-3.5 pointer-events-none" style={{ color: "rgba(99,102,241,0.5)" }} />
+          <List size={14} className="absolute left-3.5 pointer-events-none" style={{ color: "rgba(var(--wf-c1),0.5)" }} />
           <input
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
@@ -358,7 +358,7 @@ function BiblePanel({
             className="w-full text-[13px] py-3 pl-9 pr-9 rounded-xl transition-all outline-none"
             style={{
               background: "rgba(255,255,255,0.05)",
-              border: searchQuery ? "1px solid rgba(99,102,241,0.45)" : "1px solid rgba(255,255,255,0.07)",
+              border: searchQuery ? "1px solid rgba(var(--wf-c1),0.45)" : "1px solid rgba(255,255,255,0.07)",
               color: "rgba(255,255,255,0.8)",
             }}
           />
@@ -372,7 +372,7 @@ function BiblePanel({
         </div>
         {/* "Press Enter" hint when typing non-reference query */}
         {searchQuery && !globalMode && (
-          <p className="text-[10px] text-center mt-1.5" style={{ color: "rgba(99,102,241,0.5)" }}>
+          <p className="text-[10px] text-center mt-1.5" style={{ color: "rgba(var(--wf-c1),0.5)" }}>
             Press ⏎ Enter to search all 66 books
           </p>
         )}
@@ -380,18 +380,18 @@ function BiblePanel({
 
       {/* Sticky label — shows chapter context OR global search context */}
       <div className="px-4 py-2 shrink-0 flex items-center justify-between"
-        style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: globalMode ? "rgba(99,102,241,0.04)" : "rgba(255,255,255,0.015)" }}>
+        style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: globalMode ? "rgba(var(--wf-c1),0.04)" : "rgba(255,255,255,0.015)" }}>
         {globalMode ? (
-          <span className="text-[11px] font-bold tracking-widest uppercase" style={{ color: "rgba(99,102,241,0.7)" }}>
+          <span className="text-[11px] font-bold tracking-widest uppercase" style={{ color: "rgba(var(--wf-c1),0.7)" }}>
             🔍 Whole Bible · "{lastGlobalQuery}" · {translation.label}
           </span>
         ) : (
-          <span className="text-[11px] font-bold tracking-widest uppercase" style={{ color: "rgba(99,102,241,0.7)" }}>
+          <span className="text-[11px] font-bold tracking-widest uppercase" style={{ color: "rgba(var(--wf-c1),0.7)" }}>
             {displayBookName} {chapter} · {translation.label}
           </span>
         )}
         {globalMode ? (
-          globalLoading ? <Loader2 size={11} className="animate-spin" style={{ color: "rgba(99,102,241,0.5)" }} /> :
+          globalLoading ? <Loader2 size={11} className="animate-spin" style={{ color: "rgba(var(--wf-c1),0.5)" }} /> :
           globalTotal > 0 ? <span className="text-[10px] font-semibold" style={{ color: "rgba(255,255,255,0.2)" }}>{globalTotal.toLocaleString()} results</span> : null
         ) : (
           !loading && verses.length > 0 && (
@@ -412,7 +412,7 @@ function BiblePanel({
             <div className="py-4 space-y-4">
               {[1,2,3,4,5,6].map(i => (
                 <div key={i} className="rounded-2xl p-4 animate-pulse" style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.06)" }}>
-                  <div className="rounded h-2.5 w-1/3 mb-3" style={{ background: "rgba(99,102,241,0.15)" }} />
+                  <div className="rounded h-2.5 w-1/3 mb-3" style={{ background: "rgba(var(--wf-c1),0.15)" }} />
                   <div className="rounded h-3 w-full mb-1.5" style={{ background: "rgba(255,255,255,0.06)" }} />
                   <div className="rounded h-3 w-4/5" style={{ background: "rgba(255,255,255,0.04)" }} />
                 </div>
@@ -431,7 +431,7 @@ function BiblePanel({
               <p className="text-[11px] mb-3 text-center" style={{ color: "rgba(255,255,255,0.2)" }}>{globalError}</p>
               <button onClick={() => doGlobalSearch(lastGlobalQuery, globalPage)}
                 className="flex items-center gap-1.5 rounded-full px-4 py-2 text-[12px] font-semibold transition-all active:scale-95"
-                style={{ background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)", color: "#a5b4fc" }}>
+                style={{ background: "rgba(var(--wf-c1),0.15)", border: "1px solid rgba(var(--wf-c1),0.3)", color: "var(--wf-at2)" }}>
                 <RefreshCw size={12} /> Try again
               </button>
             </div>
@@ -452,7 +452,7 @@ function BiblePanel({
               ? new RegExp(`(${lastGlobalQuery.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
               : null;
             const hlText = hlReg
-              ? result.text.replace(hlReg, '<mark style="background:rgba(99,102,241,0.3);color:#e0e7ff;border-radius:3px;padding:0 2px">$1</mark>')
+              ? result.text.replace(hlReg, '<mark style="background:rgba(var(--wf-c1),0.3);color:#e0e7ff;border-radius:3px;padding:0 2px">$1</mark>')
               : result.text;
             const ref = result.reference || "";
             const isAdded = addedSet.has(ref);
@@ -465,7 +465,7 @@ function BiblePanel({
                 }}>
                 {/* Reference badge */}
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ background: "rgba(99,102,241,0.15)", color: "#a5b4fc", letterSpacing: "0.03em" }}>
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ background: "rgba(var(--wf-c1),0.15)", color: "var(--wf-at2)", letterSpacing: "0.03em" }}>
                     {ref} · {translation.label}
                   </span>
                 </div>
@@ -477,9 +477,9 @@ function BiblePanel({
                   <button onClick={() => handleCollect(ref, result.text)}
                     className="flex items-center gap-1 rounded-full transition-all active:scale-95"
                     style={{ height: 28, paddingLeft: 10, paddingRight: 10, fontSize: 11, fontWeight: 700,
-                      background: isAdded ? "rgba(16,185,129,0.15)" : "rgba(99,102,241,0.15)",
-                      border: isAdded ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(99,102,241,0.25)",
-                      color: isAdded ? "#34d399" : "#a5b4fc" }}>
+                      background: isAdded ? "rgba(16,185,129,0.15)" : "rgba(var(--wf-c1),0.15)",
+                      border: isAdded ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(var(--wf-c1),0.25)",
+                      color: isAdded ? "#34d399" : "var(--wf-at2)" }}>
                     {isAdded ? <CheckCircle2 size={11} /> : <Plus size={11} />}
                     {isAdded ? "Saved" : "Collect"}
                   </button>
@@ -558,7 +558,7 @@ function BiblePanel({
             <p className="text-[11px] mb-3 text-center" style={{ color: "rgba(255,255,255,0.2)" }}>{error}</p>
             <button onClick={fetchChapter}
               className="flex items-center gap-1.5 rounded-full px-4 py-2 text-[12px] font-semibold transition-all active:scale-95"
-              style={{ background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)", color: "#a5b4fc" }}>
+              style={{ background: "rgba(var(--wf-c1),0.15)", border: "1px solid rgba(var(--wf-c1),0.3)", color: "var(--wf-at2)" }}>
               <RefreshCw size={12} /> Try again
             </button>
           </div>
@@ -579,7 +579,7 @@ function BiblePanel({
           const highlighted = q
             ? item.text.replace(
                 new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'),
-                '<mark style="background:rgba(99,102,241,0.3);color:#e0e7ff;border-radius:3px;padding:0 2px">$1</mark>'
+                '<mark style="background:rgba(var(--wf-c1),0.3);color:#e0e7ff;border-radius:3px;padding:0 2px">$1</mark>'
               )
             : null;
           return (
@@ -595,7 +595,7 @@ function BiblePanel({
 
                 {/* Verse number */}
                 <span className="text-[15px] font-black shrink-0 mt-0.5 w-6 text-right"
-                  style={{ color: isAdded ? "#10b981" : "rgba(99,102,241,0.85)" }}>
+                  style={{ color: isAdded ? "#10b981" : "rgba(var(--wf-c1),0.85)" }}>
                   {item.verse}
                 </span>
 
@@ -618,9 +618,9 @@ function BiblePanel({
                     title={isAdded ? "Added!" : "Collect verse"}
                     style={{
                       width: 34, height: 34,
-                      background: isAdded ? "rgba(16,185,129,0.18)" : "rgba(99,102,241,0.12)",
-                      border: isAdded ? "1px solid rgba(16,185,129,0.4)" : "1px solid rgba(99,102,241,0.25)",
-                      color: isAdded ? "#10b981" : "rgba(99,102,241,0.9)",
+                      background: isAdded ? "rgba(16,185,129,0.18)" : "rgba(var(--wf-c1),0.12)",
+                      border: isAdded ? "1px solid rgba(16,185,129,0.4)" : "1px solid rgba(var(--wf-c1),0.25)",
+                      color: isAdded ? "#10b981" : "rgba(var(--wf-c1),0.9)",
                     }}>
                     {isAdded ? <Check size={15} /> : <PlusCircle size={15} />}
                   </button>
@@ -877,7 +877,7 @@ function SermonPreviewModal({ draft, onClose }: { draft: SermonDraft; onClose: (
                     {effectiveScriptures.map((s, i) => (
                       <div key={s.id} style={{
                         paddingLeft: 10,
-                        borderLeft: `3px solid ${i === 0 ? "#6366f1" : "#a5b4fc"}`,
+                        borderLeft: `3px solid ${i === 0 ? "var(--wf-c1-hex)" : "var(--wf-at2)"}`,
                         background: i === 0 ? "#f5f5ff" : "#fafaff",
                         borderRadius: "0 6px 6px 0",
                         padding: "6px 10px",
@@ -936,7 +936,7 @@ function SermonPreviewModal({ draft, onClose }: { draft: SermonDraft; onClose: (
                           {kpVerses.map((sv, si) => (
                             <div key={si} style={{
                               paddingLeft: 10,
-                              borderLeft: `3px solid ${si === 0 ? "#6366f1" : "#a5b4fc"}`,
+                              borderLeft: `3px solid ${si === 0 ? "var(--wf-c1-hex)" : "var(--wf-at2)"}`,
                               background: si === 0 ? "#f5f5ff" : "#fafaff",
                               borderRadius: "0 6px 6px 0",
                               padding: "6px 10px",
@@ -1060,15 +1060,15 @@ function FreeCanvas({ onClose }: { onClose: () => void }) {
   const btnStyle = (active: boolean): React.CSSProperties => ({
     width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
     borderRadius: 6, cursor: 'pointer', border: 'none', transition: 'all .15s',
-    background: active ? 'rgba(99,102,241,0.3)' : 'transparent',
-    color: active ? '#a5b4fc' : 'rgba(255,255,255,0.45)',
+    background: active ? 'rgba(var(--wf-c1),0.3)' : 'transparent',
+    color: active ? 'var(--wf-at2)' : 'rgba(255,255,255,0.45)',
   });
 
   return (
     <div className="flex flex-col h-full min-h-0 overflow-hidden">
       {/* Top bar — height 45px matching SermonCanvas */}
       <div className="flex items-center justify-between px-5 shrink-0"
-        style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', background: '#0e0e1c', height: 45 }}>
+        style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'var(--wf-bg6)', height: 45 }}>
         <div className="flex items-center gap-2">
           <button onClick={onClose}
             className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold transition-all hover:bg-white/5"
@@ -1135,7 +1135,7 @@ function FreeCanvas({ onClose }: { onClose: () => void }) {
               color: 'rgba(255,255,255,0.88)',
               lineHeight: 1.85,
               fontFamily: "'Inter', -apple-system, sans-serif",
-              caretColor: '#818cf8',
+              caretColor: 'var(--wf-at)',
               wordBreak: 'break-word',
             }}
           />
@@ -1146,7 +1146,7 @@ function FreeCanvas({ onClose }: { onClose: () => void }) {
 }
 
 // ── Section Block ─────────────────────────────────────────────────────────────
-function SectionBlock({ icon, label, color = "#6366f1", children, defaultOpen = false, visible = true, onToggleVisible, open: controlledOpen, onToggle }:
+function SectionBlock({ icon, label, color = "var(--wf-c1-hex)", children, defaultOpen = false, visible = true, onToggleVisible, open: controlledOpen, onToggle }:
   { icon: React.ReactNode; label: string; color?: string; children: React.ReactNode; defaultOpen?: boolean; visible?: boolean; onToggleVisible?: () => void; open?: boolean; onToggle?: () => void; }) {
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
   const isControlled = controlledOpen !== undefined;
@@ -1159,7 +1159,7 @@ function SectionBlock({ icon, label, color = "#6366f1", children, defaultOpen = 
         {onToggleVisible && (
           <button onClick={onToggleVisible} title={visible ? "Hide from preview" : "Show in preview"}
             className="flex-shrink-0 flex items-center justify-center transition-all"
-            style={{ color: visible ? "rgba(99,102,241,0.65)" : "rgba(255,255,255,0.18)", width: 48, height: 56 }}>
+            style={{ color: visible ? "rgba(var(--wf-c1),0.65)" : "rgba(255,255,255,0.18)", width: 48, height: 56 }}>
             {visible ? <Eye size={16} /> : <EyeOff size={16} />}
           </button>
         )}
@@ -1246,12 +1246,12 @@ function SermonCanvas({
       <div className="flex flex-col h-full min-h-0 overflow-hidden">
       {/* Top bar — matches Sermons header style */}
       <div className="flex items-center justify-between px-4 shrink-0"
-        style={{ minHeight: 56, borderBottom: "1px solid rgba(255,255,255,0.06)", background: "#0e0e1c" }}>
+        style={{ minHeight: 56, borderBottom: "1px solid rgba(255,255,255,0.06)", background: "var(--wf-bg6)" }}>
 
         {/* Branding */}
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="flex items-center justify-center rounded-xl flex-shrink-0"
-            style={{ width: 32, height: 32, background: "linear-gradient(135deg,rgba(245,158,11,0.25),rgba(99,102,241,0.15))", border: "1px solid rgba(245,158,11,0.3)" }}>
+            style={{ width: 32, height: 32, background: "linear-gradient(135deg,rgba(245,158,11,0.25),rgba(var(--wf-c1),0.15))", border: "1px solid rgba(245,158,11,0.3)" }}>
             <Mic2 size={16} style={{ color: "#fbbf24" }} />
           </div>
           <div>
@@ -1276,8 +1276,8 @@ function SermonCanvas({
             className="flex items-center gap-1.5 rounded-xl transition-all active:scale-95"
             style={{
               height: 36, paddingLeft: 16, paddingRight: 16,
-              background: saving ? "rgba(99,102,241,0.5)" : "linear-gradient(135deg,rgba(99,102,241,0.9),rgba(139,92,246,0.8))",
-              boxShadow: saving ? "none" : "0 2px 10px rgba(99,102,241,0.35)",
+              background: saving ? "rgba(var(--wf-c1),0.5)" : "linear-gradient(135deg,rgba(var(--wf-c1),0.9),rgba(var(--wf-c2),0.8))",
+              boxShadow: saving ? "none" : "0 2px 10px rgba(var(--wf-c1),0.35)",
               color: "#fff", fontSize: 13, fontWeight: 700, opacity: saving ? 0.7 : 1,
             }}>
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
@@ -1353,10 +1353,10 @@ function SermonCanvas({
                     border: `1px solid ${draft.serviceType ? 'rgba(52,211,153,0.25)' : 'rgba(255,255,255,0.1)'}`,
                     borderRadius: 8, padding: '0 12px', fontSize: 14, fontWeight: 600, outline: 'none', cursor: 'pointer',
                   }}>
-                  <option value="" disabled style={{ background: '#12122a', color: '#666' }}>Set Service Type</option>
-                  <option value="Mid-Week Service" style={{ background: '#12122a', color: '#fff' }}>Mid-Week Service</option>
-                  <option value="Sunday Service" style={{ background: '#12122a', color: '#fff' }}>Sunday Service</option>
-                  <option value="Other" style={{ background: '#12122a', color: '#fff' }}>Other</option>
+                  <option value="" disabled style={{ background: 'var(--wf-bg7)', color: '#666' }}>Set Service Type</option>
+                  <option value="Mid-Week Service" style={{ background: 'var(--wf-bg7)', color: '#fff' }}>Mid-Week Service</option>
+                  <option value="Sunday Service" style={{ background: 'var(--wf-bg7)', color: '#fff' }}>Sunday Service</option>
+                  <option value="Other" style={{ background: 'var(--wf-bg7)', color: '#fff' }}>Other</option>
                 </select>
               </div>
             </div>
@@ -1365,7 +1365,7 @@ function SermonCanvas({
 
         {/* ── SERMON HEADER CARD — accordion ── */}
         <div className="mb-4 rounded-xl"
-          style={{ border: "1px solid rgba(99,102,241,0.15)", background: "linear-gradient(135deg, rgba(99,102,241,0.06), rgba(139,92,246,0.04))", overflow: "visible" }}>
+          style={{ border: "1px solid rgba(var(--wf-c1),0.15)", background: "linear-gradient(135deg, rgba(var(--wf-c1),0.06), rgba(var(--wf-c2),0.04))", overflow: "visible" }}>
 
           {/* Accordion header row — matches SectionBlock layout */}
           <div className="w-full flex items-center" style={{ background: headerOpen ? "rgba(255,255,255,0.03)" : "transparent", borderRadius: "inherit" }}>
@@ -1374,14 +1374,14 @@ function SermonCanvas({
               onClick={() => onChange('previewHidden', { ...(draft.previewHidden || {}), titleSection: !draft.previewHidden?.titleSection })}
               title={draft.previewHidden?.titleSection ? 'Show in preview' : 'Hide from preview'}
               className="flex-shrink-0 flex items-center justify-center transition-all"
-              style={{ color: draft.previewHidden?.titleSection ? 'rgba(255,255,255,0.18)' : 'rgba(99,102,241,0.65)', width: 44, height: 48 }}>
+              style={{ color: draft.previewHidden?.titleSection ? 'rgba(255,255,255,0.18)' : 'rgba(var(--wf-c1),0.65)', width: 44, height: 48 }}>
               {draft.previewHidden?.titleSection ? <EyeOff size={15} /> : <Eye size={15} />}
             </button>
             {/* Expand/collapse toggle */}
             <button onClick={() => toggleSection("mainTitle")}
               className="flex-1 flex items-center justify-between py-3 pr-4 transition-all" style={{ paddingLeft: 0 }}>
               <div className="flex items-center gap-3">
-                <span style={{ color: "rgba(99,102,241,0.85)", display: 'flex', alignItems: 'center' }}><BookOpen size={14} /></span>
+                <span style={{ color: "rgba(var(--wf-c1),0.85)", display: 'flex', alignItems: 'center' }}><BookOpen size={14} /></span>
                 <span className="text-[12px] font-bold uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.6)" }}>Main Title</span>
               </div>
               <span style={{ color: "rgba(255,255,255,0.2)", flexShrink: 0 }}>
@@ -1401,7 +1401,7 @@ function SermonCanvas({
                 placeholder="Sermon title…"
                 rows={1}
                 className="w-full font-bold bg-transparent border-none outline-none text-white placeholder-white/20 leading-tight resize-none overflow-hidden"
-                style={{ fontSize: 26, caretColor: "#6366f1", marginBottom: 4, lineHeight: 1.3 }}
+                style={{ fontSize: 26, caretColor: "var(--wf-c1-hex)", marginBottom: 4, lineHeight: 1.3 }}
               />
               {/* Thin separator */}
               <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", marginBottom: 10 }} />
@@ -1413,7 +1413,7 @@ function SermonCanvas({
                 placeholder="Subtitle (optional)…"
                 rows={1}
                 className="w-full bg-transparent border-none outline-none placeholder-white/15 resize-none overflow-hidden"
-                style={{ fontSize: 15, color: "rgba(255,255,255,0.4)", caretColor: "#6366f1", marginBottom: 14, lineHeight: 1.5 }}
+                style={{ fontSize: 15, color: "rgba(255,255,255,0.4)", caretColor: "var(--wf-c1-hex)", marginBottom: 14, lineHeight: 1.5 }}
               />
               {/* Scriptures — multi-row */}
               {(() => {
@@ -1424,17 +1424,17 @@ function SermonCanvas({
                   <div className="flex flex-col gap-2">
                     {scriptureList.map((s, idx) => (
                       <div key={s.id} className="rounded-xl px-3 py-2.5"
-                        style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.15)" }}>
+                        style={{ background: "rgba(var(--wf-c1),0.08)", border: "1px solid rgba(var(--wf-c1),0.15)" }}>
                         {/* Label row */}
                         <div className="flex items-center gap-1.5 mb-1.5">
                           <BookMarked size={12} className="text-indigo-400 shrink-0" />
                           {idx === 0 && (
                             <span className="text-[11px] font-bold uppercase tracking-widest"
-                              style={{ color: "rgba(99,102,241,0.7)" }}>Scripture</span>
+                              style={{ color: "rgba(var(--wf-c1),0.7)" }}>Scripture</span>
                           )}
                           {idx > 0 && (
                             <span className="text-[11px] font-bold uppercase tracking-widest"
-                              style={{ color: "rgba(99,102,241,0.45)" }}>+Verse</span>
+                              style={{ color: "rgba(var(--wf-c1),0.45)" }}>+Verse</span>
                           )}
                         </div>
                         {/* Textarea + buttons row */}
@@ -1451,7 +1451,7 @@ function SermonCanvas({
                           onFocus={e => { onFieldFocus(e.currentTarget, { type: "draft", field: "scriptures", scriptureIdx: idx }); e.currentTarget.style.height = "auto"; e.currentTarget.style.height = e.currentTarget.scrollHeight + "px"; }}
                           rows={1}
                           className="flex-1 bg-transparent border-none outline-none placeholder-white/20 min-w-0 resize-none overflow-hidden"
-                          style={{ fontSize: 15, color: "rgba(165,180,252,0.9)", caretColor: "#6366f1", lineHeight: 1.6 }}
+                          style={{ fontSize: 15, color: "rgba(var(--wf-c3),0.9)", caretColor: "var(--wf-c1-hex)", lineHeight: 1.6 }}
                         />
                         {/* Remove button */}
                         {scriptureList.length > 1 && (
@@ -1485,9 +1485,9 @@ function SermonCanvas({
                             className="shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90 mt-0.5"
                             style={{
                               width: 28, height: 28, minWidth: 28,
-                              background: "rgba(99,102,241,0.25)",
-                              border: "1px solid rgba(99,102,241,0.5)",
-                              color: "#a5b4fc",
+                              background: "rgba(var(--wf-c1),0.25)",
+                              border: "1px solid rgba(var(--wf-c1),0.5)",
+                              color: "var(--wf-at2)",
                               fontSize: 18, fontWeight: 700, lineHeight: 1,
                             }}
                           >+</button>
@@ -1503,7 +1503,7 @@ function SermonCanvas({
         </div>
 
         {/* ── INTRODUCTION ── */}
-        <SectionBlock icon={<PenLine size={14} />} label="Introduction" color="#a78bfa"
+        <SectionBlock icon={<PenLine size={14} />} label="Introduction" color="var(--wf-c3-hex)"
           open={openSection === "introduction"} onToggle={() => toggleSection("introduction")}
           visible={!(draft.previewHidden?.introduction)}
           onToggleVisible={() => onChange('previewHidden', { ...(draft.previewHidden || {}), introduction: !draft.previewHidden?.introduction })}>
@@ -1518,7 +1518,7 @@ function SermonCanvas({
         </SectionBlock>
 
         {/* ── MAIN PASSAGE — now a collapsible SectionBlock ── */}
-        <SectionBlock icon={<BookMarked size={14} />} label="Main Passage" color="#6366f1"
+        <SectionBlock icon={<BookMarked size={14} />} label="Main Passage" color="var(--wf-c1-hex)"
           open={openSection === "mainPassage"} onToggle={() => toggleSection("mainPassage")}
           visible={!(draft.previewHidden?.mainPassage)}
           onToggleVisible={() => onChange('previewHidden', { ...(draft.previewHidden || {}), mainPassage: !draft.previewHidden?.mainPassage })}>
@@ -1572,16 +1572,16 @@ function SermonCanvas({
                       <div className="flex flex-col gap-1.5 mb-2">
                         <div className="flex items-center gap-1.5 mb-1">
                           <BookMarked size={10} className="text-indigo-400 shrink-0" />
-                          <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "rgba(99,102,241,0.65)" }}>Scripture</span>
+                          <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "rgba(var(--wf-c1),0.65)" }}>Scripture</span>
                         </div>
                         {kpList.map((sv, sidx) => (
                           <div key={sv.id} className="rounded-lg px-3 py-2.5"
-                            style={{ background: "rgba(99,102,241,0.06)", border: "1px solid rgba(99,102,241,0.15)" }}>
+                            style={{ background: "rgba(var(--wf-c1),0.06)", border: "1px solid rgba(var(--wf-c1),0.15)" }}>
                             {/* Label */}
                             <div className="flex items-center gap-1 mb-1.5">
                               {sidx === 0
-                                ? <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "rgba(99,102,241,0.65)" }}>Scripture</span>
-                                : <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "rgba(99,102,241,0.4)" }}>+Verse</span>
+                                ? <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "rgba(var(--wf-c1),0.65)" }}>Scripture</span>
+                                : <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "rgba(var(--wf-c1),0.4)" }}>+Verse</span>
                               }
                             </div>
                             {/* Textarea + action buttons */}
@@ -1597,7 +1597,7 @@ function SermonCanvas({
                                 onFocus={e => { onFieldFocus(e.currentTarget, { type: "kp", kpId: kp.id, kpField: "scripture", kpScriptureIdx: sidx }); e.currentTarget.style.height = "auto"; e.currentTarget.style.height = e.currentTarget.scrollHeight + "px"; }}
                                 placeholder={sidx === 0 ? "e.g. John 13:34-35" : "e.g. Romans 5:8"}
                                 className="flex-1 bg-transparent border-none outline-none placeholder-white/25 min-w-0 resize-none overflow-hidden"
-                                style={{ color: "#a5b4fc", fontSize: 15, lineHeight: 1.6 }}
+                                style={{ color: "var(--wf-at2)", fontSize: 15, lineHeight: 1.6 }}
                               />
                               {/* Remove button */}
                               {kpList.length > 1 && (
@@ -1619,7 +1619,7 @@ function SermonCanvas({
                                   onClick={() => updateKeyPointScriptures(kp.id, [...kpList, { id: uid(), text: '' }])}
                                   title="Add another verse"
                                   className="shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90 mt-0.5"
-                                  style={{ width: 28, height: 28, minWidth: 28, background: "rgba(99,102,241,0.25)", border: "1px solid rgba(99,102,241,0.5)", color: "#a5b4fc", fontSize: 18, fontWeight: 700, lineHeight: 1 }}
+                                  style={{ width: 28, height: 28, minWidth: 28, background: "rgba(var(--wf-c1),0.25)", border: "1px solid rgba(var(--wf-c1),0.5)", color: "var(--wf-at2)", fontSize: 18, fontWeight: 700, lineHeight: 1 }}
                                 >+</button>
                               )}
                             </div>
@@ -1635,7 +1635,7 @@ function SermonCanvas({
                       onClick={() => onChange('keyPoints', draft.keyPoints.map(p => p.id === kp.id ? { ...p, bodyHidden: !kp.bodyHidden } : p))}
                       title={kp.bodyHidden ? 'Show notes in preview' : 'Hide notes from preview'}
                       className="ml-auto transition-all"
-                      style={{ color: kp.bodyHidden ? 'rgba(255,255,255,0.18)' : 'rgba(99,102,241,0.45)' }}>
+                      style={{ color: kp.bodyHidden ? 'rgba(255,255,255,0.18)' : 'rgba(var(--wf-c1),0.45)' }}>
                       {kp.bodyHidden ? <EyeOff size={11} /> : <Eye size={11} />}
                     </button>
                   </div>
@@ -1656,7 +1656,7 @@ function SermonCanvas({
         </SectionBlock>
 
         {/* FREE NOTES */}
-        <SectionBlock icon={<FileText size={14} />} label="Free Notes & Illustrations" color="#8b5cf6"
+        <SectionBlock icon={<FileText size={14} />} label="Free Notes & Illustrations" color="var(--wf-c2-hex)"
           open={openSection === "freeNotes"} onToggle={() => toggleSection("freeNotes")}
           visible={!(draft.previewHidden?.freeNotes)}
           onToggleVisible={() => onChange('previewHidden', { ...(draft.previewHidden || {}), freeNotes: !draft.previewHidden?.freeNotes })}>
@@ -1736,7 +1736,7 @@ function ConfirmModal({
     >
       <div
         className="w-full max-w-sm rounded-2xl overflow-hidden"
-        style={{ background: "#141622", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 24px 64px rgba(0,0,0,0.7)" }}
+        style={{ background: "var(--wf-bg3)", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 24px 64px rgba(0,0,0,0.7)" }}
         onClick={e => e.stopPropagation()}
       >
         {/* Header strip */}
@@ -1780,7 +1780,7 @@ function PreachingInfoModal({ onClose }: { onClose: () => void }) {
     about: {
       title: "Your Personal Sermon Workspace",
       description: "The Preaching module is your always-available digital sermon notebook — accessible on mobile, tablet, or laptop, wherever the Spirit leads.",
-      color: "#818cf8",
+      color: "var(--wf-at)",
       items: [
         { icon: "📱", text: "Cross-device access — open the app on any device and your sermon outlines are always right where you left them." },
         { icon: "📝", text: "Create structured sermon drafts with organized sections: Main Title, Introduction, Main Passage, Key Points, Free Notes, Application, and Closing Prayer." },
@@ -1806,7 +1806,7 @@ function PreachingInfoModal({ onClose }: { onClose: () => void }) {
     integration: {
       title: "How Preaching → Design Requests Works",
       description: "The Preaching module is directly integrated with the Design Requests queue for your Audio/Tech and slide design team.",
-      color: "#a78bfa",
+      color: "var(--wf-c3-hex)",
       items: [
         { icon: "🔗", text: "When you submit a sermon draft, it instantly appears in the 'Design Requests' module — visible only to Admin and Audio/Tech roles." },
         { icon: "🎨", text: "Your slide designer opens Design Requests, expands your sermon, and can copy the full outline with one click to paste into Canva or any presentation tool." },
@@ -1820,13 +1820,13 @@ function PreachingInfoModal({ onClose }: { onClose: () => void }) {
   const c = content[tab];
   return (
     <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/75 backdrop-blur-sm px-4" onClick={e => e.target === e.currentTarget && onClose()}>
-      <style>{`@keyframes preachingInfoPulse { 0%,100%{box-shadow:0 0 0 3px rgba(99,102,241,0.2),0 0 16px rgba(99,102,241,0.3)} 50%{box-shadow:0 0 0 5px rgba(99,102,241,0.35),0 0 24px rgba(99,102,241,0.55)} }`}</style>
-      <div className="w-full max-w-lg bg-[#0f0f1c] rounded-2xl border border-white/10 shadow-2xl overflow-hidden flex flex-col" style={{ maxHeight: "90vh", boxShadow: "0 0 0 1px rgba(99,102,241,0.2), 0 32px 80px rgba(0,0,0,0.7)" }}>
+      <style>{`@keyframes preachingInfoPulse { 0%,100%{box-shadow:0 0 0 3px rgba(var(--wf-c1),0.2),0 0 16px rgba(var(--wf-c1),0.3)} 50%{box-shadow:0 0 0 5px rgba(var(--wf-c1),0.35),0 0 24px rgba(var(--wf-c1),0.55)} }`}</style>
+      <div className="w-full max-w-lg bg-[#0f0f1c] rounded-2xl border border-white/10 shadow-2xl overflow-hidden flex flex-col" style={{ maxHeight: "90vh", boxShadow: "0 0 0 1px rgba(var(--wf-c1),0.2), 0 32px 80px rgba(0,0,0,0.7)" }}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-white/8 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, rgba(99,102,241,0.25), rgba(139,92,246,0.2))", border: "1px solid rgba(99,102,241,0.35)" }}>
-              <Mic2 size={20} style={{ color: "#818cf8" }} />
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, rgba(var(--wf-c1),0.25), rgba(var(--wf-c2),0.2))", border: "1px solid rgba(var(--wf-c1),0.35)" }}>
+              <Mic2 size={20} style={{ color: "var(--wf-at)" }} />
             </div>
             <div>
               <h2 className="text-sm font-bold text-white">How Preaching Module Works</h2>
@@ -1863,7 +1863,7 @@ function PreachingInfoModal({ onClose }: { onClose: () => void }) {
         </div>
         {/* Footer */}
         <div className="px-5 py-4 border-t border-white/8 shrink-0">
-          <button onClick={onClose} className="w-full py-2.5 rounded-xl text-sm font-bold text-white transition-all active:scale-95" style={{ background: "linear-gradient(135deg, #6366f1, #7c3aed)" }}>
+          <button onClick={onClose} className="w-full py-2.5 rounded-xl text-sm font-bold text-white transition-all active:scale-95" style={{ background: "var(--wf-c1-grd)" }}>
             Got it, let's preach!
           </button>
         </div>
@@ -1884,7 +1884,7 @@ function DraftList({ drafts, activeDraftId, onSelect, onNew, onDelete, onSubmit,
   const draftItems = drafts.filter(d => d.status !== 'submitted');
 
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden" style={{ background: "#090913" }}>
+    <div className="flex flex-col h-full w-full overflow-hidden" style={{ background: "var(--wf-bg5)" }}>
 
       {/* ── Header ─────────────────────────── */}
       <div className="flex items-center justify-between px-4"
@@ -1897,11 +1897,11 @@ function DraftList({ drafts, activeDraftId, onSelect, onNew, onDelete, onSubmit,
             className="flex items-center justify-center rounded-xl transition-all active:scale-95 shrink-0"
             style={{
               width: 32, height: 32,
-              background: infoGlowing ? "linear-gradient(135deg,rgba(99,102,241,0.3),rgba(139,92,246,0.2))" : "linear-gradient(135deg,rgba(99,102,241,0.12),rgba(139,92,246,0.08))",
-              border: `1px solid ${infoGlowing ? "rgba(99,102,241,0.5)" : "rgba(99,102,241,0.2)"}`,
-              color: infoGlowing ? "#a5b4fc" : "#818cf8",
+              background: infoGlowing ? "linear-gradient(135deg,rgba(var(--wf-c1),0.3),rgba(var(--wf-c2),0.2))" : "linear-gradient(135deg,rgba(var(--wf-c1),0.12),rgba(var(--wf-c2),0.08))",
+              border: `1px solid ${infoGlowing ? "rgba(var(--wf-c1),0.5)" : "rgba(var(--wf-c1),0.2)"}`,
+              color: infoGlowing ? "var(--wf-at2)" : "var(--wf-at)",
               animation: infoGlowing ? "newModulePulse 2s ease-in-out infinite" : "none",
-              boxShadow: infoGlowing ? "0 0 0 2px rgba(99,102,241,0.2), 0 0 12px rgba(99,102,241,0.25)" : "none",
+              boxShadow: infoGlowing ? "0 0 0 2px rgba(var(--wf-c1),0.2), 0 0 12px rgba(var(--wf-c1),0.25)" : "none",
             }}>
             <Info size={15} />
           </button>
@@ -1920,8 +1920,8 @@ function DraftList({ drafts, activeDraftId, onSelect, onNew, onDelete, onSubmit,
             className="flex items-center gap-1.5 rounded-xl transition-all active:scale-95"
             style={{
               height: 36, paddingLeft: 14, paddingRight: 14,
-              background: "linear-gradient(135deg,rgba(99,102,241,0.85),rgba(139,92,246,0.75))",
-              boxShadow: "0 2px 10px rgba(99,102,241,0.35)",
+              background: "linear-gradient(135deg,rgba(var(--wf-c1),0.85),rgba(var(--wf-c2),0.75))",
+              boxShadow: "0 2px 10px rgba(var(--wf-c1),0.35)",
               color: "#fff", fontSize: 13, fontWeight: 700,
             }}
             title="New sermon draft">
@@ -1950,8 +1950,8 @@ function DraftList({ drafts, activeDraftId, onSelect, onNew, onDelete, onSubmit,
               fontSize: 13, fontWeight: 700,
               letterSpacing: '0.05em', textTransform: 'uppercase',
               background: 'none', border: 'none', cursor: 'pointer',
-              color: tab === t ? '#a5b4fc' : 'rgba(255,255,255,0.28)',
-              borderBottom: tab === t ? '2px solid #6366f1' : '2px solid transparent',
+              color: tab === t ? 'var(--wf-at2)' : 'rgba(255,255,255,0.28)',
+              borderBottom: tab === t ? '2px solid var(--wf-c1-hex)' : '2px solid transparent',
               marginBottom: -2,
             }}>
             {t === 'drafts' ? <PenLine size={13} /> : <SendHorizonal size={13} />}
@@ -1970,8 +1970,8 @@ function DraftList({ drafts, activeDraftId, onSelect, onNew, onDelete, onSubmit,
             {draftItems.length === 0 && (
               <div className="flex flex-col items-center justify-center py-12 px-4">
                 <div className="flex items-center justify-center rounded-2xl mb-3"
-                  style={{ width: 48, height: 48, background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.12)" }}>
-                  <Mic2 size={20} style={{ color: "rgba(99,102,241,0.35)" }} />
+                  style={{ width: 48, height: 48, background: "rgba(var(--wf-c1),0.08)", border: "1px solid rgba(var(--wf-c1),0.12)" }}>
+                  <Mic2 size={20} style={{ color: "rgba(var(--wf-c1),0.35)" }} />
                 </div>
                 <p className="text-[12px] font-semibold" style={{ color: "rgba(255,255,255,0.25)" }}>No drafts yet</p>
                 <p className="text-[11px] mt-1 text-center" style={{ color: "rgba(255,255,255,0.12)" }}>Tap the + button above to start your first sermon draft.</p>
@@ -1982,16 +1982,16 @@ function DraftList({ drafts, activeDraftId, onSelect, onNew, onDelete, onSubmit,
                 className="w-full text-left rounded-2xl mb-2.5 cursor-pointer group transition-all relative overflow-hidden"
                 style={{
                   background: activeDraftId === d.id
-                    ? "linear-gradient(135deg, rgba(99,102,241,0.18) 0%, rgba(139,92,246,0.1) 100%)"
+                    ? "linear-gradient(135deg, rgba(var(--wf-c1),0.18) 0%, rgba(var(--wf-c2),0.1) 100%)"
                     : "rgba(255,255,255,0.03)",
                   border: activeDraftId === d.id
-                    ? "1px solid rgba(99,102,241,0.35)"
+                    ? "1px solid rgba(var(--wf-c1),0.35)"
                     : "1px solid rgba(255,255,255,0.06)",
-                  boxShadow: activeDraftId === d.id ? "0 4px 20px rgba(99,102,241,0.12)" : "none",
+                  boxShadow: activeDraftId === d.id ? "0 4px 20px rgba(var(--wf-c1),0.12)" : "none",
                 }}>
                 {/* Active indicator bar */}
                 {activeDraftId === d.id && (
-                  <div className="absolute left-0 top-0 bottom-0" style={{ width: 3, background: "linear-gradient(180deg, #6366f1, #8b5cf6)", borderRadius: "2px 0 0 2px" }} />
+                  <div className="absolute left-0 top-0 bottom-0" style={{ width: 3, background: "linear-gradient(180deg, var(--wf-c1-hex), var(--wf-c2-hex))", borderRadius: "2px 0 0 2px" }} />
                 )}
                 <div className="px-4 pt-3 pb-3" style={{ paddingLeft: activeDraftId === d.id ? 16 : 16 }}>
                   {/* Title row */}
@@ -2013,10 +2013,10 @@ function DraftList({ drafts, activeDraftId, onSelect, onNew, onDelete, onSubmit,
                   {/* Scripture pill */}
                   {(d.scriptures?.[0]?.text || d.mainVerse) && (
                     <div className="mt-2 flex items-center gap-1.5">
-                      <BookOpen size={10} style={{ color: "rgba(99,102,241,0.6)", flexShrink: 0 }} />
-                      <p className="text-[11px] truncate" style={{ color: "rgba(99,102,241,0.75)", fontWeight: 500 }}>
+                      <BookOpen size={10} style={{ color: "rgba(var(--wf-c1),0.6)", flexShrink: 0 }} />
+                      <p className="text-[11px] truncate" style={{ color: "rgba(var(--wf-c1),0.75)", fontWeight: 500 }}>
                         {d.scriptures?.[0]?.text || d.mainVerse}
-                        {(d.scriptures?.length ?? 0) > 1 && <span style={{ color: "rgba(99,102,241,0.45)" }}> +{d.scriptures!.length - 1}</span>}
+                        {(d.scriptures?.length ?? 0) > 1 && <span style={{ color: "rgba(var(--wf-c1),0.45)" }}> +{d.scriptures!.length - 1}</span>}
                       </p>
                     </div>
                   )}
@@ -2061,7 +2061,7 @@ function DraftList({ drafts, activeDraftId, onSelect, onNew, onDelete, onSubmit,
                         onClick={e => { e.stopPropagation(); onSubmit(d.id); }}
                         title="Submit to team"
                         className="flex items-center gap-1.5 rounded-full px-3 transition-all active:scale-95"
-                        style={{ height: 28, background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)", color: "#a5b4fc", fontSize: 11, fontWeight: 600 }}
+                        style={{ height: 28, background: "rgba(var(--wf-c1),0.15)", border: "1px solid rgba(var(--wf-c1),0.3)", color: "var(--wf-at2)", fontSize: 11, fontWeight: 600 }}
                       >
                         <SendHorizonal size={11} /> Submit
                       </button>
@@ -2327,7 +2327,7 @@ export default function PreachingView({ currentUser, onToast }: Props) {
       message: `"${title}" will be sent to the Design Requests queue for your Audio/Tech team.`,
       detail: "It will be removed from your Drafts list.",
       confirmLabel: "Submit",
-      confirmColor: "#6366f1",
+      confirmColor: "var(--wf-c1-hex)",
       onConfirm: async () => {
         setConfirmLoading(true);
         try {
@@ -2499,12 +2499,12 @@ export default function PreachingView({ currentUser, onToast }: Props) {
         <div className="flex-1 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.12)" }}>
           <div className="text-center px-8">
             <div className="w-16 h-20 rounded-2xl flex items-center justify-center mx-auto mb-5"
-              style={{ background: "linear-gradient(135deg, rgba(99,102,241,0.12), rgba(139,92,246,0.08))", border: "1px solid rgba(99,102,241,0.15)" }}>
-              <BookOpen size={28} className="opacity-30" style={{ color: "#818cf8" }} />
+              style={{ background: "linear-gradient(135deg, rgba(var(--wf-c1),0.12), rgba(var(--wf-c2),0.08))", border: "1px solid rgba(var(--wf-c1),0.15)" }}>
+              <BookOpen size={28} className="opacity-30" style={{ color: "var(--wf-at)" }} />
             </div>
             <h2 className="text-xl font-bold mb-2" style={{ color: "rgba(255,255,255,0.25)" }}>Canvas Locked</h2>
             <p className="text-sm mb-6" style={{ color: "rgba(255,255,255,0.18)" }}>
-              Click <span style={{ color: "rgba(99,102,241,0.7)", fontWeight: 700 }}>+ New</span> in the sidebar to create your sermon draft.
+              Click <span style={{ color: "rgba(var(--wf-c1),0.7)", fontWeight: 700 }}>+ New</span> in the sidebar to create your sermon draft.
             </p>
           </div>
         </div>
@@ -2514,7 +2514,7 @@ export default function PreachingView({ currentUser, onToast }: Props) {
 
   return (
     <>
-    <div className="flex flex-col flex-1 h-full min-h-0 overflow-hidden" style={{ background: "#0e0e1c" }}>
+    <div className="flex flex-col flex-1 h-full min-h-0 overflow-hidden" style={{ background: "var(--wf-bg6)" }}>
 
       {/* ══════════ DESKTOP layout lg+ ══════════ */}
       <div className="hidden lg:flex flex-1 min-h-0 overflow-hidden">
@@ -2536,7 +2536,7 @@ export default function PreachingView({ currentUser, onToast }: Props) {
           </div>
         ) : (
           <div className="flex w-9 h-full shrink-0 flex-col"
-            style={{ background: "#0c0c18", borderRight: "1px solid rgba(255,255,255,0.06)" }}>
+            style={{ background: "var(--wf-bg1)", borderRight: "1px solid rgba(255,255,255,0.06)" }}>
             {/* Spacer matching canvas top bar height */}
             <div style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", height: 45, flexShrink: 0 }} />
             <div className="flex flex-col items-center pt-3 gap-2">
@@ -2564,7 +2564,7 @@ export default function PreachingView({ currentUser, onToast }: Props) {
                 {/* Dummy canvas header */}
                 <div className="flex items-center justify-between px-4 mb-2" style={{ height: 45, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                   <div className="h-4 w-48 rounded-full" style={{ background: "rgba(255,255,255,0.15)" }} />
-                  <div className="h-8 w-20 rounded-xl" style={{ background: "rgba(99,102,241,0.3)" }} />
+                  <div className="h-8 w-20 rounded-xl" style={{ background: "rgba(var(--wf-c1),0.3)" }} />
                 </div>
                 {["SERVICE INFO","MAIN TITLE","INTRODUCTION","MAIN PASSAGE","KEY POINTS","FREE NOTES & ILLUSTRATIONS","APPLICATION / CHALLENGE","END / CLOSING PRAYER"].map(label => (
                   <div key={label} className="rounded-2xl flex items-center gap-4 px-5"
@@ -2577,15 +2577,15 @@ export default function PreachingView({ currentUser, onToast }: Props) {
 
               {/* Frosted-glass overlay */}
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center"
-                style={{ background: "rgba(10,10,22,0.75)", backdropFilter: "blur(8px)" }}>
+                style={{ background: "var(--wf-overlay)", backdropFilter: "blur(8px)" }}>
                 <div className="text-center px-8 max-w-sm">
                   <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5"
-                    style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)" }}>
-                    <BookOpen size={26} style={{ color: "rgba(99,102,241,0.4)" }} />
+                    style={{ background: "rgba(var(--wf-c1),0.08)", border: "1px solid rgba(var(--wf-c1),0.2)" }}>
+                    <BookOpen size={26} style={{ color: "rgba(var(--wf-c1),0.4)" }} />
                   </div>
                   <h2 className="text-[18px] font-bold mb-2" style={{ color: "rgba(255,255,255,0.4)" }}>Canvas is Locked</h2>
                   <p className="text-[13px] leading-relaxed" style={{ color: "rgba(255,255,255,0.22)" }}>
-                    Click <span style={{ color: "#818cf8", fontWeight: 700 }}>+ New</span> in the left panel to create your sermon draft and unlock all editing tools.
+                    Click <span style={{ color: "var(--wf-at)", fontWeight: 700 }}>+ New</span> in the left panel to create your sermon draft and unlock all editing tools.
                   </p>
                 </div>
               </div>
@@ -2610,11 +2610,11 @@ export default function PreachingView({ currentUser, onToast }: Props) {
             {/* Disabled overlay when no draft is active */}
             {!activeDraft && (
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center"
-                style={{ background: "rgba(10,10,22,0.82)", backdropFilter: "blur(4px)", borderLeft: "1px solid rgba(255,255,255,0.06)" }}>
+                style={{ background: "var(--wf-overlay)", backdropFilter: "blur(4px)", borderLeft: "1px solid rgba(255,255,255,0.06)" }}>
                 <div className="flex flex-col items-center gap-3 px-6 text-center">
                   <div className="flex items-center justify-center rounded-2xl"
-                    style={{ width: 52, height: 52, background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.15)" }}>
-                    <BookOpen size={22} style={{ color: "rgba(99,102,241,0.35)" }} />
+                    style={{ width: 52, height: 52, background: "rgba(var(--wf-c1),0.08)", border: "1px solid rgba(var(--wf-c1),0.15)" }}>
+                    <BookOpen size={22} style={{ color: "rgba(var(--wf-c1),0.35)" }} />
                   </div>
                   <p className="text-[13px] font-bold" style={{ color: "rgba(255,255,255,0.25)" }}>Bible Locked</p>
                   <p className="text-[11px] leading-relaxed" style={{ color: "rgba(255,255,255,0.15)" }}>
@@ -2628,17 +2628,17 @@ export default function PreachingView({ currentUser, onToast }: Props) {
           </div>
         ) : (
           <div className="flex w-9 h-full shrink-0 flex-col"
-            style={{ background: "#0c0c18", borderLeft: "1px solid rgba(255,255,255,0.06)" }}>
+            style={{ background: "var(--wf-bg1)", borderLeft: "1px solid rgba(255,255,255,0.06)" }}>
             {/* Spacer matching canvas top bar height */}
             <div style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", height: 45, flexShrink: 0 }} />
             <div className="flex flex-col items-center pt-3 gap-2">
               <button onClick={() => setBibleOpen(true)} title="Expand Bible"
                 className="p-1.5 rounded-lg transition-all hover:scale-110"
-                style={{ color: "rgba(165,180,252,0.6)", background: "rgba(99,102,241,0.1)" }}>
+                style={{ color: "rgba(var(--wf-c3),0.6)", background: "rgba(var(--wf-c1),0.1)" }}>
                 <PanelRight size={14} />
               </button>
               <div className="flex-1 flex items-center">
-                <BookOpen size={12} style={{ color: "rgba(99,102,241,0.4)" }} />
+                <BookOpen size={12} style={{ color: "rgba(var(--wf-c1),0.4)" }} />
               </div>
               <div className="flex items-center">
                 <span style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", color: "rgba(255,255,255,0.18)", fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase" }}>Bible</span>
@@ -2669,7 +2669,7 @@ export default function PreachingView({ currentUser, onToast }: Props) {
                   <div className="absolute inset-0 overflow-hidden px-4 pt-4 space-y-3 opacity-[0.12] pointer-events-none select-none" aria-hidden="true">
                     <div className="flex items-center justify-between px-4 mb-2" style={{ height: 45, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                       <div className="h-4 w-48 rounded-full" style={{ background: "rgba(255,255,255,0.15)" }} />
-                      <div className="h-8 w-20 rounded-xl" style={{ background: "rgba(99,102,241,0.3)" }} />
+                      <div className="h-8 w-20 rounded-xl" style={{ background: "rgba(var(--wf-c1),0.3)" }} />
                     </div>
                     {["SERVICE INFO","MAIN TITLE","INTRODUCTION","MAIN PASSAGE","KEY POINTS"].map(label => (
                       <div key={label} className="rounded-2xl flex items-center gap-4 px-5"
@@ -2681,19 +2681,19 @@ export default function PreachingView({ currentUser, onToast }: Props) {
                   </div>
                   {/* Frosted lock overlay */}
                   <div className="absolute inset-0 z-10 flex flex-col items-center justify-center"
-                    style={{ background: "rgba(10,10,22,0.75)", backdropFilter: "blur(8px)" }}>
+                    style={{ background: "var(--wf-overlay)", backdropFilter: "blur(8px)" }}>
                     <div className="text-center px-8 max-w-sm">
                       <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5"
-                        style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)" }}>
-                        <BookOpen size={26} style={{ color: "rgba(99,102,241,0.4)" }} />
+                        style={{ background: "rgba(var(--wf-c1),0.08)", border: "1px solid rgba(var(--wf-c1),0.2)" }}>
+                        <BookOpen size={26} style={{ color: "rgba(var(--wf-c1),0.4)" }} />
                       </div>
                       <h2 className="text-[18px] font-bold mb-2" style={{ color: "rgba(255,255,255,0.4)" }}>Canvas is Locked</h2>
                       <p className="text-[13px] leading-relaxed mb-6" style={{ color: "rgba(255,255,255,0.22)" }}>
-                        Tap <span style={{ color: "#818cf8", fontWeight: 700 }}>+ New</span> to create your sermon draft and unlock all editing tools.
+                        Tap <span style={{ color: "var(--wf-at)", fontWeight: 700 }}>+ New</span> to create your sermon draft and unlock all editing tools.
                       </p>
                       <button onClick={handleNew}
                         className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all active:scale-95 mx-auto"
-                        style={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6)", color: "#fff" }}>
+                        style={{ background: "var(--wf-c1-grd)", color: "#fff" }}>
                         <Plus size={16} /> New Sermon Draft
                       </button>
                     </div>
@@ -2717,11 +2717,11 @@ export default function PreachingView({ currentUser, onToast }: Props) {
           {/* BIBLE TAB */}
           {mobileTab === "bible" && (
             !activeDraft ? (
-              <div className="flex-1 flex items-center justify-center h-full" style={{ background: "#0e0e1c" }}>
+              <div className="flex-1 flex items-center justify-center h-full" style={{ background: "var(--wf-bg6)" }}>
                 <div className="text-center px-8">
                   <div className="flex items-center justify-center rounded-2xl mb-4 mx-auto"
-                    style={{ width: 56, height: 56, background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)" }}>
-                    <BookOpen size={24} style={{ color: "rgba(99,102,241,0.35)" }} />
+                    style={{ width: 56, height: 56, background: "rgba(var(--wf-c1),0.08)", border: "1px solid rgba(var(--wf-c1),0.2)" }}>
+                    <BookOpen size={24} style={{ color: "rgba(var(--wf-c1),0.35)" }} />
                   </div>
                   <p className="text-[16px] font-bold mb-2" style={{ color: "rgba(255,255,255,0.35)" }}>Bible Locked</p>
                   <p className="text-[13px] leading-relaxed" style={{ color: "rgba(255,255,255,0.18)" }}>
@@ -2756,7 +2756,7 @@ export default function PreachingView({ currentUser, onToast }: Props) {
 
         {/* ── Mobile bottom tab bar ── */}
         <div className="shrink-0 flex"
-          style={{ background: "#090913", borderTop: "1px solid rgba(255,255,255,0.08)",
+          style={{ background: "var(--wf-bg5)", borderTop: "1px solid rgba(255,255,255,0.08)",
             paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
           {([
             { id: "sermons" as const, icon: <Mic2 size={22} />,     label: "Sermons" },
@@ -2768,9 +2768,9 @@ export default function PreachingView({ currentUser, onToast }: Props) {
               <button key={tab.id} onClick={() => setMobileTab(tab.id)}
                 className="flex-1 flex flex-col items-center justify-center py-3 gap-1 transition-colors"
                 style={{
-                  color: active ? "#818cf8" : "rgba(255,255,255,0.3)",
-                  background: active ? "rgba(99,102,241,0.07)" : "transparent",
-                  borderTop: `2px solid ${active ? "#6366f1" : "transparent"}`,
+                  color: active ? "var(--wf-at)" : "rgba(255,255,255,0.3)",
+                  background: active ? "rgba(var(--wf-c1),0.07)" : "transparent",
+                  borderTop: `2px solid ${active ? "var(--wf-c1-hex)" : "transparent"}`,
                 }}>
                 {tab.icon}
                 <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>
