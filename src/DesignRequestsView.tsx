@@ -304,15 +304,6 @@ export default function DesignRequestsView({ currentUserId, currentUserName, cur
     }
   }, [pendingDraftId, items, loading, onPendingDraftHandled]);
 
-    const interval = setInterval(() => {
-      fetch("/api/preaching-drafts/submitted")
-        .then(r => r.ok ? r.json() : null)
-        .then(data => { if (Array.isArray(data)) setItems(data); })
-        .catch(() => { /* silent */ });
-    }, 15_000);
-    return () => clearInterval(interval);
-  }, []);
-
   // ── Recall handler ────────────────────────────────────────────────────────
   const handleRecall = (item: SermonDraft) => {
     showConfirm({
