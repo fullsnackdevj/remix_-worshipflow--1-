@@ -3,6 +3,7 @@ import {
   Palette, BookOpen, CalendarDays, User2, Clock, ChevronDown, ChevronUp,
   RefreshCw, Loader2, CornerUpLeft, FileText, Lightbulb, Heart, BookMarked,
   PenLine, CheckCircle2, InboxIcon, AlertTriangle, Copy, Check, Info, X,
+  Brush, Sparkles, CheckCheck,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -33,12 +34,21 @@ interface SermonDraft {
   serviceType?: string;
   submittedAt?: string;
   submittedByName?: string;
-  submissionVersion?: number; // > 1 means this is a re-submission
+  submissionVersion?: number;
   status: "submitted" | "draft";
+  // ── Design volunteer fields ──────────────────────────────────
+  designStatus?: "pending" | "in_design" | "design_done";
+  designerId?: string;
+  designerName?: string;
+  designerPhoto?: string;
+  designClaimedAt?: string;
+  designCompletedAt?: string;
 }
 
 interface Props {
   currentUserId: string;
+  currentUserName: string;
+  currentUserPhoto?: string;
   isAdmin: boolean;
   onToast?: (type: "success" | "error" | "info", message: string) => void;
 }
@@ -171,13 +181,80 @@ function buildCopyText(item: SermonDraft): string {
   return lines.join("\n").trim();
 }
 
+// ── Design Status Badge ───────────────────────────────────────────────────────
+function DesignStatusBadge({ item }: { item: SermonDraft }) {
+  const [showTooltip, setShowTooltip] = useState(false);
+
+  if (item.designStatus === "design_done") {
+    return (
+      <div className="flex items-center gap-1.5 rounded-full px-2.5 py-1"
+        style={{ background: "rgba(52,211,153,0.12)", border: "1px solid rgba(52,211,153,0.3)" }}>
+        <CheckCheck size={10} style={{ color: "#34d399" }} />
+        <span style={{ fontSize: 10, color: "#34d399", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+          Slides Done
+        </span>
+        {item.designerName && (
+          <span style={{ fontSize: 10, color: "rgba(52,211,153,0.65)", fontWeight: 500 }}>
+            · {item.designerName.split(" ")[0]}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  if (item.designStatus === "in_design") {
+    return (
+      <div className="relative">
+        <div
+          className="flex items-center gap-1.5 rounded-full px-2.5 py-1 cursor-default"
+          style={{ background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.3)" }}
+          onMouseEnter={() => setShowTooltip(true)}
+          onMouseLeave={() => setShowTooltip(false)}
+        >
+          <Brush size={10} style={{ color: "#a78bfa" }} />
+          <span style={{ fontSize: 10, color: "#a78bfa", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+            Design in Progress
+          </span>
+          {item.designerName && (
+            <span style={{ fontSize: 10, color: "rgba(167,139,250,0.65)", fontWeight: 500 }}>
+              · {item.designerName.split(" ")[0]}
+            </span>
+          )}
+        </div>
+        {showTooltip && item.designerName && (
+          <div className="absolute bottom-full left-0 mb-1.5 z-50 rounded-xl px-3 py-2 whitespace-nowrap"
+            style={{ background: "rgba(15,15,30,0.97)", border: "1px solid rgba(139,92,246,0.3)", boxShadow: "0 8px 24px rgba(0,0,0,0.6)", fontSize: 11 }}>
+            <p style={{ color: "rgba(255,255,255,0.5)", marginBottom: 2 }}>Designer</p>
+            <p style={{ color: "#fff", fontWeight: 700 }}>{item.designerName}</p>
+            {item.designClaimedAt && (
+              <p style={{ color: "rgba(255,255,255,0.3)", marginTop: 2 }}>Claimed {timeAgo(item.designClaimedAt)}</p>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 rounded-full px-2.5 py-1"
+      style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+      <Clock size={9} style={{ color: "rgba(255,255,255,0.3)" }} />
+      <span style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+        Awaiting Designer
+      </span>
+    </div>
+  );
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
-export default function DesignRequestsView({ currentUserId, isAdmin, onToast }: Props) {
+export default function DesignRequestsView({ currentUserId, currentUserName, currentUserPhoto = "", isAdmin, onToast }: Props) {
   const [items, setItems] = useState<SermonDraft[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [recallingId, setRecallingId] = useState<string | null>(null);
-  const [copiedId, setCopiedId] = useState<string | null>(null); // flashes ✓ for 2s
+  const [claimingId, setClaimingId] = useState<string | null>(null);
+  const [completingId, setCompletingId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [infoOpen, setInfoOpen] = useState(false);
   const [infoGlowing, setInfoGlowing] = useState(() => !localStorage.getItem("wf_design_requests_info_seen"));
 
@@ -206,10 +283,9 @@ export default function DesignRequestsView({ currentUserId, isAdmin, onToast }: 
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
-  // Silent background poll every 15 s \u2014 catches newly submitted sermons without a manual refresh
+  // Silent background poll every 15s
   useEffect(() => {
     const interval = setInterval(() => {
-      // Only silently re-fetch if not already loading
       fetch("/api/preaching-drafts/submitted")
         .then(r => r.ok ? r.json() : null)
         .then(data => { if (Array.isArray(data)) setItems(data); })
@@ -218,6 +294,7 @@ export default function DesignRequestsView({ currentUserId, isAdmin, onToast }: 
     return () => clearInterval(interval);
   }, []);
 
+  // ── Recall handler ────────────────────────────────────────────────────────
   const handleRecall = (item: SermonDraft) => {
     showConfirm({
       title: "Recall to Drafts",
@@ -245,6 +322,95 @@ export default function DesignRequestsView({ currentUserId, isAdmin, onToast }: 
       },
     });
   };
+
+  // ── Volunteer to design ───────────────────────────────────────────────────
+  const handleClaim = (item: SermonDraft) => {
+    showConfirm({
+      title: "Volunteer to Design",
+      message: `You're taking responsibility for designing the slides for "${item.title || "this sermon"}".`,
+      detail: "The preacher will be notified that you're on it. Only you can mark it as done.",
+      confirmLabel: "Yes, I'll design it!",
+      confirmColor: "rgba(139,92,246,1)",
+      onConfirm: async () => {
+        setConfirmLoading(true);
+        setClaimingId(item.id);
+        try {
+          const res = await fetch(`/api/preaching-drafts/${item.id}/claim`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              designerId: currentUserId,
+              designerName: currentUserName,
+              designerPhoto: currentUserPhoto,
+            }),
+          });
+          if (res.status === 409) {
+            const data = await res.json();
+            onToast?.("info", `${data.existingDesigner || "Someone"} already claimed this!`);
+            // Refresh so we see the updated state
+            fetchItems();
+          } else if (!res.ok) {
+            throw new Error();
+          } else {
+            // Optimistically update local state
+            setItems(prev => prev.map(d => d.id === item.id ? {
+              ...d,
+              designStatus: "in_design",
+              designerId: currentUserId,
+              designerName: currentUserName,
+              designerPhoto: currentUserPhoto,
+              designClaimedAt: new Date().toISOString(),
+            } : d));
+            onToast?.("success", `You're now designing "${item.title || "this sermon"}"!`);
+          }
+        } catch {
+          onToast?.("error", "Could not claim. Please try again.");
+        }
+        setClaimingId(null);
+        closeConfirm();
+      },
+    });
+  };
+
+  // ── Mark slides as done ───────────────────────────────────────────────────
+  const handleComplete = (item: SermonDraft) => {
+    showConfirm({
+      title: "Mark Slides as Done ✅",
+      message: `Confirm that the slides for "${item.title || "this sermon"}" are fully designed and ready.`,
+      detail: "The preacher will receive a push notification that their slides are ready!",
+      confirmLabel: "Slides are Done!",
+      confirmColor: "#10b981",
+      onConfirm: async () => {
+        setConfirmLoading(true);
+        setCompletingId(item.id);
+        try {
+          const res = await fetch(`/api/preaching-drafts/${item.id}/complete`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              designerId: currentUserId,
+              designerName: currentUserName,
+              designerPhoto: currentUserPhoto,
+            }),
+          });
+          if (!res.ok) throw new Error();
+          setItems(prev => prev.map(d => d.id === item.id ? {
+            ...d,
+            designStatus: "design_done",
+            designCompletedAt: new Date().toISOString(),
+          } : d));
+          onToast?.("success", "Slides marked as done! The preacher has been notified 🎉");
+        } catch {
+          onToast?.("error", "Could not mark as done. Please try again.");
+        }
+        setCompletingId(null);
+        closeConfirm();
+      },
+    });
+  };
+
+  const isMyDesign = (item: SermonDraft) =>
+    item.designStatus === "in_design" && item.designerId === currentUserId;
 
   return (
     <>
@@ -274,7 +440,7 @@ export default function DesignRequestsView({ currentUserId, isAdmin, onToast }: 
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {/* Info button — glowing until first clicked */}
+          {/* Info button */}
           <button
             onClick={() => { setInfoOpen(true); if (infoGlowing) { localStorage.setItem("wf_design_requests_info_seen", "1"); setInfoGlowing(false); } }}
             title="How Design Requests Works"
@@ -310,7 +476,7 @@ export default function DesignRequestsView({ currentUserId, isAdmin, onToast }: 
       >
         <Palette size={16} style={{ color: "var(--wf-at)", marginTop: 1, flexShrink: 0 }} />
         <p style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", lineHeight: 1.5 }}>
-          Sermons submitted by the preacher will appear here. Review them to prepare slides, graphics, and presentation materials.
+          Sermons submitted by the preacher will appear here. Volunteer to design slides and notify the preacher when done.
         </p>
       </div>
 
@@ -346,6 +512,10 @@ export default function DesignRequestsView({ currentUserId, isAdmin, onToast }: 
           const isExpanded = expandedId === item.id;
           const scriptureText = item.scriptures?.[0]?.text || item.mainVerse || "";
           const hasMore = (item.scriptures?.length ?? 0) > 1;
+          const isMine = isMyDesign(item);
+          const isPending = !item.designStatus || item.designStatus === "pending";
+          const isDone = item.designStatus === "design_done";
+          const inDesign = item.designStatus === "in_design";
 
           return (
             <div
@@ -353,7 +523,7 @@ export default function DesignRequestsView({ currentUserId, isAdmin, onToast }: 
               className="rounded-2xl mb-3 overflow-hidden transition-all"
               style={{
                 background: "rgba(255,255,255,0.025)",
-                border: "1px solid rgba(var(--wf-c1),0.2)",
+                border: `1px solid ${isDone ? "rgba(52,211,153,0.25)" : inDesign ? "rgba(139,92,246,0.25)" : "rgba(var(--wf-c1),0.2)"}`,
                 boxShadow: isExpanded ? "0 0 0 1px rgba(var(--wf-c1),0.3), 0 8px 32px rgba(0,0,0,0.4)" : "none",
               }}
             >
@@ -363,7 +533,6 @@ export default function DesignRequestsView({ currentUserId, isAdmin, onToast }: 
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-1.5">
                     {(item.submissionVersion ?? 1) > 1 ? (
-                      // ── Latest Version badge ──
                       <>
                         <div className="flex items-center gap-1.5 rounded-full px-2 py-0.5"
                           style={{ background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.3)" }}>
@@ -378,7 +547,6 @@ export default function DesignRequestsView({ currentUserId, isAdmin, onToast }: 
                         </span>
                       </>
                     ) : (
-                      // ── First submission (normal) ──
                       <>
                         <CheckCircle2 size={11} style={{ color: "#34d399" }} />
                         <span style={{ fontSize: 10, color: "#34d399", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>
@@ -440,9 +608,15 @@ export default function DesignRequestsView({ currentUserId, isAdmin, onToast }: 
                   )}
                 </div>
 
-                {/* Expand/collapse + Copy + Recall buttons */}
+                {/* ── Design Status Row ── */}
+                <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+                  <DesignStatusBadge item={item} />
+                </div>
+
+                {/* Action buttons row */}
                 <div className="flex items-center gap-2 mt-3 pt-2.5"
                   style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                  {/* Expand */}
                   <button
                     onClick={() => setExpandedId(isExpanded ? null : item.id)}
                     className="flex items-center gap-1.5 rounded-full px-3 flex-1 justify-center transition-all active:scale-95"
@@ -477,7 +651,49 @@ export default function DesignRequestsView({ currentUserId, isAdmin, onToast }: 
                     {copiedId === item.id ? <Check size={12} /> : <Copy size={12} />}
                   </button>
 
-                  {/* Recall — only shown to admin or the submitter */}
+                  {/* ── Volunteer button — only when pending/unclaimed ── */}
+                  {isPending && (
+                    <button
+                      onClick={() => handleClaim(item)}
+                      disabled={claimingId === item.id}
+                      title="Volunteer to design slides"
+                      className="flex items-center gap-1.5 rounded-full px-3 transition-all active:scale-95"
+                      style={{
+                        height: 30, flexShrink: 0,
+                        background: "rgba(139,92,246,0.15)",
+                        border: "1px solid rgba(139,92,246,0.35)",
+                        fontSize: 11, color: "#a78bfa", fontWeight: 700,
+                      }}
+                    >
+                      {claimingId === item.id
+                        ? <Loader2 size={11} className="animate-spin" />
+                        : <Sparkles size={11} />}
+                      I'll design this
+                    </button>
+                  )}
+
+                  {/* ── Mark Done button — only for the assigned designer ── */}
+                  {isMine && (
+                    <button
+                      onClick={() => handleComplete(item)}
+                      disabled={completingId === item.id}
+                      title="Mark slides as complete"
+                      className="flex items-center gap-1.5 rounded-full px-3 transition-all active:scale-95"
+                      style={{
+                        height: 30, flexShrink: 0,
+                        background: "rgba(16,185,129,0.15)",
+                        border: "1px solid rgba(16,185,129,0.35)",
+                        fontSize: 11, color: "#34d399", fontWeight: 700,
+                      }}
+                    >
+                      {completingId === item.id
+                        ? <Loader2 size={11} className="animate-spin" />
+                        : <CheckCheck size={11} />}
+                      Done!
+                    </button>
+                  )}
+
+                  {/* ── Recall — admin or submitter ── */}
                   {(isAdmin || item.authorId === currentUserId) && (
                     <button
                       onClick={() => handleRecall(item)}
@@ -515,21 +731,18 @@ export default function DesignRequestsView({ currentUserId, isAdmin, onToast }: 
                     </Section>
                   )}
 
-                  {/* Introduction */}
                   {item.introduction && (
                     <Section icon={<PenLine size={13} />} label="Introduction">
                       <p className="whitespace-pre-wrap">{item.introduction}</p>
                     </Section>
                   )}
 
-                  {/* Main Passage */}
                   {item.mainPassage && (
                     <Section icon={<BookMarked size={13} />} label="Main Passage / Outline">
                       <p className="whitespace-pre-wrap">{item.mainPassage}</p>
                     </Section>
                   )}
 
-                  {/* Key Points */}
                   {(item.keyPoints?.length ?? 0) > 0 && (
                     <Section icon={<Lightbulb size={13} />} label={item.keyPointsTitle || "Key Points"}>
                       <div className="space-y-3">
@@ -556,28 +769,24 @@ export default function DesignRequestsView({ currentUserId, isAdmin, onToast }: 
                     </Section>
                   )}
 
-                  {/* Free Notes */}
                   {item.freeNotes && (
                     <Section icon={<FileText size={13} />} label="Notes">
                       <p className="whitespace-pre-wrap">{item.freeNotes}</p>
                     </Section>
                   )}
 
-                  {/* Application */}
                   {item.application && (
                     <Section icon={<Heart size={13} />} label="Application">
                       <p className="whitespace-pre-wrap">{item.application}</p>
                     </Section>
                   )}
 
-                  {/* Closing Prayer */}
                   {item.closingPrayer && (
                     <Section icon={<BookOpen size={13} />} label="Closing Prayer">
                       <p className="whitespace-pre-wrap">{item.closingPrayer}</p>
                     </Section>
                   )}
 
-                  {/* Collected Verses */}
                   {(item.collectedVerses?.length ?? 0) > 0 && (
                     <Section icon={<BookMarked size={13} />} label={`Collected Verses (${item.collectedVerses!.length})`}>
                       <div className="space-y-2">
@@ -640,10 +849,10 @@ function DesignRequestsInfoModal({ onClose }: { onClose: () => void }) {
       items: [
         { icon: "🔒", text: "This module is only visible to Admin and Audio/Tech roles — other team members cannot access it." },
         { icon: "📥", text: "Sermons submitted by the preacher appear here automatically — no manual uploading required." },
-        { icon: "📋", text: "One-click Copy: expand any sermon and click the copy icon to get the full outline ready to paste into Canva, PowerPoint, or Google Slides." },
-        { icon: "🔄", text: "Auto-refresh: the queue silently polls every 15 seconds for new submissions — so you never miss a fresh request." },
+        { icon: "✋", text: "Click 'I'll design this' to volunteer for a sermon. First-come, first-served — the preacher is notified instantly." },
+        { icon: "🎨", text: "Once you volunteer, the card shows 'Design in Progress' with your name. Others can see it's taken." },
+        { icon: "✅", text: "When slides are done, click 'Done!' to notify the preacher via push notification and in-app alert." },
         { icon: "↩️", text: "Recall: if you need the preacher to add more details, use the Recall button to send the sermon back to their Drafts." },
-        { icon: "🧩", text: "Each submission includes: sermon title, scripture references, key points, illustrations, application, and closing prayer." },
       ],
     },
     workflow: {
@@ -653,10 +862,10 @@ function DesignRequestsInfoModal({ onClose }: { onClose: () => void }) {
       items: [
         { icon: "🔔", text: "When a preacher submits a sermon, it appears immediately in this queue. Check here before Sunday service preparation." },
         { icon: "👁️", text: "Click 'View full sermon' to expand and read the complete outline — including all key points and scriptures." },
-        { icon: "📋", text: "Click the copy icon to copy the entire outline text to your clipboard — formatted and ready to paste." },
-        { icon: "🎨", text: "Paste into Canva, PowerPoint, or any tool to start building your slides based on the preacher's structure." },
+        { icon: "✋", text: "Click 'I'll design this' to claim the sermon. You'll be the designated designer and the preacher gets notified." },
+        { icon: "🎨", text: "Paste the outline into Canva, PowerPoint, or any tool to start building your slides based on the preacher's structure." },
+        { icon: "✅", text: "Once slides are done, click 'Done!' — the preacher instantly gets a push notification that their slides are ready." },
         { icon: "↩️", text: "If information is incomplete, click 'Recall' to move it back to the preacher's Drafts with a notification." },
-        { icon: "✅", text: "Once slides are done, the sermon stays in this queue as a historical record of submissions." },
       ],
     },
     integration: {
@@ -666,9 +875,9 @@ function DesignRequestsInfoModal({ onClose }: { onClose: () => void }) {
       items: [
         { icon: "📤", text: "The preacher creates their outline in the Preaching module and clicks 'Submit to Design Requests'." },
         { icon: "⚡", text: "The sermon instantly appears here with a 'Submitted' badge and the submission timestamp." },
-        { icon: "🔄", text: "If re-submitted after recall, the sermon shows a 'Latest Version' badge with a version number — so you always work from the newest content." },
+        { icon: "🔔", text: "When you volunteer, the preacher sees a push notification: '[Name] is designing your slides!'." },
+        { icon: "✅", text: "When you mark it done, the preacher gets another notification: 'Slides are ready! You're all set for Sunday!'." },
         { icon: "🛡️", text: "Only Admin and Audio/Tech roles can see Design Requests — the preacher cannot see this queue, protecting the workflow separation." },
-        { icon: "📱", text: "Works cross-platform: the preacher submits from their phone, you review on desktop — seamless real-time handoff." },
         { icon: "💡", text: "This integration eliminates manual file sharing, email attachments, and WhatsApp forwarding of sermon outlines." },
       ],
     },

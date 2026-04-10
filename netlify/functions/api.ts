@@ -3213,6 +3213,103 @@ Rules:
         }
     }
 
+    // PATCH /preaching-drafts/:id/claim — Audio/Tech member volunteers to design
+    const preachingClaimMatch = rawPath.match(/^\/preaching-drafts\/([^/]+)\/claim$/);
+    if (preachingClaimMatch && method === "PATCH") {
+        const draftId = preachingClaimMatch[1];
+        try {
+            const { designerId, designerName, designerPhoto = "" } = body as {
+                designerId: string; designerName: string; designerPhoto?: string;
+            };
+            if (!designerId || !designerName) return json(400, { error: "designerId and designerName required" });
+
+            const ref = firestore.collection("preachingDrafts").doc(draftId);
+            // Firestore transaction to guarantee first-claim-wins atomically
+            const result = await firestore.runTransaction(async tx => {
+                const snap = await tx.get(ref);
+                if (!snap.exists) return { error: "not_found" };
+                const data = snap.data() as Record<string, any>;
+                if (data.designStatus === "in_design" || data.designStatus === "design_done") {
+                    return { error: "already_claimed", existingDesigner: data.designerName };
+                }
+                tx.update(ref, {
+                    designStatus: "in_design",
+                    designerId,
+                    designerName,
+                    designerPhoto,
+                    designClaimedAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                });
+                return { ok: true, authorId: data.authorId, authorName: data.authorName, title: data.title };
+            });
+
+            if (result.error === "not_found") return json(404, { error: "Draft not found" });
+            if (result.error === "already_claimed") return json(409, { error: "already_claimed", existingDesigner: result.existingDesigner });
+
+            // Notify the preacher
+            if (result.authorId) {
+                writeNotif(firestore, {
+                    type: "design_claimed",
+                    message: "Your slides are being designed! 🎨",
+                    subMessage: `${designerName} has volunteered to design the slides for "${result.title || "your sermon"}".`,
+                    actorName: designerName,
+                    actorPhoto: designerPhoto,
+                    actorUserId: designerId,
+                    targetAudience: "direct",
+                    targetUserId: result.authorId,
+                    resourceId: draftId,
+                });
+            }
+
+            return json(200, { ok: true });
+        } catch (e: any) {
+            console.error("[claim]", e?.message);
+            return json(500, { error: "Failed to claim" });
+        }
+    }
+
+    // PATCH /preaching-drafts/:id/complete — designer marks slides as done
+    const preachingCompleteMatch = rawPath.match(/^\/preaching-drafts\/([^/]+)\/complete$/);
+    if (preachingCompleteMatch && method === "PATCH") {
+        const draftId = preachingCompleteMatch[1];
+        try {
+            const { designerId, designerName, designerPhoto = "" } = body as {
+                designerId: string; designerName: string; designerPhoto?: string;
+            };
+            const ref = firestore.collection("preachingDrafts").doc(draftId);
+            const snap = await ref.get();
+            if (!snap.exists) return json(404, { error: "Draft not found" });
+            const data = snap.data() as Record<string, any>;
+            // Only the assigned designer (or no designer yet) can mark done
+            if (data.designerId && data.designerId !== designerId) {
+                return json(403, { error: "Only the assigned designer can mark this as done" });
+            }
+            await ref.update({
+                designStatus: "design_done",
+                designCompletedAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+            });
+            // Notify the preacher via in-app + FCM
+            if (data.authorId) {
+                writeNotif(firestore, {
+                    type: "design_done",
+                    message: "Slides are ready! ✅",
+                    subMessage: `${designerName} has finished designing the slides for "${data.title || "your sermon"}". You're all set for Sunday!`,
+                    actorName: designerName,
+                    actorPhoto: designerPhoto,
+                    actorUserId: designerId,
+                    targetAudience: "direct",
+                    targetUserId: data.authorId,
+                    resourceId: draftId,
+                });
+            }
+            return json(200, { ok: true });
+        } catch (e: any) {
+            console.error("[complete]", e?.message);
+            return json(500, { error: "Failed to mark complete" });
+        }
+    }
+
     // GET /preaching-drafts/submitted — all submitted drafts (Audio/Tech + Admin)
     if (rawPath === "/preaching-drafts/submitted" && method === "GET") {
         try {

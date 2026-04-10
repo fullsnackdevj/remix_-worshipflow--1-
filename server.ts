@@ -2370,7 +2370,134 @@ app.get("/api/preaching-drafts/submitted", async (_req, res) => {
   }
 });
 
+// PATCH /api/preaching-drafts/:id/claim — Audio/Tech volunteer to design (first-claim-wins)
+app.patch("/api/preaching-drafts/:id/claim", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const draftId = req.params.id;
+  const { designerId, designerName, designerPhoto = "" } = req.body as {
+    designerId: string; designerName: string; designerPhoto?: string;
+  };
+  if (!designerId || !designerName) return res.status(400).json({ error: "designerId and designerName required" });
+  try {
+    const ref = firestore.collection("preachingDrafts").doc(draftId);
+    const result = await firestore.runTransaction(async tx => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) return { error: "not_found" };
+      const data = snap.data() as Record<string, any>;
+      if (data.designStatus === "in_design" || data.designStatus === "design_done") {
+        return { error: "already_claimed", existingDesigner: data.designerName };
+      }
+      tx.update(ref, {
+        designStatus: "in_design",
+        designerId,
+        designerName,
+        designerPhoto,
+        designClaimedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      return { ok: true, authorId: data.authorId, title: data.title };
+    });
+
+    if (result.error === "not_found") return res.status(404).json({ error: "Draft not found" });
+    if (result.error === "already_claimed") return res.status(409).json({ error: "already_claimed", existingDesigner: result.existingDesigner });
+
+    // In-app notification for the preacher
+    if (result.authorId) {
+      firestore.collection("notifications").add({
+        type: "design_claimed",
+        message: "Your slides are being designed! 🎨",
+        subMessage: `${designerName} has volunteered to design the slides for "${result.title || "your sermon"}".`,
+        actorName: designerName,
+        actorPhoto: designerPhoto,
+        actorUserId: designerId,
+        targetAudience: "direct",
+        targetUserId: result.authorId,
+        resourceId: draftId,
+        readBy: [],
+        deletedBy: [],
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      }).catch(() => { /* silent */ });
+
+      // FCM push to the preacher's device(s)
+      sendPushNotification(firestore, {
+        title: "Your slides are being designed! 🎨",
+        body: `${designerName} is working on slides for "${result.title || "your sermon"}".`,
+        actorUserId: designerId,
+        recipientUserId: result.authorId,
+        targetAudience: "direct",
+        type: "design_claimed",
+        resourceId: draftId,
+      });
+    }
+
+    res.json({ ok: true });
+  } catch (e: any) {
+    console.error("[claim]", e?.message);
+    if (!res.headersSent) res.status(500).json({ error: "Failed to claim" });
+  }
+});
+
+// PATCH /api/preaching-drafts/:id/complete — designer marks slides as done
+app.patch("/api/preaching-drafts/:id/complete", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const draftId = req.params.id;
+  const { designerId, designerName, designerPhoto = "" } = req.body as {
+    designerId: string; designerName: string; designerPhoto?: string;
+  };
+  try {
+    const ref = firestore.collection("preachingDrafts").doc(draftId);
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ error: "Draft not found" });
+    const data = snap.data() as Record<string, any>;
+    if (data.designerId && data.designerId !== designerId) {
+      return res.status(403).json({ error: "Only the assigned designer can mark this as done" });
+    }
+    await ref.update({
+      designStatus: "design_done",
+      designCompletedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    // In-app notification for the preacher
+    if (data.authorId) {
+      firestore.collection("notifications").add({
+        type: "design_done",
+        message: "Slides are ready! ✅",
+        subMessage: `${designerName} has finished designing the slides for "${data.title || "your sermon"}". You're all set for Sunday!`,
+        actorName: designerName,
+        actorPhoto: designerPhoto,
+        actorUserId: designerId,
+        targetAudience: "direct",
+        targetUserId: data.authorId,
+        resourceId: draftId,
+        readBy: [],
+        deletedBy: [],
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      }).catch(() => { /* silent */ });
+
+      // FCM push to the preacher's device(s)
+      sendPushNotification(firestore, {
+        title: "Slides are ready! ✅",
+        body: `${designerName} finished the slides for "${data.title || "your sermon"}". You're all set!`,
+        actorUserId: designerId,
+        recipientUserId: data.authorId,
+        targetAudience: "direct",
+        type: "design_done",
+        resourceId: draftId,
+      });
+    }
+
+    res.json({ ok: true });
+  } catch (e: any) {
+    console.error("[complete]", e?.message);
+    if (!res.headersSent) res.status(500).json({ error: "Failed to mark complete" });
+  }
+});
+
 // ── FREEDOM WALL ─────────────────────────────────────────────────────────────
+
 
 // GET /api/freedom-wall — fetch all notes, newest first
 app.get("/api/freedom-wall", async (_req, res) => {

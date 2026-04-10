@@ -1753,6 +1753,8 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                   <DesignRequestsView
                     key={designRequestsKey}
                     currentUserId={user?.uid ?? ""}
+                    currentUserName={user?.displayName || user?.email?.split("@")[0] || "Team Member"}
+                    currentUserPhoto={user?.photoURL ?? ""}
                     isAdmin={isRoleAdmin}
                     onToast={showToast}
                   />

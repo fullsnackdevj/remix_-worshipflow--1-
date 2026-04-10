@@ -43,6 +43,13 @@ interface SermonDraft {
   updatedAt: string;
   status?: 'draft' | 'submitted';
   submissionVersion?: number; // increments each time the draft is re-submitted
+  // ── Design volunteer fields (set by Audio/Tech team) ──
+  designStatus?: 'pending' | 'in_design' | 'design_done';
+  designerId?: string;
+  designerName?: string;
+  designerPhoto?: string;
+  designClaimedAt?: string;
+  designCompletedAt?: string;
 }
 
 // ── Field targeting for verse insertion ──────────────────────────────────────
@@ -2105,6 +2112,35 @@ function DraftList({ drafts, activeDraftId, onSelect, onNew, onDelete, onSubmit,
                   </div>
                   <p className="font-bold truncate" style={{ fontSize: 14, color: "rgba(255,255,255,0.8)" }}>{d.title || "Untitled Sermon"}</p>
                   {d.subtitle && <p className="truncate mt-0.5" style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", textTransform: "uppercase", fontWeight: 600, letterSpacing: "0.03em" }}>{d.subtitle}</p>}
+
+                  {/* ── Design Status from Audio/Tech ── */}
+                  <div className="mt-2.5">
+                    {d.designStatus === 'design_done' ? (
+                      <div className="flex items-center gap-1.5 rounded-full px-2.5 py-1 w-fit"
+                        style={{ background: "rgba(52,211,153,0.12)", border: "1px solid rgba(52,211,153,0.3)" }}>
+                        <span style={{ fontSize: 13 }}>✅</span>
+                        <span style={{ fontSize: 10, color: "#34d399", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>Slides Ready!</span>
+                        {d.designerName && (
+                          <span style={{ fontSize: 10, color: "rgba(52,211,153,0.65)", fontWeight: 500 }}>· by {d.designerName.split(' ')[0]}</span>
+                        )}
+                      </div>
+                    ) : d.designStatus === 'in_design' ? (
+                      <div className="flex items-center gap-1.5 rounded-full px-2.5 py-1 w-fit"
+                        style={{ background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.25)" }}>
+                        <span style={{ fontSize: 11 }}>🎨</span>
+                        <span style={{ fontSize: 10, color: "#a78bfa", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                          {d.designerName ? `${d.designerName.split(' ')[0]} is designing your slides` : 'Design in Progress'}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 rounded-full px-2.5 py-1 w-fit"
+                        style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                        <span style={{ fontSize: 11 }}>⏳</span>
+                        <span style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" }}>Awaiting Designer</span>
+                      </div>
+                    )}
+                  </div>
+
                   {(d.scheduledDate || d.serviceType) && (
                     <div className="flex items-center gap-2 mt-2.5 flex-wrap">
                       {d.scheduledDate && (
