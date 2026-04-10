@@ -6,7 +6,7 @@ import AutoTextarea from "./AutoTextarea";
 import { Member, ScheduleMember, Schedule, Song, Tag } from "./types";
 import {
   ChevronLeft, ChevronRight, Plus, Calendar, List, X,
-  Copy, Pencil, Lock, Users, Sun, Music, BookOpen, Mail, Eye, Loader2, Heart, SquareKanban, ExternalLink, CheckCircle2,
+  Copy, Pencil, Lock, Users, Sun, Music, BookOpen, Mail, Eye, Loader2, Heart, SquareKanban, ExternalLink, CheckCircle2, Trash2,
 } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -168,6 +168,9 @@ const [schedMemberSearch, setSchedMemberSearch] = useState("");
     if (!cu) return;
     setBdaySending("sending");
     try {
+      const senderPhotoFromMembers = allMembers.find((m: Member) =>
+        m.email?.toLowerCase().trim() === (cu.email || "").toLowerCase().trim()
+      )?.photo || "";
       const res = await fetch("/api/birthday-wish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -178,7 +181,7 @@ const [schedMemberSearch, setSchedMemberSearch] = useState("");
           date: bdayModal.dateStr,
           senderUserId: cu.uid,
           senderName: cu.displayName || cu.email?.split("@")[0] || "A teammate",
-          senderPhoto: cu.photoURL || "",
+          senderPhoto: senderPhotoFromMembers || cu.photoURL || "",
           message: bdayMsg.trim() || BDAY_QUICK_MSGS[0],
         }),
       });
@@ -2036,18 +2039,57 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                   <p className="text-xs text-gray-400 text-center py-3 italic">No greetings yet.</p>
                 ) : (
                   <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-                    {bdayWishes.map((w: any, i: number) => (
-                      <div key={i} className="flex items-start gap-2.5 bg-pink-50 dark:bg-pink-900/10 rounded-xl p-2.5 border border-pink-100 dark:border-pink-800/20">
-                        {w.photo
-                          ? <img src={w.photo} alt={w.name} className="w-7 h-7 rounded-full object-cover shrink-0 mt-0.5 ring-2 ring-pink-300 dark:ring-pink-700" />
-                          : <div className="w-7 h-7 rounded-full bg-pink-100 dark:bg-pink-900/40 flex items-center justify-center text-pink-600 text-[10px] font-bold shrink-0 mt-0.5 ring-2 ring-pink-300 dark:ring-pink-700">{(w.name||"?")[0].toUpperCase()}</div>
-                        }
-                        <div className="min-w-0">
-                          <p className="text-[11px] font-semibold text-gray-700 dark:text-gray-300 leading-tight">{w.name}</p>
-                          <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed mt-0.5 break-words">{w.message || "Happy Birthday! 🎉"}</p>
+                    {bdayWishes.map((w: any, i: number) => {
+                      const isMe = w.userId === user?.uid;
+                      // Fallback: look up photo from allMembers if not stored in wish
+                      const memberPhoto = w.photo || allMembers.find((m: Member) =>
+                        m.email && w.name && m.name?.toLowerCase().trim() === w.name?.toLowerCase().trim()
+                      )?.photo || "";
+                      return (
+                        <div key={i} className={`flex items-start gap-2.5 rounded-xl p-2.5 border transition-all ${
+                          isMe
+                            ? "bg-pink-100/60 dark:bg-pink-900/20 border-pink-300 dark:border-pink-700/50"
+                            : "bg-pink-50 dark:bg-pink-900/10 border-pink-100 dark:border-pink-800/20"
+                        }`}>
+                          {memberPhoto
+                            ? <img src={memberPhoto} alt={w.name} className="w-7 h-7 rounded-full object-cover shrink-0 mt-0.5 ring-2 ring-pink-300 dark:ring-pink-700" />
+                            : <div className="w-7 h-7 rounded-full bg-pink-100 dark:bg-pink-900/40 flex items-center justify-center text-pink-600 text-[10px] font-bold shrink-0 mt-0.5 ring-2 ring-pink-300 dark:ring-pink-700">{(w.name||"?")[0].toUpperCase()}</div>
+                          }
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[11px] font-semibold text-gray-700 dark:text-gray-300 leading-tight">
+                              {w.name}{isMe && <span className="ml-1 text-pink-400 text-[9px] font-bold">(you)</span>}
+                            </p>
+                            <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed mt-0.5 break-words">{w.message || "Happy Birthday! 🎉"}</p>
+                          </div>
+                          {isMe && (
+                            <button
+                              onClick={async () => {
+                                if (!bdayModal) return;
+                                const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+                                try {
+                                  const res = await fetch("/api/birthday-wish", {
+                                    method: "DELETE",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ memberId: bdayModal.member.id, date: today, senderUserId: user?.uid }),
+                                  });
+                                  if (res.ok) {
+                                    setBdayWishes(prev => prev.filter((_: any, idx: number) => idx !== i));
+                                    setBdayWishers(prev => prev.filter((id: string) => id !== user?.uid));
+                                    setGreetedMap(prev => ({ ...prev, [bdayModal.member.id]: false }));
+                                    // Clear localStorage key too
+                                    try { localStorage.removeItem(`wf_bday_sent_${user?.uid}_${bdayModal.member.id}_${today}`); } catch {}
+                                  }
+                                } catch { /* silent */ }
+                              }}
+                              title="Delete my greeting"
+                              className="shrink-0 p-1 rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors mt-0.5"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          )}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

@@ -1358,6 +1358,33 @@ BULLET: [...]`;
         }
     }
 
+    // DELETE /birthday-wish — remove sender's own wish
+    if (rawPath === "/birthday-wish" && method === "DELETE") {
+        const { memberId, date, senderUserId } = body;
+        if (!memberId || !date || !senderUserId) return json(400, { error: "memberId, date, senderUserId required" });
+        if (!firestore) return json(500, { error: "DB unavailable" });
+        try {
+            const docId = `${memberId}_${date}`;
+            const ref = firestore.collection("birthday_reactions").doc(docId);
+            const snap = await ref.get();
+            if (!snap.exists) return json(404, { error: "No wishes found" });
+            const data = snap.data()!;
+            const wishes: any[] = data.wishes ?? [];
+            // Find exact wish to remove (match by userId)
+            const toRemove = wishes.find((w: any) => w.userId === senderUserId);
+            if (!toRemove) return json(404, { error: "Wish not found" });
+            await ref.update({
+                wishes: admin.firestore.FieldValue.arrayRemove(toRemove),
+                wishers: admin.firestore.FieldValue.arrayRemove(senderUserId),
+                wisherNames: admin.firestore.FieldValue.arrayRemove(toRemove.name ?? ""),
+            });
+            return json(200, { success: true });
+        } catch (e) {
+            console.error("birthday-wish DELETE failed:", e);
+            return json(500, { error: "Failed to delete wish" });
+        }
+    }
+
     // ─── OCR ────────────────────────────────────────────────────────────────────
     if (rawPath === "/ocr" && method === "POST") {
 
