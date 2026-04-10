@@ -127,6 +127,8 @@ const [schedMemberSearch, setSchedMemberSearch] = useState("");
   const [bdayWishes, setBdayWishes] = useState<any[]>([]);
   const [bdayWishers, setBdayWishers] = useState<string[]>([]);
   const [bdayLoadingWishes, setBdayLoadingWishes] = useState(false);
+  /** memberId → true if the current user already sent a wish today */
+  const [greetedMap, setGreetedMap] = useState<Record<string, boolean>>({});
 
   const BDAY_QUICK_MSGS = [
     "🎂 Happy Birthday! May God bless you abundantly!",
@@ -174,6 +176,8 @@ const [schedMemberSearch, setSchedMemberSearch] = useState("");
 if (res.status === 429) { showToast("info", "You already sent a birthday wish today!"); setBdaySending("idle"); return; }
       if (!res.ok) throw new Error("Failed");
       setBdaySending("sent");
+      // Immediately mark this celebrant as greeted on the card list
+      setGreetedMap(prev => ({ ...prev, [bdayModal.member.id]: true }));
 showToast("success", `Birthday wish sent to ${bdayModal.member.name.split("")[0]}!`);
       // Refresh wishes list
       const fresh = await fetch(`/api/birthday-wish?memberId=${bdayModal.member.id}&date=${bdayModal.dateStr}`);
@@ -182,6 +186,31 @@ showToast("success", `Birthday wish sent to ${bdayModal.member.name.split("")[0]
       setBdayWishers(freshData.wishers ?? []);
     } catch { setBdaySending("error"); setTimeout(() => setBdaySending("idle"), 2000); }
   };
+
+  // Pre-load greeted status so cards are disabled if the user already greeted today ──
+  useEffect(() => {
+    const cu = getAuth().currentUser;
+    if (!cu) return;
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+    const mmdd = today.slice(5);
+    const celebrantsToday = birthdayMap[mmdd] ?? [];
+    if (!celebrantsToday.length) return;
+    // Fetch wishers for each celebrant to check if current user already greeted
+    Promise.all(
+      celebrantsToday.map(bm =>
+        fetch(`/api/birthday-wish?memberId=${bm.id}&date=${today}`)
+          .then(r => r.ok ? r.json() : { wishers: [] })
+          .then(d => ({ id: bm.id, alreadyGreeted: (d.wishers ?? []).includes(cu.uid) }))
+          .catch(() => ({ id: bm.id, alreadyGreeted: false }))
+      )
+    ).then(results => {
+      const map: Record<string, boolean> = {};
+      results.forEach(r => { map[r.id] = r.alreadyGreeted; });
+      setGreetedMap(map);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [birthdayMap]);
+
 
   // ── Schedule cache helpers ────────────────────────────────────────────────
 // ── Schedule helpers ──────────────────────────────────────────────────────
@@ -885,29 +914,38 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                   {bdaysOnDate.map(bm => {
                     const bdColors = ["bg-pink-500","bg-rose-500","bg-fuchsia-500","bg-violet-500"];
                     const bdBg = bdColors[bm.name.charCodeAt(0) % bdColors.length];
-                    // Only allow greeting on the celebrant's actual birthday (today)
-                    const canGreet = selectedScheduleDate === todayStr;
+                    // Only allow greeting on the celebrant's actual birthday (today) AND if not already greeted
+                    const alreadyGreeted = !!greetedMap[bm.id];
+                    const canGreet = selectedScheduleDate === todayStr && !alreadyGreeted;
                     const CardEl = canGreet ? "button" : "div";
                     return (
                       <CardEl
                         key={bm.id}
                         {...(canGreet ? { onClick: () => openBdayModal(bm, selectedScheduleDate!) } : {})}
-                        className={`w-full flex items-center gap-3 p-3 rounded-xl bg-pink-50 dark:bg-pink-900/20 border border-pink-200 dark:border-pink-800/50 text-left transition-all ${
-                          canGreet ? "hover:bg-pink-100 dark:hover:bg-pink-900/40 hover:border-pink-300 cursor-pointer active:scale-[0.98]" : "select-none"
+                        className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${
+                          alreadyGreeted
+                            ? "bg-gray-50 dark:bg-gray-800/60 border-gray-200 dark:border-gray-700 opacity-60 cursor-default select-none"
+                            : canGreet
+                              ? "bg-pink-50 dark:bg-pink-900/20 border-pink-200 dark:border-pink-800/50 hover:bg-pink-100 dark:hover:bg-pink-900/40 hover:border-pink-300 cursor-pointer active:scale-[0.98]"
+                              : "bg-pink-50 dark:bg-pink-900/20 border-pink-200 dark:border-pink-800/50 select-none"
                         }`}
                       >
                         <div className="relative shrink-0">
                           {bm.photo
-                            ? <img src={bm.photo} alt={bm.name} className="w-9 h-9 rounded-full object-cover ring-2 ring-pink-300 dark:ring-pink-700" />
-                            : <div className={`w-9 h-9 rounded-full ${bdBg} flex items-center justify-center text-white text-sm font-bold ring-2 ring-pink-300 dark:ring-pink-700`}>{bm.name[0].toUpperCase()}</div>
+                            ? <img src={bm.photo} alt={bm.name} className={`w-9 h-9 rounded-full object-cover ring-2 ${alreadyGreeted ? "ring-gray-300 dark:ring-gray-600" : "ring-pink-300 dark:ring-pink-700"}`} />
+                            : <div className={`w-9 h-9 rounded-full ${alreadyGreeted ? "bg-gray-400" : bdBg} flex items-center justify-center text-white text-sm font-bold ring-2 ${alreadyGreeted ? "ring-gray-300 dark:ring-gray-600" : "ring-pink-300 dark:ring-pink-700"}`}>{bm.name[0].toUpperCase()}</div>
                           }
                           <span className="absolute -bottom-0.5 -right-0.5 text-[11px] leading-none">🎂</span>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-pink-700 dark:text-pink-300 truncate">{bm.name}</p>
-                          <p className="text-xs text-pink-500 dark:text-pink-400">{canGreet ? "🎉 Tap to send birthday greetings!" : "🎉 It's their birthday!"}</p>
+                          <p className={`text-sm font-semibold truncate ${alreadyGreeted ? "text-gray-500 dark:text-gray-400" : "text-pink-700 dark:text-pink-300"}`}>{bm.name}</p>
+                          <p className={`text-xs ${alreadyGreeted ? "text-gray-400 dark:text-gray-500" : "text-pink-500 dark:text-pink-400"}`}>
+                            {alreadyGreeted ? "✅ Already greeted! 💝" : canGreet ? "🎉 Tap to send birthday greetings!" : "🎉 It's their birthday!"}
+                          </p>
                         </div>
-                        {canGreet && <Heart size={15} className="text-pink-400 shrink-0" />}
+                        {alreadyGreeted
+                          ? <CheckCircle2 size={15} className="text-gray-400 shrink-0" />
+                          : canGreet && <Heart size={15} className="text-pink-400 shrink-0" />}
                       </CardEl>
                     );
                   })}
@@ -1282,29 +1320,38 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                       <p className="text-xs font-semibold text-pink-400 uppercase tracking-wider">🎂 Birthday Celebrants</p>
                       {bdSingle.map(bm => {
                         const bdBg = bdColors[bm.name.charCodeAt(0) % bdColors.length];
-                        // Only allow greeting on the celebrant's actual birthday (today)
-                        const canGreet = selectedScheduleDate === todayStr;
+                        // Only allow greeting on the celebrant's actual birthday (today) AND if not already greeted
+                        const alreadyGreeted = !!greetedMap[bm.id];
+                        const canGreet = selectedScheduleDate === todayStr && !alreadyGreeted;
                         const CardEl = canGreet ? "button" : "div";
                         return (
                           <CardEl
                             key={bm.id}
                             {...(canGreet ? { onClick: () => openBdayModal(bm, selectedScheduleDate!) } : {})}
-                            className={`w-full flex items-center gap-3 p-3 rounded-xl bg-pink-50 dark:bg-pink-900/20 border border-pink-200 dark:border-pink-800/50 text-left transition-all ${
-                              canGreet ? "hover:bg-pink-100 dark:hover:bg-pink-900/40 hover:border-pink-300 cursor-pointer active:scale-[0.98]" : "select-none"
+                            className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${
+                              alreadyGreeted
+                                ? "bg-gray-50 dark:bg-gray-800/60 border-gray-200 dark:border-gray-700 opacity-60 cursor-default select-none"
+                                : canGreet
+                                  ? "bg-pink-50 dark:bg-pink-900/20 border-pink-200 dark:border-pink-800/50 hover:bg-pink-100 dark:hover:bg-pink-900/40 hover:border-pink-300 cursor-pointer active:scale-[0.98]"
+                                  : "bg-pink-50 dark:bg-pink-900/20 border-pink-200 dark:border-pink-800/50 select-none"
                             }`}
                           >
                             <div className="relative shrink-0">
                               {bm.photo
-                                ? <img src={bm.photo} alt={bm.name} className="w-9 h-9 rounded-full object-cover ring-2 ring-pink-300 dark:ring-pink-700" />
-                                : <div className={`w-9 h-9 rounded-full ${bdBg} flex items-center justify-center text-white text-sm font-bold ring-2 ring-pink-300 dark:ring-pink-700`}>{bm.name[0].toUpperCase()}</div>
+                                ? <img src={bm.photo} alt={bm.name} className={`w-9 h-9 rounded-full object-cover ring-2 ${alreadyGreeted ? "ring-gray-300 dark:ring-gray-600" : "ring-pink-300 dark:ring-pink-700"}`} />
+                                : <div className={`w-9 h-9 rounded-full ${alreadyGreeted ? "bg-gray-400" : bdBg} flex items-center justify-center text-white text-sm font-bold ring-2 ${alreadyGreeted ? "ring-gray-300 dark:ring-gray-600" : "ring-pink-300 dark:ring-pink-700"}`}>{bm.name[0].toUpperCase()}</div>
                               }
                               <span className="absolute -bottom-0.5 -right-0.5 text-[11px] leading-none">🎂</span>
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold text-pink-700 dark:text-pink-300 truncate">{bm.name}</p>
-                              <p className="text-xs text-pink-500 dark:text-pink-400">{canGreet ? "🎉 Tap to send birthday greetings!" : "🎉 It's their birthday!"}</p>
+                              <p className={`text-sm font-semibold truncate ${alreadyGreeted ? "text-gray-500 dark:text-gray-400" : "text-pink-700 dark:text-pink-300"}`}>{bm.name}</p>
+                              <p className={`text-xs ${alreadyGreeted ? "text-gray-400 dark:text-gray-500" : "text-pink-500 dark:text-pink-400"}`}>
+                                {alreadyGreeted ? "✅ Already greeted! 💝" : canGreet ? "🎉 Tap to send birthday greetings!" : "🎉 It's their birthday!"}
+                              </p>
                             </div>
-                            {canGreet && <Heart size={15} className="text-pink-400 shrink-0" />}
+                            {alreadyGreeted
+                              ? <CheckCircle2 size={15} className="text-gray-400 shrink-0" />
+                              : canGreet && <Heart size={15} className="text-pink-400 shrink-0" />}
                           </CardEl>
                         );
                       })}
