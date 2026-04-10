@@ -2337,20 +2337,58 @@ app.patch("/api/preaching-drafts/:id/status", async (req, res) => {
       // Increment version counter each time submitted
       const prevVersion: number = (snap.data()?.submissionVersion ?? 0) as number;
       updateData.submissionVersion = prevVersion + 1;
+      await ref.update(updateData);
+
+      // 🔔 Notify Audio/Tech + Admin + Leaders a new design request is in the queue
+      const draftTitle = (snap.data()?.title as string) || "Untitled Sermon";
+      const preacherName = submittedByName || "A preacher";
+      const isResubmission = prevVersion >= 1;
+      const notifMessage = isResubmission
+        ? `📋 Updated sermon from ${preacherName}`
+        : `🎨 New Design Request from ${preacherName}`;
+      const notifSubMessage = isResubmission
+        ? `"${draftTitle}" has been updated — check Design Requests for the latest version.`
+        : `"${draftTitle}" is ready for slides. Head to Design Requests to volunteer!`;
+
+      // Write in-app notification
+      firestore.collection("notifications").add({
+        type: "new_design_request",
+        message: notifMessage,
+        subMessage: notifSubMessage,
+        actorName: preacherName,
+        actorPhoto: "",
+        actorUserId: submittedBy ?? "",
+        targetAudience: "non_member", // Audio/Tech + Admin + Leader; not basic Members
+        resourceId: req.params.id,
+        readBy: [],
+        deletedBy: [],
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      }).catch(() => { /* silent */ });
+
+      // FCM push to all non-member devices (fire-and-forget)
+      sendPushNotification(firestore, {
+        title: notifMessage,
+        body: notifSubMessage,
+        actorUserId: submittedBy ?? "",
+        targetAudience: "non_member",
+        type: "new_design_request",
+        resourceId: req.params.id,
+      });
     } else {
       // recalled back to draft — clear submission metadata but keep version counter
       // so the next re-submit still shows 'Latest Version' badge
       updateData.submittedAt = null;
       updateData.submittedBy = null;
       updateData.submittedByName = null;
+      await ref.update(updateData);
     }
-    await ref.update(updateData);
     res.json({ ok: true, submissionVersion: updateData.submissionVersion });
   } catch (e: any) {
     console.error("[preaching-drafts PATCH status]", e?.message ?? e);
     if (!res.headersSent) res.status(500).json({ error: "Failed" });
   }
 });
+
 
 // GET /api/preaching-drafts/submitted — all submitted drafts (Audio/Tech + Admin view)
 app.get("/api/preaching-drafts/submitted", async (_req, res) => {

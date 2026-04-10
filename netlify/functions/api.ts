@@ -3200,13 +3200,33 @@ Rules:
                 // Increment version counter each time submitted
                 const prevVersion: number = (snap.data()?.submissionVersion ?? 0) as number;
                 updateData.submissionVersion = prevVersion + 1;
+                await ref.update(updateData);
+
+                // 🔔 Notify Audio/Tech + Admin + Leaders that a new design request is ready
+                const draftTitle = (snap.data()?.title as string) || "Untitled Sermon";
+                const preacherName = submittedByName || "A preacher";
+                const isResubmission = prevVersion >= 1;
+                writeNotif(firestore, {
+                    type: "new_design_request",
+                    message: isResubmission
+                        ? `📋 Updated sermon from ${preacherName}`
+                        : `🎨 New Design Request from ${preacherName}`,
+                    subMessage: isResubmission
+                        ? `"${draftTitle}" has been updated — please check Design Requests for the latest version.`
+                        : `"${draftTitle}" is ready for slides. Head to Design Requests to volunteer!`,
+                    actorName: preacherName,
+                    actorPhoto: "",
+                    actorUserId: submittedBy ?? "",
+                    targetAudience: "non_member", // Audio/Tech + Admin + Leader; not basic Members
+                    resourceId: draftId,
+                }); // fire-and-forget — don't await
             } else {
                 // recalled back to draft — clear metadata but keep version counter
                 updateData.submittedAt = null;
                 updateData.submittedBy = null;
                 updateData.submittedByName = null;
+                await ref.update(updateData);
             }
-            await ref.update(updateData);
             return json(200, { ok: true, submissionVersion: updateData.submissionVersion });
         } catch (e: any) {
             return json(500, { error: "Failed to update status" });
