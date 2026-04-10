@@ -189,27 +189,40 @@ showToast("success", `Birthday wish sent to ${bdayModal.member.name.split("")[0]
 
   // Pre-load greeted status so cards are disabled if the user already greeted today ──
   useEffect(() => {
-    const cu = getAuth().currentUser;
-    if (!cu) return;
+    const uid = user?.uid;
+    if (!uid) return;
     const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
     const mmdd = today.slice(5);
     const celebrantsToday = birthdayMap[mmdd] ?? [];
     if (!celebrantsToday.length) return;
-    // Fetch wishers for each celebrant to check if current user already greeted
+
+    // ── Phase 1: check localStorage instantly (same key BirthdayCard popup writes) ──
+    const localMap: Record<string, boolean> = {};
+    celebrantsToday.forEach(bm => {
+      const lsKey = `wf_bday_sent_${uid}_${bm.id}_${today}`;
+      if (localStorage.getItem(lsKey) === "1") localMap[bm.id] = true;
+    });
+    // Apply immediately so UI reflects local state without waiting for API
+    if (Object.keys(localMap).length > 0) setGreetedMap(prev => ({ ...prev, ...localMap }));
+
+    // ── Phase 2: also fetch Firestore wishers as source-of-truth fallback ──
+    // (covers cases where localStorage was cleared or another device was used)
     Promise.all(
       celebrantsToday.map(bm =>
         fetch(`/api/birthday-wish?memberId=${bm.id}&date=${today}`)
           .then(r => r.ok ? r.json() : { wishers: [] })
-          .then(d => ({ id: bm.id, alreadyGreeted: (d.wishers ?? []).includes(cu.uid) }))
+          .then(d => ({ id: bm.id, alreadyGreeted: (d.wishers ?? []).includes(uid) }))
           .catch(() => ({ id: bm.id, alreadyGreeted: false }))
       )
     ).then(results => {
-      const map: Record<string, boolean> = {};
-      results.forEach(r => { map[r.id] = r.alreadyGreeted; });
-      setGreetedMap(map);
+      setGreetedMap(prev => {
+        const next = { ...prev };
+        results.forEach(r => { if (r.alreadyGreeted) next[r.id] = true; });
+        return next;
+      });
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [birthdayMap]);
+  }, [birthdayMap, user?.uid]);
 
 
   // ── Schedule cache helpers ────────────────────────────────────────────────
