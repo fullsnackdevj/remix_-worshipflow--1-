@@ -507,6 +507,12 @@ export default function App() {
       // Navigate to the Team Notes module and deep-link to the specific note
       setCurrentView("team-notes");
       if (resourceId) setPendingTeamNoteId(resourceId);
+    } else if (type === "new_design_request") {
+      // Audio/Tech: go straight to Design Requests queue
+      setCurrentView("design-requests");
+    } else if (type === "design_claimed" || type === "design_done") {
+      // Preacher: go to Preaching module → they'll see the Submitted tab with the status badge
+      setCurrentView("preaching");
     }
   };
 
@@ -540,6 +546,9 @@ export default function App() {
     note_done: <CheckCircle size={14} className="text-indigo-400" />,
     note_acknowledged: <CheckCircle size={14} className="text-sky-400" />,
     note_followup: <Bell size={14} className="text-amber-400" />,
+    new_design_request: <Palette size={14} className="text-purple-400" />,
+    design_claimed: <Feather size={14} className="text-purple-400" />,
+    design_done: <CheckCircle size={14} className="text-emerald-400" />,
   };
   // ── Role-based permission flags ───────────────────────────────────────────
   // All flags use effectiveRole so QA Specialist simulation works correctly
