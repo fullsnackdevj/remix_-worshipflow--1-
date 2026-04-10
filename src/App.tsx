@@ -349,6 +349,9 @@ export default function App() {
     }
   }, []); // run once on mount only
   const [pendingTeamNoteId, setPendingTeamNoteId] = useState<string | null>(null); // deep-link into Team Notes
+  const [pendingPreachingTab, setPendingPreachingTab] = useState<'drafts' | 'submitted' | null>(null); // deep-link: force Submitted tab
+  const [pendingDesignDraftId, setPendingDesignDraftId] = useState<string | null>(null); // deep-link: highlight card in Design Requests
+
   /** True when SongsView is displaying a song detail panel (not the list) */
   const [isSongDetailOpen, setIsSongDetailOpen] = useState(false);
   /** Incrementing this tells SongsView to clear its selectedSong */
@@ -508,13 +511,16 @@ export default function App() {
       setCurrentView("team-notes");
       if (resourceId) setPendingTeamNoteId(resourceId);
     } else if (type === "new_design_request") {
-      // Audio/Tech: go straight to Design Requests queue
+      // Audio/Tech: go to Design Requests and highlight the specific sermon card
       setCurrentView("design-requests");
+      if (resourceId) setPendingDesignDraftId(resourceId);
     } else if (type === "design_claimed" || type === "design_done") {
-      // Preacher: go to Preaching module → they'll see the Submitted tab with the status badge
+      // Preacher: go to Preaching module → force Submitted tab so they see the status badge
       setCurrentView("preaching");
+      setPendingPreachingTab("submitted");
     }
   };
+
 
 
 
@@ -1766,6 +1772,8 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                     currentUserPhoto={user?.photoURL ?? ""}
                     isAdmin={isRoleAdmin}
                     onToast={showToast}
+                    pendingDraftId={pendingDesignDraftId}
+                    onPendingDraftHandled={() => setPendingDesignDraftId(null)}
                   />
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full gap-4 px-6 text-center">
@@ -1783,6 +1791,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                   <PreachingView
                     currentUser={{ uid: user?.uid ?? "", name: user?.displayName || user?.email || "", email: user?.email || "", photo: user?.photoURL || "" }}
                     onToast={showToast}
+                    initialTab={pendingPreachingTab ?? undefined}
                   />
                 ) : (
                   // Non-admin locked screen

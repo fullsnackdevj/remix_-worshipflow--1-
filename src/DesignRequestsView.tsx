@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Palette, BookOpen, CalendarDays, User2, Clock, ChevronDown, ChevronUp,
   RefreshCw, Loader2, CornerUpLeft, FileText, Lightbulb, Heart, BookMarked,
@@ -51,6 +51,8 @@ interface Props {
   currentUserPhoto?: string;
   isAdmin: boolean;
   onToast?: (type: "success" | "error" | "info", message: string) => void;
+  pendingDraftId?: string | null;
+  onPendingDraftHandled?: () => void;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -247,16 +249,18 @@ function DesignStatusBadge({ item }: { item: SermonDraft }) {
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
-export default function DesignRequestsView({ currentUserId, currentUserName, currentUserPhoto = "", isAdmin, onToast }: Props) {
+export default function DesignRequestsView({ currentUserId, currentUserName, currentUserPhoto = "", isAdmin, onToast, pendingDraftId, onPendingDraftHandled }: Props) {
   const [items, setItems] = useState<SermonDraft[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [recallingId, setRecallingId] = useState<string | null>(null);
   const [claimingId, setClaimingId] = useState<string | null>(null);
   const [completingId, setCompletingId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [infoOpen, setInfoOpen] = useState(false);
   const [infoGlowing, setInfoGlowing] = useState(() => !localStorage.getItem("wf_design_requests_info_seen"));
+  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   // ── Confirm modal state ───────────────────────────────────────────────────
   const [confirmState, setConfirmState] = useState<{
@@ -283,8 +287,23 @@ export default function DesignRequestsView({ currentUserId, currentUserName, cur
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
-  // Silent background poll every 15s
+  // Deep-link: auto-expand + flash the target card from a notification click
   useEffect(() => {
+    if (!pendingDraftId || loading) return;
+    // If items are already loaded, scroll & highlight immediately
+    if (items.length > 0) {
+      setExpandedId(pendingDraftId);
+      setHighlightedId(pendingDraftId);
+      setTimeout(() => {
+        const el = cardRefs.current[pendingDraftId];
+        el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 100);
+      // Flash for 2.5s then clear
+      setTimeout(() => setHighlightedId(null), 2500);
+      onPendingDraftHandled?.();
+    }
+  }, [pendingDraftId, items, loading, onPendingDraftHandled]);
+
     const interval = setInterval(() => {
       fetch("/api/preaching-drafts/submitted")
         .then(r => r.ok ? r.json() : null)
@@ -520,11 +539,17 @@ export default function DesignRequestsView({ currentUserId, currentUserName, cur
           return (
             <div
               key={item.id}
+              ref={el => { cardRefs.current[item.id] = el; }}
               className="rounded-2xl mb-3 overflow-hidden transition-all"
               style={{
                 background: "rgba(255,255,255,0.025)",
-                border: `1px solid ${isDone ? "rgba(52,211,153,0.25)" : inDesign ? "rgba(139,92,246,0.25)" : "rgba(var(--wf-c1),0.2)"}`,
-                boxShadow: isExpanded ? "0 0 0 1px rgba(var(--wf-c1),0.3), 0 8px 32px rgba(0,0,0,0.4)" : "none",
+                border: highlightedId === item.id
+                  ? "1.5px solid rgba(245,158,11,0.8)"
+                  : `1px solid ${isDone ? "rgba(52,211,153,0.25)" : inDesign ? "rgba(139,92,246,0.25)" : "rgba(var(--wf-c1),0.2)"}`,
+                boxShadow: highlightedId === item.id
+                  ? "0 0 0 3px rgba(245,158,11,0.2), 0 8px 32px rgba(0,0,0,0.4)"
+                  : isExpanded ? "0 0 0 1px rgba(var(--wf-c1),0.3), 0 8px 32px rgba(0,0,0,0.4)" : "none",
+                transition: "border 0.3s ease, box-shadow 0.3s ease",
               }}
             >
               {/* Card Header — always visible */}

@@ -1880,12 +1880,16 @@ function PreachingInfoModal({ onClose }: { onClose: () => void }) {
 }
 
 
-function DraftList({ drafts, activeDraftId, onSelect, onNew, onDelete, onSubmit, onRecallEdit, onPreview, onClose, onInfo, infoGlowing, currentUserName }:
+function DraftList({ drafts, activeDraftId, onSelect, onNew, onDelete, onSubmit, onRecallEdit, onPreview, onClose, onInfo, infoGlowing, currentUserName, initialTab }:
   { drafts: SermonDraft[]; activeDraftId: string | null; onSelect: (id: string) => void;
     onNew: () => void; onDelete: (id: string) => void; onSubmit: (id: string) => void;
     onRecallEdit: (id: string) => void; onPreview: (id: string) => void;
-    onClose: () => void; onInfo: () => void; infoGlowing: boolean; currentUserName: string }) {
-  const [tab, setTab] = useState<'drafts' | 'submitted'>('drafts');
+    onClose: () => void; onInfo: () => void; infoGlowing: boolean; currentUserName: string;
+    initialTab?: 'drafts' | 'submitted' }) {
+  const [tab, setTab] = useState<'drafts' | 'submitted'>(initialTab ?? 'drafts');
+
+  // Sync initialTab if parent changes it (e.g. notification deep-link)
+  useEffect(() => { if (initialTab) setTab(initialTab); }, [initialTab]);
 
   const submitted = drafts.filter(d => d.status === 'submitted');
   const draftItems = drafts.filter(d => d.status !== 'submitted');
@@ -2195,6 +2199,7 @@ function DraftList({ drafts, activeDraftId, onSelect, onNew, onDelete, onSubmit,
 interface Props {
   currentUser: { uid: string; name?: string; email?: string; photo?: string };
   onToast?: (type: "success" | "error" | "info", message: string) => void;
+  initialTab?: 'drafts' | 'submitted';
 }
 
 const EMPTY_DRAFT = (userId: string, userName: string): SermonDraft => ({
@@ -2211,7 +2216,7 @@ const EMPTY_DRAFT = (userId: string, userName: string): SermonDraft => ({
 });
 
 // ── Main PreachingView ────────────────────────────────────────────────────────
-export default function PreachingView({ currentUser, onToast }: Props) {
+export default function PreachingView({ currentUser, onToast, initialTab }: Props) {
   const [drafts, setDrafts] = useState<SermonDraft[]>([]);
   const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -2568,6 +2573,7 @@ export default function PreachingView({ currentUser, onToast }: Props) {
               onInfo={() => { setInfoOpen(true); if (infoGlowing) { localStorage.setItem('wf_preaching_info_seen','1'); setInfoGlowing(false); } }}
               infoGlowing={infoGlowing}
               currentUserName={currentUser?.name || ""}
+              initialTab={initialTab}
             />
           </div>
         ) : (
@@ -2786,6 +2792,7 @@ export default function PreachingView({ currentUser, onToast }: Props) {
               onInfo={() => { setInfoOpen(true); if (infoGlowing) { localStorage.setItem('wf_preaching_info_seen','1'); setInfoGlowing(false); } }}
               infoGlowing={infoGlowing}
               currentUserName={currentUser?.name || ""}
+              initialTab={initialTab}
             />
           )}
         </div>
