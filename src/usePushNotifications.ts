@@ -176,9 +176,14 @@ async function registerAndStoreToken(userId: string, userRole: string) {
 
     if (!token) return;
 
+    // Include email so the backend can look up a user's UID from their email
+    // (used for targeted notifications like birthday wishes)
+    const { getAuth } = await import("firebase/auth");
+    const email = getAuth().currentUser?.email || "";
+
     await fetch("/api/fcm-token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, role: userRole, token }),
+        body: JSON.stringify({ userId, role: userRole, token, email }),
     });
 }

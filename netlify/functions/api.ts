@@ -924,7 +924,7 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
     // Doc ID = last 20 chars of token (unique per device) — avoids overwriting
     // the previous device's token when a new one registers.
     if (rawPath === "/fcm-token" && method === "POST") {
-        const { userId, role, token } = body;
+        const { userId, role, token, email } = body;
         if (!userId || !token) return json(400, { error: "userId and token required" });
         try {
             // Use a stable slice of the token as the doc key so:
@@ -933,6 +933,7 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
             const docId = `${userId}_${token.slice(-20)}`;
             await firestore?.collection("fcm_tokens").doc(docId).set({
                 userId,
+                email: (email || "").toLowerCase(),
                 role: role || "member",
                 token,
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -1290,7 +1291,7 @@ BULLET: [...]`;
     }
 
     if (rawPath === "/birthday-wish" && method === "POST") {
-        const { memberId, memberName, date, senderUserId, senderName, senderPhoto, message } = body;
+        const { memberId, memberName, memberEmail, date, senderUserId, senderName, senderPhoto, message } = body;
         if (!memberId || !date || !senderUserId || !senderName) return json(400, { error: "Missing required fields" });
         if (!firestore) return json(500, { error: "DB unavailable" });
         try {
@@ -1323,16 +1324,32 @@ BULLET: [...]`;
                     wishes: admin.firestore.FieldValue.arrayUnion(wish),
                 });
             }
-            // Notify the whole team so the celebrant sees it in their bell
+
+            // ── Resolve the celebrant's Firebase UID from their email ─────────
+            // fcm_tokens stores {userId, email} — find the first token matching the celebrant's email
             const firstName = memberName?.split(" ")[0] || memberName || "your teammate";
+            let celebrantUserId: string | undefined;
+            if (memberEmail) {
+                const tokenSnap = await firestore.collection("fcm_tokens")
+                    .where("email", "==", memberEmail.toLowerCase())
+                    .limit(1)
+                    .get();
+                if (!tokenSnap.empty) {
+                    celebrantUserId = tokenSnap.docs[0].data().userId;
+                }
+            }
+
+            // 🎂 Notify ONLY the birthday celebrant — targetUserId restricts to them alone
             await writeNotif(firestore, {
                 type: "birthday_wish",
-                message: `🎂 Birthday Greetings for ${firstName}!`,
-                subMessage: `${senderName}: "${(message?.trim() || "Happy Birthday!").slice(0, 60)}"`,
+                message: `🎂 You have a birthday greeting!`,
+                subMessage: `${senderName}: "${(message?.trim() || "Happy Birthday!").slice(0, 80)}"`,
                 actorName: senderName,
                 actorPhoto: senderPhoto?.startsWith("http") ? senderPhoto : "",
                 actorUserId: senderUserId,
-                targetAudience: "all",
+                targetAudience: celebrantUserId ? "direct" : "all", // fallback to all if we can't resolve UID
+                targetUserId: celebrantUserId,
+                resourceId: memberId,
             });
             return json(200, { success: true });
         } catch (e) {

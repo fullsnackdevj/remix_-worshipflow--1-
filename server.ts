@@ -272,16 +272,18 @@ async function writeNotification(firestore: admin.firestore.Firestore, payload: 
 app.post("/api/fcm-token", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.json({ success: true });
-  const { userId, role, token } = req.body;
+  const { userId, role, token, email } = req.body;
   if (!userId || !token) return res.status(400).json({ error: "userId and token required" });
   try {
-    await firestore.collection("fcm_tokens").doc(userId).set({
-      userId, role: role || "member", token,
+    const docId = `${userId}_${token.slice(-20)}`;
+    await firestore.collection("fcm_tokens").doc(docId).set({
+      userId, email: (email || "").toLowerCase(), role: role || "member", token,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: "Failed to store token" }); }
 });
+
 
 // GET /api/user-flags?userId=xxx — get per-user boolean flags (cross-device)
 app.get("/api/user-flags", async (req, res) => {

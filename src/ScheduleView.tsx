@@ -163,6 +163,7 @@ const [schedMemberSearch, setSchedMemberSearch] = useState("");
         body: JSON.stringify({
           memberId: bdayModal.member.id,
           memberName: bdayModal.member.name,
+          memberEmail: (bdayModal.member.email || "").trim().toLowerCase(),
           date: bdayModal.dateStr,
           senderUserId: cu.uid,
           senderName: cu.displayName || cu.email?.split("@")[0] || "A teammate",
