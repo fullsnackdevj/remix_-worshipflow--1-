@@ -150,8 +150,15 @@ const [schedMemberSearch, setSchedMemberSearch] = useState("");
     try {
       const res = await fetch(`/api/birthday-wish?memberId=${member.id}&date=${dateStr}`);
       const data = await res.json();
-      setBdayWishes(data.wishes ?? []);
-      setBdayWishers(data.wishers ?? []);
+      const wishersList: string[] = data.wishers ?? [];
+      const wishesList = data.wishes ?? [];
+      setBdayWishes(wishesList);
+      setBdayWishers(wishersList);
+      // Also update greetedMap so card reflects reality after modal fetch
+      const uid = user?.uid;
+      if (uid && (wishersList.includes(uid) || wishesList.some((w: any) => w.userId === uid))) {
+        setGreetedMap(prev => ({ ...prev, [member.id]: true }));
+      }
     } catch { /* silent */ } finally { setBdayLoadingWishes(false); }
   };
 
@@ -1979,7 +1986,10 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
     })()}
     {/* ── BIRTHDAY GREETING MODAL ──────────────────────────────────────────── */}
     {bdayModal && (() => {
-      const modalAlreadyGreeted = !!greetedMap[bdayModal.member.id];
+      const modalAlreadyGreeted =
+        !!greetedMap[bdayModal.member.id] ||
+        bdaySending === "sent" ||
+        (!bdayLoadingWishes && !!user?.uid && bdayWishers.includes(user.uid));
       return (
       <div className="fixed inset-0 z-[700] flex items-center justify-center bg-black/50 backdrop-blur-sm px-4" onClick={() => setBdayModal(null)}>
         <div className="w-full max-w-sm bg-white dark:bg-gray-800 border border-pink-200 dark:border-pink-800/60 rounded-2xl shadow-2xl p-5 space-y-4" onClick={e => e.stopPropagation()}>
