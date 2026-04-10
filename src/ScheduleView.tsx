@@ -1959,8 +1959,7 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
     })()}
     {/* ── BIRTHDAY GREETING MODAL ──────────────────────────────────────────── */}
     {bdayModal && (() => {
-      const cu = getAuth().currentUser;
-      const modalAlreadyGreeted = cu ? bdayWishers.includes(cu.uid) : false;
+      const modalAlreadyGreeted = !!greetedMap[bdayModal.member.id];
       return (
       <div className="fixed inset-0 z-[700] flex items-center justify-center bg-black/50 backdrop-blur-sm px-4" onClick={() => setBdayModal(null)}>
         <div className="w-full max-w-sm bg-white dark:bg-gray-800 border border-pink-200 dark:border-pink-800/60 rounded-2xl shadow-2xl p-5 space-y-4" onClick={e => e.stopPropagation()}>
