@@ -914,18 +914,18 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                   {bdaysOnDate.map(bm => {
                     const bdColors = ["bg-pink-500","bg-rose-500","bg-fuchsia-500","bg-violet-500"];
                     const bdBg = bdColors[bm.name.charCodeAt(0) % bdColors.length];
-                    // Only allow greeting on the celebrant's actual birthday (today) AND if not already greeted
                     const alreadyGreeted = !!greetedMap[bm.id];
-                    const canGreet = selectedScheduleDate === todayStr && !alreadyGreeted;
-                    const CardEl = canGreet ? "button" : "div";
+                    // Can always click on today's birthday — if greeted: view wishes, if not: send
+                    const isToday = selectedScheduleDate === todayStr;
+                    const CardEl = isToday ? "button" : "div";
                     return (
                       <CardEl
                         key={bm.id}
-                        {...(canGreet ? { onClick: () => openBdayModal(bm, selectedScheduleDate!) } : {})}
+                        {...(isToday ? { onClick: () => openBdayModal(bm, selectedScheduleDate!) } : {})}
                         className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${
                           alreadyGreeted
-                            ? "bg-gray-50 dark:bg-gray-800/60 border-gray-200 dark:border-gray-700 opacity-60 cursor-default select-none"
-                            : canGreet
+                            ? "bg-gray-50 dark:bg-gray-800/60 border-gray-200 dark:border-gray-700 opacity-70 cursor-pointer hover:opacity-90 active:scale-[0.98]"
+                            : isToday
                               ? "bg-pink-50 dark:bg-pink-900/20 border-pink-200 dark:border-pink-800/50 hover:bg-pink-100 dark:hover:bg-pink-900/40 hover:border-pink-300 cursor-pointer active:scale-[0.98]"
                               : "bg-pink-50 dark:bg-pink-900/20 border-pink-200 dark:border-pink-800/50 select-none"
                         }`}
@@ -940,12 +940,12 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                         <div className="flex-1 min-w-0">
                           <p className={`text-sm font-semibold truncate ${alreadyGreeted ? "text-gray-500 dark:text-gray-400" : "text-pink-700 dark:text-pink-300"}`}>{bm.name}</p>
                           <p className={`text-xs ${alreadyGreeted ? "text-gray-400 dark:text-gray-500" : "text-pink-500 dark:text-pink-400"}`}>
-                            {alreadyGreeted ? "✅ Already greeted! 💝" : canGreet ? "🎉 Tap to send birthday greetings!" : "🎉 It's their birthday!"}
+                            {alreadyGreeted ? "✅ Already greeted — tap to see all wishes!" : isToday ? "🎉 Tap to send birthday greetings!" : "🎉 It's their birthday!"}
                           </p>
                         </div>
                         {alreadyGreeted
                           ? <CheckCircle2 size={15} className="text-gray-400 shrink-0" />
-                          : canGreet && <Heart size={15} className="text-pink-400 shrink-0" />}
+                          : isToday && <Heart size={15} className="text-pink-400 shrink-0" />}
                       </CardEl>
                     );
                   })}
@@ -1320,18 +1320,17 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                       <p className="text-xs font-semibold text-pink-400 uppercase tracking-wider">🎂 Birthday Celebrants</p>
                       {bdSingle.map(bm => {
                         const bdBg = bdColors[bm.name.charCodeAt(0) % bdColors.length];
-                        // Only allow greeting on the celebrant's actual birthday (today) AND if not already greeted
                         const alreadyGreeted = !!greetedMap[bm.id];
-                        const canGreet = selectedScheduleDate === todayStr && !alreadyGreeted;
-                        const CardEl = canGreet ? "button" : "div";
+                        const isToday = selectedScheduleDate === todayStr;
+                        const CardEl = isToday ? "button" : "div";
                         return (
                           <CardEl
                             key={bm.id}
-                            {...(canGreet ? { onClick: () => openBdayModal(bm, selectedScheduleDate!) } : {})}
+                            {...(isToday ? { onClick: () => openBdayModal(bm, selectedScheduleDate!) } : {})}
                             className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${
                               alreadyGreeted
-                                ? "bg-gray-50 dark:bg-gray-800/60 border-gray-200 dark:border-gray-700 opacity-60 cursor-default select-none"
-                                : canGreet
+                                ? "bg-gray-50 dark:bg-gray-800/60 border-gray-200 dark:border-gray-700 opacity-70 cursor-pointer hover:opacity-90 active:scale-[0.98]"
+                                : isToday
                                   ? "bg-pink-50 dark:bg-pink-900/20 border-pink-200 dark:border-pink-800/50 hover:bg-pink-100 dark:hover:bg-pink-900/40 hover:border-pink-300 cursor-pointer active:scale-[0.98]"
                                   : "bg-pink-50 dark:bg-pink-900/20 border-pink-200 dark:border-pink-800/50 select-none"
                             }`}
@@ -1346,12 +1345,12 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                             <div className="flex-1 min-w-0">
                               <p className={`text-sm font-semibold truncate ${alreadyGreeted ? "text-gray-500 dark:text-gray-400" : "text-pink-700 dark:text-pink-300"}`}>{bm.name}</p>
                               <p className={`text-xs ${alreadyGreeted ? "text-gray-400 dark:text-gray-500" : "text-pink-500 dark:text-pink-400"}`}>
-                                {alreadyGreeted ? "✅ Already greeted! 💝" : canGreet ? "🎉 Tap to send birthday greetings!" : "🎉 It's their birthday!"}
+                                {alreadyGreeted ? "✅ Already greeted — tap to see all wishes!" : isToday ? "🎉 Tap to send birthday greetings!" : "🎉 It's their birthday!"}
                               </p>
                             </div>
                             {alreadyGreeted
                               ? <CheckCircle2 size={15} className="text-gray-400 shrink-0" />
-                              : canGreet && <Heart size={15} className="text-pink-400 shrink-0" />}
+                              : isToday && <Heart size={15} className="text-pink-400 shrink-0" />}
                           </CardEl>
                         );
                       })}
@@ -1959,7 +1958,10 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
       );
     })()}
     {/* ── BIRTHDAY GREETING MODAL ──────────────────────────────────────────── */}
-    {bdayModal && (
+    {bdayModal && (() => {
+      const cu = getAuth().currentUser;
+      const modalAlreadyGreeted = cu ? bdayWishers.includes(cu.uid) : false;
+      return (
       <div className="fixed inset-0 z-[700] flex items-center justify-center bg-black/50 backdrop-blur-sm px-4" onClick={() => setBdayModal(null)}>
         <div className="w-full max-w-sm bg-white dark:bg-gray-800 border border-pink-200 dark:border-pink-800/60 rounded-2xl shadow-2xl p-5 space-y-4" onClick={e => e.stopPropagation()}>
 
@@ -1985,13 +1987,45 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
             }
           </div>
 
-          {/* Already wished state */}
-          {bdaySending === "sent" ? (
-            <div className="text-center py-2">
-              <p className="text-2xl mb-1">🎉</p>
-              <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">Wish sent!</p>
-              <p className="text-xs text-gray-500 mt-0.5">Your birthday greeting has been delivered.</p>
-              <button onClick={() => setBdayModal(null)} className="mt-3 px-4 py-1.5 rounded-xl bg-gray-100 dark:bg-gray-700 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">Close</button>
+          {/* ── ALREADY GREETED: read-only wishes view ── */}
+          {modalAlreadyGreeted || bdaySending === "sent" ? (
+            <div className="space-y-3">
+              {/* Sent confirmation badge */}
+              <div className="flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/40">
+                <CheckCircle2 size={15} className="text-emerald-500 shrink-0" />
+                <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400">You already sent a greeting! 💝</p>
+              </div>
+
+              {/* Full wishes list */}
+              <div>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">
+                  💖 All Greetings Sent {bdayLoadingWishes ? "" : `(${bdayWishes.length})`}
+                </p>
+                {bdayLoadingWishes ? (
+                  <div className="flex justify-center py-4"><Loader2 size={18} className="animate-spin text-pink-400" /></div>
+                ) : bdayWishes.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-3 italic">No greetings yet.</p>
+                ) : (
+                  <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                    {bdayWishes.map((w: any, i: number) => (
+                      <div key={i} className="flex items-start gap-2.5 bg-pink-50 dark:bg-pink-900/10 rounded-xl p-2.5 border border-pink-100 dark:border-pink-800/20">
+                        {w.photo
+                          ? <img src={w.photo} alt={w.name} className="w-7 h-7 rounded-full object-cover shrink-0 mt-0.5 ring-2 ring-pink-300 dark:ring-pink-700" />
+                          : <div className="w-7 h-7 rounded-full bg-pink-100 dark:bg-pink-900/40 flex items-center justify-center text-pink-600 text-[10px] font-bold shrink-0 mt-0.5 ring-2 ring-pink-300 dark:ring-pink-700">{(w.name||"?")[0].toUpperCase()}</div>
+                        }
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-semibold text-gray-700 dark:text-gray-300 leading-tight">{w.name}</p>
+                          <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed mt-0.5 break-words">{w.message || "Happy Birthday! 🎉"}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <button onClick={() => setBdayModal(null)} className="w-full py-2 text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors rounded-xl border border-gray-200 dark:border-gray-600">
+                Close
+              </button>
             </div>
           ) : (
             <>
@@ -2033,38 +2067,40 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                   {bdaySending === "sending" ? <Loader2 size={14} className="animate-spin" /> : <><Heart size={13} /> Send Greeting</>}
                 </button>
               </div>
-            </>
-          )}
 
-          {/* Who already wished */}
-          {(bdayLoadingWishes || bdayWishes.length > 0) && bdaySending !== "sent" && (
-            <div className="border-t border-gray-100 dark:border-gray-700 pt-3">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">
-                💖 Wishes sent ({bdayWishes.length})
-              </p>
-              {bdayLoadingWishes ? (
-                <div className="flex justify-center py-2"><Loader2 size={16} className="animate-spin text-pink-400" /></div>
-              ) : (
-                <div className="space-y-1.5 max-h-28 overflow-y-auto">
-                  {bdayWishes.map((w: any, i: number) => (
-                    <div key={i} className="flex items-start gap-2">
-                      {w.photo
-                        ? <img src={w.photo} alt={w.name} className="w-6 h-6 rounded-full object-cover shrink-0 mt-0.5" />
-                        : <div className="w-6 h-6 rounded-full bg-pink-100 dark:bg-pink-900/40 flex items-center justify-center text-pink-600 text-[10px] font-bold shrink-0 mt-0.5">{(w.name||"?")[0].toUpperCase()}</div>
-                      }
-                      <div className="min-w-0">
-                        <span className="text-[11px] font-semibold text-gray-700 dark:text-gray-300">{w.name}: </span>
-                        <span className="text-[11px] text-gray-500 dark:text-gray-400">{w.message || "Happy Birthday!"}</span>
-                      </div>
+              {/* Who already wished — shown below the form */}
+              {(bdayLoadingWishes || bdayWishes.length > 0) && (
+                <div className="border-t border-gray-100 dark:border-gray-700 pt-3">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">
+                    💖 Wishes sent ({bdayWishes.length})
+                  </p>
+                  {bdayLoadingWishes ? (
+                    <div className="flex justify-center py-2"><Loader2 size={16} className="animate-spin text-pink-400" /></div>
+                  ) : (
+                    <div className="space-y-1.5 max-h-28 overflow-y-auto">
+                      {bdayWishes.map((w: any, i: number) => (
+                        <div key={i} className="flex items-start gap-2">
+                          {w.photo
+                            ? <img src={w.photo} alt={w.name} className="w-6 h-6 rounded-full object-cover shrink-0 mt-0.5" />
+                            : <div className="w-6 h-6 rounded-full bg-pink-100 dark:bg-pink-900/40 flex items-center justify-center text-pink-600 text-[10px] font-bold shrink-0 mt-0.5">{(w.name||"?")[0].toUpperCase()}</div>
+                          }
+                          <div className="min-w-0">
+                            <span className="text-[11px] font-semibold text-gray-700 dark:text-gray-300">{w.name}: </span>
+                            <span className="text-[11px] text-gray-500 dark:text-gray-400">{w.message || "Happy Birthday!"}</span>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
               )}
-            </div>
+            </>
           )}
         </div>
       </div>
-    )}
+      );
+    })()}
     </>
   );
 }
+
