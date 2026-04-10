@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { getAuth } from "firebase/auth";
+import { db } from "./firebase";
+import { doc, getDoc } from "firebase/firestore";
 import AutoTextarea from "./AutoTextarea";
 import { Member, ScheduleMember, Schedule, Song, Tag } from "./types";
 import {
@@ -187,7 +189,7 @@ showToast("success", `Birthday wish sent to ${bdayModal.member.name.split("")[0]
     } catch { setBdaySending("error"); setTimeout(() => setBdaySending("idle"), 2000); }
   };
 
-  // Pre-load greeted status so cards are disabled if the user already greeted today ──
+  // Pre-load greeted status using Firestore SDK directly (same approach as BirthdayCard popup) ──
   useEffect(() => {
     const uid = user?.uid;
     if (!uid) return;
@@ -196,28 +198,33 @@ showToast("success", `Birthday wish sent to ${bdayModal.member.name.split("")[0]
     const celebrantsToday = birthdayMap[mmdd] ?? [];
     if (!celebrantsToday.length) return;
 
-    // ── Phase 1: check localStorage instantly (same key BirthdayCard popup writes) ──
+    // ── Phase 1: instant localStorage check (same key BirthdayCard popup writes) ──
     const localMap: Record<string, boolean> = {};
     celebrantsToday.forEach(bm => {
-      const lsKey = `wf_bday_sent_${uid}_${bm.id}_${today}`;
-      if (localStorage.getItem(lsKey) === "1") localMap[bm.id] = true;
+      if (localStorage.getItem(`wf_bday_sent_${uid}_${bm.id}_${today}`) === "1")
+        localMap[bm.id] = true;
     });
-    // Apply immediately so UI reflects local state without waiting for API
-    if (Object.keys(localMap).length > 0) setGreetedMap(prev => ({ ...prev, ...localMap }));
+    if (Object.keys(localMap).length > 0)
+      setGreetedMap(prev => ({ ...prev, ...localMap }));
 
-    // ── Phase 2: also fetch Firestore wishers as source-of-truth fallback ──
-    // (covers cases where localStorage was cleared or another device was used)
+    // ── Phase 2: Firestore SDK read (authoritative, works on any device/domain) ──
     Promise.all(
-      celebrantsToday.map(bm =>
-        fetch(`/api/birthday-wish?memberId=${bm.id}&date=${today}`)
-          .then(r => r.ok ? r.json() : { wishers: [] })
-          .then(d => ({ id: bm.id, alreadyGreeted: (d.wishers ?? []).includes(uid) }))
-          .catch(() => ({ id: bm.id, alreadyGreeted: false }))
-      )
+      celebrantsToday.map(async bm => {
+        try {
+          const snap = await getDoc(doc(db, "birthday_reactions", `${bm.id}_${today}`));
+          if (!snap.exists()) return { id: bm.id, greeted: false };
+          const data = snap.data();
+          const wisherHas = (data.wishers ?? []).includes(uid);
+          const wishHas   = (data.wishes  ?? []).some((w: any) => w.userId === uid);
+          return { id: bm.id, greeted: wisherHas || wishHas };
+        } catch {
+          return { id: bm.id, greeted: false };
+        }
+      })
     ).then(results => {
       setGreetedMap(prev => {
         const next = { ...prev };
-        results.forEach(r => { if (r.alreadyGreeted) next[r.id] = true; });
+        results.forEach(r => { if (r.greeted) next[r.id] = true; });
         return next;
       });
     });
