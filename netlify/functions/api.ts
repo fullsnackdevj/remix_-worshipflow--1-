@@ -3600,13 +3600,17 @@ Rules:
         }
     }
 
-    // ── Team Chat ────────────────────────────────────────────────────────────────
-    // GET /api/chat/messages?channelId=xxx
-    if (method === "GET" && path === "/api/chat/messages") {
+    // ── Team Chat ─────────────────────────────────────────────────────────────
+    // rawPath already strips /api prefix, so match /chat/... not /api/chat/...
+
+    // GET /chat/messages?channelId=xxx
+    if (method === "GET" && rawPath === "/chat/messages") {
         const channelId = event.queryStringParameters?.channelId;
         if (!channelId) return json(400, { error: "channelId required" });
+        if (!firestore) return json(503, { error: "DB unavailable" });
         try {
-            const snap = await db.collection("chat_channels").doc(channelId)
+            const snap = await firestore
+                .collection("chat_channels").doc(channelId)
                 .collection("messages")
                 .orderBy("createdAt", "asc")
                 .limitToLast(50)
@@ -3622,13 +3626,15 @@ Rules:
         }
     }
 
-    // POST /api/chat/message
-    if (method === "POST" && path === "/api/chat/message") {
+    // POST /chat/message
+    if (method === "POST" && rawPath === "/chat/message") {
+        if (!firestore) return json(503, { error: "DB unavailable" });
         const { channelId, userId, userName, userPhoto, text } = body;
         if (!channelId || !text?.trim() || !userId) return json(400, { error: "Missing required fields" });
         try {
             const mentions = (text.match(/@(\S+)/g) ?? []).map((m: string) => m.slice(1));
-            const ref = await db.collection("chat_channels").doc(channelId).collection("messages").add({
+            const ref = await firestore
+                .collection("chat_channels").doc(channelId).collection("messages").add({
                 userId, userName: userName || "", userPhoto: userPhoto || "",
                 text: text.trim(), mentions,
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -3640,13 +3646,16 @@ Rules:
         }
     }
 
-    // DELETE /api/chat/message/:id
-    if (method === "DELETE" && path.startsWith("/api/chat/message/")) {
-        const msgId = path.split("/api/chat/message/")[1];
+    // DELETE /chat/message/:id
+    if (method === "DELETE" && rawPath.startsWith("/chat/message/")) {
+        if (!firestore) return json(503, { error: "DB unavailable" });
+        const msgId = rawPath.split("/chat/message/")[1];
         const { channelId } = body;
         if (!msgId || !channelId) return json(400, { error: "Missing id or channelId" });
         try {
-            await db.collection("chat_channels").doc(channelId).collection("messages").doc(msgId).delete();
+            await firestore
+                .collection("chat_channels").doc(channelId)
+                .collection("messages").doc(msgId).delete();
             return json(200, { ok: true });
         } catch (e: any) {
             console.error("[chat/message DELETE]", e?.message);

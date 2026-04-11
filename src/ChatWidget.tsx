@@ -126,7 +126,12 @@ export default function ChatWidget({
   const fetchMessages = useCallback(async (channelId: ChannelId) => {
     try {
       const res = await fetch(`/api/chat/messages?channelId=${channelId}`);
-      if (!res.ok || !mountedRef.current) return;
+      if (!res.ok) {
+        console.error(`[chat] fetch failed ${res.status} on ${channelId}`);
+        if (mountedRef.current) setSettled(true);
+        return;
+      }
+      if (!mountedRef.current) return;
       const data = await res.json();
       // ← CRITICAL: discard response if user already switched to another channel
       if (!Array.isArray(data) || !mountedRef.current || activeChannelRef.current !== channelId) return;
