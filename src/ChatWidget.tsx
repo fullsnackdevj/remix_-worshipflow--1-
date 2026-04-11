@@ -84,10 +84,21 @@ export default function ChatWidget({
   userPhoto,
   allMembers,
 }: ChatWidgetProps) {
+  // ── Cache helpers ──────────────────────────────────────────────────────────
+  const cacheKey = (ch: ChannelId) => `wf_chat_cache_${ch}`;
+  const loadCache = useCallback((ch: ChannelId): ChatMessage[] => {
+    try { const v = localStorage.getItem(cacheKey(ch)); return v ? JSON.parse(v) : []; }
+    catch { return []; }
+  }, []);
+  const saveCache = useCallback((ch: ChannelId, msgs: ChatMessage[]) => {
+    try { localStorage.setItem(cacheKey(ch), JSON.stringify(msgs)); } catch { /* quota */ }
+  }, []);
+
   const [open, setOpen]                     = useState(false);
   const [activeChannel, setActiveChannel]   = useState<ChannelId>("chit-chats");
-  const [messages, setMessages]             = useState<ChatMessage[]>([]);
-  const [settled, setSettled]               = useState(false);
+  // Init messages & settled from cache so the panel shows instantly on first open
+  const [messages, setMessages]             = useState<ChatMessage[]>(() => loadCache("chit-chats"));
+  const [settled, setSettled]               = useState(() => loadCache("chit-chats").length > 0);
   const [input, setInput]                   = useState("");
   const [sending, setSending]               = useState(false);
   const [deletingId, setDeletingId]         = useState<string | null>(null);
@@ -122,7 +133,7 @@ export default function ChatWidget({
     });
   }, []);
 
-  // ── Fetch messages for active channel ────────────────────────────────────────
+  // ── Fetch messages for active channel ──────────────────────────────────────
   const fetchMessages = useCallback(async (channelId: ChannelId) => {
     try {
       const res = await fetch(`/api/chat/messages?channelId=${channelId}`);
@@ -133,40 +144,37 @@ export default function ChatWidget({
       }
       if (!mountedRef.current) return;
       const data = await res.json();
-      // ← CRITICAL: discard response if user already switched to another channel
+      // Discard if user already switched channel (race-condition guard)
       if (!Array.isArray(data) || !mountedRef.current || activeChannelRef.current !== channelId) return;
       setMessages(data);
       setSettled(true);
+      saveCache(channelId, data); // ← persist for instant display next open
       // Mark channel as read
       if (data.length > 0) {
         const lastTs = getMs(data[data.length - 1].createdAt);
         lastReadRef.current[channelId] = lastTs;
         localStorage.setItem(`wf_chat_read_${channelId}`, String(lastTs));
       }
-      // Clear dot for this channel
-      setUnreadDots((prev) => {
-        const next = new Set(prev);
-        next.delete(channelId);
-        return next;
-      });
+      setUnreadDots((prev) => { const next = new Set(prev); next.delete(channelId); return next; });
     } catch {
       if (mountedRef.current) setSettled(true);
     }
-  }, []);
+  }, [saveCache]);
 
-  // ── Poll when panel is open ───────────────────────────────────────────────────
+  // ── Poll when panel is open ─────────────────────────────────────────────────
   useEffect(() => {
     if (!open) {
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
       return;
     }
-    setSettled(false);
+    // Don't reset settled if we already have cached messages (instant display)
+    if (messages.length === 0) setSettled(false);
     fetchMessages(activeChannel);
-    pollRef.current = setInterval(() => fetchMessages(activeChannel), 3000);
+    pollRef.current = setInterval(() => fetchMessages(activeChannel), 2000); // 2s for snappier sync
     return () => {
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     };
-  }, [open, activeChannel, fetchMessages]);
+  }, [open, activeChannel, fetchMessages]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Background unread check for non-active channels ───────────────────────────
   useEffect(() => {
@@ -188,11 +196,23 @@ export default function ChatWidget({
     });
   }, [open, userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Auto-scroll ──────────────────────────────────────────────────────────────
+  // ── Scroll to bottom ─────────────────────────────────────────────────────────
+  // Instant snap when opening panel or switching channels
   useEffect(() => {
     if (open && messages.length > 0) {
-      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 80);
+      messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, activeChannel]);
+
+  // Smooth scroll only when new messages arrive during active session
+  const prevLenRef = useRef(0);
+  useEffect(() => {
+    if (!open || messages.length === 0) return;
+    if (messages.length > prevLenRef.current) {
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 60);
+    }
+    prevLenRef.current = messages.length;
   }, [messages.length, open]);
 
   // ── Auto-resize textarea ─────────────────────────────────────────────────────
@@ -304,8 +324,10 @@ export default function ChatWidget({
   const switchChannel = (id: ChannelId) => {
     if (id === activeChannel) return;
     setActiveChannel(id);
-    setMessages([]); // ← Clear immediately — prevents old channel messages bleeding in
-    setSettled(false);
+    // Load cache immediately so tab shows content while network fetch completes
+    const cached = loadCache(id as ChannelId);
+    setMessages(cached);
+    setSettled(cached.length > 0); // no blank flash if cached
     setDeletingId(null);
     setMentionQuery(null);
   };
