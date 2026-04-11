@@ -411,12 +411,12 @@ app.post("/api/chat/message", async (req, res) => {
   if (res.headersSent) return;
   const firestore = getDb();
   if (!firestore) return res.status(503).json({ error: "DB unavailable" });
-  const { channelId, userId, userName, userPhoto, text } = req.body;
-  if (!channelId || !text?.trim() || !userId) {
+  const { channelId, userId, userName, userPhoto, text, replyTo, imageUrl } = req.body;
+  if (!channelId || (!text?.trim() && !imageUrl) || !userId) {
     return res.status(400).json({ error: "Missing required fields" });
   }
   try {
-    const mentions = (text.match(/@(\S+)/g) ?? []).map((m: string) => m.slice(1));
+    const mentions = (text?.match(/@(\S+)/g) ?? []).map((m: string) => m.slice(1));
     const ref = await firestore
       .collection("chat_channels")
       .doc(channelId)
@@ -425,14 +425,60 @@ app.post("/api/chat/message", async (req, res) => {
         userId,
         userName: userName || "",
         userPhoto: userPhoto || "",
-        text: text.trim(),
+        text: text?.trim() || "",
         mentions,
+        ...(replyTo   ? { replyTo }   : {}),
+        ...(imageUrl  ? { imageUrl }  : {}),
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       });
     res.json({ id: ref.id });
   } catch (e) {
     console.error("chat POST failed:", e);
     res.status(500).json({ error: "Failed to send message" });
+  }
+});
+
+// POST /api/chat/reaction — toggle emoji reaction on a message
+app.post("/api/chat/reaction", async (req, res) => {
+  if (res.headersSent) return;
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { channelId, messageId, emoji, userId, action } = req.body;
+  if (!channelId || !messageId || !emoji || !userId || !action) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
+  try {
+    await firestore
+      .collection("chat_channels").doc(channelId)
+      .collection("messages").doc(messageId)
+      .update({
+        [`reactions.${emoji}`]: action === "remove"
+          ? admin.firestore.FieldValue.arrayRemove(userId)
+          : admin.firestore.FieldValue.arrayUnion(userId),
+      });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("reaction toggle failed:", e);
+    res.status(500).json({ error: "Failed to toggle reaction" });
+  }
+});
+
+// POST /api/chat/pin — toggle pin on a message
+app.post("/api/chat/pin", async (req, res) => {
+  if (res.headersSent) return;
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { channelId, messageId, pinned } = req.body;
+  if (!channelId || !messageId) return res.status(400).json({ error: "Missing fields" });
+  try {
+    await firestore
+      .collection("chat_channels").doc(channelId)
+      .collection("messages").doc(messageId)
+      .update({ pinned: !!pinned });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("pin toggle failed:", e);
+    res.status(500).json({ error: "Failed to toggle pin" });
   }
 });
 
@@ -455,6 +501,34 @@ app.delete("/api/chat/message/:id", async (req, res) => {
   } catch (e) {
     console.error("chat DELETE failed:", e);
     res.status(500).json({ error: "Failed to delete message" });
+  }
+});
+
+// PATCH /api/chat/message/:id — edit a message
+app.patch("/api/chat/message/:id", async (req, res) => {
+  if (res.headersSent) return;
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { id } = req.params;
+  const { channelId, text, userId } = req.body;
+  if (!id || !channelId || !text?.trim() || !userId) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
+  try {
+    const msgRef = firestore
+      .collection("chat_channels").doc(channelId)
+      .collection("messages").doc(id);
+    const snap = await msgRef.get();
+    if (!snap.exists) return res.status(404).json({ error: "Message not found" });
+    if (snap.data()?.userId !== userId) return res.status(403).json({ error: "Cannot edit another user's message" });
+    await msgRef.update({
+      text: text.trim(),
+      editedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("chat PATCH failed:", e);
+    res.status(500).json({ error: "Failed to edit message" });
   }
 });
 

@@ -3550,26 +3550,19 @@ Rules:
         const version = event.queryStringParameters?.version ?? "NIV";
         const pageNum = Math.max(1, parseInt(event.queryStringParameters?.page ?? "1", 10));
         if (!q || q.trim().length < 2) return json(400, { error: "Query too short" });
-
         try {
-            const ver     = version.replace(/[^A-Z0-9]/gi, "");
-            const startAt = (pageNum - 1) * 25 + 1;
-            const url     = `https://www.biblegateway.com/quicksearch/?search=${encodeURIComponent(q.trim())}&version=${ver}&resultspp=25&startnum=${startAt}&interface=print`;
-
-            const bgRes = await fetch(url, {
+            const searchUrl = `https://www.biblegateway.com/quicksearch/?quicksearch=${encodeURIComponent(q.trim())}&version=${version}&limit=25&interface=print&startnumber=${(pageNum - 1) * 25 + 1}`;
+            const bgRes = await fetch(searchUrl, {
                 headers: {
                     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36",
                     "Accept": "text/html,application/xhtml+xml",
-                    "Accept-Language": "en-US,en;q=0.9,tl;q=0.8",
+                    "Accept-Language": "en-US,en;q=0.9",
                 },
             });
-            if (!bgRes.ok) return json(502, { error: "BibleGateway unavailable" });
-
+            if (!bgRes.ok) return json(502, { error: "BibleGateway search unavailable" });
             const html = await bgRes.text();
-
-            const totalMatch = html.match(/(\d[\d,]*)\s+(?:Bible\s+)?Results?/i);
+            const totalMatch = html.match(/of\s+([\d,]+)\s+results?/i) || html.match(/([\d,]+)\s+results?/i);
             const total = totalMatch ? parseInt(totalMatch[1].replace(/,/g, ""), 10) : 0;
-
             const results: { reference: string; text: string }[] = [];
             const liReg = /<li[^>]*class="[^"]*bible-item[^"]*"[^>]*>([\s\S]*?)<\/li>/gi;
             let liMatch;
@@ -3629,20 +3622,90 @@ Rules:
     // POST /chat/message
     if (method === "POST" && rawPath === "/chat/message") {
         if (!firestore) return json(503, { error: "DB unavailable" });
-        const { channelId, userId, userName, userPhoto, text } = body;
-        if (!channelId || !text?.trim() || !userId) return json(400, { error: "Missing required fields" });
+        const { channelId, userId, userName, userPhoto, text, replyTo, imageUrl, mentionUserIds } = body;
+        if (!channelId || (!text?.trim() && !imageUrl) || !userId) return json(400, { error: "Missing required fields" });
         try {
-            const mentions = (text.match(/@(\S+)/g) ?? []).map((m: string) => m.slice(1));
+            const mentions = (text?.match(/@(\S+)/g) ?? []).map((m: string) => m.slice(1));
             const ref = await firestore
                 .collection("chat_channels").doc(channelId).collection("messages").add({
                 userId, userName: userName || "", userPhoto: userPhoto || "",
-                text: text.trim(), mentions,
+                text: text?.trim() || "", mentions,
+                ...(replyTo  ? { replyTo }  : {}),
+                ...(imageUrl ? { imageUrl } : {}),
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
             });
+            // Fire-and-forget: FCM push for @mentions (never blocks the response)
+            if (mentions.length > 0 && firestore) {
+                Promise.resolve().then(async () => {
+                    try {
+                        const targetIds: string[] = Array.isArray(mentionUserIds) ? mentionUserIds : [];
+                        // If client provided explicit user IDs, use them; else fall back to name matching
+                        let mentionedUids = targetIds.filter(id => id && id !== userId);
+                        if (mentionedUids.length === 0 && mentions.length > 0) {
+                            const usersSnap = await firestore!.collection("approved_users").get();
+                            usersSnap.docs.forEach(doc => {
+                                if (doc.id === userId) return;
+                                const uData = doc.data();
+                                const uFull  = (uData.name || "").toLowerCase().replace(/\s+/g, "");
+                                const uFirst = (uData.name || "").trim().split(/\s+/)[0]?.toLowerCase() || "";
+                                const hit = mentions.some((h: string) => {
+                                    const t = h.toLowerCase();
+                                    return t === uFull || (uFirst.length >= 2 && t === uFirst) ||
+                                           uFull.startsWith(t) || (uFirst.length >= 2 && t.startsWith(uFirst));
+                                });
+                                if (hit) mentionedUids.push(doc.id);
+                            });
+                        }
+                        for (const uid of mentionedUids) {
+                            // 5-minute cooldown per user per channel
+                            const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+                            const recent = await firestore!.collection("notifications")
+                                .where("targetUserId", "==", uid)
+                                .where("type", "==", "chat_mention")
+                                .where("resourceId", "==", channelId)
+                                .orderBy("createdAt", "desc").limit(1).get().catch(() => null);
+                            if (recent && !recent.empty) {
+                                const lastAt: Date | null = recent.docs[0].data().createdAt?.toDate?.() ?? null;
+                                if (lastAt && lastAt > fiveMinAgo) continue;
+                            }
+                            await writeNotif(firestore, {
+                                type: "chat_mention",
+                                message: `💬 ${userName || "Someone"} mentioned you`,
+                                subMessage: (text || "").slice(0, 100),
+                                actorName: userName || "",
+                                actorPhoto: userPhoto || "",
+                                actorUserId: userId,
+                                targetAudience: "direct",
+                                targetUserId: uid,
+                                resourceId: channelId,
+                            });
+                        }
+                    } catch (e) { console.error("[chat mention notify]", e); }
+                });
+            }
             return json(200, { id: ref.id });
         } catch (e: any) {
             console.error("[chat/message POST]", e?.message);
             return json(500, { error: "Failed to send message" });
+        }
+    }
+
+    // PATCH /chat/message/:id — edit a message (owner only)
+    if (method === "PATCH" && rawPath.startsWith("/chat/message/")) {
+        if (!firestore) return json(503, { error: "DB unavailable" });
+        const msgId = rawPath.split("/chat/message/")[1];
+        const { channelId, text, userId } = body;
+        if (!msgId || !channelId || !text?.trim() || !userId) return json(400, { error: "Missing required fields" });
+        try {
+            const msgRef = firestore.collection("chat_channels").doc(channelId).collection("messages").doc(msgId);
+            const snap = await msgRef.get();
+            if (!snap.exists) return json(404, { error: "Message not found" });
+            if (snap.data()?.userId !== userId) return json(403, { error: "Cannot edit another user's message" });
+            await msgRef.update({ text: text.trim(), editedAt: admin.firestore.FieldValue.serverTimestamp() });
+            return json(200, { ok: true });
+        } catch (e: any) {
+            console.error("[chat/message PATCH]", e?.message);
+            return json(500, { error: "Failed to edit message" });
         }
     }
 
@@ -3660,6 +3723,44 @@ Rules:
         } catch (e: any) {
             console.error("[chat/message DELETE]", e?.message);
             return json(500, { error: "Failed to delete message" });
+        }
+    }
+
+    // POST /chat/reaction — toggle emoji reaction
+    if (method === "POST" && rawPath === "/chat/reaction") {
+        if (!firestore) return json(503, { error: "DB unavailable" });
+        const { channelId, messageId, emoji, userId, action } = body;
+        if (!channelId || !messageId || !emoji || !userId || !action) return json(400, { error: "Missing required fields" });
+        try {
+            await firestore
+                .collection("chat_channels").doc(channelId)
+                .collection("messages").doc(messageId)
+                .update({
+                    [`reactions.${emoji}`]: action === "remove"
+                        ? admin.firestore.FieldValue.arrayRemove(userId)
+                        : admin.firestore.FieldValue.arrayUnion(userId),
+                });
+            return json(200, { ok: true });
+        } catch (e: any) {
+            console.error("[chat/reaction]", e?.message);
+            return json(500, { error: "Failed to toggle reaction" });
+        }
+    }
+
+    // POST /chat/pin — toggle pin flag
+    if (method === "POST" && rawPath === "/chat/pin") {
+        if (!firestore) return json(503, { error: "DB unavailable" });
+        const { channelId, messageId, pinned } = body;
+        if (!channelId || !messageId) return json(400, { error: "Missing fields" });
+        try {
+            await firestore
+                .collection("chat_channels").doc(channelId)
+                .collection("messages").doc(messageId)
+                .update({ pinned: !!pinned });
+            return json(200, { ok: true });
+        } catch (e: any) {
+            console.error("[chat/pin]", e?.message);
+            return json(500, { error: "Failed to toggle pin" });
         }
     }
 

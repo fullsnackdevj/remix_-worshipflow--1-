@@ -35,7 +35,7 @@ const DesignRequestsView  = lazy(() => import("./DesignRequestsView"));
 import AutoTextarea from "./AutoTextarea";
 import DatePicker from "./DatePicker";
 
-import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, BookOpen, LayoutGrid, Mic2, Copy, Pencil, Shield, Mail, Bell, Lock, AlertTriangle, CheckCircle, HelpCircle, FlaskConical, NotebookPen, SquareKanban, Feather, Palette } from "lucide-react";
+import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, BookOpen, LayoutGrid, Mic2, Copy, Pencil, Shield, Mail, Bell, Lock, AlertTriangle, CheckCircle, HelpCircle, FlaskConical, NotebookPen, SquareKanban, Feather, Palette, Code2 } from "lucide-react";
 import { Song, Tag, Member, ScheduleMember, Schedule } from "./types";
 import LineupPlayer, { LineupTrack, CurrentUser } from "./LineupPlayer";
 import SongsLibraryPlayer, { LibraryTrack } from "./SongsLibraryPlayer";
@@ -563,6 +563,9 @@ export default function App() {
   const isPlanningLead = effectiveRole === "planning_lead";
   const isRoleAdmin = isAdmin || effectiveRole === "admin"; // covers owner email AND Firestore-assigned admin
   const isQARole = effectiveRole === "qa_specialist"; // effective QA (includes simulated)
+  // isDesigner: member whose Team Management role is "Designer" (Creative Support category)
+  // Note: myMemberProfile is defined later via useMemo — hoisted here via lazy reference on render
+  // We'll derive it after myMemberProfile is defined (see canAccessDesignRequests below)
 
   // Songs
   const canAddSong = isRoleAdmin || ["musician", "audio_tech", "leader", "planning_lead", "qa_specialist"].includes(effectiveRole);
@@ -854,6 +857,11 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
     const email = user.email.trim().toLowerCase();
     return allMembers.find(m => (m.email || "").trim().toLowerCase() === email) ?? null;
   }, [allMembers, user]);
+
+  // isDesigner: member whose Team Management role column is "Designer" (Creative Support)
+  const isDesigner = myMemberProfile?.role === "Designer";
+  // Design Requests: Admin + Audio/Tech system role + Designer team role
+  const canAccessDesignRequests = isRoleAdmin || effectiveRole === "audio_tech" || isDesigner;
 
   /** True when the user has a member profile but hasn't set their birthdate yet */
   const needsBirthdatePrompt = !!myMemberProfile && !myMemberProfile.birthdate;
@@ -1259,8 +1267,8 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Freedom Wall</span>}
           </div>
 
-          {/* Design Requests — Audio/Tech + Admin only */}
-          {(isRoleAdmin || effectiveRole === "audio_tech") && (
+          {/* Design Requests — Admin + Audio/Tech + Designer (team role) */}
+          {canAccessDesignRequests && (
             <div className="relative group/tip">
               <button
                 onClick={() => { setCurrentView("design-requests"); setIsMobileMenuOpen(false); markDesignRequestsSeen(); }}
@@ -1292,58 +1300,39 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
             </div>
           )}
 
-          {/* Preaching — Admin only; everyone else sees Coming Soon */}
+          {/* Preaching — open to ALL roles */}
           <div className="relative group/tip">
-            {isRoleAdmin ? (
-              // Admin: full access button with glow
-              <button
-                onClick={() => { setCurrentView("preaching"); setIsMobileMenuOpen(false); markPreachingSeen(); }}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium transition-all ${
-                  currentView === "preaching"
-                    ? "bg-indigo-600/20 text-indigo-400"
-                    : unseenPreaching
-                      ? "text-indigo-400 dark:text-indigo-300 hover:bg-indigo-900/20"
-                      : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800/60 hover:text-gray-800 dark:hover:text-gray-200"
-                } ${isSidebarCollapsed ? "justify-center" : ""}`}
-                style={unseenPreaching && currentView !== "preaching" ? {
-                  boxShadow: "0 0 0 1px rgba(99,102,241,0.4), 0 0 12px rgba(99,102,241,0.25)",
-                  animation: "newModulePulse 2s ease-in-out infinite",
-                } : {}}
-                title="Preaching"
-              >
-                <span className="relative shrink-0">
-                  <BookOpen size={20} />
+            <button
+              onClick={() => { setCurrentView("preaching"); setIsMobileMenuOpen(false); markPreachingSeen(); }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium transition-all ${
+                currentView === "preaching"
+                  ? "bg-indigo-600/20 text-indigo-400"
+                  : unseenPreaching
+                    ? "text-indigo-400 dark:text-indigo-300 hover:bg-indigo-900/20"
+                    : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800/60 hover:text-gray-800 dark:hover:text-gray-200"
+              } ${isSidebarCollapsed ? "justify-center" : ""}`}
+              style={unseenPreaching && currentView !== "preaching" ? {
+                boxShadow: "0 0 0 1px rgba(99,102,241,0.4), 0 0 12px rgba(99,102,241,0.25)",
+                animation: "newModulePulse 2s ease-in-out infinite",
+              } : {}}
+              title="Preaching"
+            >
+              <span className="relative shrink-0">
+                <BookOpen size={20} />
+                {unseenPreaching && currentView !== "preaching" && (
+                  <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-indigo-400 border border-[#1a1f2e]" />
+                )}
+              </span>
+              {!isSidebarCollapsed && (
+                <span className="flex items-center gap-2">
+                  Preaching
                   {unseenPreaching && currentView !== "preaching" && (
-                    <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-indigo-400 border border-[#1a1f2e]" />
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">NEW</span>
                   )}
                 </span>
-                {!isSidebarCollapsed && (
-                  <span className="flex items-center gap-2">
-                    Preaching
-                    {unseenPreaching && currentView !== "preaching" && (
-                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">NEW</span>
-                    )}
-                  </span>
-                )}
-              </button>
-            ) : (
-              // Non-admin: disabled Coming Soon state
-              <div
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium cursor-not-allowed opacity-40 ${
-                  isSidebarCollapsed ? "justify-center" : ""
-                }`}
-                title="Preaching — Admin only"
-              >
-                <BookOpen size={20} className="shrink-0 text-gray-400" />
-                {!isSidebarCollapsed && (
-                  <span className="flex items-center gap-2 text-gray-400">
-                    Preaching
-                    <span className="text-[10px] font-bold uppercase tracking-wider bg-gray-500/20 text-gray-500 px-1.5 py-0.5 rounded-full">Admin</span>
-                  </span>
-                )}
-              </div>
-            )}
-            {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">{isRoleAdmin ? "Preaching" : "Preaching (Admin only)"}</span>}
+              )}
+            </button>
+            {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Preaching</span>}
           </div>
 
           {/* Admin Panel — admin only, always hidden for QA Specialist */}
@@ -1447,14 +1436,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
               onToast={showToast}
             />
 
-            {/* Team Chat */}
-            <ChatWidget
-              isAdmin={isRoleAdmin}
-              userId={user?.uid ?? ""}
-              userName={user?.displayName ?? ""}
-              userPhoto={user?.photoURL ?? ""}
-              allMembers={allMembers}
-            />
+
 
             {/* Help & Knowledge Base */}
             <HelpPanel
@@ -1804,25 +1786,11 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                   </div>
                 )
               ) : currentView === "preaching" ? (
-                isRoleAdmin ? (
-                  <PreachingView
-                    currentUser={{ uid: user?.uid ?? "", name: user?.displayName || user?.email || "", email: user?.email || "", photo: user?.photoURL || "" }}
-                    onToast={showToast}
-                    initialTab={pendingPreachingTab ?? undefined}
-                  />
-                ) : (
-                  // Non-admin locked screen
-                  <div className="flex flex-col items-center justify-center h-full gap-4 px-6 text-center">
-                    <div className="w-16 h-16 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                      <BookOpen size={28} className="text-gray-400" />
-                    </div>
-                    <div>
-                      <h2 className="text-lg font-bold text-gray-700 dark:text-gray-300">Preaching Module</h2>
-                      <p className="text-sm text-gray-500 dark:text-gray-500 mt-1">This module is coming soon. Only Admins have access during the preview period.</p>
-                    </div>
-                    <span className="px-4 py-1.5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-xs font-bold uppercase tracking-wider">Coming Soon</span>
-                  </div>
-                )
+                <PreachingView
+                  currentUser={{ uid: user?.uid ?? "", name: user?.displayName || user?.email || "", email: user?.email || "", photo: user?.photoURL || "" }}
+                  onToast={showToast}
+                  initialTab={pendingPreachingTab ?? undefined}
+                />
               ) : null}
               </Suspense>
             </div>
@@ -2029,6 +1997,17 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
           onClose={() => setLibraryOpen(false)}
         />
       )}
+
+      {/* ── Floating Team Chat FAB ──────────────────────────────────────────── */}
+      <Suspense fallback={null}>
+        <ChatWidget
+          isAdmin={isRoleAdmin}
+          userId={user?.uid ?? ""}
+          userName={user?.displayName ?? ""}
+          userPhoto={user?.photoURL ?? ""}
+          allMembers={allMembers}
+        />
+      </Suspense>
 
     </div >
   );
