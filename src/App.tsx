@@ -1427,14 +1427,8 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
 
 
             {/* Notification Bell */}
-            {/* Team Notes */}
-            <NotesPanel
-              userId={user?.uid ?? ""}
-              userName={user?.displayName ?? user?.email ?? "Unknown"}
-              userPhoto={user?.photoURL ?? ""}
-              userRole={userRole}
-              onToast={showToast}
-            />
+            {/* Team Notes — hidden per request */}
+            {/* <NotesPanel ... /> */}
 
 
 

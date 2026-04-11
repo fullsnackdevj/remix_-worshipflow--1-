@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { collection, query, orderBy, limitToLast, onSnapshot } from "firebase/firestore";
 import { db } from "./firebase";
-import { MessageSquare, X, Send, Trash2, Reply, AtSign, Search, Settings, Paperclip, Smile, Pin, PinOff, ImageIcon, Link2, ExternalLink, Code2, Pencil, Check } from "lucide-react";
+import { MessageSquare, X, Send, Trash2, Reply, AtSign, Search, Settings, Paperclip, Smile, Pin, PinOff, ImageIcon, Link2, ExternalLink, Code2, Pencil, Check, ChevronUp, ChevronDown } from "lucide-react";
 import type { Member } from "./types";
 
 // ── Channel type & defaults ──────────────────────────────────────────────────
@@ -299,6 +299,10 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
   // ── Track mentioned member IDs (for FCM targeting) ───────────────────────────
   const [mentionedIds,    setMentionedIds]    = useState<string[]>([]);
   const [devMentionedIds, setDevMentionedIds] = useState<string[]>([]);
+  // ── Mobile long-press context menu ───────────────────────────────────────────
+  const [longPressTarget, setLongPressTarget] = useState<{ msg: ChatMessage; isTeam: boolean } | null>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressMoved = useRef(false);
 
   // ── Refs ──────────────────────────────────────────────────────────────────
   const panelRef         = useRef<HTMLDivElement>(null);
@@ -323,7 +327,31 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
   const devMsgRefs       = useRef<Map<string, HTMLDivElement>>(new Map());
   const devSearchInputRef= useRef<HTMLInputElement>(null);
   const devFileInputRef  = useRef<HTMLInputElement>(null);
-  const devLocalPinnedRef= useRef<Set<string>>(new Set());
+  const devLocalPinnedRef = useRef<Set<string>>(new Set());
+
+  // ── Long-press handlers (mobile touch substitute for hover toolbar) ────────
+  const getLongPressHandlers = (msg: ChatMessage, isTeam: boolean) => ({
+    onTouchStart: (e: React.TouchEvent) => {
+      longPressMoved.current = false;
+      longPressTimer.current = setTimeout(() => {
+        if (!longPressMoved.current) {
+          try { navigator.vibrate?.(50); } catch {}
+          setLongPressTarget({ msg, isTeam });
+        }
+      }, 500);
+    },
+    onTouchMove: () => {
+      longPressMoved.current = true;
+      if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    },
+    onTouchEnd: () => {
+      if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    },
+    onContextMenu: (e: React.MouseEvent) => {
+      // Prevent native context menu on long-press (mobile WebKit)
+      e.preventDefault();
+    },
+  });
   const devMentionListRef= useRef<HTMLDivElement>(null);
 
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
@@ -1086,7 +1114,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
 
   // ── Shared close button ───────────────────────────────────────────────────
   const CloseBtn = () => (
-    <button onClick={() => setOpen(false)} className="p-1.5 text-gray-600 hover:text-gray-300 rounded-lg hover:bg-gray-800 transition-colors">
+    <button onClick={() => setOpen(false)} className="hidden sm:flex p-1.5 text-gray-600 hover:text-gray-300 rounded-lg hover:bg-gray-800 transition-colors">
       <X size={14} />
     </button>
   );
@@ -1205,12 +1233,16 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
           animation: msgPulseFindDev 1.8s ease forwards;
           border-radius: 12px;
         }
+        @keyframes slideUpSheet {
+          from { transform: translateY(100%); opacity: 0.6; }
+          to   { transform: translateY(0);    opacity: 1;   }
+        }
       `}</style>
-      <div ref={panelRef} className="fixed right-6 z-[300] flex flex-col items-end gap-3" style={{ bottom: `${fabBottomOffset}px` }}>
+      <div ref={panelRef} className="fixed right-0 sm:right-4 z-[300] flex flex-col items-end gap-0" style={{ bottom: 0 }}>
 
       {/* ── Toast notifications (fixed overlay, never covered by panel) ──── */}
       {toasts.length > 0 && (
-        <div className="fixed bottom-28 right-4 sm:right-8 flex flex-col-reverse gap-1.5 pointer-events-none z-[500] max-w-[280px]">
+        <div className="fixed bottom-24 sm:bottom-28 right-4 sm:right-8 flex flex-col-reverse gap-1.5 pointer-events-none z-[500] max-w-[280px] sm:max-w-[300px]">
           {toasts.map(t => (
             <div key={t.id} className={`wf-toast flex items-start gap-2 rounded-2xl px-3.5 py-2.5 text-[11px] font-semibold shadow-2xl border ${
               t.type === "error"   ? "bg-red-950/97 border-red-800/60 text-red-100" :
@@ -1227,11 +1259,11 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
       {/* ── Chat Panel ──────────────────────────────────────────────────────── */}
       {open && (
         <div
-          className="flex w-[calc(100vw-2rem)] sm:w-[520px] h-[min(640px,calc(100vh-120px))] rounded-2xl overflow-hidden"
-          style={{ boxShadow: "0 24px 80px -8px rgba(0,0,0,0.85), 0 0 0 1px rgba(99,102,241,0.13)", background: "#09090b" }}
+          className="flex fixed inset-0 sm:static sm:w-[540px] sm:h-[min(600px,calc(100dvh-52px))] sm:rounded-t-2xl overflow-hidden"
+          style={{ boxShadow: "0 -4px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(99,102,241,0.13)", background: "#09090b" }}
         >
           {/* ────────── LEFT SIDEBAR ────────── */}
-          <div className="w-14 flex flex-col items-center py-3 gap-1.5 border-r border-gray-800/60 shrink-0" style={{ background: "#0c0c0f" }}>
+          <div className="hidden sm:flex w-14 flex-col items-center py-3 gap-1.5 border-r border-gray-800/60 shrink-0" style={{ background: "#0c0c0f" }}>
             {/* Chat — always top */}
             <SidebarBtn view="chat" icon={<MessageSquare size={17} />} title="Team Chats" />
             {/* Dev channels — below chat */}
@@ -1258,7 +1290,61 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
           </div>
 
           {/* ────────── MAIN CONTENT ────────── */}
-          <div className="flex-1 min-w-0 flex flex-col">
+          <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+
+            {/* ── Mobile top nav bar (replaces left sidebar on small screens) sm:hidden ── */}
+            <div className="flex sm:hidden items-center gap-1 px-3 py-2 border-b border-gray-800/60 shrink-0" style={{ background: "#0c0c0f" }}>
+              {/* Team / Dev toggle */}
+              <button onClick={() => setSidebarView("chat")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${sidebarView !== "dev" ? "bg-indigo-600/30 text-indigo-300" : "text-gray-500 hover:text-gray-300"}`}>
+                <MessageSquare size={14} /><span>Team</span>
+              </button>
+              <button onClick={() => setSidebarView("dev")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${sidebarView === "dev" ? "bg-emerald-600/30 text-emerald-300" : "text-gray-500 hover:text-gray-300"}`}>
+                <Code2 size={14} /><span>Dev</span>
+              </button>
+              <div className="flex-1" />
+              {/* Utility — Team mode */}
+              {sidebarView !== "dev" && (<>
+                <button onClick={() => setSidebarView("mentions")} className={`relative p-2 rounded-lg transition-all ${sidebarView === "mentions" ? "text-indigo-400 bg-indigo-900/30" : "text-gray-600 hover:text-gray-300"}`}>
+                  <AtSign size={15} />
+                  {mentionMessages.length > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-[13px] h-3.5 flex items-center justify-center rounded-full bg-indigo-500 text-white text-[8px] font-bold px-0.5">{mentionMessages.length}</span>}
+                </button>
+                <button onClick={() => setSidebarView("pinned")} className={`relative p-2 rounded-lg transition-all ${sidebarView === "pinned" ? "text-indigo-400 bg-indigo-900/30" : "text-gray-600 hover:text-gray-300"}`}>
+                  <Pin size={15} />
+                  {pinnedMessages.length > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-[13px] h-3.5 flex items-center justify-center rounded-full bg-indigo-500 text-white text-[8px] font-bold px-0.5">{pinnedMessages.length}</span>}
+                </button>
+                <button onClick={() => setSidebarView("images")} className={`relative p-2 rounded-lg transition-all ${sidebarView === "images" ? "text-indigo-400 bg-indigo-900/30" : "text-gray-600 hover:text-gray-300"}`}>
+                  <ImageIcon size={15} />
+                  {imageMessages.length > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-[13px] h-3.5 flex items-center justify-center rounded-full bg-indigo-500 text-white text-[8px] font-bold px-0.5">{imageMessages.length}</span>}
+                </button>
+                <button onClick={() => setSidebarView("links")} className={`relative p-2 rounded-lg transition-all ${sidebarView === "links" ? "text-indigo-400 bg-indigo-900/30" : "text-gray-600 hover:text-gray-300"}`}>
+                  <Link2 size={15} />
+                  {linkMessages.length > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-[13px] h-3.5 flex items-center justify-center rounded-full bg-indigo-500 text-white text-[8px] font-bold px-0.5">{linkMessages.length}</span>}
+                </button>
+                <button onClick={() => setSidebarView("search")} className={`p-2 rounded-lg transition-all ${sidebarView === "search" ? "text-indigo-400 bg-indigo-900/30" : "text-gray-600 hover:text-gray-300"}`}>
+                  <Search size={15} />
+                </button>
+              </>)}
+              {/* Utility — Dev mode */}
+              {sidebarView === "dev" && (<>
+                <button onClick={() => setDevSubView("mentions")} className={`relative p-2 rounded-lg transition-all ${devSubView === "mentions" ? "text-emerald-400 bg-emerald-900/30" : "text-gray-600 hover:text-gray-300"}`}>
+                  <AtSign size={15} />
+                  {devMentionMessages.length > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-[13px] h-3.5 flex items-center justify-center rounded-full bg-emerald-500 text-white text-[8px] font-bold px-0.5">{devMentionMessages.length}</span>}
+                </button>
+                <button onClick={() => setDevSubView("pinned")} className={`relative p-2 rounded-lg transition-all ${devSubView === "pinned" ? "text-emerald-400 bg-emerald-900/30" : "text-gray-600 hover:text-gray-300"}`}>
+                  <Pin size={15} />
+                  {devPinnedMessages.length > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-[13px] h-3.5 flex items-center justify-center rounded-full bg-emerald-500 text-white text-[8px] font-bold px-0.5">{devPinnedMessages.length}</span>}
+                </button>
+                <button onClick={() => { setDevSubView("chat"); }} className={`p-2 rounded-lg transition-all text-gray-600 hover:text-gray-300`}>
+                  <Search size={15} />
+                </button>
+              </>)}
+              {/* Close — always visible on mobile */}
+              <button onClick={() => setOpen(false)} className="p-2 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-900/20 transition-all ml-1">
+                <X size={16} />
+              </button>
+            </div>
 
             {/* ══════════ DEV CHAT VIEW (full clone, emerald accents) ══════════ */}
             {sidebarView === "dev" && (
@@ -1323,7 +1409,8 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                                 )}
                                 <div
                                   ref={el => { if (el) devMsgRefs.current.set(msg.id, el); else devMsgRefs.current.delete(msg.id); }}
-                                  className={`group relative flex items-start gap-3 px-2 py-1.5 rounded-xl transition-colors cursor-default ${isGrouped ? "mt-1" : "mt-5"} ${devHighlightedMsgId === msg.id ? "msg-found-dev" : ""} ${msg.pinned ? "bg-emerald-500/5 border border-emerald-500/10 hover:bg-emerald-500/8" : "hover:bg-gray-800/30"}`}
+                                  {...getLongPressHandlers(msg, false)}
+                                  className={`group relative flex items-start gap-3 px-2 py-1.5 rounded-xl transition-all cursor-default select-none ${isGrouped ? "mt-1" : "mt-5"} ${devHighlightedMsgId === msg.id ? "msg-found-dev" : ""} ${longPressTarget?.msg.id === msg.id ? "bg-gray-700/40 scale-[0.98]" : ""} ${msg.pinned ? "bg-emerald-500/5 border border-emerald-500/10 hover:bg-emerald-500/8" : "hover:bg-gray-800/30"}`}
                                 >
                                   {msg.pinned && <span className="absolute top-1.5 right-8 text-[9px] text-emerald-400/60 select-none pointer-events-none">📌</span>}
                                   <div className="w-8 shrink-0">
@@ -1568,7 +1655,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                           <Send size={12} />
                         </button>
                       </div>
-                      <div className="flex items-center justify-between mt-1.5 px-1">
+                      <div className="hidden sm:flex items-center justify-between mt-1.5 px-1">
                         <span className="text-[9px] text-gray-700">
                           <kbd className="font-mono">Enter</kbd> send · <kbd className="font-mono">Shift+Enter</kbd> newline · <kbd className="font-mono">@</kbd> mention
                         </span>
@@ -1851,7 +1938,8 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
 
                             <div
                               ref={el => { if (el) msgRefs.current.set(msg.id, el); else msgRefs.current.delete(msg.id); }}
-                              className={`group relative flex items-start gap-3 px-2 py-1.5 rounded-xl transition-colors cursor-default ${isGrouped ? "mt-1" : "mt-5"} ${highlightedMsgId === msg.id ? "msg-found" : ""} ${msg.pinned ? "bg-pink-500/5 border border-pink-500/10 hover:bg-pink-500/8" : "hover:bg-gray-800/30"}`}>
+                              {...getLongPressHandlers(msg, true)}
+                              className={`group relative flex items-start gap-3 px-2 py-1.5 rounded-xl transition-colors cursor-default select-none ${isGrouped ? "mt-1" : "mt-5"} ${highlightedMsgId === msg.id ? "msg-found" : ""} ${longPressTarget?.msg.id === msg.id ? "bg-gray-700/40 scale-[0.98]" : ""} ${msg.pinned ? "bg-pink-500/5 border border-pink-500/10 hover:bg-pink-500/8" : "hover:bg-gray-800/30"}`}>
                               {msg.pinned && (
                                 <span className="absolute top-1.5 right-8 text-[9px] text-pink-400/60 select-none pointer-events-none">📌</span>
                               )}
@@ -2600,31 +2688,206 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
         </div>
       )}
 
+      {/* ── Mobile Long-Press Bottom Sheet ─────────────────────────────────── */}
+      {longPressTarget && (() => {
+        const { msg, isTeam } = longPressTarget;
+        const accent  = isTeam ? "indigo" : "emerald";
+        const isMine  = msg.userId === userId;
+        const isPinned = msg.pinned;
+        const dismiss = () => setLongPressTarget(null);
+
+        const doReaction = (emoji: string) => {
+          if (isTeam) toggleReaction(msg, emoji);
+          else toggleDevReaction(msg, emoji);
+          dismiss();
+        };
+        const doReply = () => {
+          const replyPayload = { id: msg.id, userId: msg.userId, userName: msg.userName, text: msg.text, userPhoto: msg.userPhoto, imageUrl: msg.imageUrl };
+          if (isTeam) { setReplyingTo(replyPayload); setTimeout(() => inputRef.current?.focus(), 80); }
+          else         { setDevReplyingTo(replyPayload); setTimeout(() => devInputRef.current?.focus(), 80); }
+          dismiss();
+        };
+        const doPin = () => {
+          if (isTeam) togglePin(msg);
+          else toggleDevPin(msg);
+          dismiss();
+        };
+        const doEdit = () => {
+          if (isTeam) { setEditingId(msg.id); setEditText(msg.text || ""); }
+          else        { setDevEditingId(msg.id); setDevEditText(msg.text || ""); }
+          dismiss();
+        };
+        const doDelete = () => {
+          if (isTeam) setDeletingId(msg.id);
+          else        setDevDeletingId(msg.id);
+          dismiss();
+        };
+
+        return (
+          <>
+            {/* Backdrop */}
+            <div
+              className="fixed inset-0 z-[400] bg-black/60 backdrop-blur-[2px]"
+              onClick={dismiss}
+            />
+            {/* Sheet */}
+            <div
+              className="fixed bottom-0 left-0 right-0 z-[401] rounded-t-3xl overflow-hidden"
+              style={{
+                background: "linear-gradient(180deg, #111115 0%, #0d0d10 100%)",
+                boxShadow: "0 -8px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06)",
+                animation: "slideUpSheet 0.28s cubic-bezier(0.34,1.56,0.64,1) forwards",
+              }}
+            >
+              {/* Drag handle */}
+              <div className="flex justify-center pt-3 pb-1">
+                <div className="w-10 h-1 rounded-full bg-gray-700" />
+              </div>
+
+              {/* Message preview */}
+              <div className="px-5 py-3 border-b border-gray-800/60">
+                <div className="flex items-center gap-2.5 mb-1">
+                  {msg.userPhoto
+                    ? <img src={msg.userPhoto} alt={msg.userName} className="w-6 h-6 rounded-full object-cover ring-1 ring-gray-700" />
+                    : <div className={`w-6 h-6 rounded-full bg-${accent}-900/60 flex items-center justify-center text-${accent}-300 text-[10px] font-bold`}>{msg.userName?.[0]?.toUpperCase()}</div>
+                  }
+                  <span className="text-xs font-semibold text-gray-300">{msg.userName}</span>
+                  {isMine && <span className="text-[9px] text-gray-600 font-medium">you</span>}
+                </div>
+                <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed pl-8">
+                  {msg.imageUrl ? "📎 Image attachment" : (msg.text || "")}
+                </p>
+              </div>
+
+              {/* Quick emoji reactions */}
+              <div className="flex items-center justify-around px-4 py-3 border-b border-gray-800/40">
+                {REACTION_EMOJIS.map(emoji => {
+                  const hasReacted = msg.reactions?.[emoji]?.includes(userId ?? "");
+                  return (
+                    <button
+                      key={emoji}
+                      onClick={() => doReaction(emoji)}
+                      className={`flex flex-col items-center gap-0.5 p-2 rounded-2xl transition-all active:scale-90 ${hasReacted ? `bg-${accent}-900/40 ring-1 ring-${accent}-500/50` : "hover:bg-gray-800/60"}`}
+                    >
+                      <span className="text-2xl leading-none">{emoji}</span>
+                      {msg.reactions?.[emoji]?.length ? (
+                        <span className="text-[9px] text-gray-500 font-semibold">{msg.reactions[emoji].length}</span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Action buttons */}
+              <div className="px-4 py-2 space-y-1 pb-safe-bottom" style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}>
+                {/* Reply */}
+                <button onClick={doReply}
+                  className="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl hover:bg-gray-800/60 active:bg-gray-700/60 transition-all text-left">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-900/40 flex items-center justify-center shrink-0">
+                    <Reply size={17} className="text-indigo-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-100">Reply</p>
+                    <p className="text-[10px] text-gray-600">Quote and respond to this message</p>
+                  </div>
+                </button>
+
+                {/* Pin / Unpin */}
+                <button onClick={doPin}
+                  className="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl hover:bg-gray-800/60 active:bg-gray-700/60 transition-all text-left">
+                  <div className="w-9 h-9 rounded-xl bg-amber-900/30 flex items-center justify-center shrink-0">
+                    {isPinned ? <PinOff size={17} className="text-amber-400" /> : <Pin size={17} className="text-amber-400" />}
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-100">{isPinned ? "Unpin" : "Pin Message"}</p>
+                    <p className="text-[10px] text-gray-600">{isPinned ? "Remove from pinned messages" : "Keep this message at the top"}</p>
+                  </div>
+                </button>
+
+                {/* Edit — own messages only */}
+                {isMine && msg.text && (
+                  <button onClick={doEdit}
+                    className="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl hover:bg-gray-800/60 active:bg-gray-700/60 transition-all text-left">
+                    <div className="w-9 h-9 rounded-xl bg-sky-900/30 flex items-center justify-center shrink-0">
+                      <Pencil size={17} className="text-sky-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-gray-100">Edit Message</p>
+                      <p className="text-[10px] text-gray-600">Fix typos or update your message</p>
+                    </div>
+                  </button>
+                )}
+
+                {/* Delete */}
+                {(isMine || isAdmin) && (
+                  <button onClick={doDelete}
+                    className="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl hover:bg-red-900/20 active:bg-red-900/30 transition-all text-left">
+                    <div className="w-9 h-9 rounded-xl bg-red-900/30 flex items-center justify-center shrink-0">
+                      <Trash2 size={17} className="text-red-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-red-300">Delete Message</p>
+                      <p className="text-[10px] text-gray-600">Permanently remove this message</p>
+                    </div>
+                  </button>
+                )}
+
+                {/* Cancel */}
+                <button onClick={dismiss}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3.5 rounded-2xl bg-gray-800/40 hover:bg-gray-700/40 active:bg-gray-600/40 transition-all mt-2">
+                  <X size={15} className="text-gray-500" />
+                  <span className="text-sm font-semibold text-gray-400">Cancel</span>
+                </button>
+              </div>
+            </div>
+          </>
+        );
+      })()}
+
       {/* ── Floating Action Button ───────────────────────────────────────── */}
+      {/* Mobile-only FAB (circular, shown when closed) */}
       <button
         onClick={() => setOpen(o => !o)}
-        aria-label={open ? "Close team chat" : "Open team chat"}
-        className="relative w-14 h-14 rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 hover:scale-110 active:scale-95 focus:outline-none"
-        style={{
+        aria-label="Open team chat"
+        className={`relative w-14 h-14 rounded-full items-center justify-center shadow-2xl transition-all duration-300 hover:scale-110 active:scale-95 focus:outline-none sm:hidden ${open ? "hidden" : "flex"}`}
+        style={{ marginRight: "1rem", marginBottom: "1rem",
           background: fabGradient ?? "linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%)",
-          boxShadow: totalUnread > 0 && !open
-            ? "0 0 0 0 rgba(139,92,246,0.7), 0 8px 32px rgba(99,102,241,0.5)"
-            : "0 8px 32px rgba(99,102,241,0.35)",
+          boxShadow: totalUnread > 0 ? "0 0 0 0 rgba(139,92,246,0.7), 0 8px 32px rgba(99,102,241,0.5)" : "0 8px 32px rgba(99,102,241,0.35)",
         }}
       >
-        {totalUnread > 0 && !open && (
-          <span className="absolute inset-0 rounded-full animate-ping" style={{ background: "rgba(139,92,246,0.35)" }} />
-        )}
+        {totalUnread > 0 && <span className="absolute inset-0 rounded-full animate-ping" style={{ background: "rgba(139,92,246,0.35)" }} />}
         <span className="absolute inset-0 rounded-full" style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.18) 0%, transparent 60%)" }} />
-        {open
-          ? <X size={22} className="text-white relative z-10" />
-          : (fabIcon ?? <MessageSquare size={22} className="text-white relative z-10" />)
-        }
-        {totalUnread > 0 && !open && (
+        {fabIcon ?? <MessageSquare size={22} className="text-white relative z-10" />}
+        {totalUnread > 0 && (
           <span className="absolute -top-1 -right-1 min-w-[20px] h-5 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1 ring-2 ring-gray-950 shadow-lg z-20">
             {totalUnread > 9 ? "9+" : totalUnread}
           </span>
         )}
+      </button>
+
+      {/* Desktop/Tablet: Messenger-style bottom tab bar */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        aria-label={open ? "Close team chat" : "Open team chat"}
+        className="hidden sm:flex items-center gap-2.5 px-4 h-[48px] w-[220px] rounded-t-2xl rounded-b-none focus:outline-none transition-all duration-200 hover:brightness-110 active:brightness-90 shrink-0"
+        style={{
+          background: open
+            ? "linear-gradient(135deg, #4338ca 0%, #6d28d9 100%)"
+            : fabGradient ?? "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
+          boxShadow: "0 -4px 24px rgba(99,102,241,0.3)",
+        }}
+      >
+        <MessageSquare size={18} className="text-white/90 shrink-0" />
+        <span className="text-sm font-bold text-white flex-1 text-left">Team Chat</span>
+        {totalUnread > 0 && !open && (
+          <span className="min-w-[20px] h-5 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1 shadow-lg">
+            {totalUnread > 9 ? "9+" : totalUnread}
+          </span>
+        )}
+        {open
+          ? <ChevronDown size={16} className="text-white/70" />
+          : <ChevronUp size={16} className="text-white/70" />
+        }
       </button>
     </div>
     </>
