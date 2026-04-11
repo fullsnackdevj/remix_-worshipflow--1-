@@ -1992,18 +1992,16 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
         />
       )}
 
-      {/* ── Floating Team Chat FAB — Admin only ─────────────────────────────── */}
-      {isRoleAdmin && (
-        <Suspense fallback={null}>
-          <ChatWidget
-            isAdmin={isRoleAdmin}
-            userId={user?.uid ?? ""}
-            userName={user?.displayName ?? ""}
-            userPhoto={user?.photoURL ?? ""}
-            allMembers={allMembers}
-          />
-        </Suspense>
-      )}
+      {/* ── Floating Team Chat FAB — visible to all members ──────────────────── */}
+      <Suspense fallback={null}>
+        <ChatWidget
+          isAdmin={isRoleAdmin}
+          userId={user?.uid ?? ""}
+          userName={user?.displayName ?? ""}
+          userPhoto={user?.photoURL ?? ""}
+          allMembers={allMembers}
+        />
+      </Suspense>
 
     </div >
   );
