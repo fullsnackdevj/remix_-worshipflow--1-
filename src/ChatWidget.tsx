@@ -1620,30 +1620,30 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                           </button>
                         </div>
                       )}
-                      <div className="flex items-end gap-1.5 bg-gray-800/50 border border-gray-700/40 rounded-2xl px-2 py-1.5 focus-within:border-emerald-500/50 focus-within:ring-1 focus-within:ring-emerald-500/10 transition-all">
-                        {userPhoto ? <img src={userPhoto} alt={userName} className="w-6 h-6 rounded-full object-cover shrink-0 mb-0.5" />
-                          : <div className="w-6 h-6 rounded-full bg-emerald-900/50 flex items-center justify-center text-emerald-300 text-[9px] font-bold shrink-0 mb-0.5">{userName?.[0]?.toUpperCase() ?? "?"}</div>}
+                      <div className="flex items-end gap-2 bg-gray-800/50 border border-gray-700/40 rounded-2xl px-3 py-2.5 focus-within:border-emerald-500/50 focus-within:ring-1 focus-within:ring-emerald-500/10 transition-all">
+                        {userPhoto ? <img src={userPhoto} alt={userName} className="w-7 h-7 rounded-full object-cover shrink-0" />
+                          : <div className="w-7 h-7 rounded-full bg-emerald-900/50 flex items-center justify-center text-emerald-300 text-[10px] font-bold shrink-0">{userName?.[0]?.toUpperCase() ?? "?"}</div>}
                         <button onMouseDown={e => e.stopPropagation()} onClick={() => devFileInputRef.current?.click()}
-                          className="p-1.5 rounded-lg text-gray-600 hover:text-emerald-400 hover:bg-emerald-900/20 transition-all shrink-0 mb-0.5" title="Attach image">
-                          <Paperclip size={13} />
+                          className="p-2 rounded-xl text-gray-600 hover:text-emerald-400 hover:bg-emerald-900/20 transition-all shrink-0" title="Attach image">
+                          <Paperclip size={15} />
                         </button>
                         <input ref={devFileInputRef} type="file" accept="image/*" className="hidden" onChange={handleDevFileAttach} />
                         <textarea ref={devInputRef} value={devInput} onChange={handleDevInputChange} onKeyDown={handleDevKeyDown} onPaste={handleDevPaste}
                           onClick={() => setDevEmojiPickerOpen(false)} placeholder={devActiveCh.placeholder} rows={1}
                           disabled={!userId || sending}
-                          className="flex-1 bg-transparent text-sm text-gray-100 placeholder-gray-600 resize-none outline-none py-1 min-h-[26px] max-h-[112px] overflow-y-auto disabled:opacity-40" />
+                          className="flex-1 bg-transparent text-sm text-gray-100 placeholder-gray-600 resize-none outline-none py-2 min-h-[40px] max-h-[120px] overflow-y-auto disabled:opacity-40 leading-relaxed" />
                         <div className="relative shrink-0 mb-0.5">
                           <button onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setDevEmojiPickerOpen(p => !p); }}
-                            className={`p-1.5 rounded-lg transition-all ${devEmojiPickerOpen ? "text-yellow-400 bg-yellow-900/20" : "text-gray-600 hover:text-yellow-400 hover:bg-yellow-900/10"}`}
-                            title="Insert emoji"><Smile size={13} /></button>
+                            className={`p-2 rounded-xl transition-all ${devEmojiPickerOpen ? "text-yellow-400 bg-yellow-900/20" : "text-gray-600 hover:text-yellow-400 hover:bg-yellow-900/10"}`}
+                            title="Insert emoji"><Smile size={16} /></button>
                           {devEmojiPickerOpen && (
-                            <div className="absolute bottom-full right-0 mb-2 w-56 p-2 bg-gray-900 border border-gray-700/60 rounded-2xl shadow-2xl z-50"
+                            <div className="absolute bottom-full right-0 mb-2 w-72 p-3 bg-gray-900 border border-gray-700/60 rounded-2xl shadow-2xl z-50"
                               onMouseDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
-                              <p className="text-[9px] text-gray-600 font-semibold uppercase tracking-wider mb-1.5 px-0.5">Emoji</p>
-                              <div className="grid grid-cols-10 gap-0.5">
+                              <p className="text-[9px] text-gray-600 font-semibold uppercase tracking-wider mb-2 px-0.5">Emoji</p>
+                              <div className="grid grid-cols-8 gap-1">
                                 {TEXT_EMOJIS.map(emoji => (
                                   <button key={emoji} onMouseDown={e => { e.preventDefault(); e.stopPropagation(); insertDevEmoji(emoji); }}
-                                    className="w-5 h-5 flex items-center justify-center rounded hover:bg-gray-700 text-sm transition-all hover:scale-125">{emoji}</button>
+                                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-700 text-xl transition-all hover:scale-125 active:scale-95">{emoji}</button>
                                 ))}
                               </div>
                             </div>
@@ -1651,8 +1651,8 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                         </div>
                         <button onMouseDown={e => e.stopPropagation()} onClick={sendDevMessage}
                           disabled={(!devInput.trim() && !devAttachedImage) || sending || !userId}
-                          className="w-7 h-7 flex items-center justify-center rounded-xl bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-30 disabled:cursor-not-allowed transition-all shrink-0 mb-0.5 hover:scale-105 active:scale-95">
-                          <Send size={12} />
+                          className="w-9 h-9 flex items-center justify-center rounded-xl bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-30 disabled:cursor-not-allowed transition-all shrink-0 hover:scale-105 active:scale-95">
+                          <Send size={14} />
                         </button>
                       </div>
                       <div className="hidden sm:flex items-center justify-between mt-1.5 px-1">
@@ -2229,21 +2229,21 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                   )}
 
                   {/* Toolbar row */}
-                  <div className="flex items-end gap-1.5 bg-gray-800/50 border border-gray-700/40 rounded-2xl px-2 py-1.5 focus-within:border-indigo-500/50 focus-within:ring-1 focus-within:ring-indigo-500/10 transition-all">
+                  <div className="flex items-end gap-2 bg-gray-800/50 border border-gray-700/40 rounded-2xl px-3 py-2.5 focus-within:border-indigo-500/50 focus-within:ring-1 focus-within:ring-indigo-500/10 transition-all">
 
                     {/* Left: user avatar */}
                     {userPhoto
-                      ? <img src={userPhoto} alt={userName} className="w-6 h-6 rounded-full object-cover shrink-0 mb-0.5" />
-                      : <div className="w-6 h-6 rounded-full bg-indigo-900/50 flex items-center justify-center text-indigo-300 text-[9px] font-bold shrink-0 mb-0.5">{userName?.[0]?.toUpperCase() ?? "?"}</div>
+                      ? <img src={userPhoto} alt={userName} className="w-7 h-7 rounded-full object-cover shrink-0" />
+                      : <div className="w-7 h-7 rounded-full bg-indigo-900/50 flex items-center justify-center text-indigo-300 text-[10px] font-bold shrink-0">{userName?.[0]?.toUpperCase() ?? "?"}</div>
                     }
 
                     {/* Attachment button */}
                     <button
                       onMouseDown={e => e.stopPropagation()}
                       onClick={() => fileInputRef.current?.click()}
-                      className="p-1.5 rounded-lg text-gray-600 hover:text-indigo-400 hover:bg-indigo-900/20 transition-all shrink-0 mb-0.5"
+                      className="p-2 rounded-xl text-gray-600 hover:text-indigo-400 hover:bg-indigo-900/20 transition-all shrink-0"
                       title="Attach image"
-                    ><Paperclip size={13} /></button>
+                    ><Paperclip size={15} /></button>
                     <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileAttach} />
 
                     {/* Textarea */}
@@ -2257,7 +2257,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                       placeholder={activeCh.placeholder}
                       rows={1}
                       disabled={!userId || sending}
-                      className="flex-1 bg-transparent text-sm text-gray-100 placeholder-gray-600 resize-none outline-none py-1 min-h-[26px] max-h-[112px] overflow-y-auto disabled:opacity-40"
+                      className="flex-1 bg-transparent text-sm text-gray-100 placeholder-gray-600 resize-none outline-none py-2 min-h-[40px] max-h-[120px] overflow-y-auto disabled:opacity-40 leading-relaxed"
                     />
 
                     {/* Emoji picker trigger */}
@@ -2269,22 +2269,22 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                           emojiPickerOpen ? "text-yellow-400 bg-yellow-900/20" : "text-gray-600 hover:text-yellow-400 hover:bg-yellow-900/10"
                         }`}
                         title="Insert emoji"
-                      ><Smile size={13} /></button>
+                      ><Smile size={16} /></button>
 
                       {/* Emoji grid popup */}
                       {emojiPickerOpen && (
                         <div
-                          className="absolute bottom-full right-0 mb-2 w-56 p-2 bg-gray-900 border border-gray-700/60 rounded-2xl shadow-2xl z-50"
+                          className="absolute bottom-full right-0 mb-2 w-72 p-3 bg-gray-900 border border-gray-700/60 rounded-2xl shadow-2xl z-50"
                           onMouseDown={e => e.stopPropagation()}
                           onClick={e => e.stopPropagation()}
                         >
-                          <p className="text-[9px] text-gray-600 font-semibold uppercase tracking-wider mb-1.5 px-0.5">Emoji</p>
-                          <div className="grid grid-cols-10 gap-0.5">
+                          <p className="text-[9px] text-gray-600 font-semibold uppercase tracking-wider mb-2 px-0.5">Emoji</p>
+                          <div className="grid grid-cols-8 gap-1">
                             {TEXT_EMOJIS.map(emoji => (
                               <button
                                 key={emoji}
                                 onMouseDown={e => { e.preventDefault(); e.stopPropagation(); insertEmoji(emoji); }}
-                                className="w-5 h-5 flex items-center justify-center rounded hover:bg-gray-700 text-sm transition-all hover:scale-125"
+                                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-700 text-xl transition-all hover:scale-125 active:scale-95"
                               >{emoji}</button>
                             ))}
                           </div>
@@ -2297,8 +2297,8 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                       onMouseDown={e => e.stopPropagation()}
                       onClick={sendMessage}
                       disabled={(!input.trim() && !attachedImage) || sending || !userId}
-                      className="w-7 h-7 flex items-center justify-center rounded-xl bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed transition-all shrink-0 mb-0.5 hover:scale-105 active:scale-95"
-                    ><Send size={12} /></button>
+                      className="w-9 h-9 flex items-center justify-center rounded-xl bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed transition-all shrink-0 hover:scale-105 active:scale-95"
+                    ><Send size={14} /></button>
                   </div>
 
                   <div className="flex items-center justify-between mt-1.5 px-1">
