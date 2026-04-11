@@ -17,6 +17,7 @@ import ProfileSetupModal from "./ProfileSetupModal";
 // ── Heavy views — lazy-loaded on first visit (code splitting) ────────────────
 const AdminPanel    = lazy(() => import("./AdminPanel"));
 const HelpPanel     = lazy(() => import("./HelpPanel"));
+const ChatWidget    = lazy(() => import("./ChatWidget"));
 const NotesPanel    = lazy(() => import("./NotesPanel"));
 const Dashboard     = lazy(() => import("./Dashboard"));
 const DashboardView = lazy(() => import("./DashboardView"));
@@ -1446,8 +1447,24 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
               onToast={showToast}
             />
 
+            {/* Team Chat */}
+            <ChatWidget
+              isAdmin={isRoleAdmin}
+              userId={user?.uid ?? ""}
+              userName={user?.displayName ?? ""}
+              userPhoto={user?.photoURL ?? ""}
+              allMembers={allMembers}
+            />
+
             {/* Help & Knowledge Base */}
-            <HelpPanel isAdmin={isAdmin} />
+            <HelpPanel
+              isAdmin={isRoleAdmin}
+              userId={user?.uid ?? ""}
+              userName={user?.displayName ?? ""}
+              userEmail={user?.email ?? ""}
+              userPhoto={user?.photoURL ?? ""}
+              allMembers={allMembers}
+            />
 
 
 

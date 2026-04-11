@@ -284,6 +284,292 @@ app.post("/api/fcm-token", async (req, res) => {
   } catch (e) { res.status(500).json({ error: "Failed to store token" }); }
 });
 
+// ─── BIRTHDAY WISH ────────────────────────────────────────────────────────────
+
+// GET /api/birthday-wish?memberId=&date= — fetch existing wishes for a celebrant
+app.get("/api/birthday-wish", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.json({ wishes: [], wishers: [] });
+  const memberId = (req.query.memberId as string) || "";
+  const date = (req.query.date as string) || "";
+  if (!memberId || !date) return res.status(400).json({ error: "memberId and date required" });
+  try {
+    const docId = `${memberId}_${date}`;
+    const snap = await firestore.collection("birthday_reactions").doc(docId).get();
+    if (!snap.exists) return res.json({ wishes: [], wishers: [] });
+    const data = snap.data()!;
+    return res.json({ wishes: data.wishes ?? [], wishers: data.wishers ?? [] });
+  } catch (e) {
+    return res.json({ wishes: [], wishers: [] });
+  }
+});
+
+// POST /api/birthday-wish — send a birthday wish
+app.post("/api/birthday-wish", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { memberId, memberName, memberEmail, date, senderUserId, senderName, senderPhoto, message } = req.body;
+  if (!memberId || !date || !senderUserId || !senderName)
+    return res.status(400).json({ error: "Missing required fields" });
+  try {
+    const docId = `${memberId}_${date}`;
+    const ref = firestore.collection("birthday_reactions").doc(docId);
+    const snap = await ref.get();
+    const MAX_WISHES = 1;
+    if (snap.exists) {
+      const existingWishes: any[] = snap.data()?.wishes ?? [];
+      const senderCount = existingWishes.filter((w: any) => w.userId === senderUserId).length;
+      if (senderCount >= MAX_WISHES) return res.status(429).json({ error: `Wish limit reached (max ${MAX_WISHES} per day)` });
+    }
+    const wish = {
+      userId: senderUserId,
+      name: senderName,
+      photo: senderPhoto || "",
+      message: message?.trim() || "",
+      sentAt: new Date().toISOString(),
+    };
+    if (!snap.exists) {
+      await ref.set({ memberId, date, reactions: {}, wishers: [senderUserId], wisherNames: [senderName], wishes: [wish] });
+    } else {
+      await ref.update({
+        wishers: admin.firestore.FieldValue.arrayUnion(senderUserId),
+        wisherNames: admin.firestore.FieldValue.arrayUnion(senderName),
+        wishes: admin.firestore.FieldValue.arrayUnion(wish),
+      });
+    }
+    return res.json({ success: true });
+  } catch (e) {
+    console.error("birthday-wish POST failed:", e);
+    return res.status(500).json({ error: "Failed to save wish" });
+  }
+});
+
+// DELETE /api/birthday-wish — remove sender's own wish
+app.delete("/api/birthday-wish", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { memberId, date, senderUserId } = req.body;
+  if (!memberId || !date || !senderUserId)
+    return res.status(400).json({ error: "memberId, date, senderUserId required" });
+  try {
+    const docId = `${memberId}_${date}`;
+    const ref = firestore.collection("birthday_reactions").doc(docId);
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ error: "No wishes found" });
+    const data = snap.data()!;
+    const wishes: any[] = data.wishes ?? [];
+    const toRemove = wishes.find((w: any) => w.userId === senderUserId);
+    if (!toRemove) return res.status(404).json({ error: "Wish not found" });
+    await ref.update({
+      wishes: admin.firestore.FieldValue.arrayRemove(toRemove),
+      wishers: admin.firestore.FieldValue.arrayRemove(senderUserId),
+      wisherNames: admin.firestore.FieldValue.arrayRemove(toRemove.name ?? ""),
+    });
+    return res.json({ success: true });
+  } catch (e) {
+    console.error("birthday-wish DELETE failed:", e);
+    return res.status(500).json({ error: "Failed to delete wish" });
+  }
+});
+
+
+// ── Team Chat ─────────────────────────────────────────────────────────────────
+
+// GET /api/chat/messages?channelId=xxx — fetch last 50 messages
+app.get("/api/chat/messages", async (req, res) => {
+  if (res.headersSent) return;
+  const firestore = getDb();
+  if (!firestore) return res.json([]);
+  const channelId = req.query.channelId as string;
+  if (!channelId) return res.status(400).json({ error: "channelId required" });
+  try {
+    const snap = await firestore
+      .collection("chat_channels")
+      .doc(channelId)
+      .collection("messages")
+      .orderBy("createdAt", "asc")
+      .limitToLast(50)
+      .get();
+    const messages = snap.docs.map((d) => {
+      const data = d.data();
+      return {
+        id: d.id,
+        ...data,
+        // Serialize Firestore Timestamp → ISO string for JSON
+        createdAt: data.createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(),
+      };
+    });
+    res.json(messages);
+  } catch (e) {
+    console.error("chat GET failed:", e);
+    res.status(500).json({ error: "Failed to fetch messages" });
+  }
+});
+
+// POST /api/chat/message — send a message
+app.post("/api/chat/message", async (req, res) => {
+  if (res.headersSent) return;
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { channelId, userId, userName, userPhoto, text } = req.body;
+  if (!channelId || !text?.trim() || !userId) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
+  try {
+    const mentions = (text.match(/@(\S+)/g) ?? []).map((m: string) => m.slice(1));
+    const ref = await firestore
+      .collection("chat_channels")
+      .doc(channelId)
+      .collection("messages")
+      .add({
+        userId,
+        userName: userName || "",
+        userPhoto: userPhoto || "",
+        text: text.trim(),
+        mentions,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    res.json({ id: ref.id });
+  } catch (e) {
+    console.error("chat POST failed:", e);
+    res.status(500).json({ error: "Failed to send message" });
+  }
+});
+
+// DELETE /api/chat/message/:id — delete a message
+app.delete("/api/chat/message/:id", async (req, res) => {
+  if (res.headersSent) return;
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { id } = req.params;
+  const { channelId } = req.body;
+  if (!id || !channelId) return res.status(400).json({ error: "Missing id or channelId" });
+  try {
+    await firestore
+      .collection("chat_channels")
+      .doc(channelId)
+      .collection("messages")
+      .doc(id)
+      .delete();
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("chat DELETE failed:", e);
+    res.status(500).json({ error: "Failed to delete message" });
+  }
+});
+
+// ── Help KB read tracking ─────────────────────────────────────────────────────
+
+// POST /api/help/read — mark an article as read for a user
+app.post("/api/help/read", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.json({ ok: true });
+  const { userId, userName, userEmail, userPhoto, articleId, articleTitle } = req.body;
+  if (!userId || !articleId) return res.status(400).json({ error: "Missing fields" });
+  try {
+    const docId = `${userId}_${articleId}`;
+    await firestore.collection("help_reads").doc(docId).set({
+      userId,
+      userName: userName || "",
+      userEmail: (userEmail || "").toLowerCase(),
+      userPhoto: userPhoto || "",
+      articleId,
+      articleTitle: articleTitle || "",
+      readAt: new Date().toISOString(),
+    }, { merge: true });
+    return res.json({ ok: true });
+  } catch (e) {
+    return res.json({ ok: true }); // silent — never block the UI
+  }
+});
+
+// GET /api/help/reads — get all reads (admin only)
+app.get("/api/help/reads", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.json([]);
+  try {
+    const snap = await firestore.collection("help_reads").get();
+    return res.json(snap.docs.map(d => d.data()));
+  } catch (e) {
+    return res.json([]);
+  }
+});
+
+// GET /api/help/suggestions — get all guide suggestions
+app.get("/api/help/suggestions", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.json([]);
+  try {
+    const snap = await firestore.collection("help_suggestions")
+      .orderBy("createdAt", "desc")
+      .limit(100)
+      .get();
+    return res.json(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  } catch (e) {
+    return res.json([]);
+  }
+});
+
+// POST /api/help/suggestion — submit a new guide suggestion
+app.post("/api/help/suggestion", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { userId, userName, userPhoto, text } = req.body;
+  if (!userId || !text?.trim()) return res.status(400).json({ error: "Missing fields" });
+  try {
+    const ref = await firestore.collection("help_suggestions").add({
+      userId,
+      userName: userName || "",
+      userPhoto: userPhoto || "",
+      text: text.trim(),
+      createdAt: new Date().toISOString(),
+      status: "pending",
+    });
+    return res.json({ id: ref.id, ok: true });
+  } catch (e) {
+    return res.status(500).json({ error: "Failed to submit suggestion" });
+  }
+});
+
+// PATCH /api/help/suggestion/:id — update status OR text
+app.patch("/api/help/suggestion/:id", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { id } = req.params;
+  const { status, text } = req.body;
+  const update: Record<string, string> = {};
+  if (status !== undefined) {
+    if (!["pending", "noted", "done"].includes(status)) return res.status(400).json({ error: "Invalid status" });
+    update.status = status;
+  }
+  if (text !== undefined) {
+    if (!text.trim()) return res.status(400).json({ error: "Text cannot be empty" });
+    update.text = text.trim();
+    update.editedAt = new Date().toISOString();
+  }
+  if (Object.keys(update).length === 0) return res.status(400).json({ error: "Nothing to update" });
+  try {
+    await firestore.collection("help_suggestions").doc(id).update(update);
+    return res.json({ ok: true });
+  } catch (e) {
+    return res.status(500).json({ error: "Failed to update suggestion" });
+  }
+});
+
+// DELETE /api/help/suggestion/:id — remove a suggestion
+app.delete("/api/help/suggestion/:id", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { id } = req.params;
+  try {
+    await firestore.collection("help_suggestions").doc(id).delete();
+    return res.json({ ok: true });
+  } catch (e) {
+    return res.status(500).json({ error: "Failed to delete suggestion" });
+  }
+});
+
+
 
 // GET /api/user-flags?userId=xxx — get per-user boolean flags (cross-device)
 app.get("/api/user-flags", async (req, res) => {

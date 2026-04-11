@@ -1385,6 +1385,94 @@ BULLET: [...]`;
         }
     }
 
+    // ── Help KB — read tracking ───────────────────────────────────────────────
+
+    // POST /help/read — mark an article as read
+    if (rawPath === "/help/read" && method === "POST") {
+        const { userId, userName, userEmail, userPhoto, articleId, articleTitle } = body;
+        if (!userId || !articleId) return json(400, { error: "Missing fields" });
+        try {
+            const docId = `${userId}_${articleId}`;
+            await db.collection("help_reads").doc(docId).set({
+                userId,
+                userName: userName || "",
+                userEmail: (userEmail || "").toLowerCase(),
+                userPhoto: userPhoto || "",
+                articleId,
+                articleTitle: articleTitle || "",
+                readAt: new Date().toISOString(),
+            }, { merge: true });
+            return json(200, { ok: true });
+        } catch { return json(200, { ok: true }); } // silent — never block UI
+    }
+
+    // GET /help/reads — all reads (admin)
+    if (rawPath === "/help/reads" && method === "GET") {
+        try {
+            const snap = await db.collection("help_reads").get();
+            return json(200, snap.docs.map(d => d.data()));
+        } catch { return json(200, []); }
+    }
+
+    // GET /help/suggestions — all suggestions
+    if (rawPath === "/help/suggestions" && method === "GET") {
+        try {
+            const snap = await db.collection("help_suggestions")
+                .orderBy("createdAt", "desc")
+                .limit(100)
+                .get();
+            return json(200, snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        } catch { return json(200, []); }
+    }
+
+    // POST /help/suggestion — submit a suggestion
+    if (rawPath === "/help/suggestion" && method === "POST") {
+        const { userId, userName, userPhoto, text } = body;
+        if (!userId || !text?.trim()) return json(400, { error: "Missing fields" });
+        try {
+            const ref = await db.collection("help_suggestions").add({
+                userId,
+                userName: userName || "",
+                userPhoto: userPhoto || "",
+                text: text.trim(),
+                createdAt: new Date().toISOString(),
+                status: "pending",
+            });
+            return json(200, { id: ref.id, ok: true });
+        } catch (e) { return json(500, { error: "Failed to submit suggestion" }); }
+    }
+
+    // PATCH /help/suggestion/:id — update status OR text
+    if (rawPath.startsWith("/help/suggestion/") && method === "PATCH") {
+        const id = rawPath.split("/help/suggestion/")[1];
+        const { status, text } = body;
+        const update: Record<string, string> = {};
+        if (status !== undefined) {
+            if (!["pending", "noted", "done"].includes(status)) return json(400, { error: "Invalid status" });
+            update.status = status;
+        }
+        if (text !== undefined) {
+            if (!text.trim()) return json(400, { error: "Text cannot be empty" });
+            update.text = text.trim();
+            update.editedAt = new Date().toISOString();
+        }
+        if (!id || Object.keys(update).length === 0) return json(400, { error: "Invalid" });
+        try {
+            await db.collection("help_suggestions").doc(id).update(update);
+            return json(200, { ok: true });
+        } catch (e) { return json(500, { error: "Failed to update" }); }
+    }
+
+    // DELETE /help/suggestion/:id — remove a suggestion
+    if (rawPath.startsWith("/help/suggestion/") && method === "DELETE") {
+        const id = rawPath.split("/help/suggestion/")[1];
+        if (!id) return json(400, { error: "Missing id" });
+        try {
+            await db.collection("help_suggestions").doc(id).delete();
+            return json(200, { ok: true });
+        } catch (e) { return json(500, { error: "Failed to delete" }); }
+    }
+
     // ─── OCR ────────────────────────────────────────────────────────────────────
     if (rawPath === "/ocr" && method === "POST") {
 
@@ -3512,7 +3600,62 @@ Rules:
         }
     }
 
+    // ── Team Chat ────────────────────────────────────────────────────────────────
+    // GET /api/chat/messages?channelId=xxx
+    if (method === "GET" && path === "/api/chat/messages") {
+        const channelId = event.queryStringParameters?.channelId;
+        if (!channelId) return json(400, { error: "channelId required" });
+        try {
+            const snap = await db.collection("chat_channels").doc(channelId)
+                .collection("messages")
+                .orderBy("createdAt", "asc")
+                .limitToLast(50)
+                .get();
+            const messages = snap.docs.map((d) => {
+                const data = d.data();
+                return { id: d.id, ...data, createdAt: data.createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString() };
+            });
+            return json(200, messages);
+        } catch (e: any) {
+            console.error("[chat/messages GET]", e?.message);
+            return json(500, { error: "Failed to fetch messages" });
+        }
+    }
+
+    // POST /api/chat/message
+    if (method === "POST" && path === "/api/chat/message") {
+        const { channelId, userId, userName, userPhoto, text } = body;
+        if (!channelId || !text?.trim() || !userId) return json(400, { error: "Missing required fields" });
+        try {
+            const mentions = (text.match(/@(\S+)/g) ?? []).map((m: string) => m.slice(1));
+            const ref = await db.collection("chat_channels").doc(channelId).collection("messages").add({
+                userId, userName: userName || "", userPhoto: userPhoto || "",
+                text: text.trim(), mentions,
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            return json(200, { id: ref.id });
+        } catch (e: any) {
+            console.error("[chat/message POST]", e?.message);
+            return json(500, { error: "Failed to send message" });
+        }
+    }
+
+    // DELETE /api/chat/message/:id
+    if (method === "DELETE" && path.startsWith("/api/chat/message/")) {
+        const msgId = path.split("/api/chat/message/")[1];
+        const { channelId } = body;
+        if (!msgId || !channelId) return json(400, { error: "Missing id or channelId" });
+        try {
+            await db.collection("chat_channels").doc(channelId).collection("messages").doc(msgId).delete();
+            return json(200, { ok: true });
+        } catch (e: any) {
+            console.error("[chat/message DELETE]", e?.message);
+            return json(500, { error: "Failed to delete message" });
+        }
+    }
+
     return json(404, { error: "Not found" });
+
 
 };
 
