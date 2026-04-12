@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { collection, query, orderBy, limitToLast, onSnapshot } from "firebase/firestore";
 import { db } from "./firebase";
-import { MessageSquare, X, Send, Trash2, Reply, AtSign, Search, Settings, Paperclip, Smile, Pin, PinOff, ImageIcon, Link2, ExternalLink, Code2, Pencil, Check, ChevronUp, ChevronDown } from "lucide-react";
+import { MessageSquare, X, Send, Trash2, Reply, AtSign, Search, Settings, Paperclip, Smile, Pin, PinOff, ImageIcon, Link2, ExternalLink, Code2, Pencil, Check, ChevronUp, ChevronDown, MoreVertical } from "lucide-react";
 import type { Member } from "./types";
 
 // ── Channel type & defaults ──────────────────────────────────────────────────
@@ -247,6 +247,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
 
   // ── State ─────────────────────────────────────────────────────────────────
   const [open,          setOpen]          = useState(false);
+  const [closing,        setClosing]        = useState(false);
   const [sidebarView,   setSidebarView]   = useState<SidebarView>("chat");
   const [chatTheme,     setChatTheme]     = useState<ThemeId>(() => {
     try { return (localStorage.getItem(`wf_${widgetId}_theme`) as ThemeId) || "indigo"; } catch { return "indigo"; }
@@ -299,10 +300,84 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
   // ── Track mentioned member IDs (for FCM targeting) ───────────────────────────
   const [mentionedIds,    setMentionedIds]    = useState<string[]>([]);
   const [devMentionedIds, setDevMentionedIds] = useState<string[]>([]);
+  // ── Mobile ⋮ menu + inline search bar ────────────────────────────────────────
+  const [mobileMenuOpen,    setMobileMenuOpen]    = useState(false);
+  const [mobileSearchOpen,  setMobileSearchOpen]  = useState(false);
+  const [devMobileMenuOpen, setDevMobileMenuOpen] = useState(false);
   // ── Mobile long-press context menu ───────────────────────────────────────────
   const [longPressTarget, setLongPressTarget] = useState<{ msg: ChatMessage; isTeam: boolean } | null>(null);
+  const [fabDragging, setFabDragging] = useState(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressMoved = useRef(false);
+
+  // ── Draggable FAB (mobile only) ───────────────────────────────────────────────
+  const FAB_SIZE = 56; // px (w-14 h-14 = 56px)
+  const FAB_MARGIN = 14; // px from edges
+  const loadFabPos = (): { x: number; y: number } => {
+    try {
+      const v = localStorage.getItem(`wf_${widgetId}_fab_pos`);
+      if (v) return JSON.parse(v);
+    } catch {}
+    // Default: bottom-right
+    return {
+      x: window.innerWidth  - FAB_SIZE - FAB_MARGIN,
+      y: window.innerHeight - FAB_SIZE - FAB_MARGIN,
+    };
+  };
+  const [fabPos, setFabPos] = useState<{ x: number; y: number }>(() => ({
+    x: typeof window !== "undefined" ? window.innerWidth  - FAB_SIZE - FAB_MARGIN : 300,
+    y: typeof window !== "undefined" ? window.innerHeight - FAB_SIZE - FAB_MARGIN : 600,
+  }));
+  const fabDragRef   = useRef<{ startX: number; startY: number; startPX: number; startPY: number; moved: boolean } | null>(null);
+  const fabElRef     = useRef<HTMLButtonElement>(null);
+
+  // Restore saved position once on mount
+  useEffect(() => {
+    const saved = loadFabPos();
+    // Clamp in case screen size changed
+    const maxX = window.innerWidth  - FAB_SIZE - FAB_MARGIN;
+    const maxY = window.innerHeight - FAB_SIZE - FAB_MARGIN;
+    setFabPos({ x: Math.max(FAB_MARGIN, Math.min(saved.x, maxX)), y: Math.max(FAB_MARGIN, Math.min(saved.y, maxY)) });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const onFabPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (open) return; // chat is open, don't drag
+    e.currentTarget.setPointerCapture(e.pointerId);
+    fabDragRef.current = { startX: fabPos.x, startY: fabPos.y, startPX: e.clientX, startPY: e.clientY, moved: false };
+  };
+
+
+  const onFabPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!fabDragRef.current) return;
+    const dx = e.clientX - fabDragRef.current.startPX;
+    const dy = e.clientY - fabDragRef.current.startPY;
+    if (!fabDragRef.current.moved && Math.abs(dx) + Math.abs(dy) < 6) return;
+    if (!fabDragRef.current.moved) { fabDragRef.current.moved = true; setFabDragging(true); }
+    const newX = Math.max(FAB_MARGIN, Math.min(fabDragRef.current.startX + dx, window.innerWidth  - FAB_SIZE - FAB_MARGIN));
+    const newY = Math.max(FAB_MARGIN, Math.min(fabDragRef.current.startY + dy, window.innerHeight - FAB_SIZE - FAB_MARGIN));
+    setFabPos({ x: newX, y: newY });
+  };
+
+  const onFabPointerUp = (_e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!fabDragRef.current) return;
+    const { moved } = fabDragRef.current;
+    fabDragRef.current = null;
+    setFabDragging(false);
+    if (!moved) {
+      // It was a tap — open or close with animation
+      if (open) { closeWidgetRef.current?.(); }
+      else { openWidgetRef.current?.(); }
+      return;
+    }
+    // Snap to nearest horizontal edge
+    const midX = window.innerWidth / 2;
+    const snappedX = fabPos.x + FAB_SIZE / 2 < midX
+      ? FAB_MARGIN
+      : window.innerWidth - FAB_SIZE - FAB_MARGIN;
+    const finalPos = { x: snappedX, y: fabPos.y };
+    setFabPos(finalPos);
+    try { localStorage.setItem(`wf_${widgetId}_fab_pos`, JSON.stringify(finalPos)); } catch {}
+  };
 
   // ── Refs ──────────────────────────────────────────────────────────────────
   const panelRef         = useRef<HTMLDivElement>(null);
@@ -716,6 +791,61 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
     return () => { cancelAnimationFrame(raf); clearTimeout(timer); };
   }, [highlightedMsgId, messages]); // re-runs when messages update after channel fetch
 
+  // ── Open / Close widget (with Shrink-to-FAB animation) ───────────────────
+  const closeWidgetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closeWidgetRef   = useRef<(() => void) | null>(null);
+  const openWidgetRef    = useRef<(() => void) | null>(null);
+  // Grace-period: ignore outside-clicks for 350ms right after opening
+  const justOpenedRef    = useRef(false);
+
+  const closeWidget = useCallback(() => {
+    if (closeWidgetTimer.current) { clearTimeout(closeWidgetTimer.current); closeWidgetTimer.current = null; }
+    setClosing(true);
+    closeWidgetTimer.current = setTimeout(() => {
+      setOpen(false);
+      setClosing(false);
+      setReactingMsgId(null);
+      closeWidgetTimer.current = null;
+    }, 320);
+  }, []);
+
+  const openWidget = useCallback(() => {
+    // Cancel any in-flight close timer so it can't slam the panel shut again
+    if (closeWidgetTimer.current) { clearTimeout(closeWidgetTimer.current); closeWidgetTimer.current = null; }
+    setClosing(false);
+    setOpen(true);
+    // Ignore outside-click events that fire immediately from the same open gesture
+    justOpenedRef.current = true;
+    setTimeout(() => { justOpenedRef.current = false; }, 350);
+  }, []);
+
+  // Keep refs current so early-defined handlers (FAB tap) can call these
+  closeWidgetRef.current = closeWidget;
+  openWidgetRef.current  = openWidget;
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      // Ignore clicks fired in the grace period right after opening (avoids
+      // the browser's synthetic mousedown from the open gesture closing us immediately)
+      if (justOpenedRef.current) return;
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+        closeWidget();
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open, closeWidget]);
+
+  // ── Auto-reset mobile search bar when leaving search view ───────────────────
+  // Covers ALL navigation paths (result click, sidebar btn, Team/Dev toggle, etc.)
+  useEffect(() => {
+    if (sidebarView !== "search") {
+      setMobileSearchOpen(false);
+      setSearchQuery("");
+    }
+  }, [sidebarView]);
+
   // ── Browser notification for new @mentions (zero Netlify cost) ────────────
   useEffect(() => {
     if (!open || !userId || !userName) return;
@@ -758,18 +888,6 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
       inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 120) + "px";
     }
   }, [input]);
-
-  // ── Outside click → close ────────────────────────────────────────────────
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
-        setOpen(false); setReactingMsgId(null);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
 
   // ── Send message ─────────────────────────────────────────────────────────
   const sendMessage = useCallback(async () => {
@@ -1114,8 +1232,19 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
 
   // ── Shared close button ───────────────────────────────────────────────────
   const CloseBtn = () => (
-    <button onClick={() => setOpen(false)} className="hidden sm:flex p-1.5 text-gray-600 hover:text-gray-300 rounded-lg hover:bg-gray-800 transition-colors">
+    <button onClick={closeWidget} className="hidden sm:flex p-1.5 text-gray-600 hover:text-gray-300 rounded-lg hover:bg-gray-800 transition-colors">
       <X size={14} />
+    </button>
+  );
+
+  // Back button — mobile only, returns to chat view from any sub-view
+  const BackBtn = ({ onBack }: { onBack?: () => void }) => (
+    <button
+      onClick={onBack ?? (() => setSidebarView("chat"))}
+      className="sm:hidden flex items-center gap-1 p-1.5 pr-2 text-gray-500 hover:text-indigo-300 hover:bg-indigo-900/20 rounded-lg transition-colors text-xs font-medium mr-1"
+    >
+      <ChevronDown size={14} className="rotate-90" />
+      <span>Back</span>
     </button>
   );
 
@@ -1237,6 +1366,94 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
           from { transform: translateY(100%); opacity: 0.6; }
           to   { transform: translateY(0);    opacity: 1;   }
         }
+        @keyframes wf-menu-drop {
+          from { opacity: 0; transform: translateY(-6px) scale(0.96); }
+          to   { opacity: 1; transform: translateY(0)   scale(1); }
+        }
+        .wf-menu-drop { animation: wf-menu-drop 0.18s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+        /* ── Panel open: rises from bottom-right (FAB origin) ── */
+        @keyframes wf-panel-open-mobile {
+          0%   { opacity: 0; transform: scale(0.08) translate(44vw, 44vh); filter: blur(8px); }
+          60%  { opacity: 1; filter: blur(0px); }
+          100% { opacity: 1; transform: scale(1) translate(0, 0); filter: blur(0px); }
+        }
+        @keyframes wf-panel-close-mobile {
+          0%   { opacity: 1; transform: scale(1) translate(0, 0); filter: blur(0px); }
+          40%  { opacity: 0.6; filter: blur(2px); }
+          100% { opacity: 0; transform: scale(0.08) translate(44vw, 44vh); filter: blur(10px); }
+        }
+        /* Desktop: panel anchored bottom-right, shrinks toward tab bar */
+        @keyframes wf-panel-open-desk {
+          0%   { opacity: 0; transform: scale(0.1); transform-origin: bottom right; filter: blur(6px); }
+          65%  { opacity: 1; filter: blur(0px); }
+          100% { opacity: 1; transform: scale(1); transform-origin: bottom right; filter: blur(0px); }
+        }
+        @keyframes wf-panel-close-desk {
+          0%   { opacity: 1; transform: scale(1); transform-origin: bottom right; filter: blur(0px); }
+          35%  { opacity: 0.7; filter: blur(2px); }
+          100% { opacity: 0; transform: scale(0.08); transform-origin: bottom right; filter: blur(8px); }
+        }
+        /* Apply on mobile (< sm breakpoint = < 640px) */
+        @media (max-width: 639px) {
+          .wf-panel-opening { animation: wf-panel-open-mobile  0.32s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+          .wf-panel-closing { animation: wf-panel-close-mobile 0.30s cubic-bezier(0.4,0,1,1)         forwards; }
+        }
+        /* Apply on desktop (>= sm breakpoint = >= 640px) */
+        @media (min-width: 640px) {
+          .wf-panel-opening { animation: wf-panel-open-desk  0.32s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+          .wf-panel-closing { animation: wf-panel-close-desk 0.28s cubic-bezier(0.4,0,1,1)         forwards; }
+        }
+      `}</style>
+      <style>{`
+        /* ── Premium FAB animations ─────────────────────────────────────── */
+        @keyframes fab-spin {
+          from { transform: rotate(0deg); }
+          to   { transform: rotate(360deg); }
+        }
+        @keyframes fab-breathe {
+          0%, 100% { opacity: 0.55; transform: scale(1); }
+          50%       { opacity: 0.85; transform: scale(1.12); }
+        }
+        @keyframes fab-icon-idle {
+          0%, 100% { transform: translateY(0px) scale(1); }
+          40%       { transform: translateY(-2.5px) scale(1.07); }
+          70%       { transform: translateY(1px) scale(0.97); }
+        }
+        @keyframes fab-particle {
+          0%   { transform: rotate(var(--pa)) translateX(26px) scale(1);   opacity: 0.9; }
+          50%  { transform: rotate(var(--pa)) translateX(28px) scale(1.3); opacity: 1;   }
+          100% { transform: rotate(var(--pa)) translateX(26px) scale(1);   opacity: 0.9; }
+        }
+        @keyframes fab-badge-pop {
+          0%   { transform: scale(0) rotate(-15deg); opacity:0; }
+          60%  { transform: scale(1.25) rotate(5deg); opacity:1; }
+          100% { transform: scale(1) rotate(0deg);   opacity:1; }
+        }
+        @keyframes fab-ring-pulse {
+          0%, 100% { opacity: 0.25; transform: scale(1); }
+          50%       { opacity: 0.55; transform: scale(1.06); }
+        }
+        @keyframes fab-unread-ping {
+          0%   { transform: scale(1);   opacity: 0.7; }
+          70%  { transform: scale(2.4); opacity: 0;   }
+          100% { transform: scale(2.4); opacity: 0;   }
+        }
+        .fab-spin     { animation: fab-spin 5s linear infinite; }
+        .fab-breathe  { animation: fab-breathe 3s ease-in-out infinite; }
+        .fab-icon-idle{ animation: fab-icon-idle 3.2s ease-in-out infinite; }
+        .fab-ring     { animation: fab-ring-pulse 2.6s ease-in-out infinite; }
+        .fab-unread-ping { animation: fab-unread-ping 1.4s ease-out infinite; }
+        .fab-badge-pop{ animation: fab-badge-pop 0.4s cubic-bezier(.34,1.56,.64,1) forwards; }
+        .fab-p1 { --pa: 0deg;   animation: fab-particle 2.6s ease-in-out infinite 0s; }
+        .fab-p2 { --pa: 120deg; animation: fab-particle 2.6s ease-in-out infinite 0.87s; }
+        .fab-p3 { --pa: 240deg; animation: fab-particle 2.6s ease-in-out infinite 1.73s; }
+        .fab-drag .fab-spin,
+        .fab-drag .fab-breathe,
+        .fab-drag .fab-icon-idle,
+        .fab-drag .fab-ring,
+        .fab-drag .fab-p1,
+        .fab-drag .fab-p2,
+        .fab-drag .fab-p3 { animation-play-state: paused; }
       `}</style>
       <div ref={panelRef} className="fixed right-0 sm:right-4 z-[300] flex flex-col items-end gap-0" style={{ bottom: 0 }}>
 
@@ -1257,10 +1474,10 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
       )}
 
       {/* ── Chat Panel ──────────────────────────────────────────────────────── */}
-      {open && (
+      {(open || closing) && (
         <div
-          className="flex fixed inset-0 sm:static sm:w-[540px] sm:h-[min(600px,calc(100dvh-52px))] sm:rounded-t-2xl overflow-hidden"
-          style={{ boxShadow: "0 -4px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(99,102,241,0.13)", background: "#09090b" }}
+          className={`flex fixed inset-3 rounded-2xl sm:static sm:inset-auto sm:w-[540px] sm:h-[min(600px,calc(100dvh-52px))] sm:rounded-t-2xl overflow-hidden${closing ? " wf-panel-closing" : " wf-panel-opening"}`}
+          style={{ boxShadow: "0 -4px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(99,102,241,0.18)", background: "#09090b" }}
         >
           {/* ────────── LEFT SIDEBAR ────────── */}
           <div className="hidden sm:flex w-14 flex-col items-center py-3 gap-1.5 border-r border-gray-800/60 shrink-0" style={{ background: "#0c0c0f" }}>
@@ -1292,58 +1509,69 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
           {/* ────────── MAIN CONTENT ────────── */}
           <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
 
-            {/* ── Mobile top nav bar (replaces left sidebar on small screens) sm:hidden ── */}
-            <div className="flex sm:hidden items-center gap-1 px-3 py-2 border-b border-gray-800/60 shrink-0" style={{ background: "#0c0c0f" }}>
-              {/* Team / Dev toggle */}
-              <button onClick={() => setSidebarView("chat")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${sidebarView !== "dev" ? "bg-indigo-600/30 text-indigo-300" : "text-gray-500 hover:text-gray-300"}`}>
-                <MessageSquare size={14} /><span>Team</span>
-              </button>
-              <button onClick={() => setSidebarView("dev")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${sidebarView === "dev" ? "bg-emerald-600/30 text-emerald-300" : "text-gray-500 hover:text-gray-300"}`}>
-                <Code2 size={14} /><span>Dev</span>
-              </button>
-              <div className="flex-1" />
-              {/* Utility — Team mode */}
-              {sidebarView !== "dev" && (<>
-                <button onClick={() => setSidebarView("mentions")} className={`relative p-2 rounded-lg transition-all ${sidebarView === "mentions" ? "text-indigo-400 bg-indigo-900/30" : "text-gray-600 hover:text-gray-300"}`}>
-                  <AtSign size={15} />
-                  {mentionMessages.length > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-[13px] h-3.5 flex items-center justify-center rounded-full bg-indigo-500 text-white text-[8px] font-bold px-0.5">{mentionMessages.length}</span>}
+            {/* ── Mobile top nav bar ─────────────────────────────────────────── */}
+            <div
+              className="sm:hidden shrink-0 border-b border-gray-800/60"
+              style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", background: "#0c0c0f", padding: "6px 4px" }}
+            >
+              {/* LEFT col: Team / Dev toggles */}
+              <div className="flex items-center gap-0.5">
+                <button onClick={() => setSidebarView("chat")}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${sidebarView !== "dev" ? "bg-indigo-600/30 text-indigo-300" : "text-gray-500 hover:text-gray-300"}`}>
+                  <MessageSquare size={13} /><span>Team</span>
                 </button>
-                <button onClick={() => setSidebarView("pinned")} className={`relative p-2 rounded-lg transition-all ${sidebarView === "pinned" ? "text-indigo-400 bg-indigo-900/30" : "text-gray-600 hover:text-gray-300"}`}>
-                  <Pin size={15} />
-                  {pinnedMessages.length > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-[13px] h-3.5 flex items-center justify-center rounded-full bg-indigo-500 text-white text-[8px] font-bold px-0.5">{pinnedMessages.length}</span>}
+                <button onClick={() => setSidebarView("dev")}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${sidebarView === "dev" ? "bg-emerald-600/30 text-emerald-300" : "text-gray-500 hover:text-gray-300"}`}>
+                  <Code2 size={13} /><span>Dev</span>
                 </button>
-                <button onClick={() => setSidebarView("images")} className={`relative p-2 rounded-lg transition-all ${sidebarView === "images" ? "text-indigo-400 bg-indigo-900/30" : "text-gray-600 hover:text-gray-300"}`}>
-                  <ImageIcon size={15} />
-                  {imageMessages.length > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-[13px] h-3.5 flex items-center justify-center rounded-full bg-indigo-500 text-white text-[8px] font-bold px-0.5">{imageMessages.length}</span>}
+              </div>
+
+              {/* CENTER col: Search — true mathematical center, never overlaps sides */}
+              {mobileSearchOpen ? (
+                <div className="flex items-center gap-1.5 w-32 bg-gray-800/70 border border-indigo-500/60 rounded-2xl px-2.5 py-1.5 transition-colors">
+                  <Search size={12} className="text-indigo-400 shrink-0" />
+                  <input
+                    ref={searchInputRef}
+                    autoFocus
+                    type="text"
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    placeholder="Search…"
+                    className="flex-1 bg-transparent text-xs text-gray-200 placeholder-gray-500 outline-none min-w-0 w-0"
+                  />
+                  {searchQuery && (
+                    <button onClick={() => setSearchQuery("")} className="text-gray-600 hover:text-gray-300 transition-colors shrink-0">
+                      <X size={11} />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => { setMobileSearchOpen(false); setSidebarView("chat"); setSearchQuery(""); }}
+                    className="text-gray-600 hover:text-red-400 transition-colors shrink-0"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { setMobileSearchOpen(true); setSidebarView("search"); }}
+                  className="w-32 flex items-center gap-1.5 px-2.5 py-1.5 rounded-2xl text-xs font-medium text-gray-400 hover:text-gray-200 bg-gray-800/50 hover:bg-gray-800/80 border border-gray-700/50 hover:border-gray-600/60 transition-all"
+                >
+                  <Search size={12} />
+                  <span>Search…</span>
                 </button>
-                <button onClick={() => setSidebarView("links")} className={`relative p-2 rounded-lg transition-all ${sidebarView === "links" ? "text-indigo-400 bg-indigo-900/30" : "text-gray-600 hover:text-gray-300"}`}>
-                  <Link2 size={15} />
-                  {linkMessages.length > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-[13px] h-3.5 flex items-center justify-center rounded-full bg-indigo-500 text-white text-[8px] font-bold px-0.5">{linkMessages.length}</span>}
+              )}
+
+              {/* RIGHT col: Minimize + Close — pushed to the right with justify-self */}
+              <div className="flex items-center gap-0.5 justify-self-end mr-1">
+                <button onClick={closeWidget} title="Minimize" className="p-2 rounded-lg text-gray-600 hover:text-gray-200 hover:bg-gray-800/60 transition-all">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <line x1="2" y1="11" x2="12" y2="11" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  </svg>
                 </button>
-                <button onClick={() => setSidebarView("search")} className={`p-2 rounded-lg transition-all ${sidebarView === "search" ? "text-indigo-400 bg-indigo-900/30" : "text-gray-600 hover:text-gray-300"}`}>
-                  <Search size={15} />
+                <button onClick={closeWidget} title="Close" className="p-2 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-900/20 transition-all">
+                  <X size={16} />
                 </button>
-              </>)}
-              {/* Utility — Dev mode */}
-              {sidebarView === "dev" && (<>
-                <button onClick={() => setDevSubView("mentions")} className={`relative p-2 rounded-lg transition-all ${devSubView === "mentions" ? "text-emerald-400 bg-emerald-900/30" : "text-gray-600 hover:text-gray-300"}`}>
-                  <AtSign size={15} />
-                  {devMentionMessages.length > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-[13px] h-3.5 flex items-center justify-center rounded-full bg-emerald-500 text-white text-[8px] font-bold px-0.5">{devMentionMessages.length}</span>}
-                </button>
-                <button onClick={() => setDevSubView("pinned")} className={`relative p-2 rounded-lg transition-all ${devSubView === "pinned" ? "text-emerald-400 bg-emerald-900/30" : "text-gray-600 hover:text-gray-300"}`}>
-                  <Pin size={15} />
-                  {devPinnedMessages.length > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-[13px] h-3.5 flex items-center justify-center rounded-full bg-emerald-500 text-white text-[8px] font-bold px-0.5">{devPinnedMessages.length}</span>}
-                </button>
-                <button onClick={() => { setDevSubView("chat"); }} className={`p-2 rounded-lg transition-all text-gray-600 hover:text-gray-300`}>
-                  <Search size={15} />
-                </button>
-              </>)}
-              {/* Close — always visible on mobile */}
-              <button onClick={() => setOpen(false)} className="p-2 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-900/20 transition-all ml-1">
-                <X size={16} />
-              </button>
+              </div>
             </div>
 
             {/* ══════════ DEV CHAT VIEW (full clone, emerald accents) ══════════ */}
@@ -1873,17 +2101,66 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
             {/* member name color driven by theme */}
             {sidebarView === "chat" && (
               <>
-                {/* Header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800/60 shrink-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-base leading-none">{activeCh.emoji}</span>
-                    <div>
-                      <h3 className="text-sm font-bold text-white leading-tight">{activeCh.name}</h3>
-                      <p className="text-[10px] text-gray-500 leading-tight">{activeCh.desc}</p>
-                    </div>
+              {/* ── Team Chat Header with ⋮ dropdown ── */}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800/60 shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-base leading-none">{activeCh.emoji}</span>
+                  <div>
+                    <h3 className="text-sm font-bold text-white leading-tight">{activeCh.name}</h3>
+                    <p className="text-[10px] text-gray-500 leading-tight">{activeCh.desc}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  {/* ⋮ button — mobile shows dropdown, desktop shows nothing (sidebar handles it) */}
+                  <div className="relative sm:hidden">
+                    <button
+                      onClick={() => setMobileMenuOpen(o => !o)}
+                      className={`p-1.5 rounded-lg transition-colors ${mobileMenuOpen ? "text-indigo-400 bg-indigo-900/30" : "text-gray-500 hover:text-gray-200 hover:bg-gray-800/60"}`}
+                    >
+                      <MoreVertical size={16} />
+                    </button>
+                    {/* Vertical dropdown */}
+                    {mobileMenuOpen && (
+                      <div
+                        className="wf-menu-drop absolute right-0 top-full mt-1.5 z-50 flex flex-col gap-0.5 p-1.5 rounded-2xl"
+                        style={{
+                          background: "linear-gradient(145deg, #141420 0%, #1a1a2e 100%)",
+                          border: "1px solid rgba(99,102,241,0.2)",
+                          boxShadow: "0 8px 32px rgba(0,0,0,0.5), 0 0 0 0.5px rgba(99,102,241,0.1)",
+                          minWidth: "44px",
+                        }}
+                      >
+                        {[
+                          { view: "mentions" as SidebarView, icon: <AtSign size={15} />, badge: mentionMessages.length, label: "Mentions" },
+                          { view: "pinned"   as SidebarView, icon: <Pin size={15} />,    badge: pinnedMessages.length,  label: "Pinned" },
+                          { view: "images"   as SidebarView, icon: <ImageIcon size={15} />, badge: imageMessages.length, label: "Images" },
+                          { view: "links"    as SidebarView, icon: <Link2 size={15} />,  badge: linkMessages.length,   label: "Links" },
+                          { view: "settings" as SidebarView, icon: <Settings size={15} />, badge: 0,                    label: "Settings" },
+                        ].map(({ view, icon, badge, label }) => (
+                          <button
+                            key={view}
+                            title={label}
+                            onClick={() => { setSidebarView(view); setMobileMenuOpen(false); }}
+                            className={`relative flex items-center justify-center w-9 h-9 rounded-xl transition-all ${
+                              sidebarView === view
+                                ? "bg-indigo-600/30 text-indigo-300 ring-1 ring-indigo-500/40"
+                                : "text-gray-500 hover:text-gray-200 hover:bg-gray-800/60"
+                            }`}
+                          >
+                            {icon}
+                            {badge > 0 && (
+                              <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 flex items-center justify-center rounded-full bg-indigo-500 text-white text-[8px] font-bold px-0.5">
+                                {badge}
+                              </span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <CloseBtn />
                 </div>
+              </div>
 
                 {/* Channel tabs */}
                 <div className="flex border-b border-gray-800/60 bg-gray-950 shrink-0 overflow-x-auto">
@@ -2314,15 +2591,15 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
             {/* ══════════ MENTIONS VIEW ══════════ */}
             {sidebarView === "mentions" && (
               <>
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800/60 shrink-0">
-                  <div className="flex items-center gap-2">
-                    <AtSign size={14} className="text-indigo-400" />
-                    <h3 className="text-sm font-bold text-white">Mentions</h3>
-                    {mentionMessages.length > 0 && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-600/20 text-indigo-400 font-semibold">{mentionMessages.length}</span>
-                    )}
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-gray-800 text-gray-500 ml-1">{activeCh.emoji} {activeCh.name}</span>
-                  </div>
+              <div className="flex items-center px-3 py-2.5 border-b border-gray-800/60 shrink-0">
+                  <BackBtn />
+                  <AtSign size={14} className="text-indigo-400 shrink-0" />
+                  <h3 className="text-sm font-bold text-white ml-1.5">Mentions</h3>
+                  {mentionMessages.length > 0 && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-600/20 text-indigo-400 font-semibold ml-1.5">{mentionMessages.length}</span>
+                  )}
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-gray-800 text-gray-500 ml-2">{activeCh.emoji} {activeCh.name}</span>
+                  <div className="flex-1" />
                   <CloseBtn />
                 </div>
                 <div className="flex-1 overflow-y-auto">
@@ -2339,7 +2616,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                       {mentionMessages.map(msg => (
                         <button
                           key={msg.id}
-                          onClick={() => { setHighlightedMsgId(msg.id); setSidebarView("chat"); }}
+                          onClick={() => { setHighlightedMsgId(msg.id); setSidebarView("chat"); setMobileSearchOpen(false); setSearchQuery(""); }}
                           className="w-full flex items-start gap-3 px-4 py-3 hover:bg-gray-800/40 transition-colors text-left border-b border-gray-800/30 last:border-0"
                         >
                           {msg.userPhoto
@@ -2364,36 +2641,19 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
             {/* ══════════ SEARCH VIEW ══════════ */}
             {sidebarView === "search" && (
               <>
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800/60 shrink-0">
-                  <div className="flex items-center gap-2">
-                    <Search size={14} className="text-indigo-400" />
-                    <h3 className="text-sm font-bold text-white">Search</h3>
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-gray-800 text-gray-500 ml-1">{activeCh.emoji} {activeCh.name}</span>
-                  </div>
-                  <CloseBtn />
-                </div>
-                <div className="px-3 py-2.5 border-b border-gray-800/60 shrink-0">
-                  <div className="relative">
-                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
-                    <input
-                      ref={searchInputRef}
-                      type="text"
-                      value={searchQuery}
-                      onChange={e => setSearchQuery(e.target.value)}
-                      placeholder="Search across all channels…"
-                      className="w-full bg-gray-800 border border-gray-700/50 text-gray-100 text-xs pl-8 pr-8 py-2.5 rounded-xl focus:outline-none focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/20 placeholder-gray-600 transition-all"
-                    />
-                    {searchQuery && (
-                      <button onClick={() => setSearchQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors">
-                        <X size={12} />
-                      </button>
-                    )}
-                  </div>
+                {/* Header — search input lives in the top-nav bar on mobile */}
+                <div className="flex items-center px-3 py-2.5 border-b border-gray-800/60 shrink-0">
+                  <BackBtn onBack={() => { setMobileSearchOpen(false); setSidebarView("chat"); setSearchQuery(""); }} />
+                  <Search size={14} className="text-indigo-400 shrink-0" />
+                  <h3 className="text-sm font-bold text-white ml-1.5">Search</h3>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-gray-800 text-gray-500 ml-2">{activeCh.emoji} {activeCh.name}</span>
                   {searchQuery && (
-                    <p className="text-[10px] text-gray-600 mt-1.5 pl-1">
+                    <span className="text-[10px] text-gray-600 ml-2">
                       {searchResults.length === 0 ? "No results" : `${searchResults.length} result${searchResults.length !== 1 ? "s" : ""}`}
-                    </p>
+                    </span>
                   )}
+                  <div className="flex-1" />
+                  <CloseBtn />
                 </div>
                 <div className="flex-1 overflow-y-auto">
                   {!searchQuery ? (
@@ -2418,7 +2678,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                         return (
                           <button
                             key={msg.id}
-                            onClick={() => { setHighlightedMsgId(msg.id); setSidebarView("chat"); }}
+                            onClick={() => { setHighlightedMsgId(msg.id); setSidebarView("chat"); setMobileSearchOpen(false); setSearchQuery(""); }}
                             className="w-full flex items-start gap-3 px-4 py-3 hover:bg-gray-800/40 transition-colors text-left border-b border-gray-800/30 last:border-0"
                           >
                             {msg.userPhoto
@@ -2448,15 +2708,15 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
             {/* ══════════ PINNED VIEW ══════════ */}
             {sidebarView === "pinned" && (
               <>
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800/60 shrink-0">
-                  <div className="flex items-center gap-2">
-                    <Pin size={14} className="text-amber-400" />
-                    <h3 className="text-sm font-bold text-white">Pinned Messages</h3>
-                    {pinnedMessages.length > 0 && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-600/20 text-amber-400 font-semibold">{pinnedMessages.length}</span>
-                    )}
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-gray-800 text-gray-500 ml-1">{activeCh.emoji} {activeCh.name}</span>
-                  </div>
+                <div className="flex items-center px-3 py-2.5 border-b border-gray-800/60 shrink-0">
+                  <BackBtn />
+                  <Pin size={14} className="text-amber-400 shrink-0" />
+                  <h3 className="text-sm font-bold text-white ml-1.5">Pinned Messages</h3>
+                  {pinnedMessages.length > 0 && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-600/20 text-amber-400 font-semibold ml-1.5">{pinnedMessages.length}</span>
+                  )}
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-gray-800 text-gray-500 ml-2">{activeCh.emoji} {activeCh.name}</span>
+                  <div className="flex-1" />
                   <CloseBtn />
                 </div>
                 <div className="flex-1 overflow-y-auto">
@@ -2473,7 +2733,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                       {pinnedMessages.map(msg => (
                         <button
                           key={msg.id}
-                          onClick={() => { setHighlightedMsgId(msg.id); setSidebarView("chat"); }}
+                          onClick={() => { setHighlightedMsgId(msg.id); setSidebarView("chat"); setMobileSearchOpen(false); setSearchQuery(""); }}
                           className="w-full flex items-start gap-3 px-4 py-3 hover:bg-gray-800/40 transition-colors text-left border-b border-gray-800/30 last:border-0"
                         >
                           <Pin size={11} className="text-amber-400 mt-0.5 shrink-0" />
@@ -2496,15 +2756,15 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
             {/* ══════════ IMAGES VIEW ══════════ */}
             {sidebarView === "images" && (
               <>
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800/60 shrink-0">
-                  <div className="flex items-center gap-2">
-                    <ImageIcon size={14} className="text-sky-400" />
-                    <h3 className="text-sm font-bold text-white">Images</h3>
-                    {imageMessages.length > 0 && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-sky-600/20 text-sky-400 font-semibold">{imageMessages.length}</span>
-                    )}
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-gray-800 text-gray-500 ml-1">{activeCh.emoji} {activeCh.name}</span>
-                  </div>
+                <div className="flex items-center px-3 py-2.5 border-b border-gray-800/60 shrink-0">
+                  <BackBtn />
+                  <ImageIcon size={14} className="text-sky-400 shrink-0" />
+                  <h3 className="text-sm font-bold text-white ml-1.5">Images</h3>
+                  {imageMessages.length > 0 && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-sky-600/20 text-sky-400 font-semibold ml-1.5">{imageMessages.length}</span>
+                  )}
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-gray-800 text-gray-500 ml-2">{activeCh.emoji} {activeCh.name}</span>
+                  <div className="flex-1" />
                   <CloseBtn />
                 </div>
                 <div className="flex-1 overflow-y-auto">
@@ -2521,7 +2781,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                       {imageMessages.map(msg => (
                         <button
                           key={msg.id}
-                          onClick={() => { setHighlightedMsgId(msg.id); setSidebarView("chat"); }}
+                          onClick={() => { setHighlightedMsgId(msg.id); setSidebarView("chat"); setMobileSearchOpen(false); setSearchQuery(""); }}
                           title={`${msg.userName} • ${timeAgo(msg.createdAt)}`}
                           className="relative group/img aspect-square rounded-xl overflow-hidden border border-gray-700/40 hover:border-sky-500/50 transition-all"
                         >
@@ -2540,15 +2800,15 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
             {/* ══════════ LINKS VIEW ══════════ */}
             {sidebarView === "links" && (
               <>
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800/60 shrink-0">
-                  <div className="flex items-center gap-2">
-                    <Link2 size={14} className="text-emerald-400" />
-                    <h3 className="text-sm font-bold text-white">Links</h3>
-                    {linkMessages.length > 0 && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-600/20 text-emerald-400 font-semibold">{linkMessages.length}</span>
-                    )}
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-gray-800 text-gray-500 ml-1">{activeCh.emoji} {activeCh.name}</span>
-                  </div>
+                <div className="flex items-center px-3 py-2.5 border-b border-gray-800/60 shrink-0">
+                  <BackBtn />
+                  <Link2 size={14} className="text-emerald-400 shrink-0" />
+                  <h3 className="text-sm font-bold text-white ml-1.5">Links</h3>
+                  {linkMessages.length > 0 && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-600/20 text-emerald-400 font-semibold ml-1.5">{linkMessages.length}</span>
+                  )}
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-gray-800 text-gray-500 ml-2">{activeCh.emoji} {activeCh.name}</span>
+                  <div className="flex-1" />
                   <CloseBtn />
                 </div>
                 <div className="flex-1 overflow-y-auto">
@@ -2608,7 +2868,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                             </div>
                             {/* Click to jump to message */}
                             <button
-                              onClick={() => { setHighlightedMsgId(msg.id); setSidebarView("chat"); }}
+                              onClick={() => { setHighlightedMsgId(msg.id); setSidebarView("chat"); setMobileSearchOpen(false); setSearchQuery(""); }}
                               className="w-full px-3 pt-1 pb-2.5 text-left"
                             >
                               <p className="text-[10px] text-gray-600 hover:text-gray-400 line-clamp-2 break-words transition-colors pl-8">{msg.text}</p>
@@ -2625,11 +2885,11 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
             {/* ══════════ SETTINGS VIEW ══════════ */}
             {sidebarView === "settings" && (
               <>
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800/60 shrink-0">
-                  <div className="flex items-center gap-2">
-                    <Settings size={14} className="text-indigo-400" />
-                    <h3 className="text-sm font-bold text-white">Settings</h3>
-                  </div>
+                <div className="flex items-center px-3 py-2.5 border-b border-gray-800/60 shrink-0">
+                  <BackBtn />
+                  <Settings size={14} className="text-indigo-400 shrink-0" />
+                  <h3 className="text-sm font-bold text-white ml-1.5">Settings</h3>
+                  <div className="flex-1" />
                   <CloseBtn />
                 </div>
                 <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
@@ -2845,29 +3105,119 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
       })()}
 
       {/* ── Floating Action Button ───────────────────────────────────────── */}
-      {/* Mobile-only FAB (circular, shown when closed) */}
-      <button
-        onClick={() => setOpen(o => !o)}
-        aria-label="Open team chat"
-        className={`relative w-14 h-14 rounded-full items-center justify-center shadow-2xl transition-all duration-300 hover:scale-110 active:scale-95 focus:outline-none sm:hidden ${open ? "hidden" : "flex"}`}
-        style={{ marginRight: "1rem", marginBottom: "1rem",
-          background: fabGradient ?? "linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%)",
-          boxShadow: totalUnread > 0 ? "0 0 0 0 rgba(139,92,246,0.7), 0 8px 32px rgba(99,102,241,0.5)" : "0 8px 32px rgba(99,102,241,0.35)",
-        }}
-      >
-        {totalUnread > 0 && <span className="absolute inset-0 rounded-full animate-ping" style={{ background: "rgba(139,92,246,0.35)" }} />}
-        <span className="absolute inset-0 rounded-full" style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.18) 0%, transparent 60%)" }} />
-        {fabIcon ?? <MessageSquare size={22} className="text-white relative z-10" />}
-        {totalUnread > 0 && (
-          <span className="absolute -top-1 -right-1 min-w-[20px] h-5 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1 ring-2 ring-gray-950 shadow-lg z-20">
-            {totalUnread > 9 ? "9+" : totalUnread}
+      {/* Mobile-only draggable FAB (circular, shown when chat closed) */}
+      {!open && (
+        <button
+          ref={fabElRef}
+          aria-label="Open team chat"
+          onPointerDown={onFabPointerDown}
+          onPointerMove={onFabPointerMove}
+          onPointerUp={onFabPointerUp}
+          className={`fixed sm:hidden w-16 h-16 rounded-full flex items-center justify-center focus:outline-none touch-none select-none z-[400]${fabDragging ? " fab-drag" : ""}`}
+          style={{
+            left: fabPos.x,
+            top:  fabPos.y,
+            cursor: fabDragging ? "grabbing" : "grab",
+            transition: fabDragging ? "none" : "left 0.28s cubic-bezier(0.34,1.56,0.64,1), top 0.18s ease",
+          }}
+        >
+          {/* ── Layer 1: outer breathing glow ring */}
+          <span
+            className="fab-breathe absolute rounded-full pointer-events-none"
+            style={{
+              inset: "-10px",
+              background: "radial-gradient(circle, rgba(139,92,246,0.22) 0%, rgba(99,102,241,0.08) 60%, transparent 80%)",
+            }}
+          />
+
+          {/* ── Layer 2: rotating conic gradient (aurora shimmer) */}
+          <span
+            className="fab-spin absolute inset-0 rounded-full pointer-events-none"
+            style={{
+              background: "conic-gradient(from 0deg, #6366f1, #8b5cf6, #a855f7, #ec4899, #f59e0b, #6366f1)",
+              opacity: 0.9,
+            }}
+          />
+
+          {/* ── Layer 3: frosted inner disc (glassmorphism) */}
+          <span
+            className="absolute rounded-full pointer-events-none"
+            style={{
+              inset: "2.5px",
+              background: "linear-gradient(145deg, rgba(20,14,50,0.92) 0%, rgba(30,20,65,0.96) 100%)",
+              backdropFilter: "blur(6px)",
+            }}
+          />
+
+          {/* ── Layer 4: top specular highlight */}
+          <span
+            className="absolute rounded-full pointer-events-none"
+            style={{
+              inset: "2.5px",
+              background: "linear-gradient(160deg, rgba(255,255,255,0.18) 0%, transparent 50%)",
+            }}
+          />
+
+          {/* ── Layer 5: subtle inner ring */}
+          <span
+            className="fab-ring absolute rounded-full pointer-events-none"
+            style={{
+              inset: "3px",
+              border: "1px solid rgba(167,139,250,0.45)",
+            }}
+          />
+
+          {/* ── Layer 6: orbiting particle dots */}
+          {!fabDragging && (
+            <span className="absolute inset-0 rounded-full pointer-events-none" style={{ transformOrigin: "center" }}>
+              <span className="fab-p1 absolute" style={{ top: "50%", left: "50%", marginTop: "-3px", marginLeft: "-3px", width: "6px", height: "6px", borderRadius: "50%", background: "#a78bfa", boxShadow: "0 0 6px 2px rgba(167,139,250,0.8)", transformOrigin: "0 0" }} />
+              <span className="fab-p2 absolute" style={{ top: "50%", left: "50%", marginTop: "-2.5px", marginLeft: "-2.5px", width: "5px", height: "5px", borderRadius: "50%", background: "#f472b6", boxShadow: "0 0 5px 2px rgba(244,114,182,0.8)", transformOrigin: "0 0" }} />
+              <span className="fab-p3 absolute" style={{ top: "50%", left: "50%", marginTop: "-2px", marginLeft: "-2px", width: "4px", height: "4px", borderRadius: "50%", background: "#34d399", boxShadow: "0 0 5px 2px rgba(52,211,153,0.8)", transformOrigin: "0 0" }} />
+            </span>
+          )}
+
+          {/* ── Layer 7: chat icon with idle bounce */}
+          <span className={`fab-icon-idle relative z-10 flex items-center justify-center${fabDragging ? " !animate-none" : ""}`}>
+            {fabIcon ?? (
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path
+                  d="M12 2C6.477 2 2 6.134 2 11.25c0 2.4 1.01 4.582 2.657 6.184L3.5 21.5l4.43-1.73A10.7 10.7 0 0 0 12 20.5c5.523 0 10-4.134 10-9.25S17.523 2 12 2Z"
+                  fill="url(#fabIconGrad)"
+                />
+                <circle cx="8.5"  cy="11.25" r="1.25" fill="rgba(255,255,255,0.55)" />
+                <circle cx="12"   cy="11.25" r="1.25" fill="rgba(255,255,255,0.55)" />
+                <circle cx="15.5" cy="11.25" r="1.25" fill="rgba(255,255,255,0.55)" />
+                <defs>
+                  <linearGradient id="fabIconGrad" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%"   stopColor="#c4b5fd" />
+                    <stop offset="100%" stopColor="#f9a8d4" />
+                  </linearGradient>
+                </defs>
+              </svg>
+            )}
           </span>
-        )}
-      </button>
+
+          {/* ── Unread badge */}
+          {totalUnread > 0 && (
+            <span
+              key={totalUnread}
+              className="fab-badge-pop absolute -top-0.5 -right-0.5 min-w-[22px] h-[22px] flex items-center justify-center rounded-full text-white text-[10px] font-black px-1 z-20"
+              style={{
+                background: "linear-gradient(135deg, #ef4444 0%, #f97316 100%)",
+                boxShadow: "0 0 0 2.5px #09090b, 0 2px 10px rgba(239,68,68,0.7)",
+              }}
+            >
+              {/* Unread ping ring */}
+              <span className="fab-unread-ping absolute inset-0 rounded-full" style={{ background: "rgba(239,68,68,0.5)" }} />
+              {totalUnread > 9 ? "9+" : totalUnread}
+            </span>
+          )}
+        </button>
+      )}
 
       {/* Desktop/Tablet: Messenger-style bottom tab bar */}
       <button
-        onClick={() => setOpen(o => !o)}
+        onClick={() => open ? closeWidget() : openWidget()}
         aria-label={open ? "Close team chat" : "Open team chat"}
         className="hidden sm:flex items-center gap-2.5 px-4 h-[48px] w-[220px] rounded-t-2xl rounded-b-none focus:outline-none transition-all duration-200 hover:brightness-110 active:brightness-90 shrink-0"
         style={{
