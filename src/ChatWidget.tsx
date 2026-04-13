@@ -1715,7 +1715,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
           style={{ boxShadow: sidebarView === "dev" ? "0 -4px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(16,185,129,0.2)" : "0 -4px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(99,102,241,0.18)", background: sidebarView === "dev" ? "#060d09" : "#09090b" }}
         >
           {/* ────────── LEFT SIDEBAR ────────── */}
-          <div className="hidden sm:flex w-14 flex-col items-center py-3 gap-1.5 border-r border-gray-800/60 shrink-0" style={{ background: sidebarView === "dev" ? "#08110a" : "#0c0c0f" }}>
+          <div className="hidden w-14 flex-col items-center py-3 gap-1.5 border-r border-gray-800/60 shrink-0" style={{ background: sidebarView === "dev" ? "#08110a" : "#0c0c0f" }}>
             {/* Chat — always top */}
             <SidebarBtn view="chat" icon={<MessageSquare size={17} />} title="Team Chats" />
             {/* Dev channels — below chat */}
@@ -1904,7 +1904,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
                         <div className="flex-1" />
 
                         {/* RIGHT: ⋮ mobile only */}
-                        <div className="relative sm:hidden shrink-0">
+                        <div className="relative shrink-0">
                           <button
                             onClick={() => setDevMobileMenuOpen(o => !o)}
                             className={`p-1.5 rounded-lg transition-colors ${devMobileMenuOpen ? "text-emerald-400 bg-emerald-900/30" : "text-gray-500 hover:text-gray-200 hover:bg-gray-800/60"}`}
@@ -2618,7 +2618,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
                   <div className="flex-1" />
 
                   {/* RIGHT: ⋮ mobile only */}
-                  <div className="relative sm:hidden shrink-0">
+                  <div className="relative shrink-0">
                     <button
                       onClick={() => setMobileMenuOpen(o => !o)}
                       className={`p-1.5 rounded-lg transition-colors ${mobileMenuOpen ? "text-indigo-400 bg-indigo-900/30" : "text-gray-500 hover:text-gray-200 hover:bg-gray-800/60"}`}
