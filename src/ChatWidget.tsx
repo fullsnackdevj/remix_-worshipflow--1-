@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { collection, query, orderBy, limitToLast, onSnapshot } from "firebase/firestore";
 import { db } from "./firebase";
-import { MessageSquare, X, Send, Trash2, Reply, AtSign, Search, Settings, Paperclip, Smile, Pin, PinOff, ImageIcon, Link2, ExternalLink, Code2, Pencil, Check, ChevronUp, ChevronDown, MoreVertical, Bell, BellOff } from "lucide-react";
+import { MessageSquare, X, Send, Trash2, Reply, AtSign, Search, Settings, Paperclip, Smile, Pin, PinOff, ImageIcon, Link2, ExternalLink, Code2, Pencil, Check, ChevronUp, ChevronDown, MoreVertical } from "lucide-react";
 import type { Member } from "./types";
 
 // ── Channel type & defaults ──────────────────────────────────────────────────
@@ -82,6 +82,7 @@ export interface ChatWidgetProps {
   userId: string;
   userName: string;
   userPhoto: string;
+  userRole?: string;                 // Sender role for @everyone permission check
   allMembers: Member[];
   // Optional configuration — lets you run multiple independent widget instances
   widgetId?:        string;          // localStorage namespace (default: "main")
@@ -231,7 +232,7 @@ function LinkPreview({ url }: { url: string }) {
 
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
+export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "member", allMembers,
   widgetId = "main", customChannels, fabIcon, fabGradient, fabBottomOffset = 24,
 }: ChatWidgetProps) {
 
@@ -434,6 +435,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
   const activeChannelRef    = useRef<string>(CH[0]?.id ?? "");
   const devActiveChannelRef = useRef<string>(DEV_CHANNELS[0].id);
   const muteNotifsRef       = useRef(false);
+  const userNameRef         = useRef(userName);  // for mention matching inside snapshot callbacks
   const playNotifSoundRef   = useRef<() => void>(() => {}); // synced below, after playNotifSound is declared
   const notifiedBgMsgIds    = useRef<Set<string>>(new Set());
 
@@ -469,6 +471,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
   useEffect(() => { activeChannelRef.current = activeChannel; }, [activeChannel]);
   useEffect(() => { devActiveChannelRef.current = devActiveChannel; }, [devActiveChannel]);
   useEffect(() => { muteNotifsRef.current = muteNotifs; }, [muteNotifs]);
+  useEffect(() => { userNameRef.current = userName; }, [userName]);
 
   // ── Toast helper ─────────────────────────────────────────────────────────
   const showToast = useCallback((msg: string, type: "success"|"error"|"info" = "error") => {
@@ -558,12 +561,29 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
   }, [open, sidebarView]);
 
   // ── Always-on background unread listener (works even when widget is CLOSED) ──
-  // Covers ALL Team + Dev channels. Shows browser notification + sound when widget is closed.
-  // dep array = [userId] ONLY — open/sidebarView/muteNotifs/playNotifSound read via live refs
-  // so the subscription never re-creates on state changes (prevents duplicate notifications).
+  // Notification rules:
+  //   - Regular messages → unread dot + count only (NO browser push)
+  //   - @mention of current user → push notification + sound
+  //   - @everyone command → push notification + sound for all
+  //   - 60-second freshness window → older messages never trigger push (only unread dot)
+  //   - dep array = [userId] ONLY — all other values read via live refs (no re-subscribe on state change)
   useEffect(() => {
     if (!userId) return;
     const subs: (() => void)[] = [];
+
+    const shouldPush = (data: Record<string, any>, lastTs: number): boolean => {
+      // Freshness gate: messages older than 60s are "already happened" — dot only, no push
+      if (Date.now() - lastTs > 60_000) return false;
+      // @everyone in text → notify everyone
+      if ((data.text || "").toLowerCase().includes("@everyone")) return true;
+      // @mention matching — check if any mention token matches the current user's name
+      const myName = userNameRef.current.toLowerCase().replace(/\s+/g, "");
+      const mentions: string[] = data.mentions || [];
+      return mentions.some((m: string) => {
+        const ml = m.toLowerCase();
+        return ml === myName || myName.startsWith(ml) || ml.startsWith(myName.slice(0, Math.max(3, ml.length)));
+      });
+    };
 
     // Team channels
     CH.forEach(ch => {
@@ -574,17 +594,19 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
           const doc    = snap.docs[0];
           const data   = doc.data();
           const lastTs = data.createdAt?.toDate?.()?.getTime() ?? 0;
-          // Skip: own msg, already seen, already notified for this exact message doc
-          if (data.userId === userId) return;
-          if (lastTs <= (lastReadRef.current[ch.id] ?? 0)) return;
-          if (notifiedBgMsgIds.current.has(doc.id)) return;
+          if (data.userId === userId) return;                              // own message
+          if (lastTs <= (lastReadRef.current[ch.id] ?? 0)) return;         // already read
+          if (notifiedBgMsgIds.current.has(doc.id)) return;               // already processed
           notifiedBgMsgIds.current.add(doc.id);
           const isViewing = openRef.current && sidebarViewRef.current === "chat" && ch.id === activeChannelRef.current;
           if (!isViewing) setUnreadDots(prev => new Set([...prev, ch.id]));
-          if (!openRef.current && !muteNotifsRef.current) {
+          // Push only for @mentions / @everyone (not every message)
+          if (!openRef.current && !muteNotifsRef.current && shouldPush(data, lastTs)) {
             playNotifSoundRef.current();
             if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-              try { new Notification(`${ch.emoji} ${data.userName}`, { body: (data.text || "📎 Image").slice(0, 100), icon: data.userPhoto || "/icon-192.png", tag: `wf-tm-${doc.id}`, renotify: false }); } catch {}
+              const isEveryone = (data.text || "").toLowerCase().includes("@everyone");
+              const title = isEveryone ? `📢 ${data.userName} — @everyone` : `💬 ${data.userName} mentioned you`;
+              try { new Notification(title, { body: (data.text || "📎 Image").slice(0, 100), icon: data.userPhoto || "/icon-192.png", tag: `wf-tm-${doc.id}`, renotify: false }); } catch {}
             }
           }
         }
@@ -602,17 +624,19 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
           const lastTs = data.createdAt?.toDate?.()?.getTime() ?? 0;
           const devReadKey = `wf_${widgetId}_dev_read_${ch.id}`;
           const lastSeen = parseInt(localStorage.getItem(devReadKey) ?? "0", 10) || 0;
-          // Skip: own msg, already seen, already notified for this exact message doc
-          if (data.userId === userId) return;
-          if (lastTs <= lastSeen) return;
-          if (notifiedBgMsgIds.current.has(doc.id)) return;
+          if (data.userId === userId) return;                              // own message
+          if (lastTs <= lastSeen) return;                                   // already read
+          if (notifiedBgMsgIds.current.has(doc.id)) return;               // already processed
           notifiedBgMsgIds.current.add(doc.id);
           const isViewing = openRef.current && sidebarViewRef.current === "dev" && ch.id === devActiveChannelRef.current;
           if (!isViewing) setDevUnreadDots(prev => new Set([...prev, ch.id]));
-          if (!openRef.current && !muteNotifsRef.current) {
+          // Push only for @mentions / @everyone
+          if (!openRef.current && !muteNotifsRef.current && shouldPush(data, lastTs)) {
             playNotifSoundRef.current();
             if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-              try { new Notification(`${ch.emoji} ${data.userName}`, { body: (data.text || "📎 Image").slice(0, 100), icon: data.userPhoto || "/icon-192.png", tag: `wf-dev-${doc.id}`, renotify: false }); } catch {}
+              const isEveryone = (data.text || "").toLowerCase().includes("@everyone");
+              const title = isEveryone ? `📢 ${data.userName} — @everyone` : `💬 ${data.userName} mentioned you`;
+              try { new Notification(title, { body: (data.text || "📎 Image").slice(0, 100), icon: data.userPhoto || "/icon-192.png", tag: `wf-dev-${doc.id}`, renotify: false }); } catch {}
             }
           }
         }
@@ -620,7 +644,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
     });
 
     return () => subs.forEach(u => u());
-  }, [userId]); // Only userId — all other values read via live refs above
+  }, [userId]); // Only userId — all other state read via live refs (prevents re-subscribe on state changes)
 
   // ── Scroll: instant on open/switch, smooth on new message ────────────────
   useEffect(() => {
@@ -1028,7 +1052,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          channelId: activeChannel, userId, userName,
+          channelId: activeChannel, userId, userName, userRole,
           userPhoto: userPhoto || "", text,
           mentionUserIds: idsToNotify,
           ...(replyingTo  ? { replyTo:  replyingTo  } : {}),
@@ -1801,14 +1825,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                             <p className="text-[10px] text-gray-500 leading-tight truncate">{devActiveCh.desc}</p>
                           </div>
                         </button>
-                        {/* RIGHT: mute — shown right next to channel name */}
-                        <button
-                          onClick={() => { const n = !muteNotifs; setMuteNotifs(n); try { localStorage.setItem(`wf_${widgetId}_mute`, String(n)); } catch {} }}
-                          title={muteNotifs ? "Unmute notifications" : "Mute notifications"}
-                          className={`ml-2 shrink-0 p-1.5 rounded-lg transition-colors ${muteNotifs ? "text-amber-400 bg-amber-900/20" : "text-gray-600 hover:text-gray-200 hover:bg-gray-800/60"}`}
-                        >
-                          {muteNotifs ? <BellOff size={14} /> : <Bell size={14} />}
-                        </button>
+
                         {/* Spacer */}
                         <div className="flex-1" />
 
@@ -2464,20 +2481,10 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                             className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border transition-all ${soundEnabled ? "border-emerald-500/60 bg-emerald-900/20" : "border-gray-700/60 bg-gray-800/40"}`}>
                             <div className="flex items-center gap-2">
                               <span className="text-base">🔊</span>
-                              <div className="text-left"><p className="text-[11px] font-semibold text-gray-200">Message Sound</p><p className="text-[9px] text-gray-600">Chime on new messages</p></div>
+                              <div className="text-left"><p className="text-[11px] font-semibold text-gray-200">Mention Sound</p><p className="text-[9px] text-gray-600">Chime when @mentioned or @everyone</p></div>
                             </div>
                             <div className={`w-9 h-5 rounded-full transition-colors relative ${soundEnabled ? "bg-emerald-500" : "bg-gray-700"}`}>
                               <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${soundEnabled ? "left-4" : "left-0.5"}`} />
-                            </div>
-                          </button>
-                          <button onClick={() => { const n = !muteNotifs; setMuteNotifs(n); try { localStorage.setItem(`wf_${widgetId}_mute`, String(n)); } catch {} }}
-                            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border transition-all ${muteNotifs ? "border-amber-500/60 bg-amber-900/20" : "border-gray-700/60 bg-gray-800/40"}`}>
-                            <div className="flex items-center gap-2">
-                              <span className="text-base">{muteNotifs ? "🔕" : "🔔"}</span>
-                              <div className="text-left"><p className="text-[11px] font-semibold text-gray-200">Mute All</p><p className="text-[9px] text-gray-600">Silence sound & push alerts</p></div>
-                            </div>
-                            <div className={`w-9 h-5 rounded-full transition-colors relative ${muteNotifs ? "bg-amber-500" : "bg-gray-700"}`}>
-                              <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${muteNotifs ? "left-4" : "left-0.5"}`} />
                             </div>
                           </button>
                         </div>
@@ -2515,14 +2522,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                     </div>
                   </button>
 
-                  {/* Bell right next to channel name */}
-                  <button
-                    onClick={() => { const n = !muteNotifs; setMuteNotifs(n); try { localStorage.setItem(`wf_${widgetId}_mute`, String(n)); } catch {} }}
-                    title={muteNotifs ? "Unmute notifications" : "Mute notifications"}
-                    className={`ml-2 shrink-0 p-1.5 rounded-lg transition-colors ${muteNotifs ? "text-amber-400 bg-amber-900/20" : "text-gray-500 hover:text-gray-200 hover:bg-gray-800/60"}`}
-                  >
-                    {muteNotifs ? <BellOff size={14} /> : <Bell size={14} />}
-                  </button>
+
 
                   {/* Spacer pushes ⋮ to far right */}
                   <div className="flex-1" />
@@ -3431,20 +3431,10 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                         className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border transition-all ${soundEnabled ? "border-indigo-500/60 bg-indigo-900/20" : "border-gray-700/60 bg-gray-800/40"}`}>
                         <div className="flex items-center gap-2">
                           <span className="text-base">🔊</span>
-                          <div className="text-left"><p className="text-[11px] font-semibold text-gray-200">Message Sound</p><p className="text-[9px] text-gray-600">Chime on new messages</p></div>
+                          <div className="text-left"><p className="text-[11px] font-semibold text-gray-200">Mention Sound</p><p className="text-[9px] text-gray-600">Chime when @mentioned or @everyone</p></div>
                         </div>
                         <div className={`w-9 h-5 rounded-full transition-colors relative ${soundEnabled ? "bg-indigo-500" : "bg-gray-700"}`}>
                           <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${soundEnabled ? "left-4" : "left-0.5"}`} />
-                        </div>
-                      </button>
-                      <button onClick={() => { const n = !muteNotifs; setMuteNotifs(n); try { localStorage.setItem(`wf_${widgetId}_mute`, String(n)); } catch {} }}
-                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border transition-all ${muteNotifs ? "border-amber-500/60 bg-amber-900/20" : "border-gray-700/60 bg-gray-800/40"}`}>
-                        <div className="flex items-center gap-2">
-                          <span className="text-base">{muteNotifs ? "🔕" : "🔔"}</span>
-                          <div className="text-left"><p className="text-[11px] font-semibold text-gray-200">Mute All</p><p className="text-[9px] text-gray-600">Silence sound & push alerts</p></div>
-                        </div>
-                        <div className={`w-9 h-5 rounded-full transition-colors relative ${muteNotifs ? "bg-amber-500" : "bg-gray-700"}`}>
-                          <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${muteNotifs ? "left-4" : "left-0.5"}`} />
                         </div>
                       </button>
                     </div>

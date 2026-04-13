@@ -1999,6 +1999,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
           userId={user?.uid ?? ""}
           userName={user?.displayName ?? ""}
           userPhoto={user?.photoURL ?? ""}
+          userRole={effectiveRole}
           allMembers={allMembers}
         />
       </Suspense>

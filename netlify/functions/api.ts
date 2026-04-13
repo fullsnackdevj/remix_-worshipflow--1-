@@ -3622,7 +3622,7 @@ Rules:
     // POST /chat/message
     if (method === "POST" && rawPath === "/chat/message") {
         if (!firestore) return json(503, { error: "DB unavailable" });
-        const { channelId, userId, userName, userPhoto, text, replyTo, imageUrl, mentionUserIds } = body;
+        const { channelId, userId, userName, userPhoto, userRole, text, replyTo, imageUrl, mentionUserIds } = body;
         if (!channelId || (!text?.trim() && !imageUrl) || !userId) return json(400, { error: "Missing required fields" });
         try {
             const mentions = (text?.match(/@(\S+)/g) ?? []).map((m: string) => m.slice(1));
@@ -3634,8 +3634,68 @@ Rules:
                 ...(imageUrl ? { imageUrl } : {}),
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
             });
-            // Fire-and-forget: FCM push for @mentions (never blocks the response)
-            if (mentions.length > 0 && firestore) {
+
+            // ── @everyone broadcast (Admin/Leader only, rate-limited server-side) ──────────
+            const isEveryoneCommand = (text || "").toLowerCase().includes("@everyone");
+            if (isEveryoneCommand && firestore) {
+                Promise.resolve().then(async () => {
+                    try {
+                        const ALLOWED_ROLES = ["admin", "leader"];
+                        const senderRole = (userRole || "").toLowerCase();
+                        if (!ALLOWED_ROLES.includes(senderRole)) return; // silently skip — wrong role
+
+                        const ONE_HOUR  = 60 * 60 * 1000;
+                        const ONE_DAY   = 24 * 60 * 60 * 1000;
+                        const MAX_DAILY = 3;
+                        const now       = Date.now();
+
+                        const rlRef  = firestore.collection("chat_rate_limits").doc(userId);
+                        const rlSnap = await rlRef.get();
+                        let everyoneCount = 0;
+                        let lastEveryoneAt = 0;
+                        let countResetAt   = 0;
+
+                        if (rlSnap.exists) {
+                            const d = rlSnap.data()!;
+                            everyoneCount  = d.everyoneCount  || 0;
+                            lastEveryoneAt = d.lastEveryoneAt || 0;
+                            countResetAt   = d.countResetAt   || 0;
+                            // Reset daily counter after 24 h
+                            if (now - countResetAt > ONE_DAY) everyoneCount = 0;
+                        }
+
+                        if (now - lastEveryoneAt < ONE_HOUR) return;  // within cooldown, skip
+                        if (everyoneCount >= MAX_DAILY) return;         // daily cap reached, skip
+
+                        // Update rate-limit doc
+                        await rlRef.set({
+                            everyoneCount:  everyoneCount + 1,
+                            lastEveryoneAt: now,
+                            countResetAt:   everyoneCount === 0 ? now : countResetAt,
+                        }, { merge: true });
+
+                        // Fan out — in-app notification for every approved user (skip sender)
+                        const usersSnap = await firestore.collection("approved_users").get();
+                        await Promise.allSettled(usersSnap.docs.map(async (uDoc) => {
+                            if (uDoc.id === userId) return;
+                            await writeNotif(firestore!, {
+                                type: "chat_everyone",
+                                message: `📢 ${userName || "Someone"} sent an @everyone`,
+                                subMessage: (text || "").slice(0, 100),
+                                actorName: userName || "",
+                                actorPhoto: userPhoto || "",
+                                actorUserId: userId,
+                                targetAudience: "direct",
+                                targetUserId: uDoc.id,
+                                resourceId: channelId,
+                            });
+                        }));
+                    } catch (e) { console.error("[chat @everyone]", e); }
+                });
+            }
+
+            // ── @mention push for specific users (unchanged logic) ──────────────────────
+            if (!isEveryoneCommand && mentions.length > 0 && firestore) {
                 Promise.resolve().then(async () => {
                     try {
                         const targetIds: string[] = Array.isArray(mentionUserIds) ? mentionUserIds : [];
@@ -3689,6 +3749,7 @@ Rules:
             return json(500, { error: "Failed to send message" });
         }
     }
+
 
     // PATCH /chat/message/:id — edit a message (owner only)
     if (method === "PATCH" && rawPath.startsWith("/chat/message/")) {
