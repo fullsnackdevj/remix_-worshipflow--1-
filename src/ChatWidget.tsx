@@ -427,7 +427,15 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
   const devMsgRefs       = useRef<Map<string, HTMLDivElement>>(new Map());
   const devSearchInputRef= useRef<HTMLInputElement>(null);
   const devFileInputRef  = useRef<HTMLInputElement>(null);
-  const devLocalPinnedRef = useRef<Set<string>>(new Set());
+  const devLocalPinnedRef  = useRef<Set<string>>(new Set());
+  // ── Live refs for background listener (stale-closure-free, no re-subscribe needed) ──
+  const openRef             = useRef(false);
+  const sidebarViewRef      = useRef<SidebarView>("chat");
+  const activeChannelRef    = useRef<string>(CH[0]?.id ?? "");
+  const devActiveChannelRef = useRef<string>(DEV_CHANNELS[0].id);
+  const muteNotifsRef       = useRef(false);
+  const playNotifSoundRef   = useRef<() => void>(() => {}); // synced below, after playNotifSound is declared
+  const notifiedBgMsgIds    = useRef<Set<string>>(new Set());
 
   // ── Long-press handlers (mobile touch substitute for hover toolbar) ────────
   const getLongPressHandlers = (msg: ChatMessage, isTeam: boolean) => ({
@@ -456,6 +464,11 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
 
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
   useEffect(() => { activeChRef.current = activeChannel; }, [activeChannel]);
+  useEffect(() => { openRef.current = open; }, [open]);
+  useEffect(() => { sidebarViewRef.current = sidebarView; }, [sidebarView]);
+  useEffect(() => { activeChannelRef.current = activeChannel; }, [activeChannel]);
+  useEffect(() => { devActiveChannelRef.current = devActiveChannel; }, [devActiveChannel]);
+  useEffect(() => { muteNotifsRef.current = muteNotifs; }, [muteNotifs]);
 
   // ── Toast helper ─────────────────────────────────────────────────────────
   const showToast = useCallback((msg: string, type: "success"|"error"|"info" = "error") => {
@@ -482,6 +495,9 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
       setTimeout(() => ctx.close().catch(() => {}), 600);
     } catch {}
   }, [muteNotifs, soundEnabled]);
+  // playNotifSoundRef sync must live HERE — after playNotifSound is declared (const/useCallback
+  // is in temporal dead zone above this line, so the effect dep can only be listed here)
+  useEffect(() => { playNotifSoundRef.current = playNotifSound; }, [playNotifSound]);
 
   // ── Notification permission (once on first open) ──────────────────────────
   useEffect(() => {
