@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { collection, query, orderBy, limitToLast, onSnapshot } from "firebase/firestore";
 import { db } from "./firebase";
-import { MessageSquare, X, Send, Trash2, Reply, AtSign, Search, Settings, Paperclip, Smile, Pin, PinOff, ImageIcon, Link2, ExternalLink, Code2, Pencil, Check, ChevronUp, ChevronDown, MoreVertical } from "lucide-react";
+import { MessageSquare, X, Send, Trash2, Reply, AtSign, Search, Settings, Paperclip, Smile, Pin, PinOff, ImageIcon, Link2, ExternalLink, Code2, Pencil, Check, ChevronUp, ChevronDown, MoreVertical, Bell, BellOff } from "lucide-react";
 import type { Member } from "./types";
 
 // ── Channel type & defaults ──────────────────────────────────────────────────
@@ -252,6 +252,18 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
   const [chatTheme,     setChatTheme]     = useState<ThemeId>(() => {
     try { return (localStorage.getItem(`wf_${widgetId}_theme`) as ThemeId) || "indigo"; } catch { return "indigo"; }
   });
+  const [bubbleStyle,    setBubbleStyle]    = useState<"flat"|"bubble"|"minimal">(() => {
+    try { return (localStorage.getItem(`wf_${widgetId}_bubble`) ?? "flat") as "flat"|"bubble"|"minimal"; } catch { return "flat"; }
+  });
+  const [bgPattern,      setBgPattern]      = useState<"none"|"dots"|"grid">(() => {
+    try { return (localStorage.getItem(`wf_${widgetId}_pattern`) ?? "none") as "none"|"dots"|"grid"; } catch { return "none"; }
+  });
+  const [avatarShape,    setAvatarShape]    = useState<"circle"|"squircle">(() => {
+    try { return (localStorage.getItem(`wf_${widgetId}_avatar`) ?? "circle") as "circle"|"squircle"; } catch { return "circle"; }
+  });
+  const [timestampStyle, setTimestampStyle] = useState<"relative"|"absolute"|"hidden">(() => {
+    try { return (localStorage.getItem(`wf_${widgetId}_timestamp`) ?? "relative") as "relative"|"absolute"|"hidden"; } catch { return "relative"; }
+  });
   const [activeChannel, setActiveChannel] = useState<ChannelId>(() => CH[0]?.id ?? "");
   const [messages,      setMessages]      = useState<ChatMessage[]>(() => loadCache(CH[0]?.id ?? ""));
   const [settled,       setSettled]       = useState(() => loadCache(CH[0]?.id ?? "").length > 0);
@@ -290,6 +302,14 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
   const [devMentionHlIdx,     setDevMentionHlIdx]     = useState(0);
   const [devReactingMsgId,    setDevReactingMsgId]    = useState<string | null>(null);
   const [devDeletingId,       setDevDeletingId]       = useState<string | null>(null);
+  // ── Notification state ────────────────────────────────────────────────────
+  const [devUnreadDots, setDevUnreadDots] = useState<Set<string>>(new Set());
+  const [muteNotifs,    setMuteNotifs]    = useState<boolean>(() => {
+    try { return localStorage.getItem(`wf_${widgetId}_mute`) === "true"; } catch { return false; }
+  });
+  const [soundEnabled,  setSoundEnabled]  = useState<boolean>(() => {
+    try { return localStorage.getItem(`wf_${widgetId}_sound`) !== "false"; } catch { return true; }
+  });
   // ── Toast ─────────────────────────────────────────────────────────────────
   const [toasts, setToasts] = useState<{ id: string; type: "success"|"error"|"info"; msg: string }[]>([]);
   // ── Message editing ──────────────────────────────────────────────────────
@@ -301,9 +321,14 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
   const [mentionedIds,    setMentionedIds]    = useState<string[]>([]);
   const [devMentionedIds, setDevMentionedIds] = useState<string[]>([]);
   // ── Mobile ⋮ menu + inline search bar ────────────────────────────────────────
-  const [mobileMenuOpen,    setMobileMenuOpen]    = useState(false);
-  const [mobileSearchOpen,  setMobileSearchOpen]  = useState(false);
-  const [devMobileMenuOpen, setDevMobileMenuOpen] = useState(false);
+  const [mobileMenuOpen,         setMobileMenuOpen]         = useState(false);
+  const [mobileSearchOpen,       setMobileSearchOpen]       = useState(false);
+  const [devMobileMenuOpen,      setDevMobileMenuOpen]      = useState(false);
+  const [inputFocused,           setInputFocused]           = useState(false);
+  const [devInputFocused,        setDevInputFocused]        = useState(false);
+  const [channelDropdownOpen,    setChannelDropdownOpen]    = useState(false);
+  const [devChannelDropdownOpen, setDevChannelDropdownOpen] = useState(false);
+  const [modeDropdownOpen,       setModeDropdownOpen]       = useState(false);
   // ── Mobile long-press context menu ───────────────────────────────────────────
   const [longPressTarget, setLongPressTarget] = useState<{ msg: ChatMessage; isTeam: boolean } | null>(null);
   const [fabDragging, setFabDragging] = useState(false);
@@ -439,6 +464,25 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
     setTimeout(() => { if (mountedRef.current) setToasts(prev => prev.filter(t => t.id !== id)); }, 4000);
   }, []);
 
+  // ── In-app notification sound (Web Audio API, zero cost) ─────────────────
+  const playNotifSound = useCallback(() => {
+    if (muteNotifs || !soundEnabled) return;
+    try {
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.35);
+      setTimeout(() => ctx.close().catch(() => {}), 600);
+    } catch {}
+  }, [muteNotifs, soundEnabled]);
+
   // ── Notification permission (once on first open) ──────────────────────────
   useEffect(() => {
     if (open && typeof Notification !== "undefined" && Notification.permission === "default") {
@@ -497,26 +541,58 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
     if (open && sidebarView === "search") setTimeout(() => searchInputRef.current?.focus(), 80);
   }, [open, sidebarView]);
 
-  // ── Background unread check: onSnapshot on other channels (zero Netlify cost) ──
+  // ── Always-on background unread listener (works even when widget is CLOSED) ──
+  // Covers ALL Team + Dev channels. Shows browser notification + sound when widget is closed.
   useEffect(() => {
-    if (!open || !userId) return;
+    if (!userId) return;
     const subs: (() => void)[] = [];
-    CH.filter(ch => ch.id !== activeChannel).forEach(ch => {
+
+    // Team channels
+    CH.forEach(ch => {
       subs.push(onSnapshot(
         query(collection(db, "chat_channels", ch.id, "messages"), orderBy("createdAt", "asc"), limitToLast(1)),
         snap => {
-          if (!snap.empty) {
-            const data = snap.docs[snap.docs.length - 1].data();
-            const lastTs = data.createdAt?.toDate?.()?.getTime() ?? 0;
-            if (lastTs > (lastReadRef.current[ch.id] ?? 0) && data.userId !== userId) {
-              setUnreadDots(prev => new Set([...prev, ch.id]));
+          if (snap.empty) return;
+          const data = snap.docs[0].data();
+          const lastTs = data.createdAt?.toDate?.()?.getTime() ?? 0;
+          if (data.userId === userId || lastTs <= (lastReadRef.current[ch.id] ?? 0)) return;
+          const isViewing = open && sidebarView === "chat" && ch.id === activeChannel;
+          if (!isViewing) setUnreadDots(prev => new Set([...prev, ch.id]));
+          if (!open && !muteNotifs) {
+            playNotifSound();
+            if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+              try { new Notification(`${ch.emoji} ${data.userName}`, { body: (data.text || "📎 Image").slice(0, 100), icon: data.userPhoto || "/icon-192.png", tag: `wf-tm-${ch.id}`, renotify: true }); } catch {}
             }
           }
         }
       ));
     });
+
+    // Dev channels
+    DEV_CHANNELS.forEach(ch => {
+      subs.push(onSnapshot(
+        query(collection(db, "chat_channels", ch.id, "messages"), orderBy("createdAt", "asc"), limitToLast(1)),
+        snap => {
+          if (snap.empty) return;
+          const data = snap.docs[0].data();
+          const lastTs = data.createdAt?.toDate?.()?.getTime() ?? 0;
+          const devReadKey = `wf_${widgetId}_dev_read_${ch.id}`;
+          const lastSeen = parseInt(localStorage.getItem(devReadKey) ?? "0", 10) || 0;
+          if (data.userId === userId || lastTs <= lastSeen) return;
+          const isViewing = open && sidebarView === "dev" && ch.id === devActiveChannel;
+          if (!isViewing) setDevUnreadDots(prev => new Set([...prev, ch.id]));
+          if (!open && !muteNotifs) {
+            playNotifSound();
+            if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+              try { new Notification(`${ch.emoji} ${data.userName}`, { body: (data.text || "📎 Image").slice(0, 100), icon: data.userPhoto || "/icon-192.png", tag: `wf-dev-${ch.id}`, renotify: true }); } catch {}
+            }
+          }
+        }
+      ));
+    });
+
     return () => subs.forEach(u => u());
-  }, [open, userId, activeChannel]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [userId, open, sidebarView, activeChannel, devActiveChannel, muteNotifs, playNotifSound]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Scroll: instant on open/switch, smooth on new message ────────────────
   useEffect(() => {
@@ -526,10 +602,13 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
 
   useEffect(() => {
     if (!open || sidebarView !== "chat" || messages.length === 0) return;
-    if (messages.length > prevLenRef.current)
+    if (messages.length > prevLenRef.current) {
+      const last = messages[messages.length - 1];
+      if (last.userId !== userId) playNotifSound();
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 60);
+    }
     prevLenRef.current = messages.length;
-  }, [messages.length, open, sidebarView]);
+  }, [messages.length, open, sidebarView]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Firestore real-time listener: Dev Chat (zero Netlify reads, instant updates) ──
   useEffect(() => {
@@ -581,6 +660,9 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
     setDevSettled(false);
     setDevSubView("chat");
     setDevDeletingId(null); setDevReplyingTo(null); setDevMentionQuery(null); setDevReactingMsgId(null);
+    // Clear unread dot for the channel we just switched to
+    setDevUnreadDots(prev => { const n = new Set(prev); n.delete(id); return n; });
+    try { localStorage.setItem(`wf_${widgetId}_dev_read_${id}`, String(Date.now())); } catch {}
   };
 
   const sendDevMessage = async () => {
@@ -770,13 +852,16 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
     items[devMentionHlIdx]?.scrollIntoView({ block: "nearest" });
   }, [devMentionHlIdx]);
 
-  // Dev textarea auto-resize
+  // Dev textarea auto-resize (collapse when not focused, expand when focused)
   useEffect(() => {
-    if (devInputRef.current) {
+    if (!devInputRef.current) return;
+    if (devInputFocused) {
       devInputRef.current.style.height = "auto";
       devInputRef.current.style.height = `${Math.min(devInputRef.current.scrollHeight, 112)}px`;
+    } else {
+      devInputRef.current.style.height = ""; // clear — let rows=1 define natural 1-line height
     }
-  }, [devInput]);
+  }, [devInput, devInputFocused]);
 
   // ── Scroll-to & highlight message (from search/pinned/mention jump) ────────
   useEffect(() => {
@@ -881,13 +966,16 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
     items[mentionHlIdx]?.scrollIntoView({ block: "nearest" });
   }, [mentionHlIdx]);
 
-  // ── Auto-resize textarea ─────────────────────────────────────────────────
+  // ── Auto-resize textarea (collapse when not focused, expand when focused) ───
   useEffect(() => {
-    if (inputRef.current) {
+    if (!inputRef.current) return;
+    if (inputFocused) {
       inputRef.current.style.height = "auto";
       inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 120) + "px";
+    } else {
+      inputRef.current.style.height = ""; // clear — let rows=1 define natural 1-line height
     }
-  }, [input]);
+  }, [input, inputFocused]);
 
   // ── Send message ─────────────────────────────────────────────────────────
   const sendMessage = useCallback(async () => {
@@ -1142,6 +1230,27 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
   const theme     = THEMES.find(t => t.id === chatTheme) ?? THEMES[0];
   const totalUnread = unreadDots.size;
 
+  // ── Appearance helpers (derived from settings) ───────────────────────────
+  const avatarCls = avatarShape === "squircle" ? "rounded-[35%]" : "rounded-full";
+  const bgPatternStyle: React.CSSProperties = bgPattern === "dots"
+    ? { backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px)", backgroundSize: "20px 20px" }
+    : bgPattern === "grid"
+    ? { backgroundImage: "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)", backgroundSize: "24px 24px" }
+    : {};
+  const fmtTime = (ts: any): string | null => {
+    if (timestampStyle === "hidden") return null;
+    if (timestampStyle === "absolute") {
+      const d = new Date(ts); return isNaN(d.getTime()) ? "" : d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    }
+    return timeAgo(ts);
+  };
+  const msgBubbleCls = (mine: boolean) => bubbleStyle === "bubble"
+    ? `rounded-xl px-2.5 py-2 ${mine ? "bg-indigo-900/30 border border-indigo-800/30" : "bg-gray-800/40 border border-gray-700/30"}`
+    : "";
+  const devBubbleCls = (mine: boolean) => bubbleStyle === "bubble"
+    ? `rounded-xl px-2.5 py-2 ${mine ? "bg-emerald-900/30 border border-emerald-800/30" : "bg-gray-800/40 border border-gray-700/30"}`
+    : "";
+
   // If allMembers prop is empty (members API timeout / cache expired), build a
   // fallback list from unique authors seen in chat messages so @mention always works
   const effectiveMembers = React.useMemo<Member[]>(() => {
@@ -1241,7 +1350,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
   const BackBtn = ({ onBack }: { onBack?: () => void }) => (
     <button
       onClick={onBack ?? (() => setSidebarView("chat"))}
-      className="sm:hidden flex items-center gap-1 p-1.5 pr-2 text-gray-500 hover:text-indigo-300 hover:bg-indigo-900/20 rounded-lg transition-colors text-xs font-medium mr-1"
+      className="flex items-center gap-1 p-1.5 pr-2 text-gray-500 hover:text-indigo-300 hover:bg-indigo-900/20 rounded-lg transition-colors text-xs font-medium mr-1"
     >
       <ChevronDown size={14} className="rotate-90" />
       <span>Back</span>
@@ -1476,11 +1585,11 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
       {/* ── Chat Panel ──────────────────────────────────────────────────────── */}
       {(open || closing) && (
         <div
-          className={`flex fixed inset-3 rounded-2xl sm:static sm:inset-auto sm:w-[540px] sm:h-[min(600px,calc(100dvh-52px))] sm:rounded-t-2xl overflow-hidden${closing ? " wf-panel-closing" : " wf-panel-opening"}`}
-          style={{ boxShadow: "0 -4px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(99,102,241,0.18)", background: "#09090b" }}
+          className={`flex fixed inset-0 sm:static sm:inset-auto sm:w-[540px] sm:h-[min(600px,calc(100dvh-52px))] sm:rounded-t-2xl overflow-hidden${closing ? " wf-panel-closing" : " wf-panel-opening"}`}
+          style={{ boxShadow: sidebarView === "dev" ? "0 -4px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(16,185,129,0.2)" : "0 -4px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(99,102,241,0.18)", background: sidebarView === "dev" ? "#060d09" : "#09090b" }}
         >
           {/* ────────── LEFT SIDEBAR ────────── */}
-          <div className="hidden sm:flex w-14 flex-col items-center py-3 gap-1.5 border-r border-gray-800/60 shrink-0" style={{ background: "#0c0c0f" }}>
+          <div className="hidden sm:flex w-14 flex-col items-center py-3 gap-1.5 border-r border-gray-800/60 shrink-0" style={{ background: sidebarView === "dev" ? "#08110a" : "#0c0c0f" }}>
             {/* Chat — always top */}
             <SidebarBtn view="chat" icon={<MessageSquare size={17} />} title="Team Chats" />
             {/* Dev channels — below chat */}
@@ -1492,7 +1601,6 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
               <SidebarBtn view="pinned"   icon={<Pin       size={17} />} title="Pinned"   badge={pinnedMessages.length || undefined} />
               <SidebarBtn view="images"   icon={<ImageIcon size={17} />} title="Images"   badge={imageMessages.length || undefined} />
               <SidebarBtn view="links"    icon={<Link2     size={17} />} title="Links"    badge={linkMessages.length || undefined} />
-              <SidebarBtn view="search"   icon={<Search    size={17} />} title="Search" />
               <SidebarBtn view="settings" icon={<Settings  size={17} />} title="Settings" />
             </>)}
             {/* Dev utility buttons — shown only in dev mode (emerald, controls devSubView) */}
@@ -1501,35 +1609,98 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
               <DevSidebarBtn view="pinned"   icon={<Pin       size={17} />} title="Dev Pinned"   badge={devPinnedMessages.length || undefined} />
               <DevSidebarBtn view="images"   icon={<ImageIcon size={17} />} title="Dev Images"   badge={devImageMessages.length || undefined} />
               <DevSidebarBtn view="links"    icon={<Link2     size={17} />} title="Dev Links"    badge={devLinkMessages.length || undefined} />
-              <DevSidebarBtn view="search"   icon={<Search    size={17} />} title="Dev Search" />
               <DevSidebarBtn view="settings" icon={<Settings  size={17} />} title="Settings" />
             </>)}
           </div>
 
           {/* ────────── MAIN CONTENT ────────── */}
-          <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+          <div className="flex-1 min-w-0 flex flex-col overflow-hidden sm:m-0 m-3 rounded-2xl">
 
             {/* ── Mobile top nav bar ─────────────────────────────────────────── */}
             <div
               className="sm:hidden shrink-0 border-b border-gray-800/60"
               style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", background: "#0c0c0f", padding: "6px 4px" }}
             >
-              {/* LEFT col: Team / Dev toggles */}
-              <div className="flex items-center gap-0.5">
-                <button onClick={() => setSidebarView("chat")}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${sidebarView !== "dev" ? "bg-indigo-600/30 text-indigo-300" : "text-gray-500 hover:text-gray-300"}`}>
-                  <MessageSquare size={13} /><span>Team</span>
+              {/* LEFT col: Mode switcher dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => setModeDropdownOpen(o => !o)}
+                  className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                    sidebarView === "dev"
+                      ? "bg-emerald-600/30 text-emerald-300"
+                      : "bg-indigo-600/30 text-indigo-300"
+                  }`}
+                >
+                  {sidebarView === "dev" ? <Code2 size={15} /> : <MessageSquare size={15} />}
+                  <span>{sidebarView === "dev" ? "Dev" : "Team"}</span>
+                  <svg width="11" height="11" viewBox="0 0 14 14" fill="none"
+                    className={`transition-transform duration-200 ${modeDropdownOpen ? "rotate-180" : ""}`}>
+                    <path d="M2 4.5L7 9.5L12 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
                 </button>
-                <button onClick={() => setSidebarView("dev")}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${sidebarView === "dev" ? "bg-emerald-600/30 text-emerald-300" : "text-gray-500 hover:text-gray-300"}`}>
-                  <Code2 size={13} /><span>Dev</span>
-                </button>
+
+                {modeDropdownOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setModeDropdownOpen(false)} />
+                    <div
+                      className="absolute left-0 top-full mt-1.5 z-50 overflow-hidden rounded-2xl min-w-[140px]"
+                      style={{
+                        background: "linear-gradient(145deg, #141420 0%, #1a1a2e 100%)",
+                        border: "1px solid rgba(99,102,241,0.25)",
+                        boxShadow: "0 12px 40px rgba(0,0,0,0.6)",
+                      }}
+                    >
+                      <p className="text-[10px] text-gray-600 font-semibold uppercase tracking-wider px-3 pt-2.5 pb-1.5">
+                        Chat Mode
+                      </p>
+                      <button
+                        onClick={() => { setSidebarView("chat"); setModeDropdownOpen(false); setChannelDropdownOpen(false); }}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2.5 transition-all text-left ${
+                          sidebarView !== "dev"
+                            ? "bg-indigo-600/20 border-l-2 border-indigo-500 text-indigo-300"
+                            : "border-l-2 border-transparent text-gray-300 hover:bg-gray-800/60"
+                        }`}
+                      >
+                        <MessageSquare size={15} />
+                        <div>
+                          <p className="text-sm font-semibold leading-tight">Team</p>
+                          <p className="text-[10px] text-gray-500 leading-tight">Team channels</p>
+                        </div>
+                        {sidebarView !== "dev" && (
+                          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="ml-auto text-indigo-400">
+                            <path d="M3 8L6.5 11.5L13 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => { setSidebarView("dev"); setModeDropdownOpen(false); setDevChannelDropdownOpen(false); }}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2.5 transition-all text-left ${
+                          sidebarView === "dev"
+                            ? "bg-emerald-600/20 border-l-2 border-emerald-500 text-emerald-300"
+                            : "border-l-2 border-transparent text-gray-300 hover:bg-gray-800/60"
+                        }`}
+                      >
+                        <Code2 size={15} />
+                        <div>
+                          <p className="text-sm font-semibold leading-tight">Dev</p>
+                          <p className="text-[10px] text-gray-500 leading-tight">Dev channels</p>
+                        </div>
+                        {sidebarView === "dev" && (
+                          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="ml-auto text-emerald-400">
+                            <path d="M3 8L6.5 11.5L13 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        )}
+                      </button>
+                      <div className="h-1.5" />
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* CENTER col: Search — true mathematical center, never overlaps sides */}
               {mobileSearchOpen ? (
-                <div className="flex items-center gap-1.5 w-32 bg-gray-800/70 border border-indigo-500/60 rounded-2xl px-2.5 py-1.5 transition-colors">
-                  <Search size={12} className="text-indigo-400 shrink-0" />
+                <div className="flex items-center gap-1.5 w-36 bg-gray-800/70 border border-indigo-500/60 rounded-2xl px-3 py-2.5 transition-colors">
+                  <Search size={14} className="text-indigo-400 shrink-0" />
                   <input
                     ref={searchInputRef}
                     autoFocus
@@ -1537,39 +1708,39 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
                     placeholder="Search…"
-                    className="flex-1 bg-transparent text-xs text-gray-200 placeholder-gray-500 outline-none min-w-0 w-0"
+                    className="flex-1 bg-transparent text-sm text-gray-200 placeholder-gray-500 outline-none min-w-0 w-0"
                   />
                   {searchQuery && (
                     <button onClick={() => setSearchQuery("")} className="text-gray-600 hover:text-gray-300 transition-colors shrink-0">
-                      <X size={11} />
+                      <X size={13} />
                     </button>
                   )}
                   <button
                     onClick={() => { setMobileSearchOpen(false); setSidebarView("chat"); setSearchQuery(""); }}
                     className="text-gray-600 hover:text-red-400 transition-colors shrink-0"
                   >
-                    <X size={12} />
+                    <X size={14} />
                   </button>
                 </div>
               ) : (
                 <button
                   onClick={() => { setMobileSearchOpen(true); setSidebarView("search"); }}
-                  className="w-32 flex items-center gap-1.5 px-2.5 py-1.5 rounded-2xl text-xs font-medium text-gray-400 hover:text-gray-200 bg-gray-800/50 hover:bg-gray-800/80 border border-gray-700/50 hover:border-gray-600/60 transition-all"
+                  className="w-36 flex items-center gap-1.5 px-3 py-2.5 rounded-2xl text-sm font-medium text-gray-400 hover:text-gray-200 bg-gray-800/50 hover:bg-gray-800/80 border border-gray-700/50 hover:border-gray-600/60 transition-all"
                 >
-                  <Search size={12} />
+                  <Search size={14} />
                   <span>Search…</span>
                 </button>
               )}
 
               {/* RIGHT col: Minimize + Close — pushed to the right with justify-self */}
               <div className="flex items-center gap-0.5 justify-self-end mr-1">
-                <button onClick={closeWidget} title="Minimize" className="p-2 rounded-lg text-gray-600 hover:text-gray-200 hover:bg-gray-800/60 transition-all">
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <button onClick={closeWidget} title="Minimize" className="p-3 rounded-lg text-gray-600 hover:text-gray-200 hover:bg-gray-800/60 transition-all">
+                  <svg width="16" height="16" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <line x1="2" y1="11" x2="12" y2="11" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                   </svg>
                 </button>
-                <button onClick={closeWidget} title="Close" className="p-2 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-900/20 transition-all">
-                  <X size={16} />
+                <button onClick={closeWidget} title="Close" className="p-3 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-900/20 transition-all">
+                  <X size={18} />
                 </button>
               </div>
             </div>
@@ -1580,37 +1751,145 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                 {/* ── Dev Chat sub-view ── */}
                 {devSubView === "chat" && (
                   <>
-                    {/* Header */}
-                    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800/60 shrink-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-base leading-none">{devActiveCh.emoji}</span>
-                        <div>
-                          <h3 className="text-sm font-bold text-white leading-tight">{devActiveCh.name}</h3>
-                          <p className="text-[10px] text-gray-500 leading-tight">{devActiveCh.desc}</p>
+                    {/* ── Dev Chat Header — tap channel name to switch ── */}
+                    <div className="relative shrink-0">
+                      <div className="flex items-center gap-1 px-4 py-3 border-b border-gray-800/60">
+                        {/* LEFT: tappable channel name + chevron */}
+                        <button
+                          onClick={() => setDevChannelDropdownOpen(o => !o)}
+                          className="flex items-center gap-2.5 min-w-0 text-left group"
+                        >
+                          <span className="text-lg leading-none shrink-0">{devActiveCh.emoji}</span>
+                          <div className="min-w-0">
+                            <h3 className="text-sm font-bold text-white leading-tight flex items-center gap-1.5">
+                              {devActiveCh.name}
+                              <svg
+                                width="14" height="14" viewBox="0 0 14 14" fill="none"
+                                className={`text-emerald-400 shrink-0 transition-transform duration-200 ${devChannelDropdownOpen ? "rotate-180" : ""}`}
+                              >
+                                <path d="M2 4.5L7 9.5L12 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                            </h3>
+                            <p className="text-[10px] text-gray-500 leading-tight truncate">{devActiveCh.desc}</p>
+                          </div>
+                        </button>
+                        {/* RIGHT: mute — shown right next to channel name */}
+                        <button
+                          onClick={() => { const n = !muteNotifs; setMuteNotifs(n); try { localStorage.setItem(`wf_${widgetId}_mute`, String(n)); } catch {} }}
+                          title={muteNotifs ? "Unmute notifications" : "Mute notifications"}
+                          className={`ml-2 shrink-0 p-1.5 rounded-lg transition-colors ${muteNotifs ? "text-amber-400 bg-amber-900/20" : "text-gray-600 hover:text-gray-200 hover:bg-gray-800/60"}`}
+                        >
+                          {muteNotifs ? <BellOff size={14} /> : <Bell size={14} />}
+                        </button>
+                        {/* Spacer */}
+                        <div className="flex-1" />
+
+                        {/* RIGHT: ⋮ mobile only */}
+                        <div className="relative sm:hidden shrink-0">
+                          <button
+                            onClick={() => setDevMobileMenuOpen(o => !o)}
+                            className={`p-1.5 rounded-lg transition-colors ${devMobileMenuOpen ? "text-emerald-400 bg-emerald-900/30" : "text-gray-500 hover:text-gray-200 hover:bg-gray-800/60"}`}
+                          >
+                            <MoreVertical size={16} />
+                          </button>
+                          {devMobileMenuOpen && (
+                            <div
+                              className="wf-menu-drop absolute right-0 top-full mt-1.5 z-50 flex flex-col gap-0.5 p-1.5 rounded-2xl"
+                              style={{
+                                background: "linear-gradient(145deg, #0d1f18 0%, #0f2318 100%)",
+                                border: "1px solid rgba(16,185,129,0.2)",
+                                boxShadow: "0 8px 32px rgba(0,0,0,0.5), 0 0 0 0.5px rgba(16,185,129,0.1)",
+                                minWidth: "44px",
+                              }}
+                            >
+                              {[
+                                { view: "mentions" as SidebarView, icon: <AtSign size={15} />,    badge: devMentionMessages.length, label: "Mentions" },
+                                { view: "pinned"   as SidebarView, icon: <Pin size={15} />,       badge: devPinnedMessages.length,  label: "Pinned" },
+                                { view: "images"   as SidebarView, icon: <ImageIcon size={15} />, badge: devImageMessages.length,   label: "Images" },
+                                { view: "links"    as SidebarView, icon: <Link2 size={15} />,     badge: devLinkMessages.length,    label: "Links" },
+                                { view: "settings" as SidebarView, icon: <Settings size={15} />,  badge: 0,                         label: "Settings" },
+                              ].map(({ view, icon, badge, label }) => (
+                                <button
+                                  key={view}
+                                  title={label}
+                                  onClick={() => { setDevSubView(view); setDevMobileMenuOpen(false); }}
+                                  className={`relative flex items-center justify-center w-9 h-9 rounded-xl transition-all ${
+                                    devSubView === view
+                                      ? "bg-emerald-600/30 text-emerald-300 ring-1 ring-emerald-500/40"
+                                      : "text-gray-500 hover:text-gray-200 hover:bg-gray-800/60"
+                                  }`}
+                                >
+                                  {icon}
+                                  {badge > 0 && (
+                                    <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 flex items-center justify-center rounded-full bg-emerald-500 text-white text-[8px] font-bold px-0.5">
+                                      {badge}
+                                    </span>
+                                  )}
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
-                      <CloseBtn />
-                    </div>
 
-                    {/* Channel tabs */}
-                    <div className="flex border-b border-gray-800/60 bg-gray-950 shrink-0 overflow-x-auto">
-                      {DEV_CHANNELS.map(ch => {
-                        const isActive = devActiveChannel === ch.id;
-                        return (
-                          <button key={ch.id} onClick={() => switchDevChannel(ch.id)}
-                            className={`relative flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold whitespace-nowrap border-b-2 transition-all flex-shrink-0 ${
-                              isActive ? "border-emerald-500 text-emerald-400 bg-emerald-950/30" : "border-transparent text-gray-500 hover:text-gray-300 hover:bg-gray-800/50"
-                            }`}
+                      {/* ── Dev Channel Dropdown ── */}
+                      {devChannelDropdownOpen && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-40"
+                            onClick={() => setDevChannelDropdownOpen(false)}
+                          />
+                          <div
+                            className="absolute left-0 right-0 top-full z-50 mx-2 mt-1 overflow-hidden rounded-2xl"
+                            style={{
+                              background: "linear-gradient(145deg, #0d1f18 0%, #0f2318 100%)",
+                              border: "1px solid rgba(16,185,129,0.25)",
+                              boxShadow: "0 12px 40px rgba(0,0,0,0.6), 0 0 0 0.5px rgba(16,185,129,0.1)",
+                            }}
                           >
-                            <span className="text-sm leading-none">{ch.emoji}</span>
-                            {ch.name}
-                          </button>
-                        );
-                      })}
+                            <p className="text-[10px] text-gray-600 font-semibold uppercase tracking-wider px-4 pt-3 pb-2">
+                              Switch Channel
+                            </p>
+                            {DEV_CHANNELS.map(ch => {
+                              const isActive = devActiveChannel === ch.id;
+                              return (
+                                <button
+                                  key={ch.id}
+                                  onClick={() => { switchDevChannel(ch.id); setDevChannelDropdownOpen(false); }}
+                                  className={`w-full flex items-center gap-3 px-4 py-3 transition-all text-left ${
+                                    isActive
+                                      ? "bg-emerald-600/20 border-l-2 border-emerald-500"
+                                      : "hover:bg-gray-800/60 border-l-2 border-transparent"
+                                  }`}
+                                >
+                                  <span className="text-xl leading-none shrink-0 relative">
+                                    {ch.emoji}
+                                    {devUnreadDots.has(ch.id) && !isActive && (
+                                      <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 ring-1 ring-gray-900" />
+                                    )}
+                                  </span>
+                                  <div className="flex-1 min-w-0">
+                                    <p className={`text-sm font-semibold leading-tight ${isActive ? "text-emerald-300" : "text-gray-200"}`}>
+                                      {ch.name}
+                                    </p>
+                                    <p className="text-[11px] text-gray-500 leading-tight truncate mt-0.5">{ch.desc}</p>
+                                  </div>
+                                  {isActive && (
+                                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-emerald-400 shrink-0">
+                                      <path d="M3 8L6.5 11.5L13 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                    </svg>
+                                  )}
+                                </button>
+                              );
+                            })}
+                            <div className="h-2" />
+                          </div>
+                        </>
+                      )}
                     </div>
 
                     {/* Messages */}
-                    <div className="flex-1 overflow-y-auto py-2" style={{ overscrollBehavior: "contain" }}
+                    <div className="flex-1 overflow-y-auto py-2" style={{ overscrollBehavior: "contain", ...bgPatternStyle }}
                       onClick={() => setDevReactingMsgId(null)}>
                       {!devSettled && devMessages.length === 0 ? (
                         <div />
@@ -1638,28 +1917,28 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                                 <div
                                   ref={el => { if (el) devMsgRefs.current.set(msg.id, el); else devMsgRefs.current.delete(msg.id); }}
                                   {...getLongPressHandlers(msg, false)}
-                                  className={`group relative flex items-start gap-3 px-2 py-1.5 rounded-xl transition-all cursor-default select-none ${isGrouped ? "mt-1" : "mt-5"} ${devHighlightedMsgId === msg.id ? "msg-found-dev" : ""} ${longPressTarget?.msg.id === msg.id ? "bg-gray-700/40 scale-[0.98]" : ""} ${msg.pinned ? "bg-emerald-500/5 border border-emerald-500/10 hover:bg-emerald-500/8" : "hover:bg-gray-800/30"}`}
+                                  className={`group relative flex items-start gap-3 px-3 py-2.5 rounded-xl transition-all cursor-default select-none ${isGrouped ? "mt-0.5" : "mt-4"} ${devHighlightedMsgId === msg.id ? "msg-found-dev" : ""} ${longPressTarget?.msg.id === msg.id ? "bg-gray-700/40 scale-[0.98]" : ""} ${msg.pinned ? "bg-emerald-500/5 border border-emerald-500/10 hover:bg-emerald-500/8" : bubbleStyle !== "minimal" ? "hover:bg-gray-800/30" : ""}`}
                                 >
                                   {msg.pinned && <span className="absolute top-1.5 right-8 text-[9px] text-emerald-400/60 select-none pointer-events-none">📌</span>}
-                                  <div className="w-8 shrink-0">
+                                  <div className="w-10 shrink-0">
                                     {!isGrouped ? (
                                       msg.userPhoto
-                                        ? <img src={msg.userPhoto} alt={msg.userName} className="w-8 h-8 rounded-full object-cover ring-1 ring-gray-700/60" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                                        : <div className="w-8 h-8 rounded-full bg-emerald-900/50 border border-emerald-800/40 flex items-center justify-center text-emerald-300 text-xs font-bold">{msg.userName?.[0]?.toUpperCase() ?? "?"}</div>
+                                        ? <img src={msg.userPhoto} alt={msg.userName} className={`w-10 h-10 ${avatarCls} object-cover ring-1 ring-gray-700/60`} onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                                        : <div className={`w-10 h-10 ${avatarCls} bg-emerald-900/50 border border-emerald-800/40 flex items-center justify-center text-emerald-300 text-sm font-bold`}>{msg.userName?.[0]?.toUpperCase() ?? "?"}</div>
                                     ) : (
                                       <span className="text-[9px] text-transparent group-hover:text-gray-700 transition-colors block text-right pt-1.5 leading-none select-none">
                                         {new Date(msg.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
                                       </span>
                                     )}
                                   </div>
-                                  <div className="flex-1 min-w-0">
+                                  <div className={`flex-1 min-w-0 ${devBubbleCls(isMine)}`}>
                                     {!isGrouped && (
                                       <div className="flex items-baseline gap-2 mb-0.5">
-                                        <span className={`text-xs font-semibold leading-tight ${isMine ? "text-emerald-300" : "text-gray-100"}`}>
+                                        <span className={`text-sm font-semibold leading-tight ${isMine ? "text-emerald-300" : "text-gray-100"}`}>
                                           {msg.userName}
-                                          {isMine && <span className="ml-1.5 text-[9px] text-emerald-500/70 font-normal">you</span>}
+                                          {isMine && <span className="ml-1.5 text-[10px] text-emerald-500/70 font-normal">you</span>}
                                         </span>
-                                        <span className="text-[10px] text-gray-600 leading-tight">{timeAgo(msg.createdAt)}</span>
+                                        {fmtTime(msg.createdAt) !== null && <span className="text-xs text-gray-600 leading-tight">{fmtTime(msg.createdAt)}</span>}
                                       </div>
                                     )}
                                     {msg.replyTo && (
@@ -1848,22 +2127,24 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                           </button>
                         </div>
                       )}
-                      <div className="flex items-end gap-2 bg-gray-800/50 border border-gray-700/40 rounded-2xl px-3 py-2.5 focus-within:border-emerald-500/50 focus-within:ring-1 focus-within:ring-emerald-500/10 transition-all">
-                        {userPhoto ? <img src={userPhoto} alt={userName} className="w-7 h-7 rounded-full object-cover shrink-0" />
-                          : <div className="w-7 h-7 rounded-full bg-emerald-900/50 flex items-center justify-center text-emerald-300 text-[10px] font-bold shrink-0">{userName?.[0]?.toUpperCase() ?? "?"}</div>}
+                      <div className="flex items-center gap-2 bg-gray-800/50 border border-gray-700/40 rounded-2xl px-3 py-2.5 focus-within:border-emerald-500/50 focus-within:ring-1 focus-within:ring-emerald-500/10 transition-all">
+                        {userPhoto ? <img src={userPhoto} alt={userName} className="w-8 h-8 rounded-full object-cover shrink-0" />
+                          : <div className="w-8 h-8 rounded-full bg-emerald-900/50 flex items-center justify-center text-emerald-300 text-xs font-bold shrink-0">{userName?.[0]?.toUpperCase() ?? "?"}</div>}
                         <button onMouseDown={e => e.stopPropagation()} onClick={() => devFileInputRef.current?.click()}
-                          className="p-2 rounded-xl text-gray-600 hover:text-emerald-400 hover:bg-emerald-900/20 transition-all shrink-0" title="Attach image">
-                          <Paperclip size={15} />
+                          className="p-2.5 rounded-xl text-gray-600 hover:text-emerald-400 hover:bg-emerald-900/20 transition-all shrink-0" title="Attach image">
+                          <Paperclip size={17} />
                         </button>
                         <input ref={devFileInputRef} type="file" accept="image/*" className="hidden" onChange={handleDevFileAttach} />
                         <textarea ref={devInputRef} value={devInput} onChange={handleDevInputChange} onKeyDown={handleDevKeyDown} onPaste={handleDevPaste}
                           onClick={() => setDevEmojiPickerOpen(false)} placeholder={devActiveCh.placeholder} rows={1}
+                          onFocus={() => setDevInputFocused(true)}
+                          onBlur={() => setDevInputFocused(false)}
                           disabled={!userId || sending}
-                          className="flex-1 bg-transparent text-sm text-gray-100 placeholder-gray-600 resize-none outline-none py-2 min-h-[40px] max-h-[120px] overflow-y-auto disabled:opacity-40 leading-relaxed" />
+                          className={`flex-1 bg-transparent text-sm text-gray-100 placeholder-gray-600 resize-none outline-none py-1.5 max-h-[120px] transition-[height] duration-200 ease-in-out disabled:opacity-40 leading-relaxed ${devInputFocused ? "overflow-y-auto" : "overflow-hidden"}`} />
                         <div className="relative shrink-0 mb-0.5">
                           <button onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setDevEmojiPickerOpen(p => !p); }}
-                            className={`p-2 rounded-xl transition-all ${devEmojiPickerOpen ? "text-yellow-400 bg-yellow-900/20" : "text-gray-600 hover:text-yellow-400 hover:bg-yellow-900/10"}`}
-                            title="Insert emoji"><Smile size={16} /></button>
+                            className={`p-2.5 rounded-xl transition-all ${devEmojiPickerOpen ? "text-yellow-400 bg-yellow-900/20" : "text-gray-600 hover:text-yellow-400 hover:bg-yellow-900/10"}`}
+                            title="Insert emoji"><Smile size={18} /></button>
                           {devEmojiPickerOpen && (
                             <div className="absolute bottom-full right-0 mb-2 w-72 p-3 bg-gray-900 border border-gray-700/60 rounded-2xl shadow-2xl z-50"
                               onMouseDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
@@ -1879,11 +2160,11 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                         </div>
                         <button onMouseDown={e => e.stopPropagation()} onClick={sendDevMessage}
                           disabled={(!devInput.trim() && !devAttachedImage) || sending || !userId}
-                          className="w-9 h-9 flex items-center justify-center rounded-xl bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-30 disabled:cursor-not-allowed transition-all shrink-0 hover:scale-105 active:scale-95">
-                          <Send size={14} />
+                          className="w-10 h-10 flex items-center justify-center rounded-xl bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-30 disabled:cursor-not-allowed transition-all shrink-0 hover:scale-105 active:scale-95">
+                          <Send size={16} />
                         </button>
                       </div>
-                      <div className="hidden sm:flex items-center justify-between mt-1.5 px-1">
+                      <div className="flex items-center justify-between mt-1.5 px-1">
                         <span className="text-[9px] text-gray-700">
                           <kbd className="font-mono">Enter</kbd> send · <kbd className="font-mono">Shift+Enter</kbd> newline · <kbd className="font-mono">@</kbd> mention
                         </span>
@@ -1904,7 +2185,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                           <p className="text-[10px] text-gray-500 leading-tight">{devActiveCh.emoji} {devActiveCh.name}</p>
                         </div>
                       </div>
-                      <CloseBtn />
+                      <BackBtn onBack={() => setDevSubView("chat")} />
                     </div>
                     <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2">
                       {devMentionMessages.length === 0
@@ -1936,7 +2217,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                           <p className="text-[10px] text-gray-500 leading-tight">{devActiveCh.emoji} {devActiveCh.name}</p>
                         </div>
                       </div>
-                      <CloseBtn />
+                      <BackBtn onBack={() => setDevSubView("chat")} />
                     </div>
                     <div className="px-3 py-2 border-b border-gray-800/60 shrink-0">
                       <div className="flex items-center gap-2 bg-gray-800/50 border border-gray-700/50 rounded-xl px-3 py-2 focus-within:border-emerald-500/50 transition-colors">
@@ -1978,7 +2259,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                           <p className="text-[10px] text-gray-500 leading-tight">{devActiveCh.emoji} {devActiveCh.name}</p>
                         </div>
                       </div>
-                      <CloseBtn />
+                      <BackBtn onBack={() => setDevSubView("chat")} />
                     </div>
                     <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2">
                       {devPinnedMessages.length === 0
@@ -2013,7 +2294,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                           <p className="text-[10px] text-gray-500 leading-tight">{devActiveCh.emoji} {devActiveCh.name}</p>
                         </div>
                       </div>
-                      <CloseBtn />
+                      <BackBtn onBack={() => setDevSubView("chat")} />
                     </div>
                     <div className="flex-1 overflow-y-auto px-3 py-3">
                       {devImageMessages.length === 0
@@ -2045,7 +2326,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                           <p className="text-[10px] text-gray-500 leading-tight">{devActiveCh.emoji} {devActiveCh.name}</p>
                         </div>
                       </div>
-                      <CloseBtn />
+                      <BackBtn onBack={() => setDevSubView("chat")} />
                     </div>
                     <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2">
                       {devLinkMessages.length === 0
@@ -2079,18 +2360,99 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                         <Settings size={14} className="text-emerald-400" />
                         <h3 className="text-sm font-bold text-white leading-tight">Settings</h3>
                       </div>
-                      <CloseBtn />
+                      <BackBtn onBack={() => setDevSubView("chat")} />
                     </div>
-                    <div className="flex-1 overflow-y-auto px-4 py-4">
-                      <p className="text-xs text-gray-500 mb-3 font-semibold uppercase tracking-wider">Name Color Theme</p>
-                      <div className="grid grid-cols-3 gap-2">
-                        {THEMES.map(t => (
-                          <button key={t.id} onClick={() => { localStorage.setItem(`wf_${widgetId}_theme`, t.id); setChatTheme(t.id as ThemeId); }}
-                            className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border transition-all ${chatTheme === t.id ? "bg-emerald-950/40 border-emerald-500/50 text-emerald-300" : "bg-gray-800/40 border-gray-700/40 text-gray-400 hover:bg-gray-800/70 hover:text-gray-300"}`}>
-                            <span className={`w-3 h-3 rounded-full shrink-0 ${t.dotClass}`} />
-                            <span className="text-xs font-medium">{t.label}</span>
+                    <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
+                      {/* Name color */}
+                      <div>
+                        <p className="text-[10px] text-gray-500 mb-2.5 font-bold uppercase tracking-wider flex items-center gap-1.5"><span>🎨</span> Name Color</p>
+                        <div className="grid grid-cols-3 gap-2">
+                          {THEMES.map(t => (
+                            <button key={t.id} onClick={() => { localStorage.setItem(`wf_${widgetId}_theme`, t.id); setChatTheme(t.id as ThemeId); }}
+                              className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border transition-all ${chatTheme === t.id ? "bg-emerald-950/40 border-emerald-500/50 text-emerald-300" : "bg-gray-800/40 border-gray-700/40 text-gray-400 hover:bg-gray-800/70 hover:text-gray-300"}`}>
+                              <span className={`w-3 h-3 rounded-full shrink-0 ${t.dotClass}`} />
+                              <span className="text-xs font-medium">{t.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Bubble style */}
+                      <div className="border-t border-gray-800/60 pt-4">
+                        <p className="text-[10px] text-gray-500 mb-2.5 font-bold uppercase tracking-wider flex items-center gap-1.5"><span>💬</span> Bubble Style</p>
+                        <div className="grid grid-cols-3 gap-2">
+                          {([{id:"flat",label:"Flat",desc:"Slack-style"},{id:"bubble",label:"Bubble",desc:"iMessage"},{id:"minimal",label:"Minimal",desc:"Ultra clean"}] as const).map(opt => (
+                            <button key={opt.id} onClick={() => { setBubbleStyle(opt.id); try { localStorage.setItem(`wf_${widgetId}_bubble`, opt.id); } catch {} }}
+                              className={`flex flex-col items-start px-3 py-2.5 rounded-xl border transition-all ${bubbleStyle === opt.id ? "border-emerald-500/60 bg-emerald-900/20 text-emerald-300" : "border-gray-700/60 bg-gray-800/40 text-gray-400 hover:bg-gray-800/70"}`}>
+                              <span className="text-[11px] font-semibold">{opt.label}</span>
+                              <span className="text-[9px] text-gray-600">{opt.desc}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Background pattern */}
+                      <div className="border-t border-gray-800/60 pt-4">
+                        <p className="text-[10px] text-gray-500 mb-2.5 font-bold uppercase tracking-wider flex items-center gap-1.5"><span>🌐</span> Background</p>
+                        <div className="grid grid-cols-3 gap-2">
+                          {([{id:"none",label:"None",bg:""},{id:"dots",label:"Dots",bg:"radial-gradient(circle,rgba(255,255,255,0.15) 1px,transparent 1px)"},{id:"grid",label:"Grid",bg:"linear-gradient(rgba(255,255,255,0.1) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.1) 1px,transparent 1px)"}] as const).map(opt => (
+                            <button key={opt.id} onClick={() => { setBgPattern(opt.id); try { localStorage.setItem(`wf_${widgetId}_pattern`, opt.id); } catch {} }}
+                              className={`flex flex-col items-center gap-1.5 px-2 py-2.5 rounded-xl border transition-all ${bgPattern === opt.id ? "border-emerald-500/60 bg-emerald-900/20" : "border-gray-700/60 bg-gray-800/40 hover:bg-gray-800/70"}`}>
+                              <div className="w-full h-6 rounded-lg bg-gray-900" style={opt.bg ? {backgroundImage:opt.bg,backgroundSize:opt.id==="grid"?"14px 14px":"8px 8px"} : {}} />
+                              <span className={`text-[10px] font-medium ${bgPattern === opt.id ? "text-emerald-300" : "text-gray-400"}`}>{opt.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Avatar shape */}
+                      <div className="border-t border-gray-800/60 pt-4">
+                        <p className="text-[10px] text-gray-500 mb-2.5 font-bold uppercase tracking-wider flex items-center gap-1.5"><span>👤</span> Avatar Shape</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {([{id:"circle",label:"Circle",cls:"rounded-full"},{id:"squircle",label:"Squircle",cls:"rounded-[35%]"}] as const).map(opt => (
+                            <button key={opt.id} onClick={() => { setAvatarShape(opt.id); try { localStorage.setItem(`wf_${widgetId}_avatar`, opt.id); } catch {} }}
+                              className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border transition-all ${avatarShape === opt.id ? "border-emerald-500/60 bg-emerald-900/20 text-emerald-300" : "border-gray-700/60 bg-gray-800/40 text-gray-400 hover:bg-gray-800/70"}`}>
+                              <div className={`w-8 h-8 shrink-0 bg-emerald-800/60 flex items-center justify-center text-emerald-300 text-xs font-bold ${opt.cls}`}>J</div>
+                              <span className="text-[11px] font-semibold">{opt.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Timestamp style */}
+                      <div className="border-t border-gray-800/60 pt-4">
+                        <p className="text-[10px] text-gray-500 mb-2.5 font-bold uppercase tracking-wider flex items-center gap-1.5"><span>🕐</span> Timestamps</p>
+                        <div className="grid grid-cols-3 gap-2">
+                          {([{id:"relative",label:"Relative",ex:"5m ago"},{id:"absolute",label:"Absolute",ex:"2:30 PM"},{id:"hidden",label:"Hidden",ex:"—"}] as const).map(opt => (
+                            <button key={opt.id} onClick={() => { setTimestampStyle(opt.id); try { localStorage.setItem(`wf_${widgetId}_timestamp`, opt.id); } catch {} }}
+                              className={`flex flex-col items-start px-3 py-2.5 rounded-xl border transition-all ${timestampStyle === opt.id ? "border-emerald-500/60 bg-emerald-900/20 text-emerald-300" : "border-gray-700/60 bg-gray-800/40 text-gray-400 hover:bg-gray-800/70"}`}>
+                              <span className="text-[11px] font-semibold">{opt.label}</span>
+                              <span className="text-[10px] text-gray-600">{opt.ex}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Notifications */}
+                      <div className="border-t border-gray-800/60 pt-4 pb-4">
+                        <p className="text-[10px] text-gray-500 mb-2.5 font-bold uppercase tracking-wider flex items-center gap-1.5"><span>🔔</span> Notifications</p>
+                        <div className="space-y-2">
+                          <button onClick={() => { const n = !soundEnabled; setSoundEnabled(n); try { localStorage.setItem(`wf_${widgetId}_sound`, String(n)); } catch {} }}
+                            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border transition-all ${soundEnabled ? "border-emerald-500/60 bg-emerald-900/20" : "border-gray-700/60 bg-gray-800/40"}`}>
+                            <div className="flex items-center gap-2">
+                              <span className="text-base">🔊</span>
+                              <div className="text-left"><p className="text-[11px] font-semibold text-gray-200">Message Sound</p><p className="text-[9px] text-gray-600">Chime on new messages</p></div>
+                            </div>
+                            <div className={`w-9 h-5 rounded-full transition-colors relative ${soundEnabled ? "bg-emerald-500" : "bg-gray-700"}`}>
+                              <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${soundEnabled ? "left-4" : "left-0.5"}`} />
+                            </div>
                           </button>
-                        ))}
+                          <button onClick={() => { const n = !muteNotifs; setMuteNotifs(n); try { localStorage.setItem(`wf_${widgetId}_mute`, String(n)); } catch {} }}
+                            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border transition-all ${muteNotifs ? "border-amber-500/60 bg-amber-900/20" : "border-gray-700/60 bg-gray-800/40"}`}>
+                            <div className="flex items-center gap-2">
+                              <span className="text-base">{muteNotifs ? "🔕" : "🔔"}</span>
+                              <div className="text-left"><p className="text-[11px] font-semibold text-gray-200">Mute All</p><p className="text-[9px] text-gray-600">Silence sound & push alerts</p></div>
+                            </div>
+                            <div className={`w-9 h-5 rounded-full transition-colors relative ${muteNotifs ? "bg-amber-500" : "bg-gray-700"}`}>
+                              <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${muteNotifs ? "left-4" : "left-0.5"}`} />
+                            </div>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </>
@@ -2101,25 +2463,50 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
             {/* member name color driven by theme */}
             {sidebarView === "chat" && (
               <>
-              {/* ── Team Chat Header with ⋮ dropdown ── */}
-              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800/60 shrink-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-base leading-none">{activeCh.emoji}</span>
-                  <div>
-                    <h3 className="text-sm font-bold text-white leading-tight">{activeCh.name}</h3>
-                    <p className="text-[10px] text-gray-500 leading-tight">{activeCh.desc}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  {/* ⋮ button — mobile shows dropdown, desktop shows nothing (sidebar handles it) */}
-                  <div className="relative sm:hidden">
+              {/* ── Team Chat Header — tap channel name to switch ── */}
+              <div className="relative shrink-0">
+                <div className="flex items-center gap-1 px-4 py-3 border-b border-gray-800/60">
+
+                  {/* LEFT: tappable channel name + chevron */}
+                  <button
+                    onClick={() => setChannelDropdownOpen(o => !o)}
+                    className="flex items-center gap-2.5 min-w-0 text-left group"
+                  >
+                    <span className="text-lg leading-none shrink-0">{activeCh.emoji}</span>
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-bold text-white leading-tight flex items-center gap-1.5">
+                        {activeCh.name}
+                        <svg
+                          width="14" height="14" viewBox="0 0 14 14" fill="none"
+                          className={`text-indigo-400 shrink-0 transition-transform duration-200 ${channelDropdownOpen ? "rotate-180" : ""}`}
+                        >
+                          <path d="M2 4.5L7 9.5L12 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </h3>
+                      <p className="text-[10px] text-gray-500 leading-tight truncate">{activeCh.desc}</p>
+                    </div>
+                  </button>
+
+                  {/* Bell right next to channel name */}
+                  <button
+                    onClick={() => { const n = !muteNotifs; setMuteNotifs(n); try { localStorage.setItem(`wf_${widgetId}_mute`, String(n)); } catch {} }}
+                    title={muteNotifs ? "Unmute notifications" : "Mute notifications"}
+                    className={`ml-2 shrink-0 p-1.5 rounded-lg transition-colors ${muteNotifs ? "text-amber-400 bg-amber-900/20" : "text-gray-500 hover:text-gray-200 hover:bg-gray-800/60"}`}
+                  >
+                    {muteNotifs ? <BellOff size={14} /> : <Bell size={14} />}
+                  </button>
+
+                  {/* Spacer pushes ⋮ to far right */}
+                  <div className="flex-1" />
+
+                  {/* RIGHT: ⋮ mobile only */}
+                  <div className="relative sm:hidden shrink-0">
                     <button
                       onClick={() => setMobileMenuOpen(o => !o)}
                       className={`p-1.5 rounded-lg transition-colors ${mobileMenuOpen ? "text-indigo-400 bg-indigo-900/30" : "text-gray-500 hover:text-gray-200 hover:bg-gray-800/60"}`}
                     >
                       <MoreVertical size={16} />
                     </button>
-                    {/* Vertical dropdown */}
                     {mobileMenuOpen && (
                       <div
                         className="wf-menu-drop absolute right-0 top-full mt-1.5 z-50 flex flex-col gap-0.5 p-1.5 rounded-2xl"
@@ -2158,35 +2545,71 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                       </div>
                     )}
                   </div>
-                  <CloseBtn />
                 </div>
-              </div>
 
-                {/* Channel tabs */}
-                <div className="flex border-b border-gray-800/60 bg-gray-950 shrink-0 overflow-x-auto">
-                  {CH.map(ch => {
-                    const isActive = activeChannel === ch.id;
-                    const hasDot   = unreadDots.has(ch.id);
-                    return (
-                      <button
-                        key={ch.id}
-                        onClick={() => switchChannel(ch.id)}
-                        className={`relative flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold whitespace-nowrap border-b-2 transition-all flex-shrink-0 ${
-                          isActive ? "border-indigo-500 text-indigo-400 bg-indigo-950/30" : "border-transparent text-gray-500 hover:text-gray-300 hover:bg-gray-800/50"
-                        }`}
-                      >
-                        <span className="text-sm leading-none">{ch.emoji}</span>
-                        {ch.name}
-                        {hasDot && !isActive && <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0 animate-pulse" />}
-                      </button>
-                    );
-                  })}
-                </div>
+                {/* ── Channel Dropdown ── */}
+                {channelDropdownOpen && (
+                  <>
+                    {/* Backdrop */}
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setChannelDropdownOpen(false)}
+                    />
+                    {/* Dropdown panel */}
+                    <div
+                      className="absolute left-0 right-0 top-full z-50 mx-2 mt-1 overflow-hidden rounded-2xl"
+                      style={{
+                        background: "linear-gradient(145deg, #141420 0%, #1a1a2e 100%)",
+                        border: "1px solid rgba(99,102,241,0.25)",
+                        boxShadow: "0 12px 40px rgba(0,0,0,0.6), 0 0 0 0.5px rgba(99,102,241,0.1)",
+                      }}
+                    >
+                      <p className="text-[10px] text-gray-600 font-semibold uppercase tracking-wider px-4 pt-3 pb-2">
+                        Switch Channel
+                      </p>
+                      {CH.map(ch => {
+                        const isActive = activeChannel === ch.id;
+                        const hasDot = unreadDots.has(ch.id);
+                        return (
+                          <button
+                            key={ch.id}
+                            onClick={() => { switchChannel(ch.id); setChannelDropdownOpen(false); }}
+                            className={`w-full flex items-center gap-3 px-4 py-3 transition-all text-left ${
+                              isActive
+                                ? "bg-indigo-600/20 border-l-2 border-indigo-500"
+                                : "hover:bg-gray-800/60 border-l-2 border-transparent"
+                            }`}
+                          >
+                            <span className="text-xl leading-none shrink-0">{ch.emoji}</span>
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-sm font-semibold leading-tight ${isActive ? "text-indigo-300" : "text-gray-200"}`}>
+                                {ch.name}
+                              </p>
+                              <p className="text-[11px] text-gray-500 leading-tight truncate mt-0.5">{ch.desc}</p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {hasDot && !isActive && (
+                                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                              )}
+                              {isActive && (
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-indigo-400">
+                                  <path d="M3 8L6.5 11.5L13 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                      <div className="h-2" />
+                    </div>
+                  </>
+                )}
+              </div>
 
                 {/* Messages */}
                 <div
                   className="flex-1 overflow-y-auto py-2"
-                  style={{ overscrollBehavior: "contain" }}
+                  style={{ overscrollBehavior: "contain", ...bgPatternStyle }}
                   onClick={() => setReactingMsgId(null)}
                 >
                   {!settled && messages.length === 0 ? (
@@ -2216,16 +2639,16 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                             <div
                               ref={el => { if (el) msgRefs.current.set(msg.id, el); else msgRefs.current.delete(msg.id); }}
                               {...getLongPressHandlers(msg, true)}
-                              className={`group relative flex items-start gap-3 px-2 py-1.5 rounded-xl transition-colors cursor-default select-none ${isGrouped ? "mt-1" : "mt-5"} ${highlightedMsgId === msg.id ? "msg-found" : ""} ${longPressTarget?.msg.id === msg.id ? "bg-gray-700/40 scale-[0.98]" : ""} ${msg.pinned ? "bg-pink-500/5 border border-pink-500/10 hover:bg-pink-500/8" : "hover:bg-gray-800/30"}`}>
+                              className={`group relative flex items-start gap-3 px-3 py-2.5 rounded-xl transition-colors cursor-default select-none ${isGrouped ? "mt-0.5" : "mt-4"} ${highlightedMsgId === msg.id ? "msg-found" : ""} ${longPressTarget?.msg.id === msg.id ? "bg-gray-700/40 scale-[0.98]" : ""} ${msg.pinned ? "bg-pink-500/5 border border-pink-500/10 hover:bg-pink-500/8" : bubbleStyle !== "minimal" ? "hover:bg-gray-800/30" : ""}`}>
                               {msg.pinned && (
                                 <span className="absolute top-1.5 right-8 text-[9px] text-pink-400/60 select-none pointer-events-none">📌</span>
                               )}
                               {/* Avatar col */}
-                              <div className="w-8 shrink-0">
+                              <div className="w-10 shrink-0">
                                 {!isGrouped ? (
                                   msg.userPhoto
-                                    ? <img src={msg.userPhoto} alt={msg.userName} className="w-8 h-8 rounded-full object-cover ring-1 ring-gray-700/60" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                                    : <div className="w-8 h-8 rounded-full bg-indigo-900/50 border border-indigo-800/40 flex items-center justify-center text-indigo-300 text-xs font-bold">{msg.userName?.[0]?.toUpperCase() ?? "?"}</div>
+                                    ? <img src={msg.userPhoto} alt={msg.userName} className={`w-10 h-10 ${avatarCls} object-cover ring-1 ring-gray-700/60`} onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                                    : <div className={`w-10 h-10 ${avatarCls} bg-indigo-900/50 border border-indigo-800/40 flex items-center justify-center text-indigo-300 text-sm font-bold`}>{msg.userName?.[0]?.toUpperCase() ?? "?"}</div>
                                 ) : (
                                   <span className="text-[9px] text-transparent group-hover:text-gray-700 transition-colors block text-right pt-1.5 leading-none select-none">
                                     {new Date(msg.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
@@ -2234,14 +2657,14 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                               </div>
 
                               {/* Body */}
-                              <div className="flex-1 min-w-0">
+                              <div className={`flex-1 min-w-0 ${msgBubbleCls(isMine)}`}>
                                 {!isGrouped && (
                                   <div className="flex items-baseline gap-2 mb-0.5">
-                                    <span className={`text-xs font-semibold leading-tight ${isMine ? theme.nameClass : "text-gray-100"}`}>
+                                    <span className={`text-sm font-semibold leading-tight ${isMine ? theme.nameClass : "text-gray-100"}`}>
                                       {msg.userName}
-                                      {isMine && <span className="ml-1.5 text-[9px] text-indigo-500/70 font-normal">you</span>}
+                                      {isMine && <span className="ml-1.5 text-[10px] text-indigo-500/70 font-normal">you</span>}
                                     </span>
-                                    <span className="text-[10px] text-gray-600 leading-tight">{timeAgo(msg.createdAt)}</span>
+                                    {fmtTime(msg.createdAt) !== null && <span className="text-xs text-gray-600 leading-tight">{fmtTime(msg.createdAt)}</span>}
                                   </div>
                                 )}
 
@@ -2506,21 +2929,21 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                   )}
 
                   {/* Toolbar row */}
-                  <div className="flex items-end gap-2 bg-gray-800/50 border border-gray-700/40 rounded-2xl px-3 py-2.5 focus-within:border-indigo-500/50 focus-within:ring-1 focus-within:ring-indigo-500/10 transition-all">
+                  <div className="flex items-center gap-2 bg-gray-800/50 border border-gray-700/40 rounded-2xl px-3 py-2.5 focus-within:border-indigo-500/50 focus-within:ring-1 focus-within:ring-indigo-500/10 transition-all">
 
                     {/* Left: user avatar */}
                     {userPhoto
-                      ? <img src={userPhoto} alt={userName} className="w-7 h-7 rounded-full object-cover shrink-0" />
-                      : <div className="w-7 h-7 rounded-full bg-indigo-900/50 flex items-center justify-center text-indigo-300 text-[10px] font-bold shrink-0">{userName?.[0]?.toUpperCase() ?? "?"}</div>
+                      ? <img src={userPhoto} alt={userName} className="w-8 h-8 rounded-full object-cover shrink-0" />
+                      : <div className="w-8 h-8 rounded-full bg-indigo-900/50 flex items-center justify-center text-indigo-300 text-xs font-bold shrink-0">{userName?.[0]?.toUpperCase() ?? "?"}</div>
                     }
 
                     {/* Attachment button */}
                     <button
                       onMouseDown={e => e.stopPropagation()}
                       onClick={() => fileInputRef.current?.click()}
-                      className="p-2 rounded-xl text-gray-600 hover:text-indigo-400 hover:bg-indigo-900/20 transition-all shrink-0"
+                      className="p-2.5 rounded-xl text-gray-600 hover:text-indigo-400 hover:bg-indigo-900/20 transition-all shrink-0"
                       title="Attach image"
-                    ><Paperclip size={15} /></button>
+                    ><Paperclip size={17} /></button>
                     <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileAttach} />
 
                     {/* Textarea */}
@@ -2534,7 +2957,9 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                       placeholder={activeCh.placeholder}
                       rows={1}
                       disabled={!userId || sending}
-                      className="flex-1 bg-transparent text-sm text-gray-100 placeholder-gray-600 resize-none outline-none py-2 min-h-[40px] max-h-[120px] overflow-y-auto disabled:opacity-40 leading-relaxed"
+                      onFocus={() => setInputFocused(true)}
+                      onBlur={() => setInputFocused(false)}
+                      className={`flex-1 bg-transparent text-sm text-gray-100 placeholder-gray-600 resize-none outline-none py-1.5 max-h-[120px] transition-[height] duration-200 ease-in-out disabled:opacity-40 leading-relaxed ${inputFocused ? "overflow-y-auto" : "overflow-hidden"}`}
                     />
 
                     {/* Emoji picker trigger */}
@@ -2542,11 +2967,11 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                       <button
                         onMouseDown={e => e.stopPropagation()}
                         onClick={(e) => { e.stopPropagation(); setEmojiPickerOpen(p => !p); }}
-                        className={`p-1.5 rounded-lg transition-all ${
+                        className={`p-2.5 rounded-lg transition-all ${
                           emojiPickerOpen ? "text-yellow-400 bg-yellow-900/20" : "text-gray-600 hover:text-yellow-400 hover:bg-yellow-900/10"
                         }`}
                         title="Insert emoji"
-                      ><Smile size={16} /></button>
+                      ><Smile size={18} /></button>
 
                       {/* Emoji grid popup */}
                       {emojiPickerOpen && (
@@ -2574,8 +2999,8 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                       onMouseDown={e => e.stopPropagation()}
                       onClick={sendMessage}
                       disabled={(!input.trim() && !attachedImage) || sending || !userId}
-                      className="w-9 h-9 flex items-center justify-center rounded-xl bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed transition-all shrink-0 hover:scale-105 active:scale-95"
-                    ><Send size={14} /></button>
+                      className="w-10 h-10 flex items-center justify-center rounded-xl bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed transition-all shrink-0 hover:scale-105 active:scale-95"
+                    ><Send size={16} /></button>
                   </div>
 
                   <div className="flex items-center justify-between mt-1.5 px-1">
@@ -2600,7 +3025,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                   )}
                   <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-gray-800 text-gray-500 ml-2">{activeCh.emoji} {activeCh.name}</span>
                   <div className="flex-1" />
-                  <CloseBtn />
+
                 </div>
                 <div className="flex-1 overflow-y-auto">
                   {mentionMessages.length === 0 ? (
@@ -2653,7 +3078,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                     </span>
                   )}
                   <div className="flex-1" />
-                  <CloseBtn />
+
                 </div>
                 <div className="flex-1 overflow-y-auto">
                   {!searchQuery ? (
@@ -2717,7 +3142,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                   )}
                   <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-gray-800 text-gray-500 ml-2">{activeCh.emoji} {activeCh.name}</span>
                   <div className="flex-1" />
-                  <CloseBtn />
+
                 </div>
                 <div className="flex-1 overflow-y-auto">
                   {pinnedMessages.length === 0 ? (
@@ -2765,7 +3190,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                   )}
                   <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-gray-800 text-gray-500 ml-2">{activeCh.emoji} {activeCh.name}</span>
                   <div className="flex-1" />
-                  <CloseBtn />
+
                 </div>
                 <div className="flex-1 overflow-y-auto">
                   {imageMessages.length === 0 ? (
@@ -2809,7 +3234,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                   )}
                   <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-gray-800 text-gray-500 ml-2">{activeCh.emoji} {activeCh.name}</span>
                   <div className="flex-1" />
-                  <CloseBtn />
+
                 </div>
                 <div className="flex-1 overflow-y-auto">
                   {linkMessages.length === 0 ? (
@@ -2890,54 +3315,111 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
                   <Settings size={14} className="text-indigo-400 shrink-0" />
                   <h3 className="text-sm font-bold text-white ml-1.5">Settings</h3>
                   <div className="flex-1" />
-                  <CloseBtn />
+
                 </div>
-                <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
+                <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
 
-                  {/* Theme section */}
+                  {/* Name color */}
                   <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-5 h-5 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center">
-                        <span className="text-[9px]">🎨</span>
-                      </div>
-                      <span className="text-xs font-bold text-gray-200 uppercase tracking-wider">Theme</span>
-                    </div>
-
-                    <p className="text-[10px] text-gray-500 mb-3">Member name color in chat</p>
-
+                    <p className="text-[10px] text-gray-500 mb-2.5 font-bold uppercase tracking-wider flex items-center gap-1.5"><span>🎨</span> Name Color</p>
                     <div className="grid grid-cols-3 gap-2">
                       {THEMES.map(t => (
-                        <button
-                          key={t.id}
-                          onClick={() => { setChatTheme(t.id); try { localStorage.setItem(`wf_${widgetId}_theme`, t.id); } catch {} }}
+                        <button key={t.id} onClick={() => { setChatTheme(t.id); try { localStorage.setItem(`wf_${widgetId}_theme`, t.id); } catch {} }}
                           className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border transition-all ${
-                            chatTheme === t.id
-                              ? "border-white/30 bg-white/10 shadow-lg scale-105"
-                              : "border-gray-700/60 bg-gray-800/40 hover:bg-gray-800/70"
-                          }`}
-                        >
+                            chatTheme === t.id ? "border-white/30 bg-white/10 scale-105" : "border-gray-700/60 bg-gray-800/40 hover:bg-gray-800/70"
+                          }`}>
                           <div className={`w-3.5 h-3.5 rounded-full ${t.dotClass} shrink-0 ${chatTheme === t.id ? "ring-2 ring-white/40" : ""}`} />
                           <span className={`text-[11px] font-medium ${chatTheme === t.id ? "text-white" : "text-gray-400"}`}>{t.label}</span>
                         </button>
                       ))}
                     </div>
-
-                    {/* Preview row */}
-                    <div className="mt-4 p-3 bg-gray-900/60 border border-gray-800/60 rounded-xl">
-                      <p className="text-[9px] text-gray-600 mb-2 uppercase tracking-wider">Preview</p>
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-indigo-900/60 flex items-center justify-center text-[9px] text-indigo-300 font-bold">J</div>
-                        <div>
-                          <span className={`text-xs font-semibold ${theme.nameClass}`}>Your Name</span>
-                          <span className="ml-1.5 text-[9px] text-indigo-500/70">you</span>
-                          <p className="text-sm text-gray-300 leading-snug">Sample message text</p>
-                        </div>
-                      </div>
+                    <div className="mt-3 p-2.5 bg-gray-900/60 border border-gray-800/60 rounded-xl flex items-center gap-2">
+                      <div className={`w-7 h-7 shrink-0 bg-indigo-900/60 flex items-center justify-center text-[10px] text-indigo-300 font-bold ${avatarCls}`}>J</div>
+                      <div><span className={`text-xs font-semibold ${theme.nameClass}`}>Your Name</span><span className="ml-1.5 text-[9px] text-indigo-500/70">you</span><p className="text-xs text-gray-300">Sample message</p></div>
                     </div>
                   </div>
 
+                  {/* Bubble style */}
                   <div className="border-t border-gray-800/60 pt-4">
-                    <p className="text-[10px] text-gray-600 text-center">More settings coming soon</p>
+                    <p className="text-[10px] text-gray-500 mb-2.5 font-bold uppercase tracking-wider flex items-center gap-1.5"><span>💬</span> Bubble Style</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {([{id:"flat",label:"Flat",desc:"Slack-style"},{id:"bubble",label:"Bubble",desc:"iMessage"},{id:"minimal",label:"Minimal",desc:"Ultra clean"}] as const).map(opt => (
+                        <button key={opt.id} onClick={() => { setBubbleStyle(opt.id); try { localStorage.setItem(`wf_${widgetId}_bubble`, opt.id); } catch {} }}
+                          className={`flex flex-col items-start px-3 py-2.5 rounded-xl border transition-all ${bubbleStyle === opt.id ? "border-indigo-500/60 bg-indigo-900/20 text-indigo-300" : "border-gray-700/60 bg-gray-800/40 text-gray-400 hover:bg-gray-800/70"}`}>
+                          <span className="text-[11px] font-semibold">{opt.label}</span>
+                          <span className="text-[9px] text-gray-600">{opt.desc}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Background pattern */}
+                  <div className="border-t border-gray-800/60 pt-4">
+                    <p className="text-[10px] text-gray-500 mb-2.5 font-bold uppercase tracking-wider flex items-center gap-1.5"><span>🌐</span> Background</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {([{id:"none",label:"None",bg:""},{id:"dots",label:"Dots",bg:"radial-gradient(circle,rgba(255,255,255,0.15) 1px,transparent 1px)"},{id:"grid",label:"Grid",bg:"linear-gradient(rgba(255,255,255,0.1) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.1) 1px,transparent 1px)"}] as const).map(opt => (
+                        <button key={opt.id} onClick={() => { setBgPattern(opt.id); try { localStorage.setItem(`wf_${widgetId}_pattern`, opt.id); } catch {} }}
+                          className={`flex flex-col items-center gap-1.5 px-2 py-2.5 rounded-xl border transition-all ${bgPattern === opt.id ? "border-indigo-500/60 bg-indigo-900/20" : "border-gray-700/60 bg-gray-800/40 hover:bg-gray-800/70"}`}>
+                          <div className="w-full h-6 rounded-lg bg-gray-900" style={opt.bg ? {backgroundImage:opt.bg,backgroundSize:opt.id==="grid"?"14px 14px":"8px 8px"} : {}} />
+                          <span className={`text-[10px] font-medium ${bgPattern === opt.id ? "text-indigo-300" : "text-gray-400"}`}>{opt.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Avatar shape */}
+                  <div className="border-t border-gray-800/60 pt-4">
+                    <p className="text-[10px] text-gray-500 mb-2.5 font-bold uppercase tracking-wider flex items-center gap-1.5"><span>👤</span> Avatar Shape</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {([{id:"circle",label:"Circle",cls:"rounded-full"},{id:"squircle",label:"Squircle",cls:"rounded-[35%]"}] as const).map(opt => (
+                        <button key={opt.id} onClick={() => { setAvatarShape(opt.id); try { localStorage.setItem(`wf_${widgetId}_avatar`, opt.id); } catch {} }}
+                          className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border transition-all ${avatarShape === opt.id ? "border-indigo-500/60 bg-indigo-900/20 text-indigo-300" : "border-gray-700/60 bg-gray-800/40 text-gray-400 hover:bg-gray-800/70"}`}>
+                          <div className={`w-8 h-8 shrink-0 bg-indigo-800/60 flex items-center justify-center text-indigo-300 text-xs font-bold ${opt.cls}`}>J</div>
+                          <span className="text-[11px] font-semibold">{opt.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Timestamp style */}
+                  <div className="border-t border-gray-800/60 pt-4">
+                    <p className="text-[10px] text-gray-500 mb-2.5 font-bold uppercase tracking-wider flex items-center gap-1.5"><span>🕐</span> Timestamps</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {([{id:"relative",label:"Relative",ex:"5m ago"},{id:"absolute",label:"Absolute",ex:"2:30 PM"},{id:"hidden",label:"Hidden",ex:"—"}] as const).map(opt => (
+                        <button key={opt.id} onClick={() => { setTimestampStyle(opt.id); try { localStorage.setItem(`wf_${widgetId}_timestamp`, opt.id); } catch {} }}
+                          className={`flex flex-col items-start px-3 py-2.5 rounded-xl border transition-all ${timestampStyle === opt.id ? "border-indigo-500/60 bg-indigo-900/20 text-indigo-300" : "border-gray-700/60 bg-gray-800/40 text-gray-400 hover:bg-gray-800/70"}`}>
+                          <span className="text-[11px] font-semibold">{opt.label}</span>
+                          <span className="text-[10px] text-gray-600">{opt.ex}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Notifications */}
+                  <div className="border-t border-gray-800/60 pt-4 pb-4">
+                    <p className="text-[10px] text-gray-500 mb-2.5 font-bold uppercase tracking-wider flex items-center gap-1.5"><span>🔔</span> Notifications</p>
+                    <div className="space-y-2">
+                      <button onClick={() => { const n = !soundEnabled; setSoundEnabled(n); try { localStorage.setItem(`wf_${widgetId}_sound`, String(n)); } catch {} }}
+                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border transition-all ${soundEnabled ? "border-indigo-500/60 bg-indigo-900/20" : "border-gray-700/60 bg-gray-800/40"}`}>
+                        <div className="flex items-center gap-2">
+                          <span className="text-base">🔊</span>
+                          <div className="text-left"><p className="text-[11px] font-semibold text-gray-200">Message Sound</p><p className="text-[9px] text-gray-600">Chime on new messages</p></div>
+                        </div>
+                        <div className={`w-9 h-5 rounded-full transition-colors relative ${soundEnabled ? "bg-indigo-500" : "bg-gray-700"}`}>
+                          <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${soundEnabled ? "left-4" : "left-0.5"}`} />
+                        </div>
+                      </button>
+                      <button onClick={() => { const n = !muteNotifs; setMuteNotifs(n); try { localStorage.setItem(`wf_${widgetId}_mute`, String(n)); } catch {} }}
+                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border transition-all ${muteNotifs ? "border-amber-500/60 bg-amber-900/20" : "border-gray-700/60 bg-gray-800/40"}`}>
+                        <div className="flex items-center gap-2">
+                          <span className="text-base">{muteNotifs ? "🔕" : "🔔"}</span>
+                          <div className="text-left"><p className="text-[11px] font-semibold text-gray-200">Mute All</p><p className="text-[9px] text-gray-600">Silence sound & push alerts</p></div>
+                        </div>
+                        <div className={`w-9 h-5 rounded-full transition-colors relative ${muteNotifs ? "bg-amber-500" : "bg-gray-700"}`}>
+                          <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${muteNotifs ? "left-4" : "left-0.5"}`} />
+                        </div>
+                      </button>
+                    </div>
                   </div>
 
                 </div>
@@ -3113,7 +3595,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
           onPointerDown={onFabPointerDown}
           onPointerMove={onFabPointerMove}
           onPointerUp={onFabPointerUp}
-          className={`fixed sm:hidden w-16 h-16 rounded-full flex items-center justify-center focus:outline-none touch-none select-none z-[400]${fabDragging ? " fab-drag" : ""}`}
+          className={`fixed w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center focus:outline-none touch-none select-none z-[400]${fabDragging ? " fab-drag" : ""}`}
           style={{
             left: fabPos.x,
             top:  fabPos.y,
@@ -3215,30 +3697,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
         </button>
       )}
 
-      {/* Desktop/Tablet: Messenger-style bottom tab bar */}
-      <button
-        onClick={() => open ? closeWidget() : openWidget()}
-        aria-label={open ? "Close team chat" : "Open team chat"}
-        className="hidden sm:flex items-center gap-2.5 px-4 h-[48px] w-[220px] rounded-t-2xl rounded-b-none focus:outline-none transition-all duration-200 hover:brightness-110 active:brightness-90 shrink-0"
-        style={{
-          background: open
-            ? "linear-gradient(135deg, #4338ca 0%, #6d28d9 100%)"
-            : fabGradient ?? "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
-          boxShadow: "0 -4px 24px rgba(99,102,241,0.3)",
-        }}
-      >
-        <MessageSquare size={18} className="text-white/90 shrink-0" />
-        <span className="text-sm font-bold text-white flex-1 text-left">Team Chat</span>
-        {totalUnread > 0 && !open && (
-          <span className="min-w-[20px] h-5 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1 shadow-lg">
-            {totalUnread > 9 ? "9+" : totalUnread}
-          </span>
-        )}
-        {open
-          ? <ChevronDown size={16} className="text-white/70" />
-          : <ChevronUp size={16} className="text-white/70" />
-        }
-      </button>
+
     </div>
     </>
   );
