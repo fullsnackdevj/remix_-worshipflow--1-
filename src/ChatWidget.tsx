@@ -1034,19 +1034,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
   closeWidgetRef.current = closeWidget;
   openWidgetRef.current  = openWidget;
 
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      // Ignore clicks fired in the grace period right after opening (avoids
-      // the browser's synthetic mousedown from the open gesture closing us immediately)
-      if (justOpenedRef.current) return;
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
-        closeWidget();
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open, closeWidget]);
+  // Widget stays open during navigation — only closes via Minimize / Close buttons or FAB tap.
 
   // ── Auto-reset mobile search bar when leaving search view ───────────────────
   // Covers ALL navigation paths (result click, sidebar btn, Team/Dev toggle, etc.)
@@ -1715,7 +1703,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
           style={{ boxShadow: sidebarView === "dev" ? "0 -4px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(16,185,129,0.2)" : "0 -4px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(99,102,241,0.18)", background: sidebarView === "dev" ? "#060d09" : "#09090b" }}
         >
           {/* ────────── LEFT SIDEBAR ────────── */}
-          <div className="hidden w-14 flex-col items-center py-3 gap-1.5 border-r border-gray-800/60 shrink-0" style={{ background: sidebarView === "dev" ? "#08110a" : "#0c0c0f" }}>
+          <div className="hidden sm:flex w-14 flex-col items-center py-3 gap-1.5 border-r border-gray-800/60 shrink-0" style={{ background: sidebarView === "dev" ? "#08110a" : "#0c0c0f" }}>
             {/* Chat — always top */}
             <SidebarBtn view="chat" icon={<MessageSquare size={17} />} title="Team Chats" />
             {/* Dev channels — below chat */}
@@ -1723,6 +1711,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
             <div className="flex-1" />
             {/* Team utility buttons — shown only in team mode */}
             {sidebarView !== "dev" && (<>
+              <SidebarBtn view="search"   icon={<Search    size={17} />} title="Search" />
               <SidebarBtn view="mentions" icon={<AtSign    size={17} />} title="Mentions" badge={mentionMessages.length} />
               <SidebarBtn view="pinned"   icon={<Pin       size={17} />} title="Pinned"   badge={pinnedMessages.length || undefined} />
               <SidebarBtn view="images"   icon={<ImageIcon size={17} />} title="Images"   badge={imageMessages.length || undefined} />
@@ -1731,6 +1720,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
             </>)}
             {/* Dev utility buttons — shown only in dev mode (emerald, controls devSubView) */}
             {sidebarView === "dev" && (<>
+              <DevSidebarBtn view="search"   icon={<Search    size={17} />} title="Dev Search" />
               <DevSidebarBtn view="mentions" icon={<AtSign    size={17} />} title="Dev Mentions" badge={devMentionMessages.length || undefined} />
               <DevSidebarBtn view="pinned"   icon={<Pin       size={17} />} title="Dev Pinned"   badge={devPinnedMessages.length || undefined} />
               <DevSidebarBtn view="images"   icon={<ImageIcon size={17} />} title="Dev Images"   badge={devImageMessages.length || undefined} />
@@ -1742,10 +1732,10 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
           {/* ────────── MAIN CONTENT ────────── */}
           <div className="flex-1 min-w-0 flex flex-col overflow-hidden sm:m-0 m-3 rounded-2xl">
 
-            {/* ── Mobile top nav bar ─────────────────────────────────────────── */}
+            {/* ── Mobile top nav bar — MOBILE ONLY (sm:hidden hides on desktop) ─── */}
             <div
-              className="sm:hidden shrink-0 border-b border-gray-800/60"
-              style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", background: "#0c0c0f", padding: "6px 4px" }}
+              className="sm:hidden grid shrink-0 border-b border-gray-800/60 items-center"
+              style={{ gridTemplateColumns: "1fr auto 1fr", background: "#0c0c0f", padding: "6px 4px" }}
             >
               {/* LEFT col: Mode switcher dropdown */}
               <div className="relative">
@@ -1903,8 +1893,18 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
                         {/* Spacer */}
                         <div className="flex-1" />
 
+                        {/* RIGHT: Minimize + Close — desktop only (mobile top bar has them) */}
+                        <div className="hidden sm:flex items-center gap-0.5 shrink-0">
+                          <button onClick={closeWidget} title="Minimize" className="p-2 rounded-lg text-gray-600 hover:text-gray-200 hover:bg-gray-800/60 transition-all">
+                            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><line x1="2" y1="11" x2="12" y2="11" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+                          </button>
+                          <button onClick={closeWidget} title="Close" className="p-2 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-900/20 transition-all">
+                            <X size={16} />
+                          </button>
+                        </div>
+
                         {/* RIGHT: ⋮ mobile only */}
-                        <div className="relative shrink-0">
+                        <div className="relative sm:hidden shrink-0">
                           <button
                             onClick={() => setDevMobileMenuOpen(o => !o)}
                             className={`p-1.5 rounded-lg transition-colors ${devMobileMenuOpen ? "text-emerald-400 bg-emerald-900/30" : "text-gray-500 hover:text-gray-200 hover:bg-gray-800/60"}`}
@@ -2614,11 +2614,21 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
 
 
 
-                  {/* Spacer pushes ⋮ to far right */}
+                  {/* Spacer pushes controls to far right */}
                   <div className="flex-1" />
 
+                  {/* RIGHT: Minimize + Close — desktop only (mobile top bar has them) */}
+                  <div className="hidden sm:flex items-center gap-0.5 shrink-0">
+                    <button onClick={closeWidget} title="Minimize" className="p-2 rounded-lg text-gray-600 hover:text-gray-200 hover:bg-gray-800/60 transition-all">
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><line x1="2" y1="11" x2="12" y2="11" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+                    </button>
+                    <button onClick={closeWidget} title="Close" className="p-2 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-900/20 transition-all">
+                      <X size={16} />
+                    </button>
+                  </div>
+
                   {/* RIGHT: ⋮ mobile only */}
-                  <div className="relative shrink-0">
+                  <div className="relative sm:hidden shrink-0">
                     <button
                       onClick={() => setMobileMenuOpen(o => !o)}
                       className={`p-1.5 rounded-lg transition-colors ${mobileMenuOpen ? "text-indigo-400 bg-indigo-900/30" : "text-gray-500 hover:text-gray-200 hover:bg-gray-800/60"}`}
@@ -3200,7 +3210,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
             {/* ══════════ SEARCH VIEW ══════════ */}
             {sidebarView === "search" && (
               <>
-                {/* Header — search input lives in the top-nav bar on mobile */}
+                {/* Header */}
                 <div className="flex items-center px-3 py-2.5 border-b border-gray-800/60 shrink-0">
                   <BackBtn onBack={() => { setMobileSearchOpen(false); setSidebarView("chat"); setSearchQuery(""); }} />
                   <Search size={14} className="text-indigo-400 shrink-0" />
@@ -3212,7 +3222,25 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
                     </span>
                   )}
                   <div className="flex-1" />
+                </div>
 
+                {/* Desktop-only search input (mobile uses the top nav bar input) */}
+                <div className="hidden sm:flex items-center gap-2 mx-3 my-2.5 px-3 py-2.5 bg-gray-800/50 border border-gray-700/50 rounded-xl focus-within:border-indigo-500/50 transition-colors shrink-0">
+                  <Search size={13} className="text-gray-500 shrink-0" />
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    placeholder="Search messages…"
+                    autoFocus
+                    className="flex-1 bg-transparent text-sm text-gray-200 placeholder-gray-600 outline-none"
+                  />
+                  {searchQuery && (
+                    <button onClick={() => setSearchQuery("")} className="text-gray-500 hover:text-gray-300 transition-colors shrink-0">
+                      <X size={13} />
+                    </button>
+                  )}
                 </div>
                 <div className="flex-1 overflow-y-auto">
                   {!searchQuery ? (
