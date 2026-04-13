@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { collection, query, orderBy, limitToLast, onSnapshot } from "firebase/firestore";
+import { collection, query, orderBy, limitToLast, onSnapshot, setDoc, doc } from "firebase/firestore";
 import { db } from "./firebase";
 import { MessageSquare, X, Send, Trash2, Reply, AtSign, Search, Settings, Paperclip, Smile, Pin, PinOff, ImageIcon, Link2, ExternalLink, Code2, Pencil, Check, ChevronUp, ChevronDown, MoreVertical } from "lucide-react";
 import type { Member } from "./types";
@@ -75,6 +75,14 @@ interface ChatMessage {
   imageUrl?: string;
   pinned?: boolean;
   channelId?: string;
+}
+
+interface SeenReceipt {
+  userId:    string;
+  userName:  string;
+  userPhoto: string;
+  lastMsgId: string;    // Firestore ID of the last message this user has seen
+  seenAt:    number;    // epoch ms
 }
 
 export interface ChatWidgetProps {
@@ -289,6 +297,9 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
   // ── Dev channel state ─────────────────────────────────────────────────────
   const [devActiveChannel,    setDevActiveChannel]    = useState<string>(DEV_CHANNELS[0].id);
   const [devMessages,         setDevMessages]         = useState<ChatMessage[]>([]);
+  // ── Seen receipts (real-time per-channel: who has read up to which message) ──
+  const [seenReceipts,    setSeenReceipts]    = useState<Record<string, SeenReceipt[]>>({});
+  const [devSeenReceipts, setDevSeenReceipts] = useState<Record<string, SeenReceipt[]>>({});
   const [devSettled,          setDevSettled]          = useState(false);
   const [devSubView,          setDevSubView]          = useState<SidebarView>("chat");
   const [devInput,            setDevInput]            = useState("");
@@ -408,6 +419,8 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
   // ── Refs ──────────────────────────────────────────────────────────────────
   const panelRef         = useRef<HTMLDivElement>(null);
   const messagesEndRef   = useRef<HTMLDivElement>(null);
+  const writeTeamReceiptAt  = useRef<number>(0);  // debounce: last seen-receipt write for team
+  const writeDevReceiptAt   = useRef<number>(0);  // debounce: last seen-receipt write for dev
   const inputRef         = useRef<HTMLTextAreaElement>(null);
   const searchInputRef   = useRef<HTMLInputElement>(null);
   const pollRef          = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -515,6 +528,67 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
       if (v) lastReadRef.current[ch.id] = parseInt(v, 10);
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Seen receipt writer (debounced, max 1 Firestore write per 3 s per channel) ──
+  const writeSeenReceipt = useCallback(async (channelId: string, lastMsgId: string) => {
+    if (!userId || !lastMsgId || lastMsgId.startsWith("_opt_")) return;
+    try {
+      await setDoc(
+        doc(db, "chat_channels", channelId, "seen_receipts", userId),
+        { userId, userName, userPhoto: userPhoto || "", lastMsgId, seenAt: Date.now() }
+      );
+    } catch { /* ignore — best-effort */ }
+  }, [userId, userName, userPhoto]);
+
+  // ── Subscribe to seen receipts for active Team channel ────────────────────
+  useEffect(() => {
+    if (!userId) return;
+    const unsub = onSnapshot(
+      collection(db, "chat_channels", activeChannel, "seen_receipts"),
+      snap => {
+        const receipts = snap.docs.map(d => d.data() as SeenReceipt).filter(r => !!r.lastMsgId);
+        setSeenReceipts(prev => ({ ...prev, [activeChannel]: receipts }));
+      },
+      () => {} // ignore errors silently
+    );
+    return () => unsub();
+  }, [activeChannel, userId]);
+
+  // ── Subscribe to seen receipts for active Dev channel ────────────────────
+  useEffect(() => {
+    if (!userId) return;
+    const unsub = onSnapshot(
+      collection(db, "chat_channels", devActiveChannel, "seen_receipts"),
+      snap => {
+        const receipts = snap.docs.map(d => d.data() as SeenReceipt).filter(r => !!r.lastMsgId);
+        setDevSeenReceipts(prev => ({ ...prev, [devActiveChannel]: receipts }));
+      },
+      () => {}
+    );
+    return () => unsub();
+  }, [devActiveChannel, userId]);
+
+  // ── Write own seen receipt when actively viewing Team chat ────────────────
+  useEffect(() => {
+    if (!open || sidebarView !== "chat" || !userId) return;
+    const lastMsg = messages[messages.length - 1];
+    if (!lastMsg || lastMsg.id.startsWith("_opt_")) return;
+    const now = Date.now();
+    if (now - writeTeamReceiptAt.current < 3_000) return; // 3 s debounce
+    writeTeamReceiptAt.current = now;
+    writeSeenReceipt(activeChannel, lastMsg.id);
+  }, [open, sidebarView, activeChannel, messages, userId, writeSeenReceipt]);
+
+  // ── Write own seen receipt when actively viewing Dev chat ─────────────────
+  useEffect(() => {
+    if (!open || sidebarView !== "dev" || !userId) return;
+    const lastMsg = devMessages[devMessages.length - 1];
+    if (!lastMsg || lastMsg.id.startsWith("_opt_")) return;
+    const now = Date.now();
+    if (now - writeDevReceiptAt.current < 3_000) return;
+    writeDevReceiptAt.current = now;
+    writeSeenReceipt(devActiveChannel, lastMsg.id);
+  }, [open, sidebarView, devActiveChannel, devMessages, userId, writeSeenReceipt]);
 
   // ── Firestore real-time listener: Team Chat (zero Netlify reads, instant updates) ──
   useEffect(() => {
@@ -2113,6 +2187,22 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
                               </React.Fragment>
                             );
                           })}
+                          {/* ── Seen receipts row — Messenger-style avatars — Dev chat ── */}
+                          {(() => {
+                            const others = (devSeenReceipts[devActiveChannel] ?? []).filter(r => r.userId !== userId && r.lastMsgId);
+                            if (others.length === 0) return null;
+                            return (
+                              <div className="flex items-center justify-end gap-1 px-3 pb-1">
+                                <span className="text-[9px] text-gray-600 mr-0.5">Seen</span>
+                                {others.slice(0, 6).map(r => (
+                                  r.userPhoto
+                                    ? <img key={r.userId} src={r.userPhoto} alt={r.userName} title={`Seen by ${r.userName}`} className="w-[18px] h-[18px] rounded-full border-2 border-[#16201a] object-cover" />
+                                    : <div key={r.userId} title={`Seen by ${r.userName}`} className="w-[18px] h-[18px] rounded-full bg-gray-700 border-2 border-[#16201a] flex items-center justify-center text-[8px] text-gray-300 font-bold">{r.userName?.[0]?.toUpperCase() ?? "?"}</div>
+                                ))}
+                                {others.length > 6 && <span className="text-[9px] text-gray-600">+{others.length - 6}</span>}
+                              </div>
+                            );
+                          })()}
                           <div ref={devMessagesEndRef} className="h-2" />
                         </div>
                       )}
@@ -2883,6 +2973,22 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
                           </React.Fragment>
                         );
                       })}
+                      {/* ── Seen receipts row — Messenger-style avatars — Team chat ── */}
+                      {(() => {
+                        const others = (seenReceipts[activeChannel] ?? []).filter(r => r.userId !== userId && r.lastMsgId);
+                        if (others.length === 0) return null;
+                        return (
+                          <div className="flex items-center justify-end gap-1 px-3 pb-1">
+                            <span className="text-[9px] text-gray-600 mr-0.5">Seen</span>
+                            {others.slice(0, 6).map(r => (
+                              r.userPhoto
+                                ? <img key={r.userId} src={r.userPhoto} alt={r.userName} title={`Seen by ${r.userName}`} className="w-[18px] h-[18px] rounded-full border-2 border-[#1a1f2e] object-cover" />
+                                : <div key={r.userId} title={`Seen by ${r.userName}`} className="w-[18px] h-[18px] rounded-full bg-gray-700 border-2 border-[#1a1f2e] flex items-center justify-center text-[8px] text-gray-300 font-bold">{r.userName?.[0]?.toUpperCase() ?? "?"}</div>
+                            ))}
+                            {others.length > 6 && <span className="text-[9px] text-gray-600">+{others.length - 6}</span>}
+                          </div>
+                        );
+                      })()}
                       <div ref={messagesEndRef} className="h-2" />
                     </div>
                   )}
