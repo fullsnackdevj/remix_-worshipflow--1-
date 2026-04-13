@@ -620,7 +620,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
         if (merged.length > 0) {
           const lastTs = getMs(merged[merged.length - 1].createdAt);
           lastReadRef.current[activeChannel] = lastTs;
-          localStorage.setItem(`wf_chat_read_${activeChannel}`, String(lastTs));
+          localStorage.setItem(`wf_${widgetId}_read_${activeChannel}`, String(lastTs));
         }
         setUnreadDots(prev => { const n = new Set(prev); n.delete(activeChannel); return n; });
       },
