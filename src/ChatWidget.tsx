@@ -559,6 +559,8 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
 
   // ── Always-on background unread listener (works even when widget is CLOSED) ──
   // Covers ALL Team + Dev channels. Shows browser notification + sound when widget is closed.
+  // dep array = [userId] ONLY — open/sidebarView/muteNotifs/playNotifSound read via live refs
+  // so the subscription never re-creates on state changes (prevents duplicate notifications).
   useEffect(() => {
     if (!userId) return;
     const subs: (() => void)[] = [];
@@ -569,15 +571,20 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
         query(collection(db, "chat_channels", ch.id, "messages"), orderBy("createdAt", "asc"), limitToLast(1)),
         snap => {
           if (snap.empty) return;
-          const data = snap.docs[0].data();
+          const doc    = snap.docs[0];
+          const data   = doc.data();
           const lastTs = data.createdAt?.toDate?.()?.getTime() ?? 0;
-          if (data.userId === userId || lastTs <= (lastReadRef.current[ch.id] ?? 0)) return;
-          const isViewing = open && sidebarView === "chat" && ch.id === activeChannel;
+          // Skip: own msg, already seen, already notified for this exact message doc
+          if (data.userId === userId) return;
+          if (lastTs <= (lastReadRef.current[ch.id] ?? 0)) return;
+          if (notifiedBgMsgIds.current.has(doc.id)) return;
+          notifiedBgMsgIds.current.add(doc.id);
+          const isViewing = openRef.current && sidebarViewRef.current === "chat" && ch.id === activeChannelRef.current;
           if (!isViewing) setUnreadDots(prev => new Set([...prev, ch.id]));
-          if (!open && !muteNotifs) {
-            playNotifSound();
+          if (!openRef.current && !muteNotifsRef.current) {
+            playNotifSoundRef.current();
             if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-              try { new Notification(`${ch.emoji} ${data.userName}`, { body: (data.text || "📎 Image").slice(0, 100), icon: data.userPhoto || "/icon-192.png", tag: `wf-tm-${ch.id}`, renotify: true }); } catch {}
+              try { new Notification(`${ch.emoji} ${data.userName}`, { body: (data.text || "📎 Image").slice(0, 100), icon: data.userPhoto || "/icon-192.png", tag: `wf-tm-${doc.id}`, renotify: false }); } catch {}
             }
           }
         }
@@ -590,17 +597,22 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
         query(collection(db, "chat_channels", ch.id, "messages"), orderBy("createdAt", "asc"), limitToLast(1)),
         snap => {
           if (snap.empty) return;
-          const data = snap.docs[0].data();
+          const doc    = snap.docs[0];
+          const data   = doc.data();
           const lastTs = data.createdAt?.toDate?.()?.getTime() ?? 0;
           const devReadKey = `wf_${widgetId}_dev_read_${ch.id}`;
           const lastSeen = parseInt(localStorage.getItem(devReadKey) ?? "0", 10) || 0;
-          if (data.userId === userId || lastTs <= lastSeen) return;
-          const isViewing = open && sidebarView === "dev" && ch.id === devActiveChannel;
+          // Skip: own msg, already seen, already notified for this exact message doc
+          if (data.userId === userId) return;
+          if (lastTs <= lastSeen) return;
+          if (notifiedBgMsgIds.current.has(doc.id)) return;
+          notifiedBgMsgIds.current.add(doc.id);
+          const isViewing = openRef.current && sidebarViewRef.current === "dev" && ch.id === devActiveChannelRef.current;
           if (!isViewing) setDevUnreadDots(prev => new Set([...prev, ch.id]));
-          if (!open && !muteNotifs) {
-            playNotifSound();
+          if (!openRef.current && !muteNotifsRef.current) {
+            playNotifSoundRef.current();
             if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-              try { new Notification(`${ch.emoji} ${data.userName}`, { body: (data.text || "📎 Image").slice(0, 100), icon: data.userPhoto || "/icon-192.png", tag: `wf-dev-${ch.id}`, renotify: true }); } catch {}
+              try { new Notification(`${ch.emoji} ${data.userName}`, { body: (data.text || "📎 Image").slice(0, 100), icon: data.userPhoto || "/icon-192.png", tag: `wf-dev-${doc.id}`, renotify: false }); } catch {}
             }
           }
         }
@@ -608,7 +620,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, allMembers,
     });
 
     return () => subs.forEach(u => u());
-  }, [userId, open, sidebarView, activeChannel, devActiveChannel, muteNotifs, playNotifSound]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [userId]); // Only userId — all other values read via live refs above
 
   // ── Scroll: instant on open/switch, smooth on new message ────────────────
   useEffect(() => {
