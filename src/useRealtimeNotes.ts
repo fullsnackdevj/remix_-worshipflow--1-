@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, type Dispatch, type SetStateAction, type MutableRefObject } from "react";
 import {
-  collection, query, orderBy, onSnapshot,
+  collection, query, orderBy, onSnapshot, limit,
   type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "./firebase";
@@ -73,6 +73,8 @@ export function useRealtimeNotes(_userId: string | null | undefined) {
   const pendingReactionIds = useRef<Set<string>>(new Set());
 
   const unsubRef = useRef<Unsubscribe | null>(null);
+  // True once first successful snapshot fires — used to suppress the HTTP fallback poll
+  const snapshotWorkingRef = useRef(false);
 
   // Keep a stable ref to current notes for use inside snapshot closure
   const notesRef = useRef<TeamNote[]>(notes);
@@ -91,6 +93,7 @@ export function useRealtimeNotes(_userId: string | null | undefined) {
     const q = query(
       collection(db, "team_notes"),
       orderBy("createdAt", "desc"),
+      limit(200), // cap reads — avoids unbounded fetches as notes grow
     );
 
     unsubRef.current = onSnapshot(
@@ -142,6 +145,7 @@ export function useRealtimeNotes(_userId: string | null | undefined) {
 
         setNotes(merged);
         setLoading(false);
+        snapshotWorkingRef.current = true; // mark Firestore as live — HTTP poll will skip
 
         try {
           const cacheable = merged.filter(n => !n.id.startsWith("temp_"));
@@ -185,6 +189,8 @@ export function useRealtimeNotes(_userId: string | null | undefined) {
   // This poll is purely a fallback — reduced from 10s to 60s to cut Netlify costs.
   useEffect(() => {
     const poll = async () => {
+      // Skip if Firestore onSnapshot is working fine — avoid duplicate reads
+      if (snapshotWorkingRef.current) return;
       try {
         const res = await fetch("/api/notes");
         if (!res.ok) return;

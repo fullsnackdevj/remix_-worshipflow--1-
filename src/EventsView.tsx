@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import {
-  collection, doc, addDoc, onSnapshot,
+  collection, doc, addDoc, getDocs, onSnapshot,
   query, orderBy, serverTimestamp, updateDoc,
 } from "firebase/firestore";
 import { ref as sRef, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -8,7 +8,7 @@ import { db, storage } from "./firebase";
 import {
   Plus, X, Ticket, Calendar, MapPin, Users, Wallet,
   Copy, Check, CheckCircle2, XCircle, Clock,
-  ChevronLeft, Download, Search, Loader2,
+  ChevronLeft, Download, Search, Loader2, RefreshCw,
   Smartphone, ArrowRight, Building2, QrCode, Share2, ExternalLink,
 } from "lucide-react";
 
@@ -150,15 +150,17 @@ export default function EventsView({ userId, userName, isAdmin, onToast }: Props
   const restoreRegistrant  = (id: string) =>
     updateDoc(doc(db, "events", selectedEvent!.id, "registrants", id), { archived: false });
 
-  // ── Firestore subscriptions ──────────────────────────────────────────────────
-  useEffect(() => {
-    const q = query(collection(db, "events"), orderBy("createdAt", "desc"));
-    const unsub = onSnapshot(q, snap => {
+  // ── Firestore: load events once (one-time fetch, not real-time) ──────────────
+  // getDocs saves ~95% reads vs onSnapshot — no need for live updates on the events list.
+  const fetchEvents = async () => {
+    setLoading(true);
+    try {
+      const snap = await getDocs(query(collection(db, "events"), orderBy("createdAt", "desc")));
       setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() } as MinistryEvent)));
-      setLoading(false);
-    }, () => setLoading(false));
-    return () => unsub();
-  }, []);
+    } catch { /* noop */ }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { fetchEvents(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!selectedEvent) { setRegistrants([]); return; }
@@ -235,6 +237,7 @@ export default function EventsView({ userId, userName, isAdmin, onToast }: Props
       onToast("success", "🎉 Event created!");
       setShowCreate(false);
       resetCreate();
+      fetchEvents(); // refresh list after creating
     } catch (err) {
       console.error(err);
       onToast("error", "Failed to create event");
@@ -819,14 +822,23 @@ export default function EventsView({ userId, userName, isAdmin, onToast }: Props
             <p className="text-xs text-gray-400 dark:text-gray-500">Registrations & payment tracking</p>
           </div>
         </div>
-        {isAdmin && (
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => { resetCreate(); setShowCreate(true); }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white rounded-xl font-semibold text-sm shadow shadow-amber-500/20 transition-all"
+            onClick={() => fetchEvents()}
+            className="flex items-center gap-1.5 px-3 py-2.5 text-gray-400 hover:text-white border border-gray-700/50 hover:border-gray-600 rounded-xl text-sm transition-colors"
+            title="Refresh events list"
           >
-            <Plus size={16} /> New Event
+            <RefreshCw size={14} />
           </button>
-        )}
+          {isAdmin && (
+            <button
+              onClick={() => { resetCreate(); setShowCreate(true); }}
+              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white rounded-xl font-semibold text-sm shadow shadow-amber-500/20 transition-all"
+            >
+              <Plus size={16} /> New Event
+            </button>
+          )}
+        </div>
       </div>
 
       {loading ? (
