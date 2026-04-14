@@ -1826,6 +1826,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                   userName={user?.displayName || user?.email || ""}
                   isAdmin={isRoleAdmin}
                   onToast={showToast}
+                  members={allMembers}
                 />
               ) : null}
               </Suspense>

@@ -23,6 +23,17 @@ service cloud.firestore {
       allow create: if true;
       allow update: if request.auth != null;
     }
+    // Contributions (internal events):
+    // - read:   true — collector & member form need to read
+    // - create: true — members self-register via public form link (no login required)
+    // - update: true — collector marks paid/unpaid via the secure collector link
+    // - delete: auth only — admin only
+    match /events/{eventId}/contributions/{memberId} {
+      allow read:   if true;
+      allow create: if true;
+      allow update: if true;
+      allow delete: if request.auth != null;
+    }
 
     // ── All other collections ──────────────────────────────────────────────────
     // All other reads/writes go through Netlify serverless functions

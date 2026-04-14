@@ -12,8 +12,10 @@ import LoginPage from './LoginPage.tsx';
 import AccessDenied from './AccessDenied.tsx';
 import SplashScreen from './SplashScreen.tsx';
 
-const EventRegistrationPage = lazy(() => import('./EventRegistrationPage.tsx'));
-const EventDashboardPage    = lazy(() => import('./EventDashboardPage.tsx'));
+const EventRegistrationPage    = lazy(() => import('./EventRegistrationPage.tsx'));
+const EventDashboardPage       = lazy(() => import('./EventDashboardPage.tsx'));
+const InternalContributionPage = lazy(() => import('./InternalContributionPage.tsx'));
+const InternalMemberFormPage   = lazy(() => import('./InternalMemberFormPage.tsx'));
 
 // Returning users skip the full splash — first visit gets brand impression, repeat visits feel instant
 const isReturning = (() => { try { return !!sessionStorage.getItem('wf_visited'); } catch { return false; } })();
@@ -93,6 +95,23 @@ function Root() {
     return (
       <Suspense fallback={fallback}>
         <EventDashboardPage eventId={publicEventId} />
+      </Suspense>
+    );
+  }
+
+  if (publicEventId && publicView === 'collector') {
+    const collectorToken = params.get('token') ?? '';
+    return (
+      <Suspense fallback={fallback}>
+        <InternalContributionPage eventId={publicEventId} token={collectorToken} />
+      </Suspense>
+    );
+  }
+
+  if (publicEventId && publicView === 'member-register') {
+    return (
+      <Suspense fallback={fallback}>
+        <InternalMemberFormPage />
       </Suspense>
     );
   }
