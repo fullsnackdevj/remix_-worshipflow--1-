@@ -35,7 +35,7 @@ const DesignRequestsView  = lazy(() => import("./DesignRequestsView"));
 import AutoTextarea from "./AutoTextarea";
 import DatePicker from "./DatePicker";
 
-import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, CheckSquare, Check, Filter, Users, Calendar, CalendarDays, Phone, UserPlus, Camera, BookOpen, LayoutGrid, Mic2, Copy, Pencil, Shield, Mail, Bell, Lock, AlertTriangle, CheckCircle, HelpCircle, FlaskConical, NotebookPen, SquareKanban, Feather, Palette, Code2 } from "lucide-react";
+import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, CheckSquare, Check, Filter, Users, Calendar, Ticket, Phone, UserPlus, Camera, BookOpen, LayoutGrid, Mic2, Copy, Pencil, Shield, Mail, Bell, Lock, AlertTriangle, CheckCircle, HelpCircle, FlaskConical, NotebookPen, SquareKanban, Feather, Palette, Code2 } from "lucide-react";
 import { Song, Tag, Member, ScheduleMember, Schedule } from "./types";
 import LineupPlayer, { LineupTrack, CurrentUser } from "./LineupPlayer";
 import SongsLibraryPlayer, { LibraryTrack } from "./SongsLibraryPlayer";
@@ -1194,7 +1194,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
               title={isRoleAdmin ? "Events (Coming Soon)" : "Events — Coming Soon"}
             >
               <span className="relative shrink-0">
-                <CalendarDays size={20} />
+                <Ticket size={20} />
                 {unseenEvents && (
                   <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400 border border-[#1a1f2e]" />
                 )}
