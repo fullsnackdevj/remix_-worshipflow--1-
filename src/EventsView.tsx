@@ -47,6 +47,7 @@ interface Registrant {
   paymentStatus: "pending_review" | "paid" | "rejected";
   referenceNumber?: string;
   proofUrl?: string;
+  archived?: boolean;
   registeredAt: any;
   confirmedBy?: string;
   confirmedAt?: any;
@@ -88,7 +89,7 @@ export default function EventsView({ userId, userName, isAdmin, onToast }: Props
   const [registrants, setRegistrants] = useState<Registrant[]>([]);
   const [registrantsLoading, setRegistrantsLoading] = useState(false);
   const [searchQuery,  setSearchQuery]  = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "pending_review" | "paid" | "rejected">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending_review" | "paid" | "rejected" | "archived">("all");
   const [actioningId, setActioningId] = useState<string | null>(null);
   const [copied,       setCopied]       = useState(false);
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
@@ -124,14 +125,16 @@ export default function EventsView({ userId, userName, isAdmin, onToast }: Props
     ? `${window.location.origin}${window.location.pathname}?event=${selectedEvent.id}`
     : "";
 
-  const paid      = registrants.filter(r => r.paymentStatus === "paid").length;
-  const pending   = registrants.filter(r => r.paymentStatus === "pending_review").length;
-  const rejected  = registrants.filter(r => r.paymentStatus === "rejected").length;
-  const collected = paid * (selectedEvent?.price ?? 0);
+  const active    = registrants.filter(r => !r.archived);
+  const archived  = registrants.filter(r =>  r.archived);
+  const paid      = active.filter(r => r.paymentStatus === "paid").length;
+  const pending   = active.filter(r => r.paymentStatus === "pending_review").length;
+  const rejected  = active.filter(r => r.paymentStatus === "rejected").length;
+  const collected   = paid * (selectedEvent?.price ?? 0);
   const outstanding = pending * (selectedEvent?.price ?? 0);
 
-  const filtered = registrants
-    .filter(r => statusFilter === "all" || r.paymentStatus === statusFilter)
+  const filtered = (statusFilter === "archived" ? archived : active)
+    .filter(r => statusFilter === "all" || statusFilter === "archived" || r.paymentStatus === statusFilter)
     .filter(r => {
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase();
@@ -141,6 +144,11 @@ export default function EventsView({ userId, userName, isAdmin, onToast }: Props
         (r.email ?? "").toLowerCase().includes(q)
       );
     });
+
+  const archiveRegistrant  = (id: string) =>
+    updateDoc(doc(db, "events", selectedEvent!.id, "registrants", id), { archived: true });
+  const restoreRegistrant  = (id: string) =>
+    updateDoc(doc(db, "events", selectedEvent!.id, "registrants", id), { archived: false });
 
   // ── Firestore subscriptions ──────────────────────────────────────────────────
   useEffect(() => {
@@ -384,10 +392,11 @@ export default function EventsView({ userId, userName, isAdmin, onToast }: Props
             {/* Status filter pills */}
             <div className="flex gap-2 mb-4 flex-wrap">
               {([
-                { key: "all",            label: "All",      count: registrants.length },
-                { key: "pending_review", label: "Pending",  count: registrants.filter(r => r.paymentStatus === "pending_review").length },
-                { key: "paid",           label: "Paid",     count: registrants.filter(r => r.paymentStatus === "paid").length },
-                { key: "rejected",       label: "Rejected", count: registrants.filter(r => r.paymentStatus === "rejected").length },
+                { key: "all",            label: "All",      count: active.length },
+                { key: "pending_review", label: "Pending",  count: pending },
+                { key: "paid",           label: "Paid",     count: paid },
+                { key: "rejected",       label: "Rejected", count: rejected },
+                { key: "archived",       label: "Archived", count: archived.length },
               ] as const).map(({ key, label, count }) => (
                 <button
                   key={key}
@@ -397,6 +406,7 @@ export default function EventsView({ userId, userName, isAdmin, onToast }: Props
                       ? key === "all"            ? "bg-white/10 border-white/20 text-white"
                       : key === "pending_review" ? "bg-amber-500/20 border-amber-500/40 text-amber-300"
                       : key === "paid"           ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300"
+                      : key === "archived"       ? "bg-gray-500/20 border-gray-500/40 text-gray-300"
                       :                           "bg-red-500/20 border-red-500/40 text-red-300"
                       : "bg-transparent border-gray-700/50 text-gray-500 hover:border-gray-600 hover:text-gray-400"
                   }`}
@@ -407,6 +417,7 @@ export default function EventsView({ userId, userName, isAdmin, onToast }: Props
                       ? key === "pending_review" ? "bg-amber-500/30 text-amber-200"
                       : key === "paid"           ? "bg-emerald-500/30 text-emerald-200"
                       : key === "rejected"       ? "bg-red-500/30 text-red-200"
+                      : key === "archived"       ? "bg-gray-500/30 text-gray-300"
                       :                           "bg-white/10 text-white/70"
                       : "bg-gray-700/60 text-gray-500"
                   }`}>{count}</span>
@@ -421,26 +432,50 @@ export default function EventsView({ userId, userName, isAdmin, onToast }: Props
             ) : filtered.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <Users size={32} className="text-gray-700 mb-3" />
-                <p className="text-sm text-gray-500">{searchQuery ? "No matching registrants" : "No registrants yet"}</p>
-                <p className="text-xs text-gray-600 mt-1">Share the link to start collecting sign-ups</p>
+                <p className="text-sm text-gray-500">
+                  {statusFilter === "archived" ? "No archived registrants" : searchQuery ? "No matching registrants" : "No registrants yet"}
+                </p>
+                <p className="text-xs text-gray-600 mt-1">
+                  {statusFilter === "archived" ? "Check a registrant's checkbox to archive them" : "Share the link to start collecting sign-ups"}
+                </p>
               </div>
             ) : (
               <div className="space-y-2">
                 {filtered.map(r => (
                   <div key={r.id}
                     className={`border rounded-xl transition-all ${
-                      r.paymentStatus === "rejected"
-                        ? "bg-red-950/20 border-red-800/30"
-                        : "bg-gray-800/60 border-gray-700/40"
+                      r.archived
+                        ? "bg-gray-800/30 border-gray-700/20 opacity-60"
+                        : r.paymentStatus === "rejected"
+                          ? "bg-red-950/20 border-red-800/30"
+                          : "bg-gray-800/60 border-gray-700/40"
                     }`}
                   >
                     {/* Main row */}
                     <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-4">
+                      {/* Archive checkbox */}
+                      <label className="shrink-0 cursor-pointer group" title={r.archived ? "Archived" : "Archive this registrant"}>
+                        <input
+                          type="checkbox"
+                          checked={!!r.archived}
+                          onChange={() => r.archived ? restoreRegistrant(r.id) : archiveRegistrant(r.id)}
+                          className="hidden"
+                        />
+                        <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${
+                          r.archived
+                            ? "bg-gray-500 border-gray-500"
+                            : "border-gray-600 group-hover:border-gray-400"
+                        }`}>
+                          {r.archived && <Check size={10} className="text-white" />}
+                        </div>
+                      </label>
                       {/* Avatar */}
                       <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0 ${
-                        r.paymentStatus === "rejected"
+                        r.archived
                           ? "bg-gray-700"
-                          : "bg-gradient-to-br from-amber-500 to-orange-600"
+                          : r.paymentStatus === "rejected"
+                            ? "bg-gray-700"
+                            : "bg-gradient-to-br from-amber-500 to-orange-600"
                       }`}>
                         {r.fullName[0]?.toUpperCase()}
                       </div>
@@ -479,8 +514,8 @@ export default function EventsView({ userId, userName, isAdmin, onToast }: Props
                           </div>
                         )}
                       </div>
-                      {/* Action buttons */}
-                      {r.paymentStatus === "pending_review" && rejectingId !== r.id && (
+                      {/* Action buttons — hidden on archived cards */}
+                      {!r.archived && r.paymentStatus === "pending_review" && rejectingId !== r.id && (
                         <div className="flex gap-2 shrink-0">
                           <button
                             onClick={() => {
@@ -511,14 +546,14 @@ export default function EventsView({ userId, userName, isAdmin, onToast }: Props
                           </button>
                         </div>
                       )}
-                      {r.paymentStatus === "paid" && (
+                      {!r.archived && r.paymentStatus === "paid" && (
                         <div className="flex items-center gap-1.5 text-emerald-400 text-xs shrink-0">
                           <CheckCircle2 size={14} />
                           <span className="font-medium">Confirmed{r.confirmedBy ? ` by ${r.confirmedBy}` : ""}</span>
                         </div>
                       )}
                       {/* Reopen + Copy Link for rejected */}
-                      {r.paymentStatus === "rejected" && (
+                      {!r.archived && r.paymentStatus === "rejected" && (
                         <div className="flex gap-2 shrink-0">
                           <button
                             onClick={() => {
@@ -705,6 +740,65 @@ export default function EventsView({ userId, userName, isAdmin, onToast }: Props
                 </p>
               </div>
             )}
+
+            {/* Dashboard link for pastors/mentors */}
+            <div>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Pastor / Mentor Dashboard Link</p>
+              <p className="text-xs text-gray-600 mb-2">Share this read-only link so leaders can monitor registrations live — no login needed.</p>
+              <div className="flex gap-2">
+                <div className="flex-1 px-3 py-2.5 bg-gray-800/60 border border-gray-700/50 rounded-xl text-xs text-gray-400 font-mono truncate">
+                  {`${window.location.origin}${window.location.pathname}?event=${selectedEvent.id}&view=dashboard`}
+                </div>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(
+                      `${window.location.origin}${window.location.pathname}?event=${selectedEvent.id}&view=dashboard`
+                    );
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                  className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 ${
+                    copied
+                      ? "bg-emerald-600/20 text-emerald-400 border border-emerald-500/30"
+                      : "bg-violet-600/20 text-violet-400 border border-violet-500/30 hover:bg-violet-600/30"
+                  }`}
+                >
+                  {copied ? <><Check size={14} /> Copied!</> : <><Copy size={14} /> Copy</>}
+                </button>
+              </div>
+            </div>
+
+            {/* CSV Export */}
+            <div>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Download Report</p>
+              <p className="text-xs text-gray-600 mb-2">Export all registrant data as a CSV file for records or follow-up.</p>
+              <button
+                onClick={() => {
+                  const headers = ["Name", "Phone", "Email", "Church", "Payment Method", "Status", "Reference No.", "Registered At"];
+                  const rows = registrants.map(r => [
+                    r.fullName,
+                    r.phone,
+                    r.email ?? "",
+                    r.church ?? "",
+                    r.paymentMethod,
+                    r.paymentStatus,
+                    r.referenceNumber ?? "",
+                    r.registeredAt?.toDate?.()?.toLocaleString("en-PH") ?? "",
+                  ]);
+                  const csv = [headers, ...rows]
+                    .map(row => row.map(c => `"${String(c).replace(/"/g, '""')}"`).join(","))
+                    .join("\n");
+                  const blob = new Blob([csv], { type: "text/csv" });
+                  const a = document.createElement("a");
+                  a.href = URL.createObjectURL(blob);
+                  a.download = `${selectedEvent.title.replace(/\s+/g, "_")}_registrants.csv`;
+                  a.click();
+                }}
+                className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 rounded-xl text-sm font-semibold transition-colors"
+              >
+                <Download size={15} /> Download CSV Report
+              </button>
+            </div>
           </div>
         )}
       </div>

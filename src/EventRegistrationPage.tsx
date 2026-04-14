@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import {
   doc, getDoc, collection, addDoc, updateDoc, serverTimestamp,
+  query, where, getDocs,
 } from "firebase/firestore";
 import { ref as sRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "./firebase";
@@ -132,6 +133,17 @@ export default function EventRegistrationPage({ eventId, registrantId }: { event
           updatedAt:       serverTimestamp(),
         });
       } else {
+        // Duplicate guard — check if phone already registered for this event
+        const dupSnap = await getDocs(
+          query(collection(db, "events", eventId, "registrants"),
+            where("phone", "==", phone.trim()))
+        );
+        if (!dupSnap.empty) {
+          setFormError("You're already registered for this event. Contact the organizer if you need to make any changes.");
+          setSubmitting(false);
+          return;
+        }
+
         // CREATE new registrant record
         await addDoc(collection(db, "events", eventId, "registrants"), {
           fullName:        fullName.trim(),
