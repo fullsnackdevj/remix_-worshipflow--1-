@@ -31,6 +31,7 @@ const TeamNotesView    = lazy(() => import("./TeamNotesView"));
 const FreedomWallView  = lazy(() => import("./FreedomWallView"));
 const PreachingView       = lazy(() => import("./PreachingView"));
 const DesignRequestsView  = lazy(() => import("./DesignRequestsView"));
+const EventsView          = lazy(() => import("./EventsView"));
 // AutoTextarea & DatePicker are tiny UI primitives — import statically to avoid extra chunk round-trips
 import AutoTextarea from "./AutoTextarea";
 import DatePicker from "./DatePicker";
@@ -1176,22 +1177,23 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Scheduling</span>}
           </div>
 
-          {/* ── Events — Coming Soon ─────────────────────────────────────────── */}
+          {/* ── Events — Admin only ───────────────────────────────────────────── */}
+          {isRoleAdmin && (
           <div className="relative group/tip">
             <button
-              onClick={() => markEventsSeen()}
+              onClick={() => { markEventsSeen(); setCurrentView("events"); setIsMobileMenuOpen(false); }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all font-medium ${
-                !isRoleAdmin
-                  ? "opacity-50 cursor-not-allowed text-gray-500 dark:text-gray-600"
+                currentView === "events"
+                  ? "bg-amber-500/15 text-amber-400"
                   : unseenEvents
                     ? "text-amber-400 dark:text-amber-300 hover:bg-amber-900/20"
                     : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
               } ${isSidebarCollapsed ? "justify-center" : ""}`}
-              style={unseenEvents ? {
+              style={unseenEvents && currentView !== "events" ? {
                 boxShadow: "0 0 0 1px rgba(251,191,36,0.4), 0 0 14px rgba(251,191,36,0.25)",
                 animation: "newModulePulse 2s ease-in-out infinite",
               } : {}}
-              title={isRoleAdmin ? "Events (Coming Soon)" : "Events — Coming Soon"}
+              title="Events"
             >
               <span className="relative shrink-0">
                 <Ticket size={20} />
@@ -1200,15 +1202,13 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                 )}
               </span>
               {!isSidebarCollapsed && <span>Events</span>}
-              {!isSidebarCollapsed && unseenEvents && (
-                <span className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse">SOON</span>
-              )}
-              {!isSidebarCollapsed && !unseenEvents && (
-                <span className="ml-auto text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-gray-700/40 text-gray-500">SOON</span>
+              {!isSidebarCollapsed && unseenEvents && currentView !== "events" && (
+                <span className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse">NEW</span>
               )}
             </button>
-            {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Events (Coming Soon)</span>}
+            {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Events</span>}
           </div>
+          )}
           <div className="relative group/tip">
             <button
               onClick={() => { setCurrentView("team-notes"); setIsMobileMenuOpen(false); }}
@@ -1455,7 +1455,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
 
           <div className="flex-1 flex items-center min-w-0">
             <h1 className="text-base sm:text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap truncate">
-              {currentView === "dashboard" ? "Dashboard" : currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : currentView === "playground" ? "Playground" : currentView === "planner" ? "Ministry Hub" : currentView === "team-notes" ? "Notes" : currentView === "rehearsal" ? "Rehearsal" : currentView === "freedom-wall" ? "Freedom Wall" : currentView === "preaching" ? "Preaching" : currentView === "design-requests" ? "Design Requests" : "Song Management"}
+              {currentView === "dashboard" ? "Dashboard" : currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : currentView === "playground" ? "Playground" : currentView === "planner" ? "Ministry Hub" : currentView === "team-notes" ? "Notes" : currentView === "rehearsal" ? "Rehearsal" : currentView === "freedom-wall" ? "Freedom Wall" : currentView === "preaching" ? "Preaching" : currentView === "design-requests" ? "Design Requests" : currentView === "events" ? "Events" : "Song Management"}
             </h1>
           </div>
           <div className="flex items-center gap-2">
@@ -1819,6 +1819,13 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                   currentUser={{ uid: user?.uid ?? "", name: user?.displayName || user?.email || "", email: user?.email || "", photo: user?.photoURL || "" }}
                   onToast={showToast}
                   initialTab={pendingPreachingTab ?? undefined}
+                />
+              ) : currentView === "events" && isRoleAdmin ? (
+                <EventsView
+                  userId={user?.uid ?? ""}
+                  userName={user?.displayName || user?.email || ""}
+                  isAdmin={isRoleAdmin}
+                  onToast={showToast}
                 />
               ) : null}
               </Suspense>

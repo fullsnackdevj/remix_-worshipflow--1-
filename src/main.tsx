@@ -1,4 +1,4 @@
-import { StrictMode, useState, useEffect } from 'react';
+import { StrictMode, useState, useEffect, lazy, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
@@ -11,6 +11,8 @@ import { AuthProvider, useAuth } from './AuthContext.tsx';
 import LoginPage from './LoginPage.tsx';
 import AccessDenied from './AccessDenied.tsx';
 import SplashScreen from './SplashScreen.tsx';
+
+const EventRegistrationPage = lazy(() => import('./EventRegistrationPage.tsx'));
 
 // Returning users skip the full splash — first visit gets brand impression, repeat visits feel instant
 const isReturning = (() => { try { return !!sessionStorage.getItem('wf_visited'); } catch { return false; } })();
@@ -73,6 +75,20 @@ function Root() {
       return () => clearTimeout(t);
     }
   }, [timerDone, authResolved, visible]);
+
+  // ── Public event registration — bypass auth entirely ──────────────────────
+  const publicEventId = new URLSearchParams(window.location.search).get('event');
+  if (publicEventId) {
+    return (
+      <Suspense fallback={
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#030712' }}>
+          <div style={{ width: 32, height: 32, border: '3px solid transparent', borderTopColor: '#f59e0b', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        </div>
+      }>
+        <EventRegistrationPage eventId={publicEventId} />
+      </Suspense>
+    );
+  }
 
   const isFading = timerDone && authResolved;
 

@@ -1,0 +1,17 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ── Events: QR images uploaded by admin, read by anyone (public registration page) ──
+    match /events/{fileName} {
+      allow read:  if true;
+      allow write: if request.auth != null;
+    }
+
+    // ── All other paths: require authentication ───────────────────────────────
+    match /{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+
+  }
+}

@@ -2,7 +2,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ── Chat channels ──────────────────────────────────────────────────────
+    // ── Chat channels ──────────────────────────────────────────────────────────
     // Allow authenticated users to read messages directly via onSnapshot.
     // All writes (send, edit, delete, pin, react) go through the server
     // Admin SDK which bypasses these rules entirely.
@@ -11,7 +11,20 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // ── All other collections ──────────────────────────────────────────────
+    // ── Events module ──────────────────────────────────────────────────────────
+    // Admin creates events (client-side), public reads for registration page.
+    match /events/{eventId} {
+      allow read:  if true;
+      allow write: if request.auth != null;
+    }
+    // Registrants: public create (no login needed), auth'd read & update (admin).
+    match /events/{eventId}/registrants/{registrantId} {
+      allow read:   if request.auth != null;
+      allow create: if true;
+      allow update: if request.auth != null;
+    }
+
+    // ── All other collections ──────────────────────────────────────────────────
     // All other reads/writes go through Netlify serverless functions
     // (server-side Admin SDK) — deny direct client access.
     match /{document=**} {
