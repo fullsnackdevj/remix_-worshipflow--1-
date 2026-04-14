@@ -9,7 +9,7 @@ import {
   Plus, X, Ticket, Calendar, MapPin, Users, Wallet,
   Copy, Check, CheckCircle2, XCircle, Clock,
   ChevronLeft, Download, Search, Loader2,
-  Smartphone, ArrowRight, Building2, QrCode, Share2,
+  Smartphone, ArrowRight, Building2, QrCode, Share2, ExternalLink,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -46,6 +46,7 @@ interface Registrant {
   paymentMethod: "gcash" | "maya" | "bank_transfer";
   paymentStatus: "pending_review" | "paid" | "rejected";
   referenceNumber?: string;
+  proofUrl?: string;
   registeredAt: any;
   confirmedBy?: string;
   confirmedAt?: any;
@@ -419,6 +420,16 @@ export default function EventsView({ userId, userName, isAdmin, onToast }: Props
                           <span className="text-[10px] text-gray-600">via {METHOD_LABELS[r.paymentMethod] ?? r.paymentMethod}</span>
                           {r.referenceNumber && (
                             <span className="text-[10px] text-gray-500">Ref: {r.referenceNumber}</span>
+                          )}
+                          {r.proofUrl && (
+                            <a
+                              href={r.proofUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="flex items-center gap-1 text-[10px] font-semibold text-violet-400 hover:text-violet-300 border border-violet-500/30 bg-violet-500/10 px-1.5 py-0.5 rounded-md transition-colors"
+                            >
+                              <ExternalLink size={9} /> View Proof
+                            </a>
                           )}
                         </div>
                         {/* Rejection note */}

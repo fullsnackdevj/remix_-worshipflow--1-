@@ -2,7 +2,13 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
-    // ── Events: QR images uploaded by admin, read by anyone (public registration page) ──
+    // ── Proof of payment images — public registrants can upload ───────────────
+    match /events/{eventId}/proofs/{filename} {
+      allow read:  if true;
+      allow write: if true;   // no login needed — public registration flow
+    }
+
+    // ── QR images uploaded by admin ──────────────────────────────────────────
     match /events/{fileName} {
       allow read:  if true;
       allow write: if request.auth != null;

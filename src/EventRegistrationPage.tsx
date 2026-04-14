@@ -2,10 +2,11 @@ import { useState, useEffect } from "react";
 import {
   doc, getDoc, collection, addDoc, serverTimestamp,
 } from "firebase/firestore";
-import { db } from "./firebase";
+import { ref as sRef, uploadBytes, getDownloadURL } from "firebase/storage";
+import { db, storage } from "./firebase";
 import {
   Ticket, Calendar, MapPin, Wallet, CheckCircle2,
-  Loader2, AlertCircle, Smartphone, Building2,
+  Loader2, AlertCircle, ImagePlus, X, UserPlus,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -58,6 +59,11 @@ export default function EventRegistrationPage({ eventId }: { eventId: string }) 
   const [church,           setChurch]           = useState("");
   const [paymentMethod,    setPaymentMethod]    = useState<PaymentMethod>("gcash");
   const [referenceNumber,  setReferenceNumber]  = useState("");
+  const [proofFile,        setProofFile]        = useState<File | null>(null);
+  const [proofPreview,     setProofPreview]     = useState("");
+  const [closeFailed,      setCloseFailed]      = useState(false);
+
+  const uid = () => Math.random().toString(36).slice(2, 10);
 
   // Load event
   useEffect(() => {
@@ -84,6 +90,17 @@ export default function EventRegistrationPage({ eventId }: { eventId: string }) 
     setFormError("");
     setSubmitting(true);
     try {
+      // Upload proof image if provided
+      let proofUrl = "";
+      if (proofFile) {
+        const ext  = proofFile.name.split(".").pop() || "jpg";
+        const snap = await uploadBytes(
+          sRef(storage, `events/${eventId}/proofs/${uid()}.${ext}`),
+          proofFile,
+        );
+        proofUrl = await getDownloadURL(snap.ref);
+      }
+
       await addDoc(collection(db, "events", eventId, "registrants"), {
         fullName:        fullName.trim(),
         email:           email.trim(),
@@ -91,6 +108,7 @@ export default function EventRegistrationPage({ eventId }: { eventId: string }) 
         church:          church.trim(),
         paymentMethod,
         referenceNumber: referenceNumber.trim(),
+        proofUrl,
         paymentStatus:   "pending_review",
         registeredAt:    serverTimestamp(),
         confirmedBy:     null,
@@ -103,6 +121,12 @@ export default function EventRegistrationPage({ eventId }: { eventId: string }) 
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const resetForm = () => {
+    setFullName(""); setPhone(""); setEmail(""); setChurch("");
+    setReferenceNumber(""); setProofFile(null); setProofPreview("");
+    setFormError(""); setSubmitted(false);
   };
 
   // ── Loading ──────────────────────────────────────────────────────────────────
@@ -155,7 +179,7 @@ export default function EventRegistrationPage({ eventId }: { eventId: string }) 
           {event.price > 0 && " Once your payment is confirmed by our team, your slot will be secured."}
         </p>
 
-        <div className="bg-gray-800/60 border border-gray-700/50 rounded-2xl p-5 w-full max-w-xs text-left space-y-3 mb-6">
+        <div className="bg-gray-800/60 border border-gray-700/50 rounded-2xl p-5 w-full max-w-xs text-left space-y-3 mb-8">
           <div className="flex items-center gap-2.5">
             <Calendar size={14} className="text-amber-400 shrink-0" />
             <span className="text-sm text-gray-300">{formatDate(event.date)}{event.time && ` · ${event.time}`}</span>
@@ -173,7 +197,29 @@ export default function EventRegistrationPage({ eventId }: { eventId: string }) 
             </div>
           )}
         </div>
-        <p className="text-xs text-gray-600">You may now close this page.</p>
+
+        {/* Action buttons */}
+        <div className="flex flex-col gap-3 w-full max-w-xs">
+          <button
+            onClick={resetForm}
+            className="flex items-center justify-center gap-2 w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-bold text-sm shadow-lg shadow-amber-500/20 transition-all active:scale-[0.98]"
+          >
+            <UserPlus size={17} /> Register Another Person
+          </button>
+          <button
+            onClick={() => {
+              const closed = window.close();
+              if (closed === undefined) setCloseFailed(true);
+              setTimeout(() => setCloseFailed(true), 300);
+            }}
+            className="flex items-center justify-center gap-2 w-full py-3.5 rounded-2xl border border-gray-700/60 text-gray-400 hover:bg-gray-800 hover:text-white font-semibold text-sm transition-all active:scale-[0.98]"
+          >
+            <CheckCircle2 size={17} /> I'm Done
+          </button>
+          {closeFailed && (
+            <p className="text-xs text-gray-600 text-center mt-1">You may now close this tab manually.</p>
+          )}
+        </div>
       </div>
     );
   }
@@ -394,7 +440,50 @@ export default function EventRegistrationPage({ eventId }: { eventId: string }) 
               </div>
             )}
 
-            {/* Reference number */}
+            {/* Proof of payment upload */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                Proof of Payment{" "}
+                <span className="normal-case font-normal text-gray-600">(screenshot / photo — optional)</span>
+              </label>
+              {proofPreview ? (
+                <div className="relative">
+                  <img
+                    src={proofPreview}
+                    alt="Proof of payment"
+                    className="w-full rounded-xl object-cover max-h-48 border border-gray-700/60"
+                  />
+                  <button
+                    onClick={() => { setProofFile(null); setProofPreview(""); }}
+                    className="absolute top-2 right-2 w-7 h-7 rounded-full bg-gray-900/80 text-gray-300 flex items-center justify-center hover:bg-red-600 hover:text-white transition-colors"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ) : (
+                <label className="flex flex-col items-center justify-center gap-2 w-full py-6 rounded-xl border-2 border-dashed border-gray-700/60 cursor-pointer hover:border-amber-500/50 hover:bg-amber-500/5 transition-all">
+                  <ImagePlus size={22} className="text-gray-600" />
+                  <span className="text-xs text-gray-500">Tap to upload screenshot</span>
+                  <span className="text-[10px] text-gray-700">JPG, PNG, HEIC accepted</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={e => {
+                      const f = e.target.files?.[0];
+                      if (!f) return;
+                      setProofFile(f);
+                      const reader = new FileReader();
+                      reader.onload = ev => setProofPreview(ev.target?.result as string);
+                      reader.readAsDataURL(f);
+                    }}
+                  />
+                </label>
+              )}
+              <p className="text-[11px] text-gray-600 mt-1.5">
+                Upload your GCash/Maya screenshot or bank transfer confirmation.
+              </p>
+            </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
                 GCash / Bank Reference No.{" "}
