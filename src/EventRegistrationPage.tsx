@@ -192,10 +192,10 @@ export default function EventRegistrationPage({ eventId }: { eventId: string }) 
     ...(hasBank  ? ["bank_transfer"as const] : []),
   ];
 
-  const METHOD_META: Record<PaymentMethod, { emoji: string; label: string }> = {
-    gcash:         { emoji: "💚", label: "GCash"          },
-    maya:          { emoji: "💜", label: "Maya"           },
-    bank_transfer: { emoji: "🏦", label: "Bank Transfer"  },
+  const METHOD_ICONS: Record<PaymentMethod, { src: string; alt: string; bg: string; border: string; selectedBorder: string }> = {
+    gcash:         { src: "/payments/gcash.png",        alt: "GCash",         bg: "bg-blue-50",   border: "border-gray-700/40", selectedBorder: "border-blue-400"  },
+    maya:          { src: "/payments/maya.svg",         alt: "Maya",          bg: "bg-black",    border: "border-gray-700/40", selectedBorder: "border-green-400" },
+    bank_transfer: { src: "/payments/bank_transfer.png",alt: "Bank Transfer", bg: "bg-purple-50",border: "border-gray-700/40", selectedBorder: "border-purple-400"},
   };
 
   return (
@@ -276,7 +276,7 @@ export default function EventRegistrationPage({ eventId }: { eventId: string }) 
             </label>
             <input
               value={church} onChange={e => setChurch(e.target.value)}
-              placeholder="e.g. Victory Alabang"
+              placeholder="e.g. ICLC Project8"
               className="w-full px-3 py-3 rounded-xl border border-gray-700/60 bg-gray-900/60 text-sm text-white placeholder-gray-600 outline-none focus:border-amber-500/60 transition-colors"
             />
           </div>
@@ -295,21 +295,35 @@ export default function EventRegistrationPage({ eventId }: { eventId: string }) 
 
             {/* Method selector */}
             {availableMethods.length > 0 && (
-              <div className={`grid gap-2 ${availableMethods.length === 1 ? "grid-cols-1" : availableMethods.length === 2 ? "grid-cols-2" : "grid-cols-3"}`}>
-                {availableMethods.map(m => (
-                  <button
-                    key={m}
-                    onClick={() => setPaymentMethod(m)}
-                    className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border-2 transition-all ${
-                      paymentMethod === m
-                        ? "border-amber-500 bg-amber-500/10 text-amber-300"
-                        : "border-gray-700/60 text-gray-400 hover:border-gray-600"
-                    }`}
-                  >
-                    <span className="text-xl">{METHOD_META[m].emoji}</span>
-                    <span className="text-xs font-semibold">{METHOD_META[m].label}</span>
-                  </button>
-                ))}
+              <div className={`grid gap-3 ${
+                availableMethods.length === 1 ? "grid-cols-1" :
+                availableMethods.length === 2 ? "grid-cols-2" : "grid-cols-3"
+              }`}>
+                {availableMethods.map(m => {
+                  const icon = METHOD_ICONS[m];
+                  const isSelected = paymentMethod === m;
+                  return (
+                    <button
+                      key={m}
+                      onClick={() => setPaymentMethod(m)}
+                      className={`relative overflow-hidden rounded-2xl border-2 transition-all duration-200 ${
+                        isSelected
+                          ? `${icon.selectedBorder} shadow-lg scale-[1.03]`
+                          : `${icon.border} opacity-60 hover:opacity-90 hover:scale-[1.01]`
+                      }`}
+                      style={{ padding: 0, aspectRatio: "1 / 1" }}
+                    >
+                      <img
+                        src={icon.src}
+                        alt={icon.alt}
+                        className="w-full h-full object-cover block rounded-2xl"
+                      />
+                      {isSelected && (
+                        <div className="absolute inset-0 ring-2 ring-inset ring-white/20 rounded-2xl pointer-events-none" />
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             )}
 
