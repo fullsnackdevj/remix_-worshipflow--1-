@@ -194,7 +194,7 @@ export default function EventRegistrationPage({ eventId }: { eventId: string }) 
 
   const METHOD_ICONS: Record<PaymentMethod, { src: string; alt: string; bg: string; border: string; selectedBorder: string }> = {
     gcash:         { src: "/payments/gcash.png",        alt: "GCash",         bg: "bg-blue-50",   border: "border-gray-700/40", selectedBorder: "border-blue-400"  },
-    maya:          { src: "/payments/maya.svg",         alt: "Maya",          bg: "bg-black",    border: "border-gray-700/40", selectedBorder: "border-green-400" },
+    maya:          { src: "/payments/maya.png",         alt: "Maya",          bg: "bg-black",    border: "border-gray-700/40", selectedBorder: "border-green-400" },
     bank_transfer: { src: "/payments/bank_transfer.png",alt: "Bank Transfer", bg: "bg-purple-50",border: "border-gray-700/40", selectedBorder: "border-purple-400"},
   };
 
