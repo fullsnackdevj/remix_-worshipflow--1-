@@ -35,7 +35,7 @@ const DesignRequestsView  = lazy(() => import("./DesignRequestsView"));
 import AutoTextarea from "./AutoTextarea";
 import DatePicker from "./DatePicker";
 
-import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, CheckSquare, Check, Filter, Users, Calendar, Phone, UserPlus, Camera, BookOpen, LayoutGrid, Mic2, Copy, Pencil, Shield, Mail, Bell, Lock, AlertTriangle, CheckCircle, HelpCircle, FlaskConical, NotebookPen, SquareKanban, Feather, Palette, Code2 } from "lucide-react";
+import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, CheckSquare, Check, Filter, Users, Calendar, CalendarDays, Phone, UserPlus, Camera, BookOpen, LayoutGrid, Mic2, Copy, Pencil, Shield, Mail, Bell, Lock, AlertTriangle, CheckCircle, HelpCircle, FlaskConical, NotebookPen, SquareKanban, Feather, Palette, Code2 } from "lucide-react";
 import { Song, Tag, Member, ScheduleMember, Schedule } from "./types";
 import LineupPlayer, { LineupTrack, CurrentUser } from "./LineupPlayer";
 import SongsLibraryPlayer, { LibraryTrack } from "./SongsLibraryPlayer";
@@ -330,10 +330,13 @@ export default function App() {
   const [unseenFreedomWall, setUnseenFreedomWall] = useState(() => !localStorage.getItem("wf_seen_freedom_wall"));
   const [unseenPreaching, setUnseenPreaching] = useState(() => !localStorage.getItem("wf_seen_preaching"));
   const [unseenDesignRequests, setUnseenDesignRequests] = useState(() => !localStorage.getItem("wf_seen_design_requests"));
-  const markPlannerSeen = () => { if (unseenPlanner) { localStorage.setItem("wf_seen_planner", "1"); setUnseenPlanner(false); } };
-  const markFreedomWallSeen = () => { if (unseenFreedomWall) { localStorage.setItem("wf_seen_freedom_wall", "1"); setUnseenFreedomWall(false); } };
-  const markPreachingSeen = () => { if (unseenPreaching) { localStorage.setItem("wf_seen_preaching", "1"); setUnseenPreaching(false); } };
-  const markDesignRequestsSeen = () => { if (unseenDesignRequests) { localStorage.setItem("wf_seen_design_requests", "1"); setUnseenDesignRequests(false); } };
+  const markPlannerSeen        = () => { if (unseenPlanner)        { localStorage.setItem("wf_seen_planner",          "1"); setUnseenPlanner(false);        } };
+  const markFreedomWallSeen    = () => { if (unseenFreedomWall)    { localStorage.setItem("wf_seen_freedom_wall",     "1"); setUnseenFreedomWall(false);    } };
+  const markPreachingSeen      = () => { if (unseenPreaching)      { localStorage.setItem("wf_seen_preaching",        "1"); setUnseenPreaching(false);      } };
+  const markDesignRequestsSeen = () => { if (unseenDesignRequests) { localStorage.setItem("wf_seen_design_requests",  "1"); setUnseenDesignRequests(false); } };
+  // Events — Coming Soon teaser (same pattern, amber accent)
+  const [unseenEvents, setUnseenEvents] = useState(() => !localStorage.getItem("wf_seen_events"));
+  const markEventsSeen = () => { if (unseenEvents) { localStorage.setItem("wf_seen_events", "1"); setUnseenEvents(false); } };
 
   // ── Planner deep-link state (from calendar task card ⇒ open specific card) ──
   const [pendingPlannerBoardId, setPendingPlannerBoardId] = useState<string | null>(null);
@@ -342,7 +345,7 @@ export default function App() {
   // 📱 Auto-open mobile sidebar when there are unseen new modules
   // Only on mobile (< 1024px). Stops once all modules are seen.
   useEffect(() => {
-    const hasUnseen = unseenPlanner || unseenFreedomWall || unseenPreaching || unseenDesignRequests;
+    const hasUnseen = unseenPlanner || unseenFreedomWall || unseenPreaching || unseenDesignRequests || unseenEvents;
     if (hasUnseen && window.innerWidth < 1024) {
       // Small delay so the app finishes the initial render before sliding the drawer open
       const t = setTimeout(() => setIsMobileMenuOpen(true), 400);
@@ -1173,7 +1176,39 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Scheduling</span>}
           </div>
 
-          {/* Notes */}
+          {/* ── Events — Coming Soon ─────────────────────────────────────────── */}
+          <div className="relative group/tip">
+            <button
+              onClick={() => markEventsSeen()}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all font-medium ${
+                !isRoleAdmin
+                  ? "opacity-50 cursor-not-allowed text-gray-500 dark:text-gray-600"
+                  : unseenEvents
+                    ? "text-amber-400 dark:text-amber-300 hover:bg-amber-900/20"
+                    : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
+              } ${isSidebarCollapsed ? "justify-center" : ""}`}
+              style={unseenEvents ? {
+                boxShadow: "0 0 0 1px rgba(251,191,36,0.4), 0 0 14px rgba(251,191,36,0.25)",
+                animation: "newModulePulse 2s ease-in-out infinite",
+              } : {}}
+              title={isRoleAdmin ? "Events (Coming Soon)" : "Events — Coming Soon"}
+            >
+              <span className="relative shrink-0">
+                <CalendarDays size={20} />
+                {unseenEvents && (
+                  <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400 border border-[#1a1f2e]" />
+                )}
+              </span>
+              {!isSidebarCollapsed && <span>Events</span>}
+              {!isSidebarCollapsed && unseenEvents && (
+                <span className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse">SOON</span>
+              )}
+              {!isSidebarCollapsed && !unseenEvents && (
+                <span className="ml-auto text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-gray-700/40 text-gray-500">SOON</span>
+              )}
+            </button>
+            {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Events (Coming Soon)</span>}
+          </div>
           <div className="relative group/tip">
             <button
               onClick={() => { setCurrentView("team-notes"); setIsMobileMenuOpen(false); }}
