@@ -87,9 +87,11 @@ export default function EventsView({ userId, userName, isAdmin, onToast }: Props
   const [detailTab, setDetailTab] = useState<"registrants" | "finance" | "share">("registrants");
   const [registrants, setRegistrants] = useState<Registrant[]>([]);
   const [registrantsLoading, setRegistrantsLoading] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery,  setSearchQuery]  = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending_review" | "paid" | "rejected">("all");
   const [actioningId, setActioningId] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [copied,       setCopied]       = useState(false);
+  const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
 
   // ── Rejection flow state ─────────────────────────────────────────────────────
   const [rejectingId, setRejectingId] = useState<string | null>(null);
@@ -126,15 +128,19 @@ export default function EventsView({ userId, userName, isAdmin, onToast }: Props
   const pending   = registrants.filter(r => r.paymentStatus === "pending_review").length;
   const rejected  = registrants.filter(r => r.paymentStatus === "rejected").length;
   const collected = paid * (selectedEvent?.price ?? 0);
-  const outstanding = (registrants.length - paid) * (selectedEvent?.price ?? 0);
+  const outstanding = pending * (selectedEvent?.price ?? 0);
 
-  const filtered = searchQuery.trim()
-    ? registrants.filter(r =>
-        r.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        r.phone?.includes(searchQuery) ||
-        r.email?.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : registrants;
+  const filtered = registrants
+    .filter(r => statusFilter === "all" || r.paymentStatus === statusFilter)
+    .filter(r => {
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      return (
+        r.fullName.toLowerCase().includes(q) ||
+        r.phone?.includes(q) ||
+        (r.email ?? "").toLowerCase().includes(q)
+      );
+    });
 
   // ── Firestore subscriptions ──────────────────────────────────────────────────
   useEffect(() => {
@@ -366,13 +372,46 @@ export default function EventsView({ userId, userName, isAdmin, onToast }: Props
         {/* ─── REGISTRANTS tab ─── */}
         {detailTab === "registrants" && (
           <div>
-            <div className="relative mb-4">
+            <div className="relative mb-3">
               <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" />
               <input
                 value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
                 placeholder="Search name, phone, email…"
                 className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-700/60 bg-gray-800/60 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-indigo-500/60 transition-colors"
               />
+            </div>
+
+            {/* Status filter pills */}
+            <div className="flex gap-2 mb-4 flex-wrap">
+              {([
+                { key: "all",            label: "All",      count: registrants.length },
+                { key: "pending_review", label: "Pending",  count: registrants.filter(r => r.paymentStatus === "pending_review").length },
+                { key: "paid",           label: "Paid",     count: registrants.filter(r => r.paymentStatus === "paid").length },
+                { key: "rejected",       label: "Rejected", count: registrants.filter(r => r.paymentStatus === "rejected").length },
+              ] as const).map(({ key, label, count }) => (
+                <button
+                  key={key}
+                  onClick={() => setStatusFilter(key)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                    statusFilter === key
+                      ? key === "all"            ? "bg-white/10 border-white/20 text-white"
+                      : key === "pending_review" ? "bg-amber-500/20 border-amber-500/40 text-amber-300"
+                      : key === "paid"           ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300"
+                      :                           "bg-red-500/20 border-red-500/40 text-red-300"
+                      : "bg-transparent border-gray-700/50 text-gray-500 hover:border-gray-600 hover:text-gray-400"
+                  }`}
+                >
+                  {label}
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                    statusFilter === key
+                      ? key === "pending_review" ? "bg-amber-500/30 text-amber-200"
+                      : key === "paid"           ? "bg-emerald-500/30 text-emerald-200"
+                      : key === "rejected"       ? "bg-red-500/30 text-red-200"
+                      :                           "bg-white/10 text-white/70"
+                      : "bg-gray-700/60 text-gray-500"
+                  }`}>{count}</span>
+                </button>
+              ))}
             </div>
 
             {registrantsLoading ? (
@@ -444,6 +483,17 @@ export default function EventsView({ userId, userName, isAdmin, onToast }: Props
                       {r.paymentStatus === "pending_review" && rejectingId !== r.id && (
                         <div className="flex gap-2 shrink-0">
                           <button
+                            onClick={() => {
+                              const url = `${window.location.origin}/?event=${selectedEvent.id}&registrant=${r.id}`;
+                              navigator.clipboard.writeText(url);
+                              setCopiedLinkId(r.id);
+                              setTimeout(() => setCopiedLinkId(null), 2000);
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 text-xs font-semibold hover:bg-indigo-600/30 transition-colors"
+                          >
+                            {copiedLinkId === r.id ? <><Check size={11} /> Copied!</> : <><Copy size={11} /> Copy Link</>}
+                          </button>
+                          <button
                             onClick={() => confirmPayment(r.id)} disabled={actioningId === r.id}
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 text-xs font-semibold hover:bg-emerald-600/30 transition-colors disabled:opacity-50"
                           >
@@ -467,17 +517,30 @@ export default function EventsView({ userId, userName, isAdmin, onToast }: Props
                           <span className="font-medium">Confirmed{r.confirmedBy ? ` by ${r.confirmedBy}` : ""}</span>
                         </div>
                       )}
-                      {/* Reopen button for rejected */}
+                      {/* Reopen + Copy Link for rejected */}
                       {r.paymentStatus === "rejected" && (
-                        <button
-                          onClick={() => reopenPayment(r.id)} disabled={actioningId === r.id}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-700/60 text-gray-300 border border-gray-600/40 text-xs font-semibold hover:bg-amber-500/20 hover:text-amber-300 hover:border-amber-500/30 transition-all disabled:opacity-50 shrink-0"
-                        >
-                          {actioningId === r.id
-                            ? <Loader2 size={11} className="animate-spin" />
-                            : <span className="text-base leading-none">↩</span>}
-                          Reopen
-                        </button>
+                        <div className="flex gap-2 shrink-0">
+                          <button
+                            onClick={() => {
+                              const url = `${window.location.origin}/?event=${selectedEvent.id}&registrant=${r.id}`;
+                              navigator.clipboard.writeText(url);
+                              setCopiedLinkId(r.id);
+                              setTimeout(() => setCopiedLinkId(null), 2000);
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 text-xs font-semibold hover:bg-indigo-600/30 transition-colors"
+                          >
+                            {copiedLinkId === r.id ? <><Check size={11} /> Copied!</> : <><Copy size={11} /> Copy Link</>}
+                          </button>
+                          <button
+                            onClick={() => reopenPayment(r.id)} disabled={actioningId === r.id}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-700/60 text-gray-300 border border-gray-600/40 text-xs font-semibold hover:bg-amber-500/20 hover:text-amber-300 hover:border-amber-500/30 transition-all disabled:opacity-50"
+                          >
+                            {actioningId === r.id
+                              ? <Loader2 size={11} className="animate-spin" />
+                              : <span className="text-base leading-none">↩</span>}
+                            Reopen
+                          </button>
+                        </div>
                       )}
                     </div>
 
@@ -542,9 +605,9 @@ export default function EventsView({ userId, userName, isAdmin, onToast }: Props
                   <p className="text-xs text-gray-500 mt-1">{paid} paid × {formatPHP(selectedEvent.price)}</p>
                 </div>
                 <div className="rounded-2xl border bg-amber-500/10 border-amber-500/20 p-5">
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Outstanding</p>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Pending</p>
                   <p className="text-3xl font-black text-amber-400">{formatPHP(outstanding)}</p>
-                  <p className="text-xs text-gray-500 mt-1">{registrants.length - paid} unpaid × {formatPHP(selectedEvent.price)}</p>
+                  <p className="text-xs text-gray-500 mt-1">{registrants.length - paid} pending × {formatPHP(selectedEvent.price)}</p>
                 </div>
               </div>
             )}

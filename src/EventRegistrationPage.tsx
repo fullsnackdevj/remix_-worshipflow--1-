@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import {
-  doc, getDoc, collection, addDoc, serverTimestamp,
+  doc, getDoc, collection, addDoc, updateDoc, serverTimestamp,
 } from "firebase/firestore";
 import { ref as sRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "./firebase";
@@ -44,13 +44,15 @@ const formatDate = (d: string) => {
 };
 
 // ── Public Registration Page ───────────────────────────────────────────────────
-export default function EventRegistrationPage({ eventId }: { eventId: string }) {
+export default function EventRegistrationPage({ eventId, registrantId }: { eventId: string; registrantId?: string }) {
+  const isUpdateMode = !!registrantId;
   const [event,      setEvent]      = useState<MinistryEvent | null>(null);
   const [loading,    setLoading]    = useState(true);
   const [notFound,   setNotFound]   = useState(false);
   const [submitted,  setSubmitted]  = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError,  setFormError]  = useState("");
+  const [existingProofUrl, setExistingProofUrl] = useState("");
 
   // Form
   const [fullName,         setFullName]         = useState("");
@@ -65,7 +67,7 @@ export default function EventRegistrationPage({ eventId }: { eventId: string }) 
 
   const uid = () => Math.random().toString(36).slice(2, 10);
 
-  // Load event
+  // Load event (and existing registrant if in update mode)
   useEffect(() => {
     const load = async () => {
       try {
@@ -76,11 +78,26 @@ export default function EventRegistrationPage({ eventId }: { eventId: string }) 
         const p = snap.data().paymentInfo as PaymentInfo;
         if (!p?.gcashQRUrl && p?.mayaQRUrl) setPaymentMethod("maya");
         else if (!p?.gcashQRUrl && !p?.mayaQRUrl && p?.bankName) setPaymentMethod("bank_transfer");
+
+        // If update mode — load the existing registrant and pre-fill
+        if (registrantId) {
+          const rSnap = await getDoc(doc(db, "events", eventId, "registrants", registrantId));
+          if (rSnap.exists()) {
+            const r = rSnap.data();
+            setFullName(r.fullName ?? "");
+            setPhone(r.phone ?? "");
+            setEmail(r.email ?? "");
+            setChurch(r.church ?? "");
+            setPaymentMethod(r.paymentMethod ?? "gcash");
+            setReferenceNumber(r.referenceNumber ?? "");
+            if (r.proofUrl) setExistingProofUrl(r.proofUrl);
+          }
+        }
       } catch { setNotFound(true); }
       finally  { setLoading(false); }
     };
     load();
-  }, [eventId]);
+  }, [eventId, registrantId]);
 
   const handleSubmit = async () => {
     if (!fullName.trim()) { setFormError("Full name is required"); return; }
@@ -90,8 +107,8 @@ export default function EventRegistrationPage({ eventId }: { eventId: string }) 
     setFormError("");
     setSubmitting(true);
     try {
-      // Upload proof image if provided
-      let proofUrl = "";
+      // Upload proof image if a new one was selected
+      let proofUrl = existingProofUrl;
       if (proofFile) {
         const ext  = proofFile.name.split(".").pop() || "jpg";
         const snap = await uploadBytes(
@@ -101,20 +118,36 @@ export default function EventRegistrationPage({ eventId }: { eventId: string }) 
         proofUrl = await getDownloadURL(snap.ref);
       }
 
-      await addDoc(collection(db, "events", eventId, "registrants"), {
-        fullName:        fullName.trim(),
-        email:           email.trim(),
-        phone:           phone.trim(),
-        church:          church.trim(),
-        paymentMethod,
-        referenceNumber: referenceNumber.trim(),
-        proofUrl,
-        paymentStatus:   "pending_review",
-        registeredAt:    serverTimestamp(),
-        confirmedBy:     null,
-        confirmedAt:     null,
-        checkedIn:       false,
-      });
+      if (isUpdateMode && registrantId) {
+        // UPDATE existing registrant record
+        await updateDoc(doc(db, "events", eventId, "registrants", registrantId), {
+          fullName:        fullName.trim(),
+          email:           email.trim(),
+          phone:           phone.trim(),
+          church:          church.trim(),
+          paymentMethod,
+          referenceNumber: referenceNumber.trim(),
+          proofUrl,
+          paymentStatus:   "pending_review",   // reset to pending so admin re-reviews
+          updatedAt:       serverTimestamp(),
+        });
+      } else {
+        // CREATE new registrant record
+        await addDoc(collection(db, "events", eventId, "registrants"), {
+          fullName:        fullName.trim(),
+          email:           email.trim(),
+          phone:           phone.trim(),
+          church:          church.trim(),
+          paymentMethod,
+          referenceNumber: referenceNumber.trim(),
+          proofUrl,
+          paymentStatus:   "pending_review",
+          registeredAt:    serverTimestamp(),
+          confirmedBy:     null,
+          confirmedAt:     null,
+          checkedIn:       false,
+        });
+      }
       setSubmitted(true);
     } catch {
       setFormError("Failed to submit. Please check your connection and try again.");
@@ -173,10 +206,14 @@ export default function EventRegistrationPage({ eventId }: { eventId: string }) 
         <div className="w-20 h-20 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center mb-6">
           <CheckCircle2 size={40} className="text-emerald-400" />
         </div>
-        <h2 className="text-2xl font-black text-white mb-3">You're Registered! 🎉</h2>
+        <h2 className="text-2xl font-black text-white mb-3">
+          {isUpdateMode ? "Payment Updated! ✅" : "You're Registered! 🎉"}
+        </h2>
         <p className="text-gray-400 text-sm mb-6 max-w-xs leading-relaxed">
-          Your registration for <strong className="text-white">{event.title}</strong> has been received.
-          {event.price > 0 && " Once your payment is confirmed by our team, your slot will be secured."}
+          {isUpdateMode
+            ? <>Your payment details for <strong className="text-white">{event.title}</strong> have been updated. Our team will review and confirm your payment.</>            
+            : <>Your registration for <strong className="text-white">{event.title}</strong> has been received.{event.price > 0 && " Once your payment is confirmed by our team, your slot will be secured."}</>          
+          }
         </p>
 
         <div className="bg-gray-800/60 border border-gray-700/50 rounded-2xl p-5 w-full max-w-xs text-left space-y-3 mb-8">
@@ -253,7 +290,9 @@ export default function EventRegistrationPage({ eventId }: { eventId: string }) 
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/20">
               <Ticket size={20} className="text-white" />
             </div>
-            <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Event Registration</span>
+            <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">
+              {isUpdateMode ? "Update Your Payment" : "Event Registration"}
+            </span>
           </div>
 
           <h1 className="text-2xl font-black text-white mb-3 leading-tight">{event.title}</h1>

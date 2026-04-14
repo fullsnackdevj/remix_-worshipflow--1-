@@ -77,7 +77,9 @@ function Root() {
   }, [timerDone, authResolved, visible]);
 
   // ── Public event registration — bypass auth entirely ──────────────────────
-  const publicEventId = new URLSearchParams(window.location.search).get('event');
+  const params         = new URLSearchParams(window.location.search);
+  const publicEventId  = params.get('event');
+  const publicRegId    = params.get('registrant') ?? undefined;
   if (publicEventId) {
     return (
       <Suspense fallback={
@@ -85,7 +87,7 @@ function Root() {
           <div style={{ width: 32, height: 32, border: '3px solid transparent', borderTopColor: '#f59e0b', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
         </div>
       }>
-        <EventRegistrationPage eventId={publicEventId} />
+        <EventRegistrationPage eventId={publicEventId} registrantId={publicRegId} />
       </Suspense>
     );
   }
