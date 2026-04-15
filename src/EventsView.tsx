@@ -168,10 +168,11 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
   const [fBankAcctNum, setFBankAcctNum] = useState("");
   const [fInstructions, setFInstructions] = useState("");
 
-  // ── Derived ──────────────────────────────────────────────────────────────────
-  const regLink = selectedEvent
-    ? `${window.location.origin}${window.location.pathname}?event=${selectedEvent.id}`
-    : "";
+  // Path-based URLs: /r/ID (registration), /d/ID (dashboard)
+  // iOS PWA standalone mode silently drops query params from shared links
+  // but always preserves the URL path — so /r/ID format works reliably on mobile.
+  const origin  = window.location.origin;
+  const regLink = selectedEvent ? `${origin}/r/${selectedEvent.id}` : "";
 
   const active    = registrants.filter(r => !r.archived);
   const archived  = registrants.filter(r =>  r.archived);
@@ -802,7 +803,7 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
                         <div className="flex gap-2 shrink-0">
                           <button
                             onClick={() => {
-                              const url = `${window.location.origin}/?event=${selectedEvent.id}&registrant=${r.id}`;
+                              const url = `${origin}/r/${selectedEvent.id}?registrant=${r.id}`;
                               navigator.clipboard.writeText(url);
                               setCopiedLinkId(r.id);
                               setTimeout(() => setCopiedLinkId(null), 2000);
@@ -840,7 +841,7 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
                         <div className="flex gap-2 shrink-0">
                           <button
                             onClick={() => {
-                              const url = `${window.location.origin}/?event=${selectedEvent.id}&registrant=${r.id}`;
+                              const url = `${origin}/r/${selectedEvent.id}?registrant=${r.id}`;
                               navigator.clipboard.writeText(url);
                               setCopiedLinkId(r.id);
                               setTimeout(() => setCopiedLinkId(null), 2000);
@@ -1172,11 +1173,11 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
                   </div>
                   <div className="flex gap-2">
                     <div className="flex-1 px-3 py-2 bg-gray-900/60 border border-gray-700/50 rounded-xl text-[11px] text-gray-400 font-mono truncate">
-                      {`${window.location.origin}${window.location.pathname}?event=${selectedEvent.id}&view=member-register`}
+                      {`${origin}/?event=${selectedEvent.id}&view=member-register`}
                     </div>
                     <button
                       onClick={() => {
-                        navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}?event=${selectedEvent.id}&view=member-register`);
+                        navigator.clipboard.writeText(`${origin}/?event=${selectedEvent.id}&view=member-register`);
                         setCopiedCollector(true); setTimeout(() => setCopiedCollector(false), 2000);
                       }}
                       className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all shrink-0 ${copiedCollector ? "bg-emerald-600/20 text-emerald-400 border border-emerald-500/30" : "bg-amber-600/20 text-amber-400 border border-amber-500/30 hover:bg-amber-600/30"}`}
@@ -1199,11 +1200,11 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
                   </div>
                   <div className="flex gap-2">
                     <div className="flex-1 px-3 py-2 bg-gray-900/60 border border-gray-700/50 rounded-xl text-[11px] text-gray-400 font-mono truncate">
-                      {`${window.location.origin}${window.location.pathname}?event=${selectedEvent.id}&view=collector&token=${selectedEvent.collectorToken}`}
+                      {`${origin}/?event=${selectedEvent.id}&view=collector&token=${selectedEvent.collectorToken}`}
                     </div>
                     <button
                       onClick={() => {
-                        navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}?event=${selectedEvent.id}&view=collector&token=${selectedEvent.collectorToken}`);
+                        navigator.clipboard.writeText(`${origin}/?event=${selectedEvent.id}&view=collector&token=${selectedEvent.collectorToken}`);
                         flashCopy("collector");
                       }}
                       className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all shrink-0 ${copiedId === "collector" ? "bg-emerald-600/20 text-emerald-400 border border-emerald-500/30" : "bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-600/30"}`}
@@ -1274,12 +1275,12 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
               <p className="text-xs text-gray-600 mb-2">Share this read-only link so leaders can monitor registrations live — no login needed.</p>
               <div className="flex gap-2">
                 <div className="flex-1 px-3 py-2.5 bg-gray-800/60 border border-gray-700/50 rounded-xl text-xs text-gray-400 font-mono truncate">
-                  {`${window.location.origin}${window.location.pathname}?event=${selectedEvent.id}&view=dashboard`}
+                  {`${origin}/d/${selectedEvent.id}`}
                 </div>
                 <button
                   onClick={() => {
                     navigator.clipboard.writeText(
-                      `${window.location.origin}${window.location.pathname}?event=${selectedEvent.id}&view=dashboard`
+                      `${origin}/d/${selectedEvent.id}`
                     );
                     flashCopy("dashboard");
                   }}

@@ -16,6 +16,17 @@
   status = 200
   force = true
 
+# ── Public event path-based routes (mobile-safe: iOS PWA preserves paths, drops query params) ──
+[[redirects]]
+  from = "/r/*"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/d/*"
+  to = "/index.html"
+  status = 200
+
 # ── SPA fallback ─────────────────────────────────────────────────────────────
 [[redirects]]
   from = "/*"

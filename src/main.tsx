@@ -80,10 +80,21 @@ function Root() {
   }, [timerDone, authResolved, visible]);
 
   // ── Public event registration — bypass auth entirely ──────────────────────
-  const params         = new URLSearchParams(window.location.search);
-  const publicEventId  = params.get('event');
-  const publicRegId    = params.get('registrant') ?? undefined;
-  const publicView     = params.get('view');
+  // Supports BOTH path-based (/r/EVENT_ID) and query-param (?event=ID) routing.
+  // Path-based is the PREFERRED form for shared links: iOS PWA standalone mode
+  // silently drops query params from shared URLs but always preserves the path.
+  const params        = new URLSearchParams(window.location.search);
+  const pathname      = window.location.pathname;
+
+  // Path-based: /r/EVENT_ID  → registration
+  //             /d/EVENT_ID  → dashboard
+  const pathRegMatch  = pathname.match(/^\/r\/([^/?#]+)/);
+  const pathDashMatch = pathname.match(/^\/d\/([^/?#]+)/);
+
+  const publicEventId = pathRegMatch?.[1] ?? pathDashMatch?.[1] ?? params.get('event');
+  const publicRegId   = params.get('registrant') ?? undefined;
+  // Determine view: path-based takes priority over query param
+  const publicView    = pathDashMatch ? 'dashboard' : params.get('view');
 
   const fallback = (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#030712' }}>
