@@ -265,24 +265,46 @@ export default function EventRegistrationPage({ eventId, registrantId }: { event
 
         {/* Action buttons */}
         <div className="flex flex-col gap-3 w-full max-w-xs">
-          <button
-            onClick={resetForm}
-            className="flex items-center justify-center gap-2 w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-bold text-sm shadow-lg shadow-amber-500/20 transition-all active:scale-[0.98]"
-          >
-            <UserPlus size={17} /> Register Another Person
-          </button>
-          <button
-            onClick={() => {
-              const closed = window.close();
-              if (closed === undefined) setCloseFailed(true);
-              setTimeout(() => setCloseFailed(true), 300);
-            }}
-            className="flex items-center justify-center gap-2 w-full py-3.5 rounded-2xl border border-gray-700/60 text-gray-400 hover:bg-gray-800 hover:text-white font-semibold text-sm transition-all active:scale-[0.98]"
-          >
-            <CheckCircle2 size={17} /> I'm Done
-          </button>
-          {closeFailed && (
-            <p className="text-xs text-gray-600 text-center mt-1">You may now close this tab manually.</p>
+          {!closeFailed ? (
+            <>
+              <button
+                onClick={resetForm}
+                className="flex items-center justify-center gap-2 w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-bold text-sm shadow-lg shadow-amber-500/20 transition-all active:scale-[0.98]"
+              >
+                <UserPlus size={17} /> Register Another Person
+              </button>
+              <button
+                onClick={() => {
+                  // window.close() is blocked by browsers on tabs that weren't
+                  // opened by window.open() — always the case on mobile shared links.
+                  // Try it anyway as a best-effort, then immediately show the manual
+                  // close instruction so the user isn't left confused.
+                  window.close();
+                  setCloseFailed(true);
+                }}
+                className="flex items-center justify-center gap-2 w-full py-3.5 rounded-2xl border border-gray-700/60 text-gray-400 hover:bg-gray-800 hover:text-white font-semibold text-sm transition-all active:scale-[0.98]"
+              >
+                <CheckCircle2 size={17} /> I'm Done
+              </button>
+            </>
+          ) : (
+            /* Browser blocked window.close() — show a clear, friendly instruction */
+            <div className="flex flex-col items-center gap-3 w-full py-4 px-5 rounded-2xl bg-gray-800/60 border border-gray-700/50 text-center">
+              <div className="w-10 h-10 rounded-full bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center">
+                <CheckCircle2 size={20} className="text-emerald-400" />
+              </div>
+              <p className="text-sm font-semibold text-white">You're all set! 🎉</p>
+              <p className="text-xs text-gray-400 leading-relaxed">
+                You can now <strong className="text-gray-200">close this tab</strong> using your browser's back button or tab manager.
+              </p>
+              {/* Show the Register Another button below the close hint */}
+              <button
+                onClick={resetForm}
+                className="flex items-center gap-1.5 text-xs font-semibold text-amber-400 hover:text-amber-300 transition-colors mt-1"
+              >
+                <UserPlus size={13} /> Register another person
+              </button>
+            </div>
           )}
         </div>
       </div>
