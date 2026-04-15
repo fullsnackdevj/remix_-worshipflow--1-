@@ -134,14 +134,19 @@ export default function EventRegistrationPage({ eventId, registrantId }: { event
         });
       } else {
         // Duplicate guard — check if phone already registered for this event
-        const dupSnap = await getDocs(
-          query(collection(db, "events", eventId, "registrants"),
-            where("phone", "==", phone.trim()))
-        );
-        if (!dupSnap.empty) {
-          setFormError("You're already registered for this event. Contact the organizer if you need to make any changes.");
-          setSubmitting(false);
-          return;
+        try {
+          const dupSnap = await getDocs(
+            query(collection(db, "events", eventId, "registrants"),
+              where("phone", "==", phone.trim()))
+          );
+          if (!dupSnap.empty) {
+            setFormError("You're already registered for this event. Contact the organizer if you need to make any changes.");
+            setSubmitting(false);
+            return;
+          }
+        } catch (dupErr) {
+          // Duplicate check failed (e.g. index not built) — allow submission to proceed
+          console.warn("[EventRegistrationPage] duplicate check failed, proceeding:", dupErr);
         }
 
         // CREATE new registrant record
@@ -161,8 +166,19 @@ export default function EventRegistrationPage({ eventId, registrantId }: { event
         });
       }
       setSubmitted(true);
-    } catch {
-      setFormError("Failed to submit. Please check your connection and try again.");
+    } catch (err: any) {
+      console.error("[EventRegistrationPage] submit error:", err);
+      // Surface a specific message where possible so users aren't misled
+      const code = err?.code ?? "";
+      if (code === "permission-denied" || code === "PERMISSION_DENIED") {
+        setFormError("Submission blocked by a security rule. Please contact the organizer.");
+      } else if (code === "storage/unauthorized" || code === "storage/unknown") {
+        setFormError("Could not upload your proof image. Please try a smaller file or skip the upload.");
+      } else if (code === "unavailable" || err?.message?.includes("network") || err?.message?.includes("fetch")) {
+        setFormError("Network error — please check your connection and try again.");
+      } else {
+        setFormError(`Submission failed: ${err?.message ?? "Unknown error. Please try again."}`);
+      }
     } finally {
       setSubmitting(false);
     }
