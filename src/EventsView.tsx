@@ -116,9 +116,11 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
   const [searchQuery,  setSearchQuery]  = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "pending_review" | "paid" | "rejected" | "archived">("all");
   const [actioningId, setActioningId] = useState<string | null>(null);
-  const [copied,       setCopied]       = useState(false);
+  const [copiedId,     setCopiedId]     = useState<string | null>(null);
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
   const [copiedCollector, setCopiedCollector] = useState(false);
+  // helper: flash a named copy button for 2 s
+  const flashCopy = (id: string) => { setCopiedId(id); setTimeout(() => setCopiedId(null), 2000); };
 
   // ── Internal event form state ─────────────────────────────────────────────
   const [fType, setFType] = useState<"external" | "internal">("external");
@@ -518,7 +520,7 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
 
   const copyLink = () => {
     navigator.clipboard.writeText(regLink);
-    setCopied(true); setTimeout(() => setCopied(false), 2000);
+    flashCopy("reg-link");
   };
 
   // ── Status badge ─────────────────────────────────────────────────────────────
@@ -1202,11 +1204,11 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
                     <button
                       onClick={() => {
                         navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}?event=${selectedEvent.id}&view=collector&token=${selectedEvent.collectorToken}`);
-                        setCopied(true); setTimeout(() => setCopied(false), 2000);
+                        flashCopy("collector");
                       }}
-                      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all shrink-0 ${copied ? "bg-emerald-600/20 text-emerald-400 border border-emerald-500/30" : "bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-600/30"}`}
+                      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all shrink-0 ${copiedId === "collector" ? "bg-emerald-600/20 text-emerald-400 border border-emerald-500/30" : "bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-600/30"}`}
                     >
-                      {copied ? <><Check size={12} /> Copied!</> : <><Copy size={12} /> Copy</>}
+                      {copiedId === "collector" ? <><Check size={12} /> Copied!</> : <><Copy size={12} /> Copy</>}
                     </button>
                   </div>
                 </div>
@@ -1245,12 +1247,12 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
                 <button
                   onClick={copyLink}
                   className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 ${
-                    copied
+                    copiedId === "reg-link"
                       ? "bg-emerald-600/20 text-emerald-400 border border-emerald-500/30"
                       : "bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-600/30"
                   }`}
                 >
-                  {copied ? <><Check size={14} /> Copied!</> : <><Copy size={14} /> Copy</>}
+                  {copiedId === "reg-link" ? <><Check size={14} /> Copied!</> : <><Copy size={14} /> Copy</>}
                 </button>
               </div>
               <p className="text-xs text-gray-600 mt-2">Paste this link in your GC, Messenger, Facebook, or anywhere you share event info.</p>
@@ -1279,16 +1281,15 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
                     navigator.clipboard.writeText(
                       `${window.location.origin}${window.location.pathname}?event=${selectedEvent.id}&view=dashboard`
                     );
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 2000);
+                    flashCopy("dashboard");
                   }}
                   className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 ${
-                    copied
+                    copiedId === "dashboard"
                       ? "bg-emerald-600/20 text-emerald-400 border border-emerald-500/30"
                       : "bg-violet-600/20 text-violet-400 border border-violet-500/30 hover:bg-violet-600/30"
                   }`}
                 >
-                  {copied ? <><Check size={14} /> Copied!</> : <><Copy size={14} /> Copy</>}
+                  {copiedId === "dashboard" ? <><Check size={14} /> Copied!</> : <><Copy size={14} /> Copy</>}
                 </button>
               </div>
             </div>
