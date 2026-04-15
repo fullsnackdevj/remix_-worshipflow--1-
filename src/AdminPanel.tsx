@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "./AuthContext";
 import { useTheme } from "./ThemeContext";
-import { UserPlus, Trash2, Shield, Users, Loader2, Check, X, Clock, UserCheck, Pencil, ShieldCheck, ShieldAlert, Megaphone, Plus, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, Eye, Sparkles, User, Guitar, Mic2, ClipboardList, Sliders, Wrench, ThumbsUp, FlaskConical, Mail, Activity, Wifi, WifiOff, Timer, RefreshCw, SquareKanban, Palette, CheckCircle2 } from "lucide-react";
+import { UserPlus, Trash2, Shield, Users, Loader2, Check, X, Clock, UserCheck, Pencil, ShieldCheck, ShieldAlert, Megaphone, Plus, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, Eye, Sparkles, User, Guitar, Mic2, ClipboardList, Sliders, Wrench, ThumbsUp, FlaskConical, Mail, Activity, Wifi, WifiOff, Timer, RefreshCw, SquareKanban, Palette, CheckCircle2, Ticket } from "lucide-react";
 import AutoTextarea from "./AutoTextarea";
 import DateTimePicker from "./DateTimePicker";
 
@@ -431,7 +431,7 @@ export default function AdminPanel({
 }) {
     const { isAdmin, user } = useAuth();
     const { theme, setTheme } = useTheme();
-    const [activeTab, setActiveTab] = useState<"team" | "planner" | "broadcasts" | "birthdays" | "activity" | "appearance">("team");
+    const [activeTab, setActiveTab] = useState<"team" | "planner" | "events" | "broadcasts" | "birthdays" | "activity" | "appearance">("team");
     const [members, setMembers] = useState<any[]>([]);
     const [users, setUsers] = useState<ApprovedUser[]>([]);
     const [pending, setPending] = useState<PendingUser[]>([]);
@@ -468,6 +468,11 @@ export default function AdminPanel({
     const [plannerMembers, setPlannerMembers] = useState<any[]>([]);
     const [plannerLoading, setPlannerLoading] = useState(false);
     const [grantingId, setGrantingId] = useState<string | null>(null);
+
+    // ── Events Access state ───────────────────────────────────────────────────
+    const [eventsMembers, setEventsMembers] = useState<any[]>([]);
+    const [eventsLoading, setEventsLoading] = useState(false);
+    const [grantingEventsId, setGrantingEventsId] = useState<string | null>(null);
 
     const autoGenerate = async () => {
         setBAutoGenerating(true);
@@ -632,6 +637,31 @@ export default function AdminPanel({
         finally { setGrantingId(null); }
     };
 
+    const fetchEventsMembers = async () => {
+        setEventsLoading(true);
+        try {
+            const res = await fetch("/api/members");
+            const data = await res.json();
+            if (Array.isArray(data)) setEventsMembers(data);
+        } catch { setEventsMembers([]); }
+        finally { setEventsLoading(false); }
+    };
+
+    const toggleEventsAccess = async (memberId: string, current: boolean) => {
+        setGrantingEventsId(memberId);
+        try {
+            const res = await fetch(`/api/members/${memberId}/events-access`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ eventsAccess: !current }),
+            });
+            if (!res.ok) throw new Error();
+            setEventsMembers(prev => prev.map(m => m.id === memberId ? { ...m, eventsAccess: !current } : m));
+            onToast?.("success", !current ? "Events access granted!" : "Events access revoked.");
+        } catch { onToast?.("error", "Failed to update. Try again."); }
+        finally { setGrantingEventsId(null); }
+    };
+
     useEffect(() => { fetchAll(); fetchBroadcasts(); }, []);
     useEffect(() => {
         if (activeTab === "birthdays" && members.length === 0) {
@@ -639,6 +669,9 @@ export default function AdminPanel({
         }
         if (activeTab === "planner" && plannerMembers.length === 0) {
             fetchPlannerMembers();
+        }
+        if (activeTab === "events" && eventsMembers.length === 0) {
+            fetchEventsMembers();
         }
     }, [activeTab]);
 
@@ -805,6 +838,16 @@ export default function AdminPanel({
                             {plannerMembers.filter(m => m.plannerAccess).length > 0 && (
                                 <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-violet-500 text-white text-[9px] font-bold leading-none">
                                     {plannerMembers.filter(m => m.plannerAccess).length}
+                                </span>
+                            )}
+                        </span>
+                    </button>
+                    <button onClick={() => setActiveTab("events")} className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${activeTab === "events" ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"}`}>
+                        <span className="flex items-center gap-1.5">
+                            <Ticket size={14} /> Events
+                            {eventsMembers.filter(m => m.eventsAccess).length > 0 && (
+                                <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-amber-500 text-white text-[9px] font-bold leading-none">
+                                    {eventsMembers.filter(m => m.eventsAccess).length}
                                 </span>
                             )}
                         </span>
@@ -1324,6 +1367,114 @@ export default function AdminPanel({
                                                     : granted
                                                         ? <><Check size={12} /> Plan Lead</>
                                                         : <><SquareKanban size={12} /> Grant Access</>
+                                                }
+                                            </button>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* ── EVENTS ACCESS TAB ────────────────────────────────────────── */}
+            {activeTab === "events" && (
+                <div className="space-y-4">
+                    {/* Description card */}
+                    <div className="bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-rose-500/10 border border-amber-200 dark:border-amber-800/40 rounded-2xl px-4 py-4">
+                        <div className="flex items-center gap-2.5 mb-1">
+                            <Ticket size={18} className="text-amber-500" />
+                            <h3 className="text-sm font-bold text-gray-900 dark:text-white">Events Full Access</h3>
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+                            Grant any member the <span className="font-semibold text-amber-500">Event Lead</span> tag to unlock full Events module access — without changing their current role.
+                        </p>
+                    </div>
+
+                    {/* Member list */}
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                        <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+                            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                                <Users size={15} /> All Members
+                            </h3>
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full">
+                                    {eventsMembers.filter(m => m.eventsAccess).length} / {eventsMembers.length} granted
+                                </span>
+                                <button onClick={fetchEventsMembers} title="Refresh"
+                                    className="p-1.5 text-gray-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-lg transition-colors">
+                                    <RefreshCw size={13} className={eventsLoading ? "animate-spin" : ""} />
+                                </button>
+                            </div>
+                        </div>
+
+                        {eventsLoading && eventsMembers.length === 0 ? (
+                            <div className="flex items-center justify-center py-10">
+                                <Loader2 size={20} className="animate-spin text-gray-400" />
+                            </div>
+                        ) : eventsMembers.length === 0 ? (
+                            <div className="text-center py-10 text-gray-400 text-sm">No members found. Add members first.</div>
+                        ) : (
+                            <ul className="divide-y divide-gray-100 dark:divide-gray-700/60">
+                                {eventsMembers.map(m => {
+                                    const granted = !!m.eventsAccess;
+                                    const isMe = grantingEventsId === m.id;
+                                    return (
+                                        <li key={m.id} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                                            {/* Avatar with optional spinning gradient ring */}
+                                            <div className="relative shrink-0" style={{ width: 38, height: 38 }}>
+                                                {granted && (
+                                                    <div
+                                                        className="planner-ring-spin absolute inset-0 rounded-full"
+                                                        style={{ background: 'conic-gradient(from 0deg, #f59e0b, #f97316, #ef4444, #f59e0b)', zIndex: 0 }}
+                                                    />
+                                                )}
+                                                <div
+                                                    className="absolute rounded-full overflow-hidden"
+                                                    style={{ inset: granted ? 2.5 : 0, zIndex: 1 }}
+                                                >
+                                                    {m.photo
+                                                        ? <img src={m.photo} alt={m.name} className="w-full h-full object-cover" />
+                                                        : <div className="w-full h-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center text-amber-600 dark:text-amber-400 font-bold text-sm">{(m.name || "?")[0].toUpperCase()}</div>
+                                                    }
+                                                </div>
+                                            </div>
+
+                                            {/* Name + role + glowing ticket icon */}
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{m.name}</p>
+                                                <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                                    <RoleBadge role={m.role ?? "member"} />
+                                                    {granted && (
+                                                        <span className="relative group/evtt">
+                                                            <Ticket
+                                                                size={13}
+                                                                style={{ color: '#f59e0b', filter: 'drop-shadow(0 0 5px #f59e0baa)' }}
+                                                            />
+                                                            <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-[10px] font-semibold whitespace-nowrap opacity-0 group-hover/evtt:opacity-100 transition-opacity z-50 shadow-lg">
+                                                                Events Full Access
+                                                            </span>
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Grant / Revoke toggle button */}
+                                            <button
+                                                onClick={() => toggleEventsAccess(m.id, granted)}
+                                                disabled={isMe}
+                                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all shrink-0 ${
+                                                    granted
+                                                        ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 border border-amber-200 dark:border-amber-700"
+                                                        : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 hover:text-amber-700 dark:hover:text-amber-300 border border-gray-200 dark:border-gray-600"
+                                                } disabled:opacity-50 disabled:cursor-not-allowed`}
+                                            >
+                                                {isMe
+                                                    ? <Loader2 size={12} className="animate-spin" />
+                                                    : granted
+                                                        ? <><Check size={12} /> Event Lead</>
+                                                        : <><Ticket size={12} /> Grant Access</>
                                                 }
                                             </button>
                                         </li>

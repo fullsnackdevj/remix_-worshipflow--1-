@@ -1451,6 +1451,26 @@ app.patch("/api/members/:id/planner-access", async (req, res) => {
   }
 });
 
+// PATCH /api/members/:id/events-access ── toggle the Event Lead tag ──────────
+app.patch("/api/members/:id/events-access", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(500).json({ error: "Firebase not configured" });
+  const { id } = req.params;
+  const { eventsAccess } = req.body;
+  if (typeof eventsAccess !== "boolean")
+    return res.status(400).json({ error: "eventsAccess must be a boolean" });
+  try {
+    await firestore.collection("members").doc(id).update({
+      eventsAccess,
+      updated_at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    res.json({ success: true });
+  } catch (e) {
+    console.error("events-access PATCH:", e);
+    res.status(500).json({ error: "Failed to update events access" });
+  }
+});
+
 // ─── Scheduling ──────────────────────────────────────────────────────────────
 
 app.get("/api/schedules", async (req, res) => {

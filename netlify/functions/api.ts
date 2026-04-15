@@ -1894,6 +1894,23 @@ Rules:
         }
     }
 
+    // PATCH /members/:id/events-access — grant or revoke Events module access
+    const eventsAccessMatch = rawPath.match(/^\/members\/([^/]+)\/events-access$/);
+    if (eventsAccessMatch && method === "PATCH") {
+        const memberId = eventsAccessMatch[1];
+        try {
+            const { eventsAccess } = body;
+            if (typeof eventsAccess !== "boolean") return json(400, { error: "eventsAccess must be a boolean" });
+            await firestore.collection("members").doc(memberId).update({
+                eventsAccess,
+                updated_at: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            return json(200, { success: true });
+        } catch (err) {
+            return json(500, { error: "Failed to update events access" });
+        }
+    }
+
     // PUT /members/:id  &  DELETE /members/:id
     const memberMatch = rawPath.match(/^\/members\/([^/]+)$/);
     if (memberMatch) {

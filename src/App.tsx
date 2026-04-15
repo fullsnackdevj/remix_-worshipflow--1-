@@ -181,7 +181,7 @@ const QA_SWITCH_ROLES = [
   { value: "member", label: "Member" },
 ];
 
-function UserMenu({ simulatedRole, onRoleSwitch, plannerAccess }: { simulatedRole: string; onRoleSwitch: (r: string) => void; plannerAccess?: boolean }) {
+function UserMenu({ simulatedRole, onRoleSwitch, plannerAccess, eventsAccess }: { simulatedRole: string; onRoleSwitch: (r: string) => void; plannerAccess?: boolean; eventsAccess?: boolean }) {
   const { user, logOut, userRole, isAdmin } = useAuth();
   const [open, setOpen] = React.useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -265,6 +265,18 @@ function UserMenu({ simulatedRole, onRoleSwitch, plannerAccess }: { simulatedRol
                   </span>
                   <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-lg bg-gray-900 text-white text-[10px] font-semibold whitespace-nowrap opacity-0 group-hover/pfabadge:opacity-100 transition-opacity z-50 shadow-lg">
                     Full Ministry Hub access granted by Admin
+                  </span>
+                </span>
+              )}
+              {eventsAccess && (
+                <span className="relative group/evabadge flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-semibold"
+                  style={{ background: 'linear-gradient(135deg, rgba(245,158,11,0.15), rgba(249,115,22,0.15), rgba(239,68,68,0.15))', border: '1px solid rgba(245,158,11,0.35)' }}>
+                  <Ticket size={10} style={{ color: '#f59e0b', filter: 'drop-shadow(0 0 4px #f59e0baa)' }} />
+                  <span style={{ background: 'linear-gradient(90deg, #f59e0b, #ef4444)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                  Events Full Access
+                  </span>
+                  <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-lg bg-gray-900 text-white text-[10px] font-semibold whitespace-nowrap opacity-0 group-hover/evabadge:opacity-100 transition-opacity z-50 shadow-lg">
+                    Full Events access granted by Admin
                   </span>
                 </span>
               )}
@@ -1177,8 +1189,8 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Scheduling</span>}
           </div>
 
-          {/* ── Events — Admin only ───────────────────────────────────────────── */}
-          {isRoleAdmin && (
+          {/* ── Events — Admin + Event Lead ────────────────────────────────────── */}
+          {(isRoleAdmin || (myMemberProfile?.eventsAccess ?? false)) && (
           <div className="relative group/tip">
             <button
               onClick={() => { markEventsSeen(); setCurrentView("events"); setIsMobileMenuOpen(false); }}
@@ -1585,7 +1597,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
               )}
 
             </div>
-            <UserMenu simulatedRole={simulatedRole} onRoleSwitch={handleRoleSwitch} plannerAccess={isAdmin || (myMemberProfile?.plannerAccess ?? false)} />
+            <UserMenu simulatedRole={simulatedRole} onRoleSwitch={handleRoleSwitch} plannerAccess={isAdmin || (myMemberProfile?.plannerAccess ?? false)} eventsAccess={isAdmin || (myMemberProfile?.eventsAccess ?? false)} />
           </div>
         </header>
 
@@ -1820,11 +1832,11 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                   onToast={showToast}
                   initialTab={pendingPreachingTab ?? undefined}
                 />
-              ) : currentView === "events" && isRoleAdmin ? (
+              ) : currentView === "events" && (isRoleAdmin || (myMemberProfile?.eventsAccess ?? false)) ? (
                 <EventsView
                   userId={user?.uid ?? ""}
                   userName={user?.displayName || user?.email || ""}
-                  isAdmin={isRoleAdmin}
+                  isAdmin={isRoleAdmin || (myMemberProfile?.eventsAccess ?? false)}
                   onToast={showToast}
                   members={allMembers}
                 />
