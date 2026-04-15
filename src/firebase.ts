@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
-import { getMessaging, getToken, onMessage } from "firebase/messaging";
+import { getMessaging, getToken, onMessage, type Messaging } from "firebase/messaging";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
@@ -25,9 +25,37 @@ googleProvider.setCustomParameters({ prompt: 'select_account' });
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 
-// Firebase Cloud Messaging — for push notifications
-export const messaging = getMessaging(app);
+// Firebase Cloud Messaging — lazily initialized so it never crashes on
+// unsupported platforms (iOS Safari < 16.4, in-app browsers from WhatsApp /
+// Messenger / Instagram, etc. that lack Service Worker + Push API support).
+// A top-level getMessaging() call on those platforms throws at module load
+// time — BEFORE React mounts — producing a completely blank page.
+let _messaging: Messaging | null = null;
+export function getMessagingInstance(): Messaging | null {
+    if (_messaging) return _messaging;
+    try {
+        if (typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window) {
+            _messaging = getMessaging(app);
+        }
+    } catch {
+        // Silently ignored — push notifications simply won't work on this browser.
+    }
+    return _messaging;
+}
+
+// Keep the named re-exports so existing import sites don't need to change.
 export { getToken, onMessage };
+
+// Legacy alias — callers that imported `messaging` directly get null on
+// unsupported browsers instead of a crash. Prefer getMessagingInstance().
+export const messaging = (() => {
+    try {
+        if (typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window) {
+            return getMessaging(app);
+        }
+    } catch { /* unsupported browser */ }
+    return null;
+})();
 
 // VAPID key for web push
 export const VAPID_KEY = import.meta.env.VITE_VAPID_KEY;

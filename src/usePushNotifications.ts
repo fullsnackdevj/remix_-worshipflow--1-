@@ -129,7 +129,7 @@ export function usePushNotifications(userId: string | null, userRole: string | n
     // Listen for foreground messages (app open)
     // Use reg.showNotification() with same `tag` as service worker → deduplication
     useEffect(() => {
-        if (!userId || !pushEnabled) return;
+        if (!userId || !pushEnabled || !messaging) return;  // messaging is null on unsupported browsers
         const unsubscribe = onMessage(messaging, async (payload) => {
             const { title, body } = payload.notification || {};
             if (Notification.permission !== "granted" || !title) return;
@@ -169,11 +169,10 @@ async function registerAndStoreToken(userId: string, userRole: string) {
     );
     await navigator.serviceWorker.ready;
 
-    const token = await getToken(messaging, {
+    const token = await getToken(messaging!, {
         vapidKey: VAPID_KEY,
         serviceWorkerRegistration: registration,
     });
-
     if (!token) return;
 
     // Include email so the backend can look up a user's UID from their email
