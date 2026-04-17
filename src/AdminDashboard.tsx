@@ -78,8 +78,12 @@ function svcColor(t?: string) {
 }
 function greeting() { const h = new Date().getHours(); return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"; }
 
-// ── Original app card ─────────────────────────────────────────────────────────
-const CARD = "bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm";
+// ── Design System: Overpay structural tokens applied to WorshipFlow ──────────
+// Card surface: subtle border elevation over heavy shadows (dark mode safe)
+// Padding: 24px internal (p-6) per Overpay Data Card spec
+// Radius: 20px (rounded-[20px]) for cards, 12px (rounded-xl) for inner elements
+// Hover: translate-y-0.5 lift + border accent — no color shift
+const CARD = "bg-white dark:bg-gray-800/90 rounded-[20px] border border-gray-200/80 dark:border-gray-700/60 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.05)] dark:shadow-[0_4px_20px_-2px_rgba(0,0,0,0.3)]";
 
 // ── Bento Tile ────────────────────────────────────────────────────────────────
 function Tile({ children, className = "", onClick, style }: {
@@ -88,24 +92,27 @@ function Tile({ children, className = "", onClick, style }: {
     return (
         <div onClick={onClick} style={style}
             className={`${CARD} overflow-hidden
-                ${onClick ? "cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-700 hover:shadow-md transition-all duration-150" : ""}
+                ${onClick ? "cursor-pointer hover:-translate-y-0.5 hover:border-indigo-300/60 dark:hover:border-indigo-600/50 hover:shadow-[0_8px_24px_-4px_rgba(0,0,0,0.08)] dark:hover:shadow-[0_8px_24px_-4px_rgba(0,0,0,0.4)] transition-all duration-200" : ""}
                 ${className}`}>
             {children}
         </div>
     );
 }
 
-// ── Card header ───────────────────────────────────────────────────────────────
+// ── Card header — Overpay spec: icon chip + title left, action right ─────────
 function CardHeader({ icon, title, action, onAction }: {
     icon: React.ReactNode; title: string; action?: string; onAction?: () => void;
 }) {
     return (
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
-            <div className="flex items-center gap-2 font-semibold text-gray-900 dark:text-white text-sm">
-                {icon}{title}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100/80 dark:border-gray-700/60">
+            <div className="flex items-center gap-2.5">
+                <span className="w-7 h-7 rounded-xl bg-gray-100 dark:bg-gray-700/80 flex items-center justify-center shrink-0">
+                    {icon}
+                </span>
+                <span className="font-semibold text-gray-900 dark:text-white text-sm tracking-tight">{title}</span>
             </div>
             {action && onAction && (
-                <button onClick={onAction} className="text-xs text-indigo-500 hover:text-indigo-400 flex items-center gap-1 font-medium">
+                <button onClick={onAction} className="text-xs text-indigo-500 hover:text-indigo-400 flex items-center gap-1 font-medium transition-colors">
                     {action}<ChevronRight size={13} />
                 </button>
             )}
@@ -113,20 +120,20 @@ function CardHeader({ icon, title, action, onAction }: {
     );
 }
 
-// ── Big metric tile ───────────────────────────────────────────────────────────
+// ── Metric tile — Overpay 24px padding, stronger type hierarchy ───────────────
 function MetricTile({ label, value, sub, iconBg, icon, onClick }: {
     label: string; value: number; sub: string; iconBg: string; icon: React.ReactNode; onClick?: () => void;
 }) {
     return (
-        <Tile className="p-4 flex flex-col justify-between hover-lift stat-glow" onClick={onClick}>
-            <div className="flex items-start justify-between">
-                <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${iconBg}`}>{icon}</div>
-                <ArrowUpRight size={13} className="text-gray-300 dark:text-gray-600 mt-0.5" />
+        <Tile className="p-6 flex flex-col justify-between" onClick={onClick}>
+            <div className="flex items-start justify-between mb-4">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${iconBg}`}>{icon}</div>
+                <ArrowUpRight size={14} className="text-gray-300 dark:text-gray-600 mt-0.5 group-hover:text-indigo-400 transition-colors" />
             </div>
-            <div className="mt-2">
-                <p className="text-3xl font-black text-gray-900 dark:text-white tracking-tight leading-none">{value}</p>
-                <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 mt-1">{label}</p>
-                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">{sub}</p>
+            <div>
+                <p className="text-4xl font-black text-gray-900 dark:text-white tracking-tight leading-none">{value}</p>
+                <p className="text-sm font-bold text-gray-600 dark:text-gray-300 mt-2 tracking-tight">{label}</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 font-medium">{sub}</p>
             </div>
         </Tile>
     );
@@ -667,20 +674,22 @@ export default function AdminDashboard({
 
 
     return (
-        <div className="space-y-4 p-0">
-            {/* ── Greeting row — name left, Admin badge far right ── */}
+        <div className="space-y-5 p-0">
+            {/* ── Greeting — Overpay: generous spacing, stronger type hierarchy ── */}
             <div className="flex items-center justify-between gap-4 pt-1">
                 <div className="flex items-center gap-4">
-                    <div className="w-1.5 h-14 rounded-full bg-indigo-500 dark:bg-indigo-400 shrink-0" />
+                    {/* Left accent bar — kept as brand pulse indicator */}
+                    <div className="w-1 h-16 rounded-full bg-gradient-to-b from-indigo-500 to-violet-500 shrink-0" />
                     <div>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                        <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">
                             {greeting()},{" "}
                             <span className={`font-semibold ${(ROLE_STYLE[userRole] ?? ROLE_STYLE.admin).text}`}>
                                 {(ROLE_STYLE[userRole] ?? ROLE_STYLE.admin).label}
                             </span>
                         </p>
-                        <h1 className="text-3xl font-bold text-gray-900 dark:text-white leading-tight">{first} 👋</h1>
-                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{new Date().toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</p>
+                        {/* Overpay h1: 2.25rem bold, tight tracking */}
+                        <h1 className="text-4xl font-black text-gray-900 dark:text-white leading-tight tracking-tight">{first} 👋</h1>
+                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 font-medium">{new Date().toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</p>
                     </div>
                 </div>
                 <div className="flex flex-col items-end gap-2 shrink-0">
@@ -807,32 +816,32 @@ export default function AdminDashboard({
                 </div>
             )}
 
-            {/* ── Top section: Verse (left) + My Tasks (center) + 2×2 metric tiles (right) ── */}
-            <div className="grid grid-cols-1 lg:grid-cols-[2fr_1.5fr_1.5fr] gap-3">
+            {/* ── Top section — Overpay 8px grid: generous gap-4, 3-col desktop ── */}
+            <div className="grid grid-cols-1 lg:grid-cols-[2fr_1.5fr_1.5fr] gap-4">
                 {/* LEFT — Daily Bible Verse */}
                 <VerseOfTheDay userId={userId} userName={userName.split(" ")[0] || userName} userPhoto="" />
                 {/* CENTER — My Tasks */}
                 <MyTasksCard userName={userName} userEmail={userEmail} members={members} onNavigate={onNavigate} />
-            {/* RIGHT — 2×2 metric tiles */}
-                <div className="grid grid-cols-2 gap-3">
+                {/* RIGHT — 2×2 metric tiles: Overpay 4-col desktop spec → 2×2 grid */}
+                <div className="grid grid-cols-2 gap-4">
                     <div className="stagger-1">
                     <MetricTile label="Songs" value={songs.length} sub={`${songsUsed} in services`}
-                        iconBg="bg-indigo-100 dark:bg-indigo-900/40" icon={<Music size={15} className="text-indigo-600 dark:text-indigo-400" />}
+                        iconBg="bg-indigo-100 dark:bg-indigo-900/40" icon={<Music size={16} className="text-indigo-600 dark:text-indigo-400" />}
                         onClick={() => onNavigate("songs")} />
                     </div>
                     <div className="stagger-2">
                     <MetricTile label="Members" value={members.length} sub={`${members.filter(m => m.status !== "inactive").length} active`}
-                        iconBg="bg-violet-100 dark:bg-violet-900/40" icon={<Users size={15} className="text-violet-600 dark:text-violet-400" />}
+                        iconBg="bg-violet-100 dark:bg-violet-900/40" icon={<Users size={16} className="text-violet-600 dark:text-violet-400" />}
                         onClick={() => onNavigate("members")} />
                     </div>
                     <div className="stagger-3">
                     <MetricTile label="Events" value={totalEvents} sub={`${upcomingEvents.length} upcoming`}
-                        iconBg="bg-emerald-100 dark:bg-emerald-900/40" icon={<Zap size={15} className="text-emerald-600 dark:text-emerald-400" />}
+                        iconBg="bg-emerald-100 dark:bg-emerald-900/40" icon={<Zap size={16} className="text-emerald-600 dark:text-emerald-400" />}
                         onClick={() => onNavigate("schedule")} />
                     </div>
                     <div className="stagger-4">
                     <MetricTile label="Issues" value={openBugs + openFeqs} sub={`${openBugs} bugs · ${openFeqs} req`}
-                        iconBg="bg-amber-100 dark:bg-amber-900/40" icon={<AlertCircle size={15} className="text-amber-600 dark:text-amber-400" />} />
+                        iconBg="bg-amber-100 dark:bg-amber-900/40" icon={<AlertCircle size={16} className="text-amber-600 dark:text-amber-400" />} />
                     </div>
                 </div>
             </div>
@@ -840,12 +849,12 @@ export default function AdminDashboard({
 
 
             {/*
-             * BENTO GRID 3×2
-             * Row 1: [What's New]  [Church Events]      [Upcoming Events]
-             * Row 2: [Songs]       [Team by Role]        [Open Issues]
-             * Responsive: 1-col mobile → 2-col lg → 3-col xl
+             * BENTO GRID — Overpay 12-col spec adapted:
+             * Mobile  (0–640):    1-col, vertical stack
+             * Tablet  (641–1024): 2-col grid
+             * Desktop (1025+):    3-col grid, max breathing room
              */}
-            <div className="grid gap-4 grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-5 grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
 
                 {/* ── ROW 1 ─────────────────────────── */}
 
@@ -939,61 +948,73 @@ export default function AdminDashboard({
 
                 {/* Recently Added Songs */}
                 <Tile className="min-h-[260px]" onClick={() => onNavigate("songs")}>
-                    <CardHeader icon={<TrendingUp size={14} className="text-violet-500" />} title="Recently Added Songs" action="Library" onAction={() => onNavigate("songs")} />
+                    <CardHeader icon={<TrendingUp size={13} className="text-violet-500" />} title="Recently Added Songs" action="Library" onAction={() => onNavigate("songs")} />
                     {recentSongs.length === 0 ? (
-                        <div className="flex flex-col items-center py-8 gap-3"><BookOpen size={22} className="text-indigo-300" /><p className="text-sm text-gray-400">No songs yet</p></div>
+                        <div className="flex flex-col items-center py-10 gap-3">
+                            <BookOpen size={24} className="text-indigo-300 opacity-50" />
+                            <p className="text-sm text-gray-400">No songs yet</p>
+                        </div>
                     ) : (
-                        <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                        <div className="divide-y divide-gray-100/80 dark:divide-gray-700/60">
                             {recentSongs.map(s => (
-                                <div key={s.id} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-                                    <div className="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center shrink-0"><Music size={14} className="text-indigo-600 dark:text-indigo-400" /></div>
-                                    <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{s.title}</p><p className="text-xs text-gray-400 truncate">{s.artist}</p></div>
-                                    {s.created_at && <p className="text-xs text-gray-400 shrink-0">{relDate(s.created_at)}</p>}
+                                <div key={s.id} className="flex items-center gap-3 px-6 py-3.5 hover:bg-gray-50 dark:hover:bg-gray-700/20 transition-colors">
+                                    <div className="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center shrink-0">
+                                        <Music size={14} className="text-indigo-600 dark:text-indigo-400" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-semibold text-gray-900 dark:text-white truncate tracking-tight">{s.title}</p>
+                                        <p className="text-xs text-gray-400 truncate mt-0.5">{s.artist}</p>
+                                    </div>
+                                    {s.created_at && <p className="text-xs text-gray-400 shrink-0 font-medium">{relDate(s.created_at)}</p>}
                                 </div>
                             ))}
                         </div>
                     )}
-                    <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60">
-                        <p className="text-xs text-gray-400">{songs.length} songs · {songsUsed} used in services</p>
+                    <div className="px-6 py-3.5 border-t border-gray-100/80 dark:border-gray-700/60 bg-gray-50/60 dark:bg-gray-800/40">
+                        <p className="text-xs text-gray-400 font-medium">{songs.length} songs · {songsUsed} used in services</p>
                     </div>
                 </Tile>
 
                 {/* Team by Role */}
                 <Tile className="min-h-[260px]" onClick={() => onNavigate("members")}>
-                    <CardHeader icon={<Users size={14} className="text-violet-500" />} title="Team by Role" action="All members" onAction={() => onNavigate("members")} />
-                    <div className="p-5 space-y-3">
+                    <CardHeader icon={<Users size={13} className="text-violet-500" />} title="Team by Role" action="All members" onAction={() => onNavigate("members")} />
+                    <div className="px-6 py-5 space-y-4">
                         {roleGroups.length === 0 ? (
                             <p className="text-sm text-gray-400">No members yet</p>
                         ) : roleGroups.slice(0, 5).map(([role, count]) => (
                             <div key={role}>
-                                <div className="flex justify-between text-sm mb-1.5">
-                                    <span className="text-gray-700 dark:text-gray-300 truncate">{role}</span>
-                                    <span className="text-gray-900 dark:text-white font-bold shrink-0 ml-2">{count}</span>
+                                <div className="flex justify-between items-center mb-2">
+                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate tracking-tight">{role}</span>
+                                    <span className="text-sm font-black text-gray-900 dark:text-white shrink-0 ml-2 tabular-nums">{count}</span>
                                 </div>
-                                <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                                    <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full"
+                                <div className="h-1.5 bg-gray-100 dark:bg-gray-700/80 rounded-full overflow-hidden">
+                                    <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full transition-all duration-500"
                                         style={{ width: members.length > 0 ? `${Math.round(count / members.length * 100)}%` : "0%" }} />
                                 </div>
                             </div>
                         ))}
                     </div>
-                    <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60">
-                        <p className="text-xs text-gray-400">{members.length} total team members</p>
+                    <div className="px-6 py-3.5 border-t border-gray-100/80 dark:border-gray-700/60 bg-gray-50/60 dark:bg-gray-800/40">
+                        <p className="text-xs text-gray-400 font-medium">{members.length} total team members</p>
                     </div>
                 </Tile>
 
                 {/* What's New */}
                 <Tile className="h-full flex flex-col">
-                    <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 shrink-0">
-                        <div className="flex items-center gap-2 font-semibold text-gray-900 dark:text-white text-base">
-                            <Megaphone size={15} className="text-amber-500" />
-                            {latestBroadcast?.title ?? "What's New in WorshipFlow"}
+                    <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100/80 dark:border-gray-700/60 shrink-0">
+                        <div className="flex items-center gap-2.5">
+                            <span className="w-7 h-7 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0">
+                                <Megaphone size={13} className="text-amber-500" />
+                            </span>
+                            <span className="font-semibold text-gray-900 dark:text-white text-sm tracking-tight">
+                                {latestBroadcast?.title ?? "What's New in WorshipFlow"}
+                            </span>
                         </div>
-                        <button onClick={() => onNavigate("admin")} className="text-xs text-indigo-500 hover:text-indigo-400 flex items-center gap-1 font-medium">
+                        <button onClick={() => onNavigate("admin")} className="text-xs text-indigo-500 hover:text-indigo-400 flex items-center gap-1 font-medium transition-colors">
                             Manage <ChevronRight size={13} />
                         </button>
                     </div>
-                    <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
+                    <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">
                         {loadingExtra ? (
                             <div className="animate-pulse space-y-3 pt-1">
                                 <div className="h-3 w-24 bg-gray-200 dark:bg-gray-700 rounded" />
@@ -1031,42 +1052,6 @@ export default function AdminDashboard({
                     </div>
                 </Tile>
 
-                {/* Open Issues */}
-                <Tile className="min-h-[260px]">
-                    <CardHeader icon={<Bug size={14} className="text-red-500" />} title="Open Issues" action="Admin panel" onAction={() => onNavigate("admin")} />
-                    <div className="p-5 space-y-3">
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="flex flex-col items-center py-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/40">
-                                <p className="text-3xl font-black text-red-500 dark:text-red-400">{openBugs}</p>
-                                <p className="text-[10px] text-red-400 flex items-center gap-0.5 mt-1"><Bug size={9} />Bugs</p>
-                            </div>
-                            <div className="flex flex-col items-center py-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/40">
-                                <p className="text-3xl font-black text-amber-500 dark:text-amber-400">{openFeqs}</p>
-                                <p className="text-[10px] text-amber-400 flex items-center gap-0.5 mt-1"><Lightbulb size={9} />Requests</p>
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="flex flex-col items-center py-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900/40">
-                                <p className="text-2xl font-black text-emerald-500 dark:text-emerald-400">{resolvedNotes}</p>
-                                <p className="text-[10px] text-emerald-500 dark:text-emerald-400 flex items-center gap-0.5 mt-1"><CheckCheck size={9} />Resolved</p>
-                            </div>
-                            <div className="flex flex-col items-center py-3 rounded-xl bg-sky-50 dark:bg-sky-900/20 border border-sky-100 dark:border-sky-900/40">
-                                <p className="text-2xl font-black text-sky-500 dark:text-sky-400">{totalNotes}</p>
-                                <p className="text-[10px] text-sky-500 dark:text-sky-400 flex items-center gap-0.5 mt-1"><NotepadText size={9} />Total Notes</p>
-                            </div>
-                        </div>
-                        {openBugs + openFeqs === 0 ? (
-                            <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 text-xs font-medium">
-                                <CheckCircle2 size={12} />All clear! 🎉
-                            </div>
-                        ) : pendingUsers.length > 0 && (
-                            <button onClick={() => onNavigate("admin")} className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 text-xs font-semibold hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors">
-                                <span className="flex items-center gap-1.5"><UserCheck size={11} />{pendingUsers.length} pending request{pendingUsers.length !== 1 ? "s" : ""}</span>
-                                <ChevronRight size={11} />
-                            </button>
-                        )}
-                    </div>
-                </Tile>
 
             </div>
 

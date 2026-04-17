@@ -620,27 +620,27 @@ showToast("error", "Could not save acknowledgment. Try again.");
     <>
     <div className="max-w-7xl mx-auto">
       {/* Single toolbar row: [Month|List] — [< Apr 2026 >] — [Add Event] */}
-      <div className="flex items-center justify-between gap-2 mb-4">
+      <div className="flex items-center justify-between gap-2 mb-5">
 
         {/* Left: view toggle */}
         <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-xl p-0.5 gap-0.5 shrink-0">
-          <button onClick={() => setScheduleView("month")} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-all ${scheduleView === "month" ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-white"}`}>
+          <button onClick={() => setScheduleView("month")} className={`flex items-center gap-1.5 px-3 py-2 rounded-[10px] text-sm font-semibold transition-all ${scheduleView === "month" ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"}`}>
             <Calendar size={14} />
             <span className="hidden min-[375px]:inline">Month</span>
           </button>
-          <button onClick={() => setScheduleView("list")} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-all ${scheduleView === "list" ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-white"}`}>
+          <button onClick={() => setScheduleView("list")} className={`flex items-center gap-1.5 px-3 py-2 rounded-[10px] text-sm font-semibold transition-all ${scheduleView === "list" ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"}`}>
             <List size={14} />
             <span className="hidden min-[375px]:inline">List</span>
           </button>
         </div>
 
         {/* Center: month navigation */}
-        <div className="flex items-center gap-1 sm:gap-2">
-          <button onClick={() => setCalendarMonth(new Date(year, month - 1, 1))} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-600 dark:text-gray-400"><ChevronLeft size={18} /></button>
-          <h2 className="font-bold text-gray-900 dark:text-white text-base sm:text-lg min-w-[120px] sm:min-w-[160px] text-center">
+        <div className="flex items-center gap-0.5 sm:gap-1">
+          <button onClick={() => setCalendarMonth(new Date(year, month - 1, 1))} className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-all text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"><ChevronLeft size={18} /></button>
+          <h2 className="font-extrabold text-gray-900 dark:text-white text-base sm:text-lg min-w-[120px] sm:min-w-[160px] text-center tracking-tight">
             {calendarMonth.toLocaleDateString("en", { month: "long", year: "numeric" })}
           </h2>
-          <button onClick={() => setCalendarMonth(new Date(year, month + 1, 1))} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-600 dark:text-gray-400"><ChevronRight size={18} /></button>
+          <button onClick={() => setCalendarMonth(new Date(year, month + 1, 1))} className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-all text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"><ChevronRight size={18} /></button>
         </div>
 
         {/* Right: Add Event button */}
@@ -666,7 +666,7 @@ showToast("error", "Could not save acknowledgment. Try again.");
             if (canAdd) {
               return (
                 <button onClick={() => { setSelectedEventId(null); setSchedPanelMode("edit"); openBlankEventForm(selectedScheduleDate!); }}
-                  className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-medium transition-colors whitespace-nowrap">
+                  className="flex items-center gap-2 px-3 sm:px-4 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-semibold transition-all shadow-sm shadow-indigo-500/30 whitespace-nowrap">
                   <Plus size={16} />
                   <span className="hidden sm:inline">{label}</span>
                   <span className="sm:hidden">Add</span>
@@ -675,7 +675,7 @@ showToast("error", "Could not save acknowledgment. Try again.");
             }
             return (
               <button disabled title={disabledTitle}
-                className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-sm font-medium bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed select-none whitespace-nowrap">
+                className="flex items-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-sm font-semibold bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed select-none whitespace-nowrap">
                 <Plus size={16} />
                 <span className="hidden sm:inline">{label}</span>
                 <span className="sm:hidden">Add</span>
@@ -690,14 +690,14 @@ showToast("error", "Could not save acknowledgment. Try again.");
         <div className="flex-1 min-w-0">
           {scheduleView === "month" ? (
             <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-              <div className="grid grid-cols-7 border-b border-gray-100 dark:border-gray-700">
+              <div className="grid grid-cols-7 border-b border-gray-100 dark:border-gray-700/60">
                 {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(d => (
-                  <div key={d} className="py-2 text-center text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{d}</div>
+                  <div key={d} className="py-2.5 text-center text-[11px] font-bold text-gray-400 dark:text-gray-600 uppercase tracking-widest">{d}</div>
                 ))}
               </div>
               <div className="grid grid-cols-7">
                 {Array.from({ length: firstDow }).map((_, i) => (
-                  <div key={`e${i}`} className="min-h-[80px] lg:min-h-[110px] border-b border-r border-gray-200 dark:border-gray-700/50" />
+                  <div key={`e${i}`} className="min-h-[80px] lg:min-h-[110px] border-b border-r border-gray-100 dark:border-gray-700/40" />
                 ))}
                 {Array.from({ length: daysInMonth }).map((_, i) => {
                   const day = i + 1;
@@ -712,9 +712,9 @@ showToast("error", "Could not save acknowledgment. Try again.");
                       key={dateStr}
                       onClick={() => openScheduleEditor(dateStr)}
                       title={isCellPast && !cellHasEvents ? "Past date — no new events can be added" : undefined}
-                      className={`group relative min-h-[80px] lg:min-h-[110px] border-b border-r border-gray-200 dark:border-gray-700/50 p-1.5 lg:p-2 text-left transition-colors ${isCellPast && !cellHasEvents ? "opacity-40 cursor-not-allowed" : "hover:bg-indigo-50 dark:hover:bg-indigo-900/20"} ${isSelected ? "bg-indigo-50 dark:bg-indigo-900/30" : ""}`}
+                      className={`group relative min-h-[80px] lg:min-h-[110px] border-b border-r border-gray-100 dark:border-gray-700/40 p-1.5 lg:p-2 text-left transition-all duration-150 ${isCellPast && !cellHasEvents ? "opacity-35 cursor-not-allowed" : "hover:bg-indigo-50/70 dark:hover:bg-indigo-900/20"} ${isSelected ? "bg-indigo-50 dark:bg-indigo-900/30 ring-1 ring-inset ring-indigo-300 dark:ring-indigo-700" : ""}`}
                     >
-                      <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-medium mb-1 ${isToday ? "bg-indigo-600 text-white" : "text-gray-700 dark:text-gray-300"}`}>{day}</span>
+                      <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold mb-1 transition-colors ${isToday ? "bg-indigo-600 text-white shadow-sm shadow-indigo-500/40" : isSelected ? "text-indigo-600 dark:text-indigo-400" : "text-gray-600 dark:text-gray-400"}`}>{day}</span>
                       {(canWriteSchedule || isLeader) && !isCellPast && (
                         <span
                           onClick={e => { e.stopPropagation(); openBlankEventForm(dateStr); }}
@@ -743,9 +743,9 @@ showToast("error", "Could not save acknowledgment. Try again.");
                               const nm = (ev as any).eventName || (ev.serviceType === "sunday" ? "Sunday Service" : "Midweek Service");
                               const clr = palette[ei % palette.length];
                               return (
-                                <div key={ei} className="flex items-center gap-0.5">
+                                <div key={ei} className="flex items-center gap-1">
                                   <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${clr.dot}`} />
-                                   <p className={`text-[11px] lg:text-xs font-medium truncate leading-tight ${clr.text}`}>{nm}</p>
+                                   <p className={`text-[11px] lg:text-xs font-semibold truncate leading-tight ${clr.text}`}>{nm}</p>
                                 </div>
                               );
                             })}
@@ -872,17 +872,17 @@ showToast("error", "Could not save acknowledgment. Try again.");
                       const s = item.data;
                       const evName = (s as any).eventName || (s.serviceType === "sunday" ? "Sunday Service" : "Midweek Service");
                       return (
-                        <div key={s.id} className={`relative flex items-center gap-4 p-4 cursor-pointer group transition-colors ${selectedEventId === s.id ? "bg-indigo-50 dark:bg-indigo-900/30 border-l-4 border-indigo-500" : "bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50 border-l-4 border-transparent"}`} onClick={() => openEventById(s.id, s.date)}>
+                        <div key={s.id} className={`relative flex items-center gap-4 p-4 cursor-pointer group transition-all duration-150 ${selectedEventId === s.id ? "bg-indigo-50 dark:bg-indigo-900/30 border-l-4 border-indigo-500" : "bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/40 border-l-4 border-transparent hover:shadow-sm"}`} onClick={() => openEventById(s.id, s.date)}>
                           {/* Date badge */}
-                          <div className={`shrink-0 rounded-xl px-3 py-2 text-center min-w-[52px] ${isPast ? "bg-gray-100 dark:bg-gray-700" : "bg-indigo-50 dark:bg-indigo-900/30"}`}>
-                            <div className={`text-xs font-semibold uppercase ${isPast ? "text-gray-400" : "text-indigo-500"}`}>{d.toLocaleDateString("en", { month: "short" })}</div>
-                            <div className={`text-xl font-bold leading-none ${isPast ? "text-gray-400 dark:text-gray-500" : "text-indigo-700 dark:text-indigo-300"}`}>{d.getDate()}</div>
-                            <div className={`text-[10px] ${isPast ? "text-gray-400" : "text-indigo-400"}`}>{d.toLocaleDateString("en", { weekday: "short" })}</div>
+                          <div className={`shrink-0 rounded-xl px-3 py-2.5 text-center min-w-[54px] ${isPast ? "bg-gray-100 dark:bg-gray-700/60" : "bg-indigo-50 dark:bg-indigo-900/30"}`}>
+                            <div className={`text-[10px] font-bold uppercase tracking-wider ${isPast ? "text-gray-400" : "text-indigo-500"}`}>{d.toLocaleDateString("en", { month: "short" })}</div>
+                            <div className={`text-xl font-extrabold leading-none my-0.5 ${isPast ? "text-gray-400 dark:text-gray-500" : "text-indigo-700 dark:text-indigo-300"}`}>{d.getDate()}</div>
+                            <div className={`text-[10px] font-medium ${isPast ? "text-gray-400" : "text-indigo-400"}`}>{d.toLocaleDateString("en", { weekday: "short" })}</div>
                           </div>
                           {/* Event info */}
                           <div className="flex-1 min-w-0 pr-7">
-                            <p className="font-semibold text-gray-900 dark:text-white text-sm">{eventEmoji(evName)} {evName}</p>
-                            {s.worshipLeader && <p className="text-xs text-gray-500 mt-0.5">{s.worshipLeader.name}</p>}
+                            <p className="font-bold text-gray-900 dark:text-white text-sm leading-snug">{eventEmoji(evName)} {evName}</p>
+                            {s.worshipLeader && <p className="text-xs text-indigo-500 dark:text-indigo-400 font-semibold mt-0.5">{s.worshipLeader.name}</p>}
                             {s.notes && <p className="text-xs text-gray-400 truncate mt-0.5">{s.notes}</p>}
                           </div>
                           {/* Copy button */}
@@ -939,24 +939,28 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
           if (showDayView) {
             const dateLabel = new Date(selectedScheduleDate + "T00:00:00").toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
             return (
-              <div className="fixed top-1/2 -translate-y-1/2 left-4 right-4 z-50 md:static md:translate-y-0 md:z-auto md:w-80 md:shrink-0 bg-white dark:bg-gray-800 rounded-2xl md:rounded-2xl border border-gray-200 dark:border-gray-700 shadow-2xl p-5 max-h-[85dvh] md:max-h-[calc(100vh-200px)] overflow-y-auto md:self-start md:sticky md:top-0">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="font-bold text-gray-900 dark:text-white text-base">{dateLabel.split(",")[0]}</h3>
-                    <p className="text-xs text-indigo-500 font-medium mt-0.5">{dateLabel}</p>
+              <div className="fixed top-1/2 -translate-y-1/2 left-4 right-4 z-50 md:static md:translate-y-0 md:z-auto md:w-80 md:shrink-0 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-2xl overflow-hidden max-h-[85dvh] md:max-h-[calc(100vh-200px)] md:self-start md:sticky md:top-0 flex flex-col">
+                {/* Day panel gradient header */}
+                <div className="shrink-0 bg-gradient-to-br from-indigo-600 via-purple-500 to-rose-400 px-5 py-4">
+                  <div className="flex items-end justify-between">
+                    <div>
+                      <h3 className="font-extrabold tracking-tight text-white text-base drop-shadow-sm">{dateLabel.split(",")[0]}</h3>
+                      <p className="text-xs text-white/70 font-medium mt-0.5">{dateLabel}</p>
+                    </div>
+                    <button onClick={closeScheduleEditor} className="w-8 h-8 flex items-center justify-center rounded-xl bg-white/20 hover:bg-white/30 text-white transition-all"><X size={16} /></button>
                   </div>
-                  <button onClick={closeScheduleEditor} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg"><X size={18} /></button>
                 </div>
+                <div className="flex-1 overflow-y-auto p-5">
                 <div className="space-y-2 mb-4">
                   {selectedDateEvents.map(ev => {
                     const evName = (ev as any).eventName || (ev.serviceType === "sunday" ? "Sunday Service" : "Midweek Service");
                     return (
                       <button key={ev.id} onClick={() => openEventById(ev.id, selectedScheduleDate!)}
-                        className="w-full flex items-center gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-700/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 border border-gray-100 dark:border-gray-700 hover:border-indigo-300 transition-all text-left">
+                        className="w-full flex items-center gap-3 p-3.5 rounded-xl bg-gray-50 dark:bg-gray-800/60 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 border border-gray-100 dark:border-gray-700/60 hover:border-indigo-300 dark:hover:border-indigo-700 transition-all text-left group">
                         <span className="text-xl">{eventEmoji(evName)}</span>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{evName}</p>
-                          {ev.worshipLeader && <p className="text-xs text-gray-400 truncate">{ev.worshipLeader.name}</p>}
+                          <p className="text-sm font-bold text-gray-900 dark:text-white truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{evName}</p>
+                          {ev.worshipLeader && <p className="text-xs text-indigo-500 dark:text-indigo-400 font-semibold truncate mt-0.5">{ev.worshipLeader.name}</p>}
                         </div>
                         <ChevronRight size={16} className="text-gray-400 shrink-0" />
                       </button>
@@ -1061,10 +1065,11 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                   </div>
                 ) : (
                   <button onClick={() => openBlankEventForm(selectedScheduleDate!)}
-                    className="w-full flex items-center justify-center gap-2 py-2.5 border-2 border-dashed border-indigo-300 dark:border-indigo-600 text-indigo-600 dark:text-indigo-400 rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-900/20 text-sm font-medium transition-colors">
+                    className="w-full flex items-center justify-center gap-2 py-2.5 border-2 border-dashed border-indigo-300 dark:border-indigo-600/60 text-indigo-600 dark:text-indigo-400 rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-900/20 text-sm font-semibold transition-all">
                     <Plus size={16} /> Add Another Event
                   </button>
                 )}
+                </div>
               </div>
             );
           }
@@ -1081,13 +1086,15 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
             ? allMembers.filter(m => m.name.toLowerCase().includes(schedMemberSearch.toLowerCase()))
             : allMembers;
           return (
-            <div className="fixed top-1/2 -translate-y-1/2 left-4 right-4 z-50 md:static md:translate-y-0 md:z-auto md:w-80 md:shrink-0 bg-white dark:bg-gray-800 rounded-2xl md:rounded-2xl border border-gray-200 dark:border-gray-700 shadow-2xl p-5 max-h-[85dvh] md:max-h-[calc(100vh-200px)] overflow-y-auto md:self-start md:sticky md:top-0">
-              {isDatePast && (
-                <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40 rounded-xl px-3 py-2 mb-3 text-xs text-amber-700 dark:text-amber-400">
-                  <Lock size={13} className="shrink-0" />
-                  <span>This date has passed — view only</span>
-                </div>
-              )}
+            <div className="fixed top-1/2 -translate-y-1/2 left-4 right-4 z-50 md:static md:translate-y-0 md:z-auto md:w-80 md:shrink-0 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-2xl overflow-hidden max-h-[85dvh] md:max-h-[calc(100vh-200px)] md:self-start md:sticky md:top-0 flex flex-col">
+              {/* Event panel gradient header */}
+              <div className="shrink-0 bg-gradient-to-br from-indigo-600 via-purple-500 to-rose-400 px-5 py-4">
+                {isDatePast && (
+                  <div className="flex items-center gap-1.5 bg-black/20 rounded-xl px-3 py-1.5 mb-3 text-xs text-white/90 font-semibold">
+                    <Lock size={12} className="shrink-0" />
+                    <span>View only — date has passed</span>
+                  </div>
+                )}
 
 
               {selectedDateEvents.length >= 1 && selectedEventId && (() => {
@@ -1105,7 +1112,7 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                   <div className="flex items-center justify-between mb-3">
                     <button
                       onClick={() => { setSelectedEventId(null); setSchedPanelMode("view"); }}
-                      className="flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium transition-colors"
+                      className="flex items-center gap-1 text-xs text-white/80 hover:text-white font-semibold transition-colors"
                     >
                       <ChevronLeft size={14} /> All events this day
                     </button>
@@ -1115,31 +1122,31 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                         onClick={() => handleLineupAck(editingExisting.id)}
                         disabled={isAcking}
                         title={ackTooltip}
-                        className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold transition-all ${
+                        className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold transition-all ${
                           iHaveAcked
-                            ? "bg-pink-100 dark:bg-pink-900/40 text-pink-600 dark:text-pink-400"
-                            : "text-gray-400 hover:text-pink-500 hover:bg-pink-50 dark:hover:bg-pink-900/20"
+                            ? "bg-white/30 text-white"
+                            : "text-white/60 hover:text-white hover:bg-white/20"
                         }`}
                       >
-                        <Heart size={16} className={iHaveAcked ? "fill-pink-500 text-pink-500" : ""} />
-                        {ackCount > 0 && <span className="text-sm">{ackCount}</span>}
+                        <Heart size={14} className={iHaveAcked ? "fill-white text-white" : ""} />
+                        {ackCount > 0 && <span>{ackCount}</span>}
                       </button>
                     )}
                   </div>
                 );
               })()}
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="font-bold text-gray-900 dark:text-white text-base">
+              <div className="flex items-end justify-between">
+                <div className="min-w-0 flex-1 pr-2">
+                  <h3 className="font-extrabold tracking-tight text-white text-base drop-shadow-sm leading-tight">
                     {schedPanelMode === "view" && editingExisting
                       ? `${eventEmoji(editSchedEventName)} ${editSchedEventName}`
                       : editingExisting ? "Edit Event" : "New Event"}
                   </h3>
-                  <p className="text-xs text-indigo-500 font-medium mt-0.5">
+                  <p className="text-xs text-white/70 font-medium mt-0.5">
                     {new Date(selectedScheduleDate + "T00:00:00").toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
                   </p>
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 shrink-0">
                   {schedPanelMode === "view" && editingExisting && !isDatePast && (canWriteSchedule || leaderCanEditEvent) && (
                     <button
                       onClick={() => {
@@ -1159,9 +1166,9 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                         setPendingRolePick(null);
                         setSchedPanelMode("edit");
                       }}
-                      className="p-1.5 text-gray-400 hover:text-indigo-500 rounded-lg transition-colors"
+                      className="w-8 h-8 flex items-center justify-center rounded-xl bg-white/20 hover:bg-white/30 text-white transition-all"
                     >
-                      <Pencil size={16} />
+                      <Pencil size={15} />
                     </button>
                   )}
 
@@ -1189,11 +1196,14 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                       }
                       if (editSchedNotes) { lines.push(""); lines.push("*Notes:"); lines.push(editSchedNotes); }
 navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", "Copied to clipboard!"));
-                    }} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg transition-colors"><Copy size={16} /></button>
+                    }} className="w-8 h-8 flex items-center justify-center rounded-xl bg-white/20 hover:bg-white/30 text-white transition-all"><Copy size={15} /></button>
                   )}
-                  <button onClick={closeScheduleEditor} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg"><X size={18} /></button>
+                  <button onClick={closeScheduleEditor} className="w-8 h-8 flex items-center justify-center rounded-xl bg-white/20 hover:bg-white/30 text-white transition-all"><X size={15} /></button>
                 </div>
               </div>
+              </div>
+              {/* Scrollable panel body */}
+              <div className="flex-1 overflow-y-auto p-5">
 
               {schedPanelMode === "view" && editingExisting ? (
                 /* ── VIEW MODE ── */
@@ -1284,9 +1294,9 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                   })()}
 
                   {editSchedNotes && (
-                    <div>
-                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Notes</p>
-                      <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{editSchedNotes}</p>
+                    <div className="rounded-2xl border border-gray-100 dark:border-gray-700/60 bg-gray-50 dark:bg-gray-900/40 p-3.5">
+                      <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2">Notes</p>
+                      <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">{editSchedNotes}</p>
                     </div>
                   )}
                   {editSchedAssignments.length > 0 && !isServiceEvent && (
@@ -1344,7 +1354,7 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                           className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all ${
                             onCooldown
                               ? "bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed"
-                              : "bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white shadow-sm"
+                              : "bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white shadow-sm shadow-indigo-500/30"
                           }`}
                         >
                           {isNotifying
@@ -1409,7 +1419,7 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                 {!isDatePast && (canWriteSchedule || leaderCanAddOnDate) && (
                   <button
                     onClick={() => openBlankEventForm(selectedScheduleDate!)}
-                    className="w-full flex items-center justify-center gap-2 mt-4 py-2.5 border-2 border-dashed border-indigo-300 dark:border-indigo-600 text-indigo-600 dark:text-indigo-400 rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-900/20 text-sm font-medium transition-colors"
+                    className="w-full flex items-center justify-center gap-2 mt-5 py-2.5 border-2 border-dashed border-indigo-300 dark:border-indigo-600/60 text-indigo-600 dark:text-indigo-400 rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-900/20 text-sm font-semibold transition-all"
                   >
                     <Plus size={16} /> Add Another Event
                   </button>
@@ -1839,11 +1849,11 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                   {!isDatePast && (
                     <div className="flex flex-col gap-2 pt-2 border-t border-gray-100 dark:border-gray-700">
                       <button onClick={handleSaveSchedule} disabled={isSavingSchedule}
-                        className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-60">
+                        className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-all disabled:opacity-60 shadow-sm shadow-indigo-500/30">
                         {isSavingSchedule ? "Saving…" : editingExisting ? "Update Event" : "Save Event"}
                       </button>
                       {editingExisting && (
-                        <button onClick={handleDeleteSchedule} className="w-full py-2 text-red-500 hover:text-red-600 text-sm font-medium rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                        <button onClick={handleDeleteSchedule} className="w-full py-2 text-red-500 hover:text-red-600 text-sm font-semibold rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 transition-all">
                           Remove Event
                         </button>
                       )}
@@ -1851,6 +1861,7 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                   )}
                 </div>
               ) : null}
+              </div>
             </div>
           );
         })()}

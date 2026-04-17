@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
-    ChevronLeft, ChevronRight, Music, ArrowUpDown, Headphones,
+    ChevronLeft, ChevronRight, Music, Headphones, BookOpen, Guitar,
     Minus, Plus, Pencil, Check, X, Undo2, Redo2, Loader2, ImagePlus,
-    ZoomIn, ZoomOut,
+    ZoomIn, ZoomOut, Maximize2, Minimize2,
 } from "lucide-react";
 import { Song, Schedule } from "./types";
 import { LineupTrack } from "./LineupPlayer";
@@ -159,12 +159,13 @@ interface RehearsalViewProps {
     canEditSong?: boolean;
     onSongUpdated?: (updatedSong: Song) => void;
     showToast?: (type: string, message: string) => void;
+    onFullscreenChange?: (isFullscreen: boolean) => void;
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function RehearsalView({
     allSchedules, allSongs, lineupTracks, onOpenLineup, isLineupOpen = false, isLibraryOpen = false,
-    currentUser, canEditSong = false, onSongUpdated, showToast,
+    currentUser, canEditSong = false, onSongUpdated, showToast, onFullscreenChange,
 }: RehearsalViewProps) {
 
     const [selectedEventIdx, setSelectedEventIdx] = useState(0);
@@ -173,6 +174,11 @@ export default function RehearsalView({
     const [chordsOnTop, setChordsOnTop] = useState<boolean>(() => {
         try { return localStorage.getItem("wf_rehearsal_row_order") === "chords_top"; } catch { return false; }
     });
+    // Mobile tab: which panel is shown (Lyrics or Chords)
+    const [mobileTab, setMobileTab] = useState<"lyrics" | "chords">("lyrics");
+    // Mobile fullscreen overlay — notify parent when it changes so top header can be hidden
+    const [mobileFullscreen, setMobileFullscreen] = useState<boolean>(false);
+    useEffect(() => { onFullscreenChange?.(mobileFullscreen); }, [mobileFullscreen, onFullscreenChange]);
 
     // ── Font-size zoom (11 → 24 px, step 1, persisted) ───────────────────────
     const FONT_SIZES = [11, 12, 13, 14, 15, 16, 18, 20, 22, 24];
@@ -189,15 +195,17 @@ export default function RehearsalView({
     const zoomOut = () => setFontSizeIdx(prev => { const next = Math.max(0, prev - 1); try { localStorage.setItem("wf_rehearsal_font_idx", String(next)); } catch { /* noop */ } return next; });
 
     const zoomControls = (
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-1">
             <button onClick={zoomOut} disabled={fontSizeIdx === 0} title="Decrease text size"
-                className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 disabled:opacity-20 disabled:cursor-not-allowed transition-all">
-                <ZoomOut size={14} />
+                className="w-9 h-9 md:w-7 md:h-7 flex items-center justify-center rounded-xl md:rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 disabled:opacity-20 disabled:cursor-not-allowed transition-all active:scale-95">
+                <ZoomOut size={18} className="md:hidden" />
+                <ZoomOut size={14} className="hidden md:block" />
             </button>
-            <span className="min-w-[28px] text-center text-[10px] font-bold text-gray-400 tabular-nums select-none">{fontSize}px</span>
+            <span className="min-w-[36px] md:min-w-[28px] text-center text-xs md:text-[10px] font-bold text-gray-400 tabular-nums select-none">{fontSize}px</span>
             <button onClick={zoomIn} disabled={fontSizeIdx === FONT_SIZES.length - 1} title="Increase text size"
-                className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 disabled:opacity-20 disabled:cursor-not-allowed transition-all">
-                <ZoomIn size={14} />
+                className="w-9 h-9 md:w-7 md:h-7 flex items-center justify-center rounded-xl md:rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 disabled:opacity-20 disabled:cursor-not-allowed transition-all active:scale-95">
+                <ZoomIn size={18} className="md:hidden" />
+                <ZoomIn size={14} className="hidden md:block" />
             </button>
         </div>
     );
@@ -392,59 +400,64 @@ export default function RehearsalView({
         const label = col === "lyrics" ? "Lyrics" : "Chords";
 
         return (
-            <div className="flex items-center gap-0.5">
+            <div className="flex items-center gap-1">
                 {/* Undo */}
                 <button
                     onClick={edit.undo}
                     disabled={!edit.canUndo}
                     title="Undo"
-                    className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                    className="w-10 h-10 md:w-7 md:h-7 flex items-center justify-center rounded-xl md:rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95"
                 >
-                    <Undo2 size={13} />
+                    <Undo2 size={18} className="md:hidden" />
+                    <Undo2 size={13} className="hidden md:block" />
                 </button>
                 {/* Redo */}
                 <button
                     onClick={edit.redo}
                     disabled={!edit.canRedo}
                     title="Redo"
-                    className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                    className="w-10 h-10 md:w-7 md:h-7 flex items-center justify-center rounded-xl md:rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95"
                 >
-                    <Redo2 size={13} />
+                    <Redo2 size={18} className="md:hidden" />
+                    <Redo2 size={13} className="hidden md:block" />
                 </button>
 
                 {/* Divider */}
-                <div className="w-px h-4 bg-gray-200 dark:bg-gray-700 mx-1" />
+                <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-1" />
 
-                {/* Screenshot / OCR — both lyrics and chords columns */}
+                {/* Screenshot / OCR */}
                 <button
                     onClick={() => { ocrColRef.current = col; ocrFileRef.current?.click(); }}
                     disabled={isOcrLoading}
                     title="Upload a screenshot — AI will extract the text"
-                    className="p-1.5 rounded-lg text-violet-400 hover:text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-900/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                    className="w-10 h-10 md:w-7 md:h-7 flex items-center justify-center rounded-xl md:rounded-lg text-violet-400 hover:text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-900/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-95"
                 >
-                    {isOcrLoading ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}
+                    {isOcrLoading ? <Loader2 size={18} className="animate-spin md:hidden" /> : <ImagePlus size={18} className="md:hidden" />}
+                    {isOcrLoading ? <Loader2 size={13} className="animate-spin hidden md:block" /> : <ImagePlus size={13} className="hidden md:block" />}
                 </button>
 
                 {/* Divider */}
-                <div className="w-px h-4 bg-gray-200 dark:bg-gray-700 mx-1" />
+                <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-1" />
 
                 {/* Save */}
                 <button
                     onClick={() => requestSave(col)}
                     disabled={!edit.isDirty || isSaving}
                     title={`Save ${label}`}
-                    className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                    className="w-10 h-10 md:w-7 md:h-7 flex items-center justify-center rounded-xl md:rounded-lg text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95"
                 >
-                    {isSaving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                    {isSaving ? <Loader2 size={18} className="animate-spin md:hidden" /> : <Check size={18} className="md:hidden" />}
+                    {isSaving ? <Loader2 size={13} className="animate-spin hidden md:block" /> : <Check size={13} className="hidden md:block" />}
                 </button>
 
                 {/* Cancel edit */}
                 <button
                     onClick={() => requestExitEdit(col)}
                     title="Cancel editing"
-                    className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
+                    className="w-10 h-10 md:w-7 md:h-7 flex items-center justify-center rounded-xl md:rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all active:scale-95"
                 >
-                    <X size={13} />
+                    <X size={18} className="md:hidden" />
+                    <X size={13} className="hidden md:block" />
                 </button>
             </div>
         );
@@ -459,9 +472,10 @@ export default function RehearsalView({
             <button
                 onClick={edit.startEdit}
                 title={`Edit ${col}`}
-                className="p-1.5 rounded-lg text-gray-300 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all"
+                className="w-10 h-10 md:w-7 md:h-7 flex items-center justify-center rounded-xl md:rounded-lg text-gray-300 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all active:scale-95"
             >
-                <Pencil size={13} />
+                <Pencil size={18} className="md:hidden" />
+                <Pencil size={13} className="hidden md:block" />
             </button>
         );
     };
@@ -469,8 +483,11 @@ export default function RehearsalView({
     // ── Transpose controls ────────────────────────────────────────────────────
     const transposeControls = (
         <div className="flex items-center gap-1">
-            <button onClick={() => adjustTranspose(-1)} className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all" title="Transpose down">
-                <Minus size={14} />
+            <button onClick={() => adjustTranspose(-1)}
+                className="w-10 h-10 md:w-7 md:h-7 flex items-center justify-center rounded-xl md:rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all active:scale-95"
+                title="Transpose down">
+                <Minus size={18} className="md:hidden" />
+                <Minus size={14} className="hidden md:block" />
             </button>
             <button
                 onClick={resetTranspose}
@@ -689,65 +706,189 @@ export default function RehearsalView({
         </div>
     );
 
-    // ── Mobile: 2-row layout with swap ────────────────────────────────────────
-    const mobileRow = (col: "lyrics" | "chords", isTop: boolean) => {
-        const isLyrics = col === "lyrics";
-        const accent = isLyrics ? "text-rose-500" : "text-indigo-500";
-        const label = isLyrics ? "Lyrics" : "Chords";
-        const edit = isLyrics ? lyricsEdit : chordsEdit;
-
-        return (
-            <div className="flex flex-col min-w-0">
-                <div className="flex items-center justify-between px-4 py-2 shrink-0 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
-                    <div className="flex items-center gap-2">
-                        <span className={`text-[11px] font-bold uppercase tracking-widest ${accent}`}>{label}</span>
-                        {/* Zoom controls — shown in the top row header on mobile */}
-                        {isTop && !edit.isEditing && zoomControls}
-                    </div>
-                    <div className="flex items-center gap-1">
-                        {edit.isEditing ? editToolbar(col) : (
-                            <>
-                                {!isLyrics && !edit.isEditing && transposeControls}
-                                {pencilBtn(col)}
-                                {isTop && (
-                                    <button
-                                        onClick={toggleRowOrder}
-                                        className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all"
-                                        title={chordsOnTop ? "Move chords below lyrics" : "Move chords above lyrics"}
-                                    >
-                                        <ArrowUpDown size={15} />
-                                    </button>
-                                )}
-                            </>
-                        )}
-                    </div>
-                </div>
-                <div className="min-w-0">
-                    {columnContent(col)}
-                </div>
-            </div>
-        );
-    };
-
+    // ── Mobile: tab-switcher layout (Lyrics / Chords) ─────────────────────────
     const mobileLayout = (
         <div
-            className="flex md:hidden flex-col h-full overflow-y-auto divide-y divide-gray-200 dark:divide-gray-800"
+            className="flex md:hidden flex-col h-full overflow-hidden"
             onTouchStart={onTouchStart}
             onTouchEnd={onTouchEnd}
         >
-            {chordsOnTop ? (
-                <>
-                    {mobileRow("chords", true)}
-                    {mobileRow("lyrics", false)}
-                </>
-            ) : (
-                <>
-                    {mobileRow("lyrics", true)}
-                    {mobileRow("chords", false)}
-                </>
-            )}
+            {/* ── Tab bar ── */}
+            <div className="shrink-0 flex items-center gap-2 px-3 py-2 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+                {/* Lyrics / Chords pill switcher */}
+                <div className="flex flex-1 bg-gray-100 dark:bg-gray-800 rounded-2xl p-1 gap-1">
+                    <button
+                        onClick={() => setMobileTab("lyrics")}
+                        className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all active:scale-95 ${
+                            mobileTab === "lyrics"
+                                ? "bg-indigo-600 text-white shadow-sm"
+                                : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                        }`}>
+                        <BookOpen size={16} />
+                        Lyrics
+                    </button>
+                    <button
+                        onClick={() => setMobileTab("chords")}
+                        className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all active:scale-95 ${
+                            mobileTab === "chords"
+                                ? "bg-purple-600 text-white shadow-sm"
+                                : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                        }`}>
+                        <Guitar size={16} />
+                        Chords
+                    </button>
+                </div>
+            </div>
+
+            {/* ── Panel header with controls ── */}
+            <div className="shrink-0 flex items-center justify-between px-4 py-2 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+                <div className="flex items-center gap-2">
+                    <span className={`text-[11px] font-bold uppercase tracking-widest ${
+                        mobileTab === "lyrics" ? "text-rose-500" : "text-indigo-500"
+                    }`}>
+                        {mobileTab === "lyrics" ? "Lyrics" : "Chords"}
+                    </span>
+                    {/* Zoom controls in panel header */}
+                    {!(mobileTab === "lyrics" ? lyricsEdit : chordsEdit).isEditing && zoomControls}
+                </div>
+                <div className="flex items-center gap-1">
+                    {(mobileTab === "lyrics" ? lyricsEdit : chordsEdit).isEditing
+                        ? editToolbar(mobileTab)
+                        : (
+                            <>
+                                {mobileTab === "chords" && transposeControls}
+                                {pencilBtn(mobileTab)}
+                                {/* Fullscreen expand button */}
+                                <button
+                                    onClick={() => setMobileFullscreen(true)}
+                                    title="Full screen"
+                                    className="w-10 h-10 flex items-center justify-center rounded-xl text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all active:scale-95"
+                                >
+                                    <Maximize2 size={18} />
+                                </button>
+                            </>
+                        )
+                    }
+                </div>
+            </div>
+
+            {/* ── Scrollable content ── */}
+            <div className="flex-1 overflow-y-auto min-h-0">
+                {columnContent(mobileTab)}
+            </div>
         </div>
     );
+
+    // ── Mobile fullscreen overlay ───────────────────────────────────────────
+    // Covers the full viewport (z-50) when mobileFullscreen is true.
+    const fullscreenOverlay = mobileFullscreen ? (
+        <div className="md:hidden fixed inset-0 z-50 flex flex-col bg-gray-950"
+            style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}>
+
+            {/* Song title row */}
+            {currentSong && (
+                <div className="shrink-0 px-4 py-2.5 bg-gray-900 border-b border-gray-800/60 flex items-center justify-center">
+                    <p className="text-sm font-bold text-white text-center truncate">
+                        {currentSong.title}
+                        <span className="ml-1.5 text-xs font-medium text-gray-400">
+                            ({safeActiveSong === "joyful" ? "Joyful" : "Solemn"})
+                        </span>
+                    </p>
+                </div>
+            )}
+
+            {/* Overlay controls */}
+            <div className="shrink-0 flex items-center justify-between px-4 py-3 bg-gray-900 border-b border-gray-800">
+                <div className="flex items-center gap-3">
+                    <span className={`text-[11px] font-bold uppercase tracking-widest ${
+                        mobileTab === "lyrics" ? "text-rose-400" : "text-indigo-400"
+                    }`}>
+                        {mobileTab === "lyrics" ? "Lyrics" : "Chords"}
+                    </span>
+                    {/* Zoom controls */}
+                    {zoomControls}
+                </div>
+                <div className="flex items-center gap-1">
+                    {/* Transpose (chords only) */}
+                    {mobileTab === "chords" && transposeControls}
+                    {/* Collapse button */}
+                    <button
+                        onClick={() => setMobileFullscreen(false)}
+                        title="Exit full screen"
+                        className="w-10 h-10 flex items-center justify-center rounded-xl text-gray-400 hover:text-white hover:bg-gray-700 transition-all active:scale-95 ml-1"
+                    >
+                        <Minimize2 size={20} />
+                    </button>
+                </div>
+            </div>
+
+            {/* Scrollable content — with floating carousel arrows */}
+            <div className="flex-1 relative overflow-hidden min-h-0">
+                {/* ‹ Left carousel arrow */}
+                {canPrev && (
+                    <button
+                        onClick={goPrev}
+                        title="Previous song"
+                        className="absolute left-5 top-1/2 -translate-y-1/2 z-10 w-12 h-12 flex items-center justify-center rounded-full transition-all active:scale-90"
+                        style={{
+                            background: "rgba(255,255,255,0.03)",
+                            border: "1px solid rgba(255,255,255,0.06)",
+                            color: "rgba(255,255,255,0.28)",
+                        }}
+                    >
+                        <ChevronLeft size={26} />
+                    </button>
+                )}
+
+                {/* › Right carousel arrow */}
+                {canNext && (
+                    <button
+                        onClick={goNext}
+                        title="Next song"
+                        className="absolute right-5 top-1/2 -translate-y-1/2 z-10 w-12 h-12 flex items-center justify-center rounded-full transition-all active:scale-90"
+                        style={{
+                            background: "rgba(255,255,255,0.03)",
+                            border: "1px solid rgba(255,255,255,0.06)",
+                            color: "rgba(255,255,255,0.28)",
+                        }}
+                    >
+                        <ChevronRight size={26} />
+                    </button>
+                )}
+
+                {/* Scrollable text — padded so text doesn't go under arrows */}
+                <div className="h-full overflow-y-auto">
+                    <pre
+                        className="font-mono leading-[1.9] text-white px-16 py-6 whitespace-pre-wrap break-words overflow-x-hidden w-full transition-[font-size] duration-150"
+                        style={{ fontSize }}
+                    >
+                        {mobileTab === "lyrics"
+                            ? (currentSong?.lyrics?.trim() ? currentSong.lyrics : "No lyrics available.")
+                            : (transposedChords?.trim() ? transposedChords : "No chords available.")
+                        }
+                    </pre>
+                </div>
+            </div>
+
+            {/* Bottom tab switcher */}
+            <div className="shrink-0 flex gap-1 px-3 py-2 bg-gray-900 border-t border-gray-800">
+                <button
+                    onClick={() => setMobileTab("lyrics")}
+                    className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all active:scale-95 ${
+                        mobileTab === "lyrics" ? "bg-indigo-600 text-white" : "text-gray-500 hover:text-gray-200 hover:bg-gray-800"
+                    }`}>
+                    <BookOpen size={16} /> Lyrics
+                </button>
+                <button
+                    onClick={() => setMobileTab("chords")}
+                    className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all active:scale-95 ${
+                        mobileTab === "chords" ? "bg-purple-600 text-white" : "text-gray-500 hover:text-gray-200 hover:bg-gray-800"
+                    }`}>
+                    <Guitar size={16} /> Chords
+                </button>
+            </div>
+        </div>
+    ) : null;
 
     return (
         <div className="flex flex-col h-full overflow-hidden -m-4 sm:-m-6">
@@ -788,6 +929,9 @@ export default function RehearsalView({
                 {desktopLayout}
                 {mobileLayout}
             </div>
+
+            {/* Mobile fullscreen overlay — rendered above everything else */}
+            {fullscreenOverlay}
 
             {/* ── Dialogs ─── */}
 

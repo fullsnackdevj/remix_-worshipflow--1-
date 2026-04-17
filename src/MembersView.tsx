@@ -473,164 +473,187 @@ showToast("error", `Photo is too large. Please use an image under ${MAX_PHOTO_SI
 
       {/* ── Member Form ── */}
       {isEditingMember ? (
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold">{selectedMember ? "Edit Member" : "Add Member"}</h2>
-            <button onClick={() => setIsEditingMember(false)} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"><X size={22} /></button>
+        <div className="wf-card">
+
+          {/* ── Gradient hero ── */}
+          <div className="relative h-28 bg-gradient-to-br from-indigo-600 via-purple-500 to-rose-400">
+            <div className="absolute inset-0 bg-black/10" />
+            <div className="absolute top-4 left-5 right-14">
+              <h2 className="text-lg font-extrabold tracking-tight text-white drop-shadow-sm">
+                {selectedMember ? "Edit Member" : "Add Member"}
+              </h2>
+              <p className="text-xs text-white/70 mt-0.5">
+                {selectedMember ? "Update profile details" : "Fill in the member's information"}
+              </p>
+            </div>
+            <button
+              onClick={() => setIsEditingMember(false)}
+              className="absolute top-3 right-3 w-9 h-9 flex items-center justify-center rounded-xl bg-white/20 hover:bg-white/30 text-white transition-all"
+            >
+              <X size={18} />
+            </button>
           </div>
 
-          <div className="space-y-6">
-            {/* Photo upload */}
-            <div className="flex flex-col items-center gap-2">
-              {/* Avatar — click to open camera */}
-              <div
-                onClick={openCamera}
-                className="relative w-28 h-28 rounded-full overflow-hidden border-4 border-indigo-200 dark:border-indigo-700 bg-gray-100 dark:bg-gray-700 cursor-pointer hover:border-indigo-400 transition-colors group"
-              >
-                {editMemberPhoto ? (
-                  <img src={editMemberPhoto} alt="Preview" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center gap-1 text-gray-400 group-hover:text-indigo-400 transition-colors px-2">
-                    <Camera size={24} />
-                    <span className="text-[9px] text-center leading-tight">Click to open camera</span>
-                  </div>
-                )}
-                {/* Hover overlay */}
-                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <Camera size={20} className="text-white" />
+          {/* ── Avatar — overlaps the gradient ── */}
+          <div className="flex flex-col items-center -mt-14 mb-5 px-5">
+            <div
+              onClick={openCamera}
+              className="relative w-28 h-28 rounded-2xl overflow-hidden cursor-pointer group ring-4 ring-white dark:ring-gray-800 shadow-xl"
+            >
+              {editMemberPhoto ? (
+                <img src={editMemberPhoto} alt="Preview" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-br from-indigo-400 to-purple-600 flex flex-col items-center justify-center gap-1.5 text-white">
+                  <Camera size={26} />
+                  <span className="text-[9px] font-semibold uppercase tracking-wider text-white/80">Camera</span>
                 </div>
-                {isUploadingPhoto && (
-                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                    <Loader2 size={22} className="text-white animate-spin" />
-                  </div>
-                )}
+              )}
+              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <Camera size={22} className="text-white" />
               </div>
-
-              {/* Secondary actions */}
-              <div className="flex items-center gap-2">
+              {isUploadingPhoto && (
+                <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                  <Loader2 size={22} className="text-white animate-spin" />
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-2 mt-3">
+              <button
+                type="button"
+                onClick={() => memberPhotoInputRef.current?.click()}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-xl border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-indigo-300 dark:hover:border-indigo-600 transition-all"
+              >
+                <ImagePlus size={13} /> Gallery
+              </button>
+              {editMemberPhoto && (
                 <button
                   type="button"
-                  onClick={() => memberPhotoInputRef.current?.click()}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  onClick={() => setEditMemberPhoto("")}
+                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-xl text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 border border-transparent hover:border-red-200 dark:hover:border-red-800 transition-all"
+                  title="Remove photo"
                 >
-                  <ImagePlus size={14} /> Gallery
+                  <X size={13} /> Remove
                 </button>
-                {editMemberPhoto && (
-                  <button
-                    type="button"
-                    onClick={() => setEditMemberPhoto("")}
-                    className="flex items-center gap-1 px-2 py-1.5 text-xs font-medium rounded-lg text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                    title="Remove photo"
-                  >
-                    <X size={13} />
-                  </button>
-                )}
+              )}
+            </div>
+            <input type="file" ref={memberPhotoInputRef} onChange={handleMemberPhotoUpload} className="hidden" accept="image/*" />
+          </div>
+
+          {/* ── Form sections ── */}
+          <div className="px-5 sm:px-6 space-y-4">
+
+            {/* Personal Info */}
+            <div className="rounded-2xl border border-gray-100 dark:border-gray-700/60 bg-gray-50 dark:bg-gray-900/40 p-4 space-y-4">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-indigo-500 dark:text-indigo-400">Personal Info</p>
+
+              <div className="grid gap-3" style={{ gridTemplateColumns: '1fr 60px 1fr' }}>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">First Name <span className="text-red-400">*</span></label>
+                  <input
+                    type="text"
+                    value={editMemberFirstName}
+                    onChange={e => { setEditMemberFirstName(e.target.value); if (memberFormErrors.firstName) setMemberFormErrors(p => ({ ...p, firstName: undefined })); }}
+                    className={`w-full px-3.5 py-2.5 text-sm border rounded-xl outline-none transition-all dark:text-white ${memberFormErrors.firstName ? "border-red-400 bg-red-50 dark:bg-red-900/10 focus:ring-2 focus:ring-red-200" : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900"}`}
+                    placeholder="Juan"
+                  />
+                  {memberFormErrors.firstName && <p className="mt-1 text-xs text-red-500">{memberFormErrors.firstName}</p>}
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">M.I.</label>
+                  <input
+                    type="text"
+                    maxLength={2}
+                    value={editMemberMiddleInitial}
+                    onChange={e => setEditMemberMiddleInitial(e.target.value.replace(/[^a-zA-Z]/g, '').toUpperCase())}
+                    className="w-full px-2 py-2.5 text-sm border border-gray-200 dark:border-gray-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900 bg-white dark:bg-gray-800 rounded-xl outline-none text-center uppercase tracking-widest dark:text-white transition-all"
+                    placeholder="M"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">Last Name <span className="text-red-400">*</span></label>
+                  <input
+                    type="text"
+                    value={editMemberLastName}
+                    onChange={e => { setEditMemberLastName(e.target.value); if (memberFormErrors.lastName) setMemberFormErrors(p => ({ ...p, lastName: undefined })); }}
+                    className={`w-full px-3.5 py-2.5 text-sm border rounded-xl outline-none transition-all dark:text-white ${memberFormErrors.lastName ? "border-red-400 bg-red-50 dark:bg-red-900/10 focus:ring-2 focus:ring-red-200" : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900"}`}
+                    placeholder="dela Cruz"
+                  />
+                  {memberFormErrors.lastName && <p className="mt-1 text-xs text-red-500">{memberFormErrors.lastName}</p>}
+                </div>
               </div>
-              <input type="file" ref={memberPhotoInputRef} onChange={handleMemberPhotoUpload} className="hidden" accept="image/*" />
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">Birthdate <span className="text-red-400">*</span></label>
+                <DatePicker
+                  value={editMemberBirthdate}
+                  max={new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" })}
+                  onChange={v => { setEditMemberBirthdate(v); if (memberFormErrors.birthdate) setMemberFormErrors(p => ({ ...p, birthdate: undefined })); }}
+                  error={!!memberFormErrors.birthdate}
+                  placeholder="Select birthdate"
+                />
+                {memberFormErrors.birthdate && <p className="mt-1 text-xs text-red-500">{memberFormErrors.birthdate}</p>}
+              </div>
             </div>
 
-            {/* First Name | MI | Last Name */}
-            <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 72px 1fr' }}>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">First Name <span className="text-red-500">*</span></label>
-                <input
-                  type="text"
-                  value={editMemberFirstName}
-                  onChange={e => { setEditMemberFirstName(e.target.value); if (memberFormErrors.firstName) setMemberFormErrors(p => ({ ...p, firstName: undefined })); }}
-                  className={`w-full px-4 py-2 border ${memberFormErrors.firstName ? "border-red-400 focus:border-red-400 focus:ring-red-200" : "border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-indigo-200"} bg-white dark:bg-gray-700 rounded-xl focus:ring-2 outline-none`}
-                  placeholder="Juan"
-                />
-                {memberFormErrors.firstName && <p className="mt-1 text-xs text-red-500">{memberFormErrors.firstName}</p>}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">M.I. <span className="text-gray-400 font-normal text-xs">(opt.)</span></label>
-                <input
-                  type="text"
-                  maxLength={2}
-                  value={editMemberMiddleInitial}
-                  onChange={e => setEditMemberMiddleInitial(e.target.value.replace(/[^a-zA-Z]/g, '').toUpperCase())}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-indigo-200 bg-white dark:bg-gray-700 rounded-xl focus:ring-2 outline-none text-center uppercase tracking-widest"
-                  placeholder="M"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Last Name <span className="text-red-500">*</span></label>
-                <input
-                  type="text"
-                  value={editMemberLastName}
-                  onChange={e => { setEditMemberLastName(e.target.value); if (memberFormErrors.lastName) setMemberFormErrors(p => ({ ...p, lastName: undefined })); }}
-                  className={`w-full px-4 py-2 border ${memberFormErrors.lastName ? "border-red-400 focus:border-red-400 focus:ring-red-200" : "border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-indigo-200"} bg-white dark:bg-gray-700 rounded-xl focus:ring-2 outline-none`}
-                  placeholder="dela Cruz"
-                />
-                {memberFormErrors.lastName && <p className="mt-1 text-xs text-red-500">{memberFormErrors.lastName}</p>}
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Phone Number <span className="text-red-500">*</span></label>
-              <div className="relative">
-                <Phone size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input
-                  type="tel"
-                  value={editMemberPhone}
-                  onChange={e => { setEditMemberPhone(e.target.value); if (memberFormErrors.phone) setMemberFormErrors(p => ({ ...p, phone: undefined })); }}
-                  className={`w-full pl-9 pr-4 py-2 border ${memberFormErrors.phone ? "border-red-400 focus:border-red-400 focus:ring-red-200" : "border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-indigo-200"} bg-white dark:bg-gray-700 rounded-xl focus:ring-2 outline-none`}
-                  placeholder="+63 912 345 6789"
-                />
-              </div>
-              {memberFormErrors.phone && <p className="mt-1 text-xs text-red-500">{memberFormErrors.phone}</p>}
-            </div>
+            {/* Contact */}
+            <div className="rounded-2xl border border-gray-100 dark:border-gray-700/60 bg-gray-50 dark:bg-gray-900/40 p-4 space-y-4">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-indigo-500 dark:text-indigo-400">Contact</p>
 
-            {/* Email */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email Address <span className="text-red-500">*</span></label>
-              <div className="relative">
-                <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input
-                  type="email"
-                  value={editMemberEmail}
-                  onChange={e => { setEditMemberEmail(e.target.value); if (memberFormErrors.email) setMemberFormErrors(p => ({ ...p, email: undefined })); }}
-                  className={`w-full pl-9 pr-4 py-2 border ${memberFormErrors.email ? "border-red-400 focus:border-red-400 focus:ring-red-200" : "border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-indigo-200"} bg-white dark:bg-gray-700 rounded-xl focus:ring-2 outline-none`}
-                  placeholder="member@gmail.com"
-                />
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">Phone Number <span className="text-red-400">*</span></label>
+                <div className="relative">
+                  <Phone size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="tel"
+                    value={editMemberPhone}
+                    onChange={e => { setEditMemberPhone(e.target.value); if (memberFormErrors.phone) setMemberFormErrors(p => ({ ...p, phone: undefined })); }}
+                    className={`w-full pl-10 pr-4 py-2.5 text-sm border rounded-xl outline-none transition-all dark:text-white ${memberFormErrors.phone ? "border-red-400 bg-red-50 dark:bg-red-900/10 focus:ring-2 focus:ring-red-200" : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900"}`}
+                    placeholder="+63 912 345 6789"
+                  />
+                </div>
+                {memberFormErrors.phone && <p className="mt-1 text-xs text-red-500">{memberFormErrors.phone}</p>}
               </div>
-              {memberFormErrors.email
-                ? <p className="mt-1 text-xs text-red-500">{memberFormErrors.email}</p>
-                : <p className="mt-1.5 flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40 rounded-lg px-2.5 py-1.5">
-                  <AlertTriangle size={12} className="shrink-0 mt-0.5" />
-                  <span>Make sure this is the same email address this person will use to <strong>sign in to the app</strong>. This is how their access is linked to their profile.</span>
-                </p>
-              }
-            </div>
 
-            {/* Birthdate */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Birthdate <span className="text-red-500">*</span>
-              </label>
-              <DatePicker
-                value={editMemberBirthdate}
-                max={new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" })}
-                onChange={v => { setEditMemberBirthdate(v); if (memberFormErrors.birthdate) setMemberFormErrors(p => ({ ...p, birthdate: undefined })); }}
-                error={!!memberFormErrors.birthdate}
-                placeholder="Select birthdate"
-              />
-              {memberFormErrors.birthdate && <p className="mt-1 text-xs text-red-500">{memberFormErrors.birthdate}</p>}
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">Email Address <span className="text-red-400">*</span></label>
+                <div className="relative">
+                  <Mail size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="email"
+                    value={editMemberEmail}
+                    onChange={e => { setEditMemberEmail(e.target.value); if (memberFormErrors.email) setMemberFormErrors(p => ({ ...p, email: undefined })); }}
+                    className={`w-full pl-10 pr-4 py-2.5 text-sm border rounded-xl outline-none transition-all dark:text-white ${memberFormErrors.email ? "border-red-400 bg-red-50 dark:bg-red-900/10 focus:ring-2 focus:ring-red-200" : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900"}`}
+                    placeholder="member@gmail.com"
+                  />
+                </div>
+                {memberFormErrors.email
+                  ? <p className="mt-1 text-xs text-red-500">{memberFormErrors.email}</p>
+                  : <p className="mt-2 flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40 rounded-xl px-3 py-2">
+                      <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+                      <span>Must match the email used to <strong>sign in to the app</strong>. This links their account to their profile.</span>
+                    </p>
+                }
+              </div>
             </div>
 
             {/* Status */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Status</label>
-              <div className="flex gap-2 flex-wrap">
+            <div className="rounded-2xl border border-gray-100 dark:border-gray-700/60 bg-gray-50 dark:bg-gray-900/40 p-4">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-indigo-500 dark:text-indigo-400 mb-3">Status</p>
+              <div className="grid grid-cols-3 gap-2">
                 {(["active", "on-leave", "inactive"] as const).map(s => (
                   <button
                     key={s}
                     onClick={() => setEditMemberStatus(s)}
-                    className={`px-4 py-1.5 rounded-full text-sm font-medium border-2 transition-all ${editMemberStatus === s
-                      ? STATUS_CONFIG[s].badge + " border-transparent ring-2 ring-offset-1 ring-indigo-400"
-                      : "bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-600 hover:border-gray-300"
-                      }`}
+                    className={`flex flex-col items-center gap-2 py-3.5 px-2 rounded-xl text-xs font-bold border-2 transition-all ${editMemberStatus === s
+                      ? s === "active"
+                        ? "bg-emerald-50 dark:bg-emerald-900/30 border-emerald-400 dark:border-emerald-500 text-emerald-700 dark:text-emerald-400"
+                        : s === "on-leave"
+                          ? "bg-amber-50 dark:bg-amber-900/30 border-amber-400 dark:border-amber-500 text-amber-700 dark:text-amber-400"
+                          : "bg-gray-100 dark:bg-gray-700/60 border-gray-400 dark:border-gray-500 text-gray-600 dark:text-gray-300"
+                      : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500 hover:border-gray-300 dark:hover:border-gray-600"
+                    }`}
                   >
-                    <span className={`inline-block w-2 h-2 rounded-full mr-1.5 ${STATUS_CONFIG[s].dot}`} />
+                    <span className={`w-3 h-3 rounded-full ${STATUS_CONFIG[s].dot}`} />
                     {STATUS_CONFIG[s].label}
                   </button>
                 ))}
@@ -638,12 +661,13 @@ showToast("error", `Photo is too large. Please use an image under ${MAX_PHOTO_SI
             </div>
 
             {/* Roles */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Roles <span className="text-gray-400 font-normal">(select all that apply)</span></label>
-              <div className="space-y-3">
+            <div className="rounded-2xl border border-gray-100 dark:border-gray-700/60 bg-gray-50 dark:bg-gray-900/40 p-4">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-indigo-500 dark:text-indigo-400 mb-1">Roles</p>
+              <p className="text-[10px] text-gray-400 dark:text-gray-600 mb-4">Select all that apply</p>
+              <div className="space-y-4">
                 {ROLE_CATEGORIES.map(cat => (
                   <div key={cat.label}>
-                    <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1.5">{cat.label}</p>
+                    <p className="text-[10px] font-bold text-gray-400 dark:text-gray-600 uppercase tracking-widest mb-2">{cat.label}</p>
                     <div className="flex flex-wrap gap-2">
                       {cat.roles.map(role => {
                         const isSelected = editMemberRoles.includes(role);
@@ -652,12 +676,12 @@ showToast("error", `Photo is too large. Please use an image under ${MAX_PHOTO_SI
                             key={role}
                             type="button"
                             onClick={() => toggleMemberRole(role)}
-                            className={`px-3 py-1 rounded-full text-sm font-medium border-2 transition-all ${isSelected
-                              ? cat.color + " border-transparent ring-2 ring-offset-1 ring-indigo-400"
-                              : "bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-600 hover:border-gray-300"
-                              }`}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${isSelected
+                              ? cat.color + " border-transparent shadow-sm"
+                              : "bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-700 hover:text-indigo-600 dark:hover:text-indigo-400"
+                            }`}
                           >
-                            {isSelected && <Check size={12} className="inline mr-1" />}
+                            {isSelected && <Check size={11} strokeWidth={3} />}
                             {role}
                           </button>
                         );
@@ -669,83 +693,101 @@ showToast("error", `Photo is too large. Please use an image under ${MAX_PHOTO_SI
             </div>
 
             {/* Notes */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Notes <span className="text-gray-400 font-normal">(optional)</span></label>
+            <div className="rounded-2xl border border-gray-100 dark:border-gray-700/60 bg-gray-50 dark:bg-gray-900/40 p-4">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-indigo-500 dark:text-indigo-400 mb-1">Notes</p>
+              <p className="text-[10px] text-gray-400 dark:text-gray-600 mb-3">Optional</p>
               <AutoTextarea
                 value={editMemberNotes}
                 onChange={e => setEditMemberNotes(e.target.value)}
                 minRows={3}
-                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none"
+                className="w-full px-3.5 py-3 text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900 outline-none dark:text-white transition-all"
                 placeholder="Available weekends only, plays both keys and acoustic..."
               />
             </div>
+          </div>
 
-            {/* Actions */}
-            <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-700">
-              <button onClick={() => setIsEditingMember(false)} className="px-6 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 font-medium transition-colors">Cancel</button>
-              <button
-                onClick={handleSaveMember}
-                disabled={isSavingMember}
-                className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {isSavingMember ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                {isSavingMember ? "Saving..." : "Save Member"}
-              </button>
-            </div>
+          {/* ── Sticky footer ── */}
+          <div className="sticky bottom-0 flex justify-end gap-3 px-5 sm:px-6 py-4 mt-5 border-t border-gray-100 dark:border-gray-700/60 bg-white dark:bg-gray-800 rounded-b-2xl">
+            <button
+              onClick={() => setIsEditingMember(false)}
+              className="px-5 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-all"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSaveMember}
+              disabled={isSavingMember}
+              className="flex items-center gap-2 px-6 py-2.5 text-sm font-semibold bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-sm shadow-indigo-500/30"
+            >
+              {isSavingMember ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+              {isSavingMember ? "Saving..." : "Save Member"}
+            </button>
           </div>
         </div>
+
 
         /* ── Member Detail ── */
       ) : selectedMember ? (
         <div className="max-w-2xl mx-auto">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-            {/* Top banner + avatar */}
-            <div className="h-24 bg-gradient-to-r from-indigo-500 via-purple-500 to-rose-400" />
-            <div className="px-6 pb-6">
-              <div className="-mt-12 mb-4 flex items-end justify-between">
-                <div className="w-24 h-24 rounded-full border-4 border-white dark:border-gray-800 overflow-hidden bg-gray-200 dark:bg-gray-700 shrink-0">
+          <div className="wf-card">
+            {/* Gradient banner — taller, more premium */}
+            <div className="h-32 bg-gradient-to-br from-indigo-600 via-purple-500 to-rose-400" />
+            <div className="px-5 sm:px-6 pb-6">
+              <div className="-mt-14 mb-5 flex items-end justify-between">
+                {/* Avatar */}
+                <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl border-4 border-white dark:border-gray-800 overflow-hidden bg-gray-200 dark:bg-gray-700 shrink-0 shadow-lg">
                   {selectedMember.photo
                     ? <img src={selectedMember.photo} alt={selectedMember.name} className="w-full h-full object-cover" />
-                    : <div className="w-full h-full flex items-center justify-center text-3xl font-bold text-gray-400">{selectedMember.name?.[0]?.toUpperCase()}</div>}
+                    : <div className="w-full h-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-3xl font-extrabold text-white">{selectedMember.name?.[0]?.toUpperCase()}</div>}
                 </div>
-                <div className="flex items-center gap-2 mb-1">
+                {/* Action buttons — standardized w-9 h-9 touch targets */}
+                <div className="flex items-center gap-1.5 mb-1">
                   {canEditMember(selectedMember) && (
-                    <button onClick={() => openMemberEditor(selectedMember)} className="relative group text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
-                      <Edit size={18} />
-                      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-0.5 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none">Edit</span>
+                    <button
+                      onClick={() => openMemberEditor(selectedMember)}
+                      title="Edit member"
+                      className="w-9 h-9 flex items-center justify-center rounded-xl text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-all"
+                    >
+                      <Edit size={17} />
                     </button>
                   )}
                   {canDeleteMember && selectedMember && (
-                    <button onClick={() => handleDeleteMember(selectedMember.id)} className="relative group text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-colors">
-                      <Trash2 size={18} />
-                      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-0.5 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none">Remove</span>
+                    <button
+                      onClick={() => handleDeleteMember(selectedMember.id)}
+                      title="Remove member"
+                      className="w-9 h-9 flex items-center justify-center rounded-xl text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
+                    >
+                      <Trash2 size={17} />
                     </button>
                   )}
-                  <button onClick={() => setSelectedMember(null)} className="relative group text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
-                    <X size={18} />
-                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-0.5 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none">Close</span>
+                  <button
+                    onClick={() => setSelectedMember(null)}
+                    title="Close"
+                    className="w-9 h-9 flex items-center justify-center rounded-xl text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all"
+                  >
+                    <X size={17} />
                   </button>
                 </div>
               </div>
 
               <div className="space-y-4">
-                {/* Name + status */}
+                {/* Name + status badge */}
                 <div>
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{selectedMember.name}</h2>
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_CONFIG[selectedMember.status ?? "active"].badge}`}>
+                  <div className="flex items-center gap-3 flex-wrap mb-1">
+                    <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">{selectedMember.name}</h2>
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${STATUS_CONFIG[selectedMember.status ?? "active"].badge}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${STATUS_CONFIG[selectedMember.status ?? "active"].dot}`} />
                       {STATUS_CONFIG[selectedMember.status ?? "active"].label}
                     </span>
                   </div>
                   {/* Phone */}
-                  <a href={`tel:${selectedMember.phone}`} className="inline-flex items-center gap-1.5 mt-1 text-indigo-500 dark:text-indigo-400 hover:text-indigo-600 font-medium text-sm">
-                    <Phone size={14} />{selectedMember.phone}
+                  <a href={`tel:${selectedMember.phone}`} className="inline-flex items-center gap-1.5 text-indigo-500 dark:text-indigo-400 hover:text-indigo-600 font-semibold text-sm transition-colors">
+                    <Phone size={13} />{selectedMember.phone}
                   </a>
                   {/* Email */}
                   {(selectedMember as any).email && (
-                    <a href={`mailto:${(selectedMember as any).email}`} className="inline-flex items-center gap-1.5 mt-1 ml-3 text-gray-500 dark:text-gray-400 hover:text-indigo-500 dark:hover:text-indigo-400 font-medium text-sm">
-                      <Mail size={14} />{(selectedMember as any).email}
+                    <a href={`mailto:${(selectedMember as any).email}`} className="inline-flex items-center gap-1.5 mt-1 ml-3 text-gray-500 dark:text-gray-400 hover:text-indigo-500 dark:hover:text-indigo-400 font-medium text-sm transition-colors">
+                      <Mail size={13} />{(selectedMember as any).email}
                     </a>
                   )}
                 </div>
@@ -753,7 +795,7 @@ showToast("error", `Photo is too large. Please use an image under ${MAX_PHOTO_SI
                 {/* Roles */}
                 {selectedMember.roles?.length > 0 && (
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">Roles</p>
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-2">Roles</p>
                     <div className="flex flex-wrap gap-2">
                       {selectedMember.roles.map(role => (
                         <span key={role} className={`px-3 py-1 rounded-full text-xs font-semibold ${getRoleStyle(role)}`}>{role}</span>
@@ -765,8 +807,8 @@ showToast("error", `Photo is too large. Please use an image under ${MAX_PHOTO_SI
                 {/* Notes */}
                 {selectedMember.notes && (
                   <div className="pt-3 border-t border-gray-100 dark:border-gray-700">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1">Notes</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap">{selectedMember.notes}</p>
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1.5">Notes</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">{selectedMember.notes}</p>
                   </div>
                 )}
               </div>
@@ -776,7 +818,7 @@ showToast("error", `Photo is too large. Please use an image under ${MAX_PHOTO_SI
 
         /* ── Member List ── */
       ) : (
-        <div className="space-y-5">
+        <div className="space-y-4">
           {/* Toolbar */}
           <div className="flex items-center gap-3">
             <div className="relative flex-1">
@@ -788,7 +830,7 @@ showToast("error", `Photo is too large. Please use an image under ${MAX_PHOTO_SI
                 placeholder="Search by name, role, or phone..."
                 value={memberSearchQuery}
                 onChange={e => setMemberSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-8 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900 outline-none text-sm dark:text-white"
+                className="w-full pl-10 pr-8 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900 outline-none text-sm dark:text-white transition-all"
               />
               {memberSearchQuery && (
                 <button onClick={() => setMemberSearchQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"><X size={14} /></button>
@@ -797,37 +839,36 @@ showToast("error", `Photo is too large. Please use an image under ${MAX_PHOTO_SI
             {canAddMember && (
               <button
                 onClick={() => openMemberEditor()}
-                className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium shadow-sm text-sm shrink-0"
+                className="flex items-center gap-2 px-3 sm:px-4 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all font-semibold shadow-sm shadow-indigo-500/30 text-sm shrink-0"
               >
-                <UserPlus size={18} />
+                <UserPlus size={17} />
                 <span className="hidden sm:inline">Add Member</span>
               </button>
             )}
           </div>
 
-
           {/* Count badge */}
-          <div className="text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-xl inline-block">
+          <div className="h-9 inline-flex items-center text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-3 rounded-xl">
             {memberSearchQuery
-              ? <>{filteredMembers.length} of {allMembers.length} Members</>
-              : <>{allMembers.length} {allMembers.length === 1 ? "Member" : "Members"} Total</>}
+              ? <>{filteredMembers.length} of {allMembers.length}<span className="hidden sm:inline ml-1">Members</span></>
+              : <>{allMembers.length} <span className="hidden sm:inline ml-1">{allMembers.length === 1 ? "Member" : "Members"} Total</span></>}
           </div>
 
           {/* Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {/* Only show skeletons when actually loading AND no data yet */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+            {/* Skeletons — only when loading with no cached data */}
             {isLoadingMembers && allMembers.length === 0
               ? Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-200 dark:border-gray-700 shadow-sm animate-pulse">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-700 shrink-0" />
+                <div key={i} className="wf-card p-5 animate-pulse">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-12 h-12 rounded-xl bg-gray-200 dark:bg-gray-700 shrink-0" />
                     <div className="flex-1 space-y-2">
-                      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4" />
-                      <div className="h-3 bg-gray-100 dark:bg-gray-700 rounded w-1/2" />
+                      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded-lg w-3/4" />
+                      <div className="h-3 bg-gray-100 dark:bg-gray-700 rounded-lg w-1/2" />
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <div className="h-5 w-16 bg-gray-100 dark:bg-gray-700 rounded-full" />
+                    <div className="h-5 w-18 bg-gray-100 dark:bg-gray-700 rounded-full" />
                     <div className="h-5 w-20 bg-gray-100 dark:bg-gray-700 rounded-full" />
                   </div>
                 </div>
@@ -836,37 +877,41 @@ showToast("error", `Photo is too large. Please use an image under ${MAX_PHOTO_SI
                 <div
                   key={member.id}
                   onClick={() => setSelectedMember(member)}
-                  className="bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-500 cursor-pointer transition-all group"
+                  className="wf-card wf-hover-card p-5 group"
                 >
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="w-12 h-12 rounded-full overflow-hidden bg-gradient-to-br from-indigo-400 to-purple-500 text-white flex items-center justify-center font-bold text-lg shrink-0">
+                  {/* Avatar row */}
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-12 h-12 rounded-xl overflow-hidden bg-gradient-to-br from-indigo-400 to-purple-500 text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-sm">
                       {member.photo
                         ? <img src={member.photo} alt={member.name} className="w-full h-full object-cover" />
                         : member.name?.[0]?.toUpperCase()}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="font-bold text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate">{member.name}</p>
+                      <p className="font-bold text-sm text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate leading-snug">{member.name}</p>
                       <a
                         href={`tel:${member.phone}`}
                         onClick={e => e.stopPropagation()}
-                        className="inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-indigo-500 transition-colors"
+                        className="inline-flex items-center gap-1 text-xs text-indigo-500 dark:text-indigo-400 font-semibold hover:text-indigo-600 transition-colors mt-0.5"
                       >
-                        <Phone size={11} />{member.phone}
+                        <Phone size={10} />{member.phone}
                       </a>
                     </div>
-                    {/* Status dot */}
-                    <span title={STATUS_CONFIG[member.status ?? "active"].label} className={`w-2.5 h-2.5 rounded-full shrink-0 ${STATUS_CONFIG[member.status ?? "active"].dot}`} />
+                    {/* Status dot — slightly larger with title tooltip */}
+                    <div
+                      title={STATUS_CONFIG[member.status ?? "active"].label}
+                      className={`w-3 h-3 rounded-full shrink-0 ring-2 ring-white dark:ring-gray-800 ${STATUS_CONFIG[member.status ?? "active"].dot}`}
+                    />
                   </div>
                   {/* Role badges */}
                   <div className="flex flex-wrap gap-1.5">
                     {(member.roles || []).slice(0, 3).map(role => (
-                      <span key={role} className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${getRoleStyle(role)}`}>{role}</span>
+                      <span key={role} className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${getRoleStyle(role)}`}>{role}</span>
                     ))}
                     {(member.roles || []).length > 3 && (
-                      <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 dark:bg-gray-700 text-gray-500">+{member.roles.length - 3}</span>
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">+{member.roles.length - 3}</span>
                     )}
                     {(!member.roles || member.roles.length === 0) && (
-                      <span className="text-xs text-gray-400">No roles assigned</span>
+                      <span className="text-xs text-gray-400 italic">No roles assigned</span>
                     )}
                   </div>
                 </div>
@@ -875,24 +920,24 @@ showToast("error", `Photo is too large. Please use an image under ${MAX_PHOTO_SI
             {/* Empty state */}
             {!isLoadingMembers && filteredMembers.length === 0 && (
               <div className="col-span-full py-16 text-center">
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400 mb-4">
-                  <Users size={30} />
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 mb-4">
+                  <Users size={28} />
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-1">
                   {memberSearchQuery ? "No members found" : "No team members yet"}
                 </h3>
-                <p className="text-sm text-gray-400 mb-4">
+                <p className="text-sm text-gray-400 dark:text-gray-500 mb-5">
                   {memberSearchQuery
-                    ? `No results for "${memberSearchQuery}"`
+                    ? `No results for "${memberSearchQuery}". Try a different name or role.`
                     : "Add your first team member to get started."}
                 </p>
                 {!memberSearchQuery && (
-                  <button onClick={() => openMemberEditor()} className="inline-flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-medium text-sm transition-colors">
-                    <UserPlus size={16} /> Add First Member
+                  <button onClick={() => openMemberEditor()} className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-semibold text-sm transition-all shadow-sm shadow-indigo-500/30">
+                    <UserPlus size={15} /> Add First Member
                   </button>
                 )}
                 {memberSearchQuery && (
-                  <button onClick={() => setMemberSearchQuery("")} className="text-sm text-indigo-500 hover:underline">Clear search</button>
+                  <button onClick={() => setMemberSearchQuery("")} className="text-sm font-semibold text-indigo-500 dark:text-indigo-400 hover:text-indigo-600 transition-colors">Clear search</button>
                 )}
               </div>
             )}

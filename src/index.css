@@ -129,6 +129,217 @@ body {
   overscroll-behavior: none;   /* stop iOS rubber-band horizontal bounce */
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   OVERPAY STRUCTURAL DESIGN SYSTEM — WorshipFlow Adaptation v1.0
+   ──────────────────────────────────────────────────────────────────────────
+   Token-first component classes. Use these in every module for consistency:
+
+   .wf-card              — Surface card  (radius 20px, soft shadow, border)
+   .wf-card-header       — Card top bar  (24px h-pad, icon chip, divider)
+   .wf-card-body         — Card content  (24px pad, breathing room)
+   .wf-card-footer       — Card bottom   (subtle bg tint, 14px v-pad)
+   .wf-section-header    — Module hero   (h1 + gradient accent bar)
+   .wf-input             — Form input    (48px height, border, radius 8px)
+   .wf-btn-primary       — Filled action button
+   .wf-btn-secondary     — Outline action button
+   .wf-stat-number       — Big metric number  (4xl / font-black / tracking)
+   .wf-tag               — Small pill label
+   .wf-divider           — Subtle horizontal rule
+   .wf-hover-card        — Clickable card hover: lift + border accent
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Card surface ─────────────────────────────────────────────────────────── */
+.wf-card {
+  background-color: white;
+  border-radius: 20px;
+  border: 1px solid rgba(229, 231, 235, 0.8);           /* gray-200/80 */
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);     /* Overpay soft */
+  overflow: hidden;
+}
+.dark .wf-card {
+  background-color: rgba(31, 41, 55, 0.9);              /* gray-800/90 */
+  border-color: rgba(55, 65, 81, 0.6);                  /* gray-700/60 */
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.3);      /* Overpay soft-dark */
+}
+
+/* Hover lift variant — apply to clickable cards */
+.wf-hover-card {
+  cursor: pointer;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow  0.2s cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 0.2s ease;
+}
+.wf-hover-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.08);
+  border-color: rgba(165, 180, 252, 0.6);              /* indigo-300/60 */
+}
+.dark .wf-hover-card:hover {
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.4);
+  border-color: rgba(99, 102, 241, 0.5);               /* indigo-600/50 */
+}
+
+/* ── Card header bar ──────────────────────────────────────────────────────── */
+/* Always 24px horizontal padding (Overpay spec), 16px vertical, icon chip */
+.wf-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;                                /* py-4 px-6 */
+  border-bottom: 1px solid rgba(243, 244, 246, 0.8);  /* gray-100/80 */
+}
+.dark .wf-card-header {
+  border-bottom-color: rgba(55, 65, 81, 0.6);         /* gray-700/60 */
+}
+
+/* ── Card body ────────────────────────────────────────────────────────────── */
+.wf-card-body {
+  padding: 1.5rem;                                      /* 24px — Overpay spec */
+}
+
+/* ── Card footer ──────────────────────────────────────────────────────────── */
+.wf-card-footer {
+  padding: 0.875rem 1.5rem;                             /* py-3.5 px-6 */
+  border-top: 1px solid rgba(243, 244, 246, 0.8);
+  background-color: rgba(249, 250, 251, 0.6);           /* gray-50/60 */
+  font-size: 0.75rem;
+  color: rgb(156, 163, 175);                            /* gray-400 */
+}
+.dark .wf-card-footer {
+  border-top-color: rgba(55, 65, 81, 0.6);
+  background-color: rgba(31, 41, 55, 0.4);              /* gray-800/40 */
+}
+
+/* ── Section / module hero header ────────────────────────────────────────── */
+.wf-section-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.wf-section-header-bar {
+  width: 4px;
+  height: 3.5rem;
+  border-radius: 9999px;
+  background: linear-gradient(to bottom, #6366f1, #8b5cf6);
+  flex-shrink: 0;
+}
+.wf-section-title {
+  font-size: 1.875rem;               /* text-3xl */
+  font-weight: 900;                  /* font-black */
+  letter-spacing: -0.025em;         /* tracking-tight */
+  line-height: 1.2;
+}
+.wf-section-subtitle {
+  font-size: 0.75rem;               /* text-xs */
+  color: rgb(156, 163, 175);        /* text-gray-400 */
+  margin-top: 0.125rem;
+  font-weight: 500;
+}
+
+/* ── Stat / metric number ─────────────────────────────────────────────────── */
+.wf-stat-number {
+  font-size: 2.25rem;              /* text-4xl */
+  font-weight: 900;                /* font-black */
+  letter-spacing: -0.025em;       /* tracking-tight */
+  line-height: 1;
+}
+
+/* ── Form input — Overpay: 48px height, bg-main, border-subtle ───────────── */
+.wf-input {
+  height: 3rem;                           /* 48px */
+  width: 100%;
+  padding: 0 0.75rem;
+  border-radius: 0.5rem;                  /* rounded-lg (8px) */
+  border: 1px solid rgba(229, 231, 235, 1);
+  background-color: rgb(249, 250, 251);   /* bg-gray-50 */
+  font-size: 0.875rem;
+  color: rgb(17, 24, 39);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  outline: none;
+}
+.wf-input:focus {
+  border-color: rgba(99, 102, 241, 0.7);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+.dark .wf-input {
+  background-color: rgba(31, 41, 55, 0.8);
+  border-color: rgba(55, 65, 81, 0.8);
+  color: rgb(249, 250, 251);
+}
+.dark .wf-input:focus {
+  border-color: rgba(99, 102, 241, 0.7);
+}
+
+/* ── Buttons — Overpay: radius 10px, 200ms cubic-bezier transition ────────── */
+.wf-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  border-radius: 0.625rem;              /* ~10px */
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.wf-btn-primary {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: white;
+  border: none;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.3);
+}
+.wf-btn-primary:hover {
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.45);
+  transform: translateY(-1px);
+}
+.wf-btn-secondary {
+  background: transparent;
+  color: rgb(99, 102, 241);
+  border: 1px solid rgba(99, 102, 241, 0.5);
+}
+.wf-btn-secondary:hover {
+  background: rgba(99, 102, 241, 0.08);
+}
+.dark .wf-btn-secondary {
+  color: rgb(129, 140, 248);
+  border-color: rgba(99, 102, 241, 0.4);
+}
+
+/* ── Tag / pill label ─────────────────────────────────────────────────────── */
+.wf-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/* ── Divider ──────────────────────────────────────────────────────────────── */
+.wf-divider {
+  border: none;
+  border-top: 1px solid rgba(229, 231, 235, 0.8);
+  margin: 0;
+}
+.dark .wf-divider {
+  border-top-color: rgba(55, 65, 81, 0.6);
+}
+
+/* ── Module content area spacing ─────────────────────────────────────────── */
+/* Wraps the main scrollable content of any module view */
+.wf-module-content {
+  max-width: 80rem;                /* Overpay desktop: 1440px max */
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;                   /* 20px — generous breathing room */
+  padding-bottom: 2.5rem;
+}
+
 /* ── View transition — springy premium feel ─────────────────────────────── */
 @keyframes viewFadeIn {
   from { opacity: 0; transform: translateY(12px) scale(0.99); }

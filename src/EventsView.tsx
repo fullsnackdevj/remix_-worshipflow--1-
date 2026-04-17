@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import {
   collection, doc, addDoc, getDocs, onSnapshot,
   query, orderBy, serverTimestamp, updateDoc, setDoc, deleteDoc,
@@ -543,118 +543,118 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
     const isPast = new Date(selectedEvent.date + "T00:00:00") < new Date();
     return (
       <div className="min-h-[60vh]">
-        {/* Back row */}
-        <div className="flex items-center gap-3 mb-6 flex-wrap">
-          <button
-            onClick={() => { setSelectedEvent(null); setRegistrants([]); setSearchQuery(""); }}
-            className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-white transition-colors"
-          >
-            <ChevronLeft size={16} /> Back
-          </button>
-          <span className="text-gray-700">/</span>
-          <h1 className="text-sm font-semibold text-white truncate flex-1">{selectedEvent.title}</h1>
-          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold border ${
-            selectedEvent.status === "open" && !isPast
-              ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
-              : "bg-gray-500/15 text-gray-400 border-gray-600/30"
-          }`}>
-            {selectedEvent.status === "open" && !isPast ? "🟢 Open" : "⚫ Closed"}
-          </span>
-          {isAdmin && (
-            <div className="flex items-center gap-1.5 shrink-0">
-              <button
-                onClick={() => openEdit(selectedEvent)}
-                title="Edit event"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 hover:bg-indigo-500/20 transition-colors"
-              >
-                <Pencil size={13} /> Edit
-              </button>
-              <button
-                onClick={() => setShowDeleteConfirm(true)}
-                title="Delete event"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-colors"
-              >
-                <Trash2 size={13} /> Delete
-              </button>
-            </div>
-          )}
+        {/* ── Gradient Hero Header ── */}
+        <div className="bg-gradient-to-br from-amber-600 via-orange-500 to-rose-500 rounded-2xl p-5 mb-5 shadow-lg shadow-amber-500/20">
+          {/* Back + actions row */}
+          <div className="flex items-center gap-3 mb-3 flex-wrap">
+            <button
+              onClick={() => { setSelectedEvent(null); setRegistrants([]); setSearchQuery(""); }}
+              className="flex items-center gap-1.5 text-sm text-white/80 hover:text-white transition-colors"
+            >
+              <ChevronLeft size={16} /> Back
+            </button>
+            <span className="text-white/30">/</span>
+            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold ${
+              selectedEvent.status === "open" && !isPast
+                ? "bg-white/20 text-white border border-white/30"
+                : "bg-black/20 text-white/70 border border-white/10"
+            }`}>
+              {selectedEvent.status === "open" && !isPast ? "● Open" : "● Closed"}
+            </span>
+            {isAdmin && (
+              <div className="flex items-center gap-1.5 ml-auto shrink-0">
+                <button
+                  onClick={() => openEdit(selectedEvent)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-white bg-white/20 hover:bg-white/30 transition-all"
+                >
+                  <Pencil size={12} /> Edit
+                </button>
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-rose-100 bg-rose-900/40 hover:bg-rose-900/60 border border-rose-400/30 transition-all"
+                >
+                  <Trash2 size={12} /> Delete
+                </button>
+              </div>
+            )}
+          </div>
+          {/* Title */}
+          <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight leading-snug mb-3">{selectedEvent.title}</h1>
+
+          {/* Info pills inside hero */}
+          <div className="flex flex-wrap gap-2.5">
+            <span className="flex items-center gap-1.5 text-xs font-medium text-white/90 bg-white/15 px-3 py-1.5 rounded-full">
+              <Calendar size={11} className="shrink-0" />
+              {formatDate(selectedEvent.date)}{selectedEvent.time && ` · ${selectedEvent.time}`}
+            </span>
+            <span className="flex items-center gap-1.5 text-xs font-medium text-white/90 bg-white/15 px-3 py-1.5 rounded-full">
+              <MapPin size={11} className="shrink-0" />
+              {selectedEvent.venue}
+            </span>
+            {selectedEvent.type !== "internal" && selectedEvent.price > 0 && (
+              <span className="flex items-center gap-1.5 text-xs font-medium text-white/90 bg-white/15 px-3 py-1.5 rounded-full">
+                <Wallet size={11} className="shrink-0" />
+                {formatPHP(selectedEvent.price)} / person
+              </span>
+            )}
+            {selectedEvent.type === "internal" && (
+              <span className="flex items-center gap-1.5 text-xs font-medium text-white/90 bg-white/15 px-3 py-1.5 rounded-full">
+                <Wallet size={11} className="shrink-0" />
+                {(selectedEvent.contributionTiers ?? [
+                  { name: "Working", amount: selectedEvent.workingAmount ?? 0 },
+                  { name: "Student", amount: selectedEvent.studentAmount ?? 0 },
+                ]).map((t, i, arr) => (
+                  <span key={i}>{t.name}: {formatPHP(t.amount)}{i < arr.length - 1 ? " ·" : ""}</span>
+                ))}
+              </span>
+            )}
+            <span className="flex items-center gap-1.5 text-xs font-medium text-white/90 bg-white/15 px-3 py-1.5 rounded-full">
+              <Users size={11} className="shrink-0" />
+              {registrants.length} registered{selectedEvent.capacity ? ` / ${selectedEvent.capacity} slots` : ""}
+            </span>
+          </div>
         </div>
 
-        {/* Info strip */}
-        <div className="bg-gradient-to-br from-amber-500/10 to-orange-500/5 border border-amber-500/20 rounded-2xl p-4 mb-5 flex flex-wrap gap-4">
-          <div className="flex items-center gap-2 text-sm text-gray-300">
-            <Calendar size={13} className="text-amber-400 shrink-0" />
-            {formatDate(selectedEvent.date)}{selectedEvent.time && ` · ${selectedEvent.time}`}
-          </div>
-          <div className="flex items-center gap-2 text-sm text-gray-300">
-            <MapPin size={13} className="text-violet-400 shrink-0" />
-            {selectedEvent.venue}
-          </div>
-          {selectedEvent.type !== "internal" && selectedEvent.price > 0 && (
-            <div className="flex items-center gap-2 text-sm text-gray-300">
-              <Wallet size={13} className="text-amber-400 shrink-0" />
-              {formatPHP(selectedEvent.price)} / person
-            </div>
-          )}
-          {selectedEvent.type === "internal" && (
-            <div className="flex items-center gap-2 text-sm text-gray-300 flex-wrap">
-              <Wallet size={13} className="text-amber-400 shrink-0" />
-              {(selectedEvent.contributionTiers ?? [
-                { name: "Working", amount: selectedEvent.workingAmount ?? 0 },
-                { name: "Student", amount: selectedEvent.studentAmount ?? 0 },
-              ]).map((t, i, arr) => (
-                <span key={i}>{t.name}: {formatPHP(t.amount)}{i < arr.length - 1 ? " ·" : ""}</span>
-              ))}
-            </div>
-          )}
-          <div className="flex items-center gap-2 text-sm text-gray-300">
-            <Users size={13} className="text-emerald-400 shrink-0" />
-            {registrants.length} registered{selectedEvent.capacity ? ` / ${selectedEvent.capacity} slots` : ""}
-          </div>
-        </div>
-
-        {/* Tabs — different sets for internal vs external events */}
-        <div className="flex gap-1 mb-5 bg-gray-800/60 p-1 rounded-xl">
+        {/* ── Premium Tab Switcher ── */}
+        <div className="flex gap-1 mb-6 bg-gray-800/80 p-1 rounded-2xl border border-gray-700/50">
           {selectedEvent.type === "internal" ? (
-            // Internal event tabs
             (["contributions", "budget", "share"] as const).map(tab => (
               <button
                 key={tab}
                 onClick={() => setDetailTab(tab)}
-                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
+                className={`flex-1 py-2.5 px-2 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
                   detailTab === tab
-                    ? "bg-indigo-600 text-white shadow"
-                    : "text-gray-400 hover:text-gray-200"
+                    ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md shadow-amber-500/25"
+                    : "text-gray-400 hover:text-gray-200 hover:bg-white/5"
                 }`}
               >
-                {tab === "contributions" ? "Members" : tab === "budget" ? "Budget" : "Share"}
+                {tab === "contributions" ? "👥 Members" : tab === "budget" ? "💰 Budget" : "📤 Share"}
                 {tab === "contributions" && (
-                  <span className={`ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                    detailTab === tab ? "bg-white/20" : "bg-gray-700"
+                  <span className={`ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                    detailTab === tab ? "bg-white/25" : "bg-gray-700"
                   }`}>{contributions.length}</span>
                 )}
               </button>
             ))
           ) : (
-            // External event tabs
             (["registrants", "finance", "share"] as const).map(tab => (
               <button
                 key={tab}
                 onClick={() => setDetailTab(tab)}
-                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all capitalize ${
+                className={`flex-1 py-2.5 px-2 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
                   detailTab === tab
-                    ? "bg-indigo-600 text-white shadow"
-                    : "text-gray-400 hover:text-gray-200"
+                    ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md shadow-amber-500/25"
+                    : "text-gray-400 hover:text-gray-200 hover:bg-white/5"
                 }`}
               >
-                {tab === "share" ? "Share & QR" : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                {tab === "share" ? "📤 Share" : tab === "registrants" ? "👥 Registrants" : "💰 Finance"}
                 {tab === "registrants" && (
-                  <span className={`ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                    detailTab === tab ? "bg-white/20" : "bg-gray-700"
+                  <span className={`ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                    detailTab === tab ? "bg-white/25" : "bg-gray-700"
                   }`}>{registrants.length}</span>
                 )}
                 {tab === "finance" && pending > 0 && (
-                  <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/30 text-amber-300">{pending}</span>
+                  <span className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-rose-900/50 text-rose-300">{pending}</span>
                 )}
               </button>
             ))
@@ -727,12 +727,14 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
               <div className="space-y-2">
                 {filtered.map(r => (
                   <div key={r.id}
-                    className={`border rounded-xl transition-all ${
+                    className={`border rounded-2xl transition-all duration-200 ${
                       r.archived
-                        ? "bg-gray-800/30 border-gray-700/20 opacity-60"
+                        ? "bg-gray-800/20 border-gray-700/20 opacity-60"
                         : r.paymentStatus === "rejected"
                           ? "bg-red-950/20 border-red-800/30"
-                          : "bg-gray-800/60 border-gray-700/40"
+                          : r.paymentStatus === "paid"
+                            ? "bg-emerald-900/10 border-emerald-700/20"
+                            : "bg-gray-800/60 border-gray-700/40 hover:border-amber-500/30 hover:shadow-sm"
                     }`}
                   >
                     {/* Main row */}
@@ -754,12 +756,14 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
                         </div>
                       </label>
                       {/* Avatar */}
-                      <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0 ${
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-extrabold text-sm shrink-0 shadow-sm ${
                         r.archived
                           ? "bg-gray-700"
                           : r.paymentStatus === "rejected"
                             ? "bg-gray-700"
-                            : "bg-gradient-to-br from-amber-500 to-orange-600"
+                            : r.paymentStatus === "paid"
+                              ? "bg-gradient-to-br from-emerald-500 to-teal-600"
+                              : "bg-gradient-to-br from-amber-500 to-orange-600"
                       }`}>
                         {r.fullName[0]?.toUpperCase()}
                       </div>
@@ -800,7 +804,7 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
                       </div>
                       {/* Action buttons — hidden on archived cards */}
                       {!r.archived && r.paymentStatus === "pending_review" && rejectingId !== r.id && (
-                        <div className="flex gap-2 shrink-0">
+                        <div className="flex gap-1.5 shrink-0 flex-wrap justify-end">
                           <button
                             onClick={() => {
                               const url = `${origin}/r/${selectedEvent.id}?registrant=${r.id}`;
@@ -808,25 +812,25 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
                               setCopiedLinkId(r.id);
                               setTimeout(() => setCopiedLinkId(null), 2000);
                             }}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 text-xs font-semibold hover:bg-indigo-600/30 transition-colors"
+                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-gray-700/60 text-gray-300 border border-gray-600/40 text-[11px] font-semibold hover:bg-indigo-600/20 hover:text-indigo-300 hover:border-indigo-500/30 transition-all"
                           >
-                            {copiedLinkId === r.id ? <><Check size={11} /> Copied!</> : <><Copy size={11} /> Copy Link</>}
+                            {copiedLinkId === r.id ? <><Check size={10} /> Copied</> : <><Copy size={10} /> Link</>}
                           </button>
                           <button
                             onClick={() => confirmPayment(r.id)} disabled={actioningId === r.id}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 text-xs font-semibold hover:bg-emerald-600/30 transition-colors disabled:opacity-50"
+                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[11px] font-bold hover:bg-emerald-500/25 transition-all disabled:opacity-50"
                           >
                             {actioningId === r.id
-                              ? <Loader2 size={11} className="animate-spin" />
-                              : <CheckCircle2 size={13} />}
+                              ? <Loader2 size={10} className="animate-spin" />
+                              : <CheckCircle2 size={12} />}
                             Confirm
                           </button>
                           <button
                             onClick={() => { setRejectingId(r.id); setRejectNote(""); }}
                             disabled={actioningId === r.id}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600/20 text-red-400 border border-red-500/30 text-xs font-semibold hover:bg-red-600/30 transition-colors disabled:opacity-50"
+                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 text-[11px] font-bold hover:bg-red-500/20 transition-all disabled:opacity-50"
                           >
-                            <XCircle size={13} /> Reject
+                            <XCircle size={12} /> Reject
                           </button>
                         </div>
                       )}
@@ -903,14 +907,15 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
             {/* Stat cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
-                { label: "Registered", value: registrants.length, color: "text-indigo-400",  bg: "bg-indigo-500/10 border-indigo-500/20"  },
-                { label: "Paid",       value: paid,               color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20" },
-                { label: "Pending",    value: pending,            color: "text-amber-400",   bg: "bg-amber-500/10 border-amber-500/20"     },
-                { label: "Rejected",   value: rejected,           color: "text-red-400",     bg: "bg-red-500/10 border-red-500/20"         },
+                { label: "Registered", value: registrants.length, color: "text-indigo-300",  bg: "bg-indigo-500/10 border-indigo-500/20", icon: "🎟" },
+                { label: "Paid",       value: paid,               color: "text-emerald-300", bg: "bg-emerald-500/10 border-emerald-500/20", icon: "✅" },
+                { label: "Pending",    value: pending,            color: "text-amber-300",   bg: "bg-amber-500/10 border-amber-500/20",   icon: "⏳" },
+                { label: "Rejected",   value: rejected,           color: "text-red-300",     bg: "bg-red-500/10 border-red-500/20",       icon: "❌" },
               ].map(s => (
-                <div key={s.label} className={`rounded-2xl border ${s.bg} p-4 text-center`}>
+                <div key={s.label} className={`rounded-2xl border ${s.bg} p-4 text-center hover:-translate-y-0.5 transition-transform duration-200`}>
+                  <p className="text-lg mb-0.5">{s.icon}</p>
                   <p className={`text-3xl font-black ${s.color}`}>{s.value}</p>
-                  <p className="text-[11px] text-gray-500 mt-0.5 font-medium">{s.label}</p>
+                  <p className="text-[11px] text-gray-500 mt-1 font-semibold uppercase tracking-wide">{s.label}</p>
                 </div>
               ))}
             </div>
@@ -1155,7 +1160,7 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
 
         {/* ─── SHARE tab ─── */}
         {detailTab === "share" && (
-          <div className="space-y-6">
+          <div className="space-y-5">
 
             {/* ── Internal Event: Member Sign-Up + Collector Links ── */}
             {selectedEvent.type === "internal" && (
@@ -1218,13 +1223,13 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
 
             {/* ── External Event: QR + Links ── */}
             {selectedEvent.type !== "internal" && <>
-            {/* QR */}
-            <div className="flex flex-col items-center">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">Registration QR Code</p>
-              <div className="bg-white p-4 rounded-2xl shadow-2xl">
+            {/* QR — premium card */}
+            <div className="bg-gradient-to-br from-indigo-900/40 to-violet-900/30 border border-indigo-500/20 rounded-2xl p-6 flex flex-col items-center">
+              <p className="text-xs font-bold text-indigo-300 uppercase tracking-widest mb-4">📷 Registration QR Code</p>
+              <div className="bg-white p-4 rounded-2xl shadow-2xl ring-4 ring-indigo-500/20">
                 <img src={qrUrl(regLink, 220)} alt="Registration QR" className="w-44 h-44 block" />
               </div>
-              <p className="text-xs text-gray-500 mt-3 text-center max-w-xs leading-relaxed">
+              <p className="text-xs text-gray-400 mt-4 text-center max-w-xs leading-relaxed">
                 Share this QR anywhere — social media, group chats, projector screen. Scanning opens the registration form instantly.
               </p>
               <a
@@ -1232,7 +1237,7 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
                 download={`${selectedEvent.title}-qr.png`}
                 target="_blank"
                 rel="noreferrer"
-                className="mt-4 flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold transition-colors"
+                className="mt-4 flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-semibold transition-all shadow-md shadow-indigo-500/30"
               >
                 <Download size={15} /> Download QR (High-res)
               </a>
@@ -1525,18 +1530,18 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/20">
+          <span className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/25">
             <Ticket size={20} className="text-white" />
-          </div>
+          </span>
           <div>
-            <h1 className="text-xl font-bold text-gray-900 dark:text-white">Events</h1>
+            <h1 className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-white">Events</h1>
             <p className="text-xs text-gray-400 dark:text-gray-500">Registrations & payment tracking</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => fetchEvents()}
-            className="flex items-center gap-1.5 px-3 py-2.5 text-gray-400 hover:text-white border border-gray-700/50 hover:border-gray-600 rounded-xl text-sm transition-colors"
+            className="p-2.5 text-gray-400 hover:text-white border border-gray-700/50 hover:border-gray-600 rounded-xl transition-all hover:bg-gray-800/60"
             title="Refresh events list"
           >
             <RefreshCw size={14} />
@@ -1544,7 +1549,7 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
           {isAdmin && (
             <button
               onClick={() => { resetCreate(); setShowCreate(true); }}
-              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white rounded-xl font-semibold text-sm shadow shadow-amber-500/20 transition-all"
+              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white rounded-xl font-semibold text-sm shadow-md shadow-amber-500/25 transition-all"
             >
               <Plus size={16} /> New Event
             </button>
@@ -1579,24 +1584,39 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
           {events.map(ev => {
             const d    = new Date(ev.date + "T00:00:00");
             const past = d < new Date();
+            const isOpen = ev.status === "open" && !past;
             return (
               <button
                 key={ev.id}
                 onClick={() => { setSelectedEvent(ev); setDetailTab(ev.type === "internal" ? "contributions" : "registrants"); setSearchQuery(""); }}
-                className="text-left bg-gray-800/60 border border-gray-700/50 hover:border-amber-500/40 rounded-2xl p-5 transition-all hover:shadow-xl hover:shadow-amber-500/5 group"
+                className="text-left bg-gray-800/60 border border-gray-700/50 hover:border-amber-500/40 rounded-2xl p-5 transition-all duration-200 hover:shadow-xl hover:shadow-amber-500/10 hover:-translate-y-0.5 group"
               >
+                {/* Card top accent */}
+                <div className={`h-1 -mx-5 -mt-5 mb-4 rounded-t-2xl ${
+                  ev.type === "internal"
+                    ? "bg-gradient-to-r from-violet-500 to-purple-600"
+                    : isOpen
+                      ? "bg-gradient-to-r from-amber-500 to-orange-500"
+                      : "bg-gray-700"
+                }`} />
+
                 <div className="flex items-start justify-between gap-2 mb-3">
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                    ev.status === "open" && !past
-                      ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
-                      : "bg-gray-500/15 text-gray-400 border-gray-600/30"
-                  }`}>
-                    {ev.status === "open" && !past ? "🟢 Open" : "⚫ Closed"}
-                  </span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                      isOpen
+                        ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                        : "bg-gray-500/15 text-gray-400 border-gray-600/30"
+                    }`}>
+                      {isOpen ? "● Open" : "● Closed"}
+                    </span>
+                    {ev.type === "internal" && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-500/15 text-violet-400 border border-violet-500/30">Team</span>
+                    )}
+                  </div>
                   <ArrowRight size={14} className="text-gray-600 group-hover:text-amber-400 transition-colors shrink-0 mt-0.5" />
                 </div>
 
-                <h3 className="text-base font-bold text-white leading-snug mb-1 truncate">{ev.title}</h3>
+                <h3 className="text-base font-bold text-white leading-snug mb-3 truncate">{ev.title}</h3>
 
                 <div className="space-y-1.5 mb-4">
                   <div className="flex items-center gap-1.5 text-xs text-gray-400">
@@ -1644,27 +1664,27 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="bg-gray-900 border border-gray-700/60 rounded-3xl w-full max-w-lg shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
 
-            {/* Header */}
-            <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-800 shrink-0">
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center">
+            {/* Gradient Header */}
+            <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-rose-400 px-6 py-4 flex items-center gap-3 shrink-0">
+              <span className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
                 <Ticket size={15} className="text-white" />
-              </div>
+              </span>
               <div className="flex-1">
                 <h2 className="text-base font-bold text-white">New Event</h2>
-                <p className="text-[10px] text-gray-500">
+                <p className="text-[10px] text-white/70">
                   Step {createStep} of 2 — {createStep === 1 ? "Basic Info" : "Payment Setup"}
                 </p>
               </div>
               <div className="flex gap-1.5 mr-2">
                 {[1, 2].map(s => (
-                  <div key={s} className={`w-2 h-2 rounded-full transition-all ${createStep >= s ? "bg-amber-500" : "bg-gray-700"}`} />
+                  <div key={s} className={`w-2 h-2 rounded-full transition-all ${createStep >= s ? "bg-white" : "bg-white/30"}`} />
                 ))}
               </div>
               <button
                 onClick={() => { setShowCreate(false); resetCreate(); }}
-                className="p-1.5 text-gray-500 hover:text-gray-200 transition-colors rounded-lg"
+                className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/20 hover:bg-white/30 text-white transition-all"
               >
-                <X size={18} />
+                <X size={15} />
               </button>
             </div>
 
@@ -2004,17 +2024,17 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
       {showEdit && selectedEvent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="bg-gray-900 border border-gray-700/60 rounded-3xl w-full max-w-lg shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-800 shrink-0">
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center">
+            {/* Gradient Header */}
+            <div className="bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-600 px-6 py-4 flex items-center gap-3 shrink-0">
+              <span className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
                 <Pencil size={14} className="text-white" />
-              </div>
+              </span>
               <div className="flex-1">
                 <h2 className="text-base font-bold text-white">Edit Event</h2>
-                <p className="text-[11px] text-gray-500 truncate">{selectedEvent.title}</p>
+                <p className="text-[11px] text-white/70 truncate">{selectedEvent.title}</p>
               </div>
-              <button onClick={() => setShowEdit(false)} className="p-1.5 text-gray-500 hover:text-gray-200 transition-colors rounded-lg">
-                <X size={18} />
+              <button onClick={() => setShowEdit(false)} className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/20 hover:bg-white/30 text-white transition-all">
+                <X size={15} />
               </button>
             </div>
 

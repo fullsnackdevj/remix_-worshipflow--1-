@@ -100,21 +100,21 @@ function TeamNoteViewModal({
   const modal = (
     <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
       <div className="w-full max-w-lg bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-white/10 overflow-hidden" onClick={e => e.stopPropagation()}>
-        {/* Header — single row: [avatar][name+date][spacer][tags][X] */}
-        <div className="flex items-center gap-2.5 px-5 py-4 border-b border-gray-100 dark:border-white/10">
+        {/* Header — gradient strip + avatar + meta */}
+        <div className="bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-600 px-5 py-4 flex items-center gap-3">
           {/* Avatar */}
           {note.authorPhoto ? (
-            <img src={note.authorPhoto} className="w-9 h-9 rounded-full object-cover shrink-0 border-2 border-indigo-400/30" alt="" />
+            <img src={note.authorPhoto} className="w-10 h-10 rounded-full object-cover shrink-0 ring-2 ring-white/40 ring-offset-1 ring-offset-indigo-600" alt="" />
           ) : (
-            <div className="w-9 h-9 rounded-full shrink-0 bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold">
+            <div className="w-10 h-10 rounded-full shrink-0 bg-white/20 flex items-center justify-center text-white text-xs font-bold">
               {note.authorName?.[0]?.toUpperCase()}
             </div>
           )}
 
           {/* Name + date — takes remaining space, truncate on narrow screens */}
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-gray-900 dark:text-white leading-tight truncate">{note.authorName}</p>
-            <p className="text-[11px] text-gray-400 mt-0.5 truncate">
+            <p className="text-sm font-bold text-white leading-tight truncate">{note.authorName}</p>
+            <p className="text-[11px] text-white/70 mt-0.5 truncate">
               {relTime(note.createdAt)}
               {note.updatedAt && (new Date(note.updatedAt).getTime() - new Date(note.createdAt).getTime() > 2000) ? " · edited" : ""}
             </p>
@@ -122,24 +122,24 @@ function TeamNoteViewModal({
 
           {/* Tags — icon-only pills, pushed right */}
           <div className="flex items-center gap-1.5 shrink-0">
-            <span title={cfg.label} className={`shrink-0 aspect-square flex items-center justify-center w-7 h-7 rounded-full border ${cfg.cls}`}>
+            <span title={cfg.label} className="shrink-0 aspect-square flex items-center justify-center w-7 h-7 rounded-full bg-white/20 text-white border border-white/20">
               {cfg.icon}
             </span>
             {note.pinned && (
-              <span title="Pinned" className="shrink-0 aspect-square flex items-center justify-center w-7 h-7 rounded-full text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900/50 border border-indigo-200 dark:border-indigo-700">
+              <span title="Pinned" className="shrink-0 aspect-square flex items-center justify-center w-7 h-7 rounded-full bg-white/20 text-white border border-white/20">
                 <Pin size={12} />
               </span>
             )}
           </div>
 
           {/* Close — breathing space from tags */}
-          <button onClick={onClose} className="ml-2 p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-white rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-all shrink-0" title="Close">
+          <button onClick={onClose} className="ml-auto w-7 h-7 flex items-center justify-center rounded-lg bg-white/20 hover:bg-white/30 text-white transition-all shrink-0" title="Close">
             <X size={15} />
           </button>
         </div>
         {/* Body */}
         <div className="px-5 py-4 overflow-y-auto max-h-[60vh]" style={{ scrollbarWidth: "thin" }}>
-          <h2 className="text-base font-bold text-gray-900 dark:text-white mb-3 leading-snug">{note.title}</h2>
+          <h2 className="text-lg font-extrabold text-gray-900 dark:text-white mb-3 leading-snug tracking-tight">{note.title}</h2>
           <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words leading-relaxed">{note.body}</p>
         </div>
         {/* Footer — icon-only, bigger on mobile: [❤️ count] spacer [copy][pin][edit][delete] */}
@@ -148,9 +148,9 @@ function TeamNoteViewModal({
           <button
             onClick={() => onLike(note.id, !(note.likes ?? []).includes(userId))}
             title={(note.likes ?? []).includes(userId) ? "Unlike" : "Like this note"}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border transition-all shrink-0 ${
+            className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border transition-all shrink-0 ${
               (note.likes ?? []).includes(userId)
-                ? "text-rose-600 bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-800"
+                ? "text-rose-600 bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-700"
                 : "text-gray-500 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 border-gray-200 dark:border-gray-700"
             }`}
           >
@@ -242,10 +242,10 @@ function NoteCard({
 
   return (
     <div
-      className={`group relative rounded-2xl border transition-all hover:shadow-md cursor-pointer ${
+      className={`group relative rounded-2xl border transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer ${
         note.pinned
-          ? "border-indigo-300 dark:border-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/10"
-          : "border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/50"
+          ? "border-indigo-300 dark:border-indigo-600/70 bg-indigo-50/60 dark:bg-indigo-900/15 shadow-sm"
+          : "border-gray-200 dark:border-gray-700/50 bg-white dark:bg-gray-800/60 hover:border-indigo-200 dark:hover:border-indigo-800/50"
       }`}
       onDoubleClick={() => (isAuthor || isAdmin) ? onEdit(note) : onView(note)}
       title={(isAuthor || isAdmin) ? "Double-click to edit" : "Double-click to view"}
@@ -254,16 +254,16 @@ function NoteCard({
         {/* Header: [avatar][name+date flex-1][category badge][pinned badge?] */}
         <div className="flex items-center gap-2 mb-3">
           {note.authorPhoto ? (
-            <img src={note.authorPhoto} className="w-8 h-8 rounded-full object-cover shrink-0 border-2 border-indigo-400/30" alt="" />
+            <img src={note.authorPhoto} className="w-9 h-9 rounded-full object-cover shrink-0 ring-2 ring-indigo-400/20 ring-offset-1 ring-offset-white dark:ring-offset-gray-800" alt="" />
           ) : (
-            <div className="w-8 h-8 rounded-full shrink-0 bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold">
+            <div className="w-9 h-9 rounded-full shrink-0 bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold shadow-sm">
               {note.authorName?.[0]?.toUpperCase()}
             </div>
           )}
           {/* Name + date */}
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold text-gray-900 dark:text-white truncate">{note.authorName}</p>
-            <p className="text-[10px] text-gray-400">
+            <p className="text-xs font-bold text-gray-900 dark:text-white truncate">{note.authorName}</p>
+            <p className="text-[10px] text-gray-400 mt-0.5">
               {relTime(note.createdAt)}{note.updatedAt && (new Date(note.updatedAt).getTime() - new Date(note.createdAt).getTime() > 2000) ? " · edited" : ""}
             </p>
           </div>
@@ -283,7 +283,7 @@ function NoteCard({
 
         {/* Title — clickable to open full view */}
         <h3
-          className="text-sm font-bold text-gray-900 dark:text-white mb-1.5 leading-snug cursor-pointer hover:text-indigo-500 dark:hover:text-indigo-400 transition-colors"
+          className="text-sm font-bold text-gray-900 dark:text-white mb-2 leading-snug cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
           onClick={() => onView(note)}
           title="Click to view full note"
         >
@@ -320,7 +320,7 @@ function NoteCard({
             title={(note.likes ?? []).includes(userId) ? "Unlike" : "Like this note"}
             className={`flex items-center gap-1 p-1.5 rounded-lg transition-all text-xs ${
               (note.likes ?? []).includes(userId)
-                ? "text-rose-500"
+                ? "text-rose-500 bg-rose-50 dark:bg-rose-900/20"
                 : "text-gray-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20"
             }`}
           >
@@ -351,7 +351,7 @@ function NoteCard({
 
           {/* Full view */}
           <button onClick={() => onView(note)} title="View full note"
-            className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-all">
+            className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-all group-hover:text-indigo-400">
             <NotebookPen size={13} />
           </button>
 
@@ -535,27 +535,23 @@ function NoteFormModal({
           </div>
         )}
 
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-white/10">
-          <div className="flex items-center gap-2">
-            <NotebookPen size={16} className="text-indigo-500" />
-            <span className="text-sm font-bold text-gray-900 dark:text-white">
+        {/* Header — indigo gradient top strip */}
+        <div className="bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-600 px-5 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <span className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center"><NotebookPen size={14} className="text-white" /></span>
+            <span className="text-sm font-bold text-white tracking-tight">
               {initial ? "Edit Note" : "New Team Note"}
             </span>
-            {/* Dirty indicator dot */}
             {isDirty && (
-              <span
-                className="w-2 h-2 rounded-full bg-amber-400 shrink-0"
-                title="Unsaved changes"
-              />
+              <span className="w-2 h-2 rounded-full bg-amber-300 shrink-0 shadow-sm shadow-amber-300/50" title="Unsaved changes" />
             )}
           </div>
           <button
             onClick={handleCloseAttempt}
-            className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-white rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-all"
+            className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/20 hover:bg-white/30 text-white transition-all"
             title="Close"
           >
-            <X size={15} />
+            <X size={14} />
           </button>
         </div>
 
@@ -624,7 +620,7 @@ function NoteFormModal({
           <button
             onClick={handleSave}
             disabled={!valid || saving}
-            className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-indigo-500/30"
           >
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
             {initial ? "Save Changes" : "Post Note"}
@@ -872,12 +868,12 @@ export default function TeamNotesView({
   return (
     <div className="max-w-3xl mx-auto">
       {/* ── Page Header ── */}
-      <div className="flex items-start justify-between mb-5 gap-3 flex-wrap">
+      <div className="flex items-start justify-between mb-6 gap-3 flex-wrap">
         <div>
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <NotebookPen size={20} className="text-indigo-500" /> Notes
+          <h2 className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-white flex items-center gap-2.5">
+            <span className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-sm shadow-indigo-500/30"><NotebookPen size={16} className="text-white" /></span> Notes
           </h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5 max-w-[220px] leading-snug">
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 max-w-[260px] leading-snug">
             {activeTab === "personal"
               ? "Private notes only visible to you."
               : "Meeting recaps, decisions, and team announcements."}
@@ -893,10 +889,10 @@ export default function TeamNotesView({
               setShowForm(true);
             }
           }}
-          className={`flex items-center gap-2 px-4 py-2 text-white text-sm font-semibold rounded-xl transition-all shadow-sm ${
+          className={`flex items-center gap-2 px-5 py-2.5 text-white text-sm font-semibold rounded-xl transition-all shadow-md ${
             activeTab === "personal"
-              ? "bg-amber-500 hover:bg-amber-400"
-              : "bg-indigo-600 hover:bg-indigo-500"
+              ? "bg-amber-500 hover:bg-amber-400 shadow-amber-500/25"
+              : "bg-indigo-600 hover:bg-indigo-500 shadow-indigo-500/25"
           }`}
         >
           <Plus size={16} /> New Note
@@ -904,23 +900,23 @@ export default function TeamNotesView({
       </div>
 
       {/* ── Tab Switcher ── */}
-      <div className="flex items-center gap-1.5 mb-6 p-1 bg-gray-100 dark:bg-gray-800/80 rounded-2xl w-fit">
+      <div className="flex items-center gap-1 mb-6 p-1 bg-gray-100/80 dark:bg-gray-800/80 rounded-2xl w-fit border border-gray-200/50 dark:border-gray-700/50 backdrop-blur-sm">
         <button
           onClick={() => setActiveTab("personal")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
             activeTab === "personal"
-              ? "bg-gradient-to-r from-amber-500 to-amber-400 text-white shadow-md shadow-amber-500/20"
-              : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+              ? "bg-gradient-to-r from-amber-500 to-orange-400 text-white shadow-md shadow-amber-500/25"
+              : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white hover:bg-white/60 dark:hover:bg-white/5"
           }`}
         >
           <Lock size={14} /> Personal Notes
         </button>
         <button
           onClick={() => setActiveTab("team")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
             activeTab === "team"
-              ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/20"
-              : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+              ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/25"
+              : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white hover:bg-white/60 dark:hover:bg-white/5"
           }`}
         >
           <Users size={14} /> Team Notes
@@ -947,7 +943,7 @@ export default function TeamNotesView({
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search notes…"
-                className="w-full pl-8 pr-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition"
+                className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-400 transition-all"
               />
             </div>
 
@@ -955,7 +951,7 @@ export default function TeamNotesView({
             <div className="relative" ref={catMenuRef}>
               <button
                 onClick={() => setShowCatMenu((v) => !v)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all"
+                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all"
               >
                 {currentCatLabel}{" "}
                 <ChevronDown
@@ -996,10 +992,10 @@ export default function TeamNotesView({
             </div>
           ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
-              <div className="w-16 h-16 rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center mb-4">
-                <NotebookPen size={28} className="text-indigo-400" />
+              <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-indigo-100 to-violet-100 dark:from-indigo-900/30 dark:to-violet-900/20 flex items-center justify-center mb-5 shadow-inner">
+                <NotebookPen size={32} className="text-indigo-500 dark:text-indigo-400" />
               </div>
-              <p className="text-base font-semibold text-gray-700 dark:text-gray-300">
+              <p className="text-base font-bold text-gray-800 dark:text-gray-200">
                 {q || catFilter !== "all" ? "No notes match your search" : "No notes yet"}
               </p>
               <p className="text-sm text-gray-400 mt-1">
@@ -1013,7 +1009,7 @@ export default function TeamNotesView({
                     setEditing(null);
                     setShowForm(true);
                   }}
-                  className="mt-4 flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl transition-all"
+                  className="mt-5 flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl transition-all shadow-md shadow-indigo-500/25"
                 >
                   <Plus size={15} /> Create your first note
                 </button>

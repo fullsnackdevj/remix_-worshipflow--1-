@@ -1,0 +1,1069 @@
+import React, { useState, useEffect, useCallback, memo } from "react";
+import {
+  Bookmark, ChevronDown, X, Plus, Check, Loader2,
+  RefreshCw, List, CheckCircle2, Trash2, ChevronLeft, ChevronRight,
+  Copy, PlusCircle, Edit3, ScrollText,
+} from "lucide-react";
+
+// ── SoapForm ─────────────────────────────────────────────────────────────
+// Isolated memoized component so keystrokes only re-render this subtree,
+// NOT the entire BibleView (verse list, selectors, etc).
+interface SoapFormValues { title: string; scriptureRef: string; scripture: string; observation: string; application: string; prayer: string; }
+interface SoapFormProps {
+  initialValues: SoapFormValues;
+  editingId: string | null;
+  saving: boolean;
+  onSave: (values: SoapFormValues) => void;
+  onCancel: () => void;
+}
+const SoapForm = memo(function SoapForm({ initialValues, editingId, saving, onSave, onCancel }: SoapFormProps) {
+  const [f, setF] = useState<SoapFormValues>(initialValues);
+  // Sync when parent resets (new form opened or edit started)
+  useEffect(() => { setF(initialValues); }, [initialValues]);
+
+  const set = (k: keyof SoapFormValues) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setF(prev => ({ ...prev, [k]: e.target.value }));
+
+  const canSave = f.title.trim() || f.scripture.trim() || f.observation.trim();
+
+  const fieldCls = "w-full rounded-xl px-3 py-2.5 text-[13px] outline-none resize-none";
+
+  return (
+    <div className="flex-1 overflow-y-auto px-3 pt-3 pb-4"
+      style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.07) transparent" }}>
+
+      {/* Title */}
+      <input value={f.title} onChange={set("title")}
+        placeholder="Devotion title (e.g. Walking in Faith)"
+        className="w-full rounded-xl px-3 py-2.5 text-[13px] font-semibold outline-none mb-4"
+        style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.09)", color: "rgba(255,255,255,0.85)" }} />
+
+      {/* S — Scripture */}
+      <div className="mb-4">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="w-6 h-6 flex items-center justify-center rounded-lg text-[11px] font-black" style={{ background: "rgba(99,102,241,0.25)", color: "#a5b4fc", border: "1px solid rgba(99,102,241,0.4)" }}>S</span>
+          <div>
+            <p className="text-[12px] font-bold" style={{ color: "#a5b4fc" }}>Scripture</p>
+            <p className="text-[10px]" style={{ color: "rgba(255,255,255,0.3)" }}>Write out the verse word-for-word</p>
+          </div>
+        </div>
+        <input value={f.scriptureRef} onChange={set("scriptureRef")}
+          placeholder="Reference (e.g. John 3:16)"
+          className="w-full rounded-xl px-3 py-2 text-[12px] outline-none mb-1.5"
+          style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)", color: "rgba(255,255,255,0.7)" }} />
+        <textarea value={f.scripture} onChange={set("scripture")}
+          placeholder='"For God so loved the world that he gave his one and only Son..." (write the verse out yourself)'
+          rows={4} className={fieldCls}
+          style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)", color: "rgba(255,255,255,0.85)", lineHeight: 1.7 }} />
+      </div>
+
+      {/* O — Observation */}
+      <div className="mb-4">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="w-6 h-6 flex items-center justify-center rounded-lg text-[11px] font-black" style={{ background: "rgba(251,146,60,0.2)", color: "#fdba74", border: "1px solid rgba(251,146,60,0.35)" }}>O</span>
+          <div>
+            <p className="text-[12px] font-bold" style={{ color: "#fdba74" }}>Observation</p>
+            <p className="text-[10px]" style={{ color: "rgba(255,255,255,0.3)" }}>What is happening? Who is the audience?</p>
+          </div>
+        </div>
+        <textarea value={f.observation} onChange={set("observation")}
+          placeholder="What did you notice? What is the context of this passage?"
+          rows={4} className={fieldCls}
+          style={{ background: "rgba(251,146,60,0.07)", border: "1px solid rgba(251,146,60,0.2)", color: "rgba(255,255,255,0.85)", lineHeight: 1.7 }} />
+      </div>
+
+      {/* A — Application */}
+      <div className="mb-4">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="w-6 h-6 flex items-center justify-center rounded-lg text-[11px] font-black" style={{ background: "rgba(16,185,129,0.2)", color: "#6ee7b7", border: "1px solid rgba(16,185,129,0.35)" }}>A</span>
+          <div>
+            <p className="text-[12px] font-bold" style={{ color: "#6ee7b7" }}>Application</p>
+            <p className="text-[10px]" style={{ color: "rgba(255,255,255,0.3)" }}>How does this change my behavior today?</p>
+          </div>
+        </div>
+        <textarea value={f.application} onChange={set("application")}
+          placeholder="What specific action or change will you make today based on this truth?"
+          rows={4} className={fieldCls}
+          style={{ background: "rgba(16,185,129,0.07)", border: "1px solid rgba(16,185,129,0.2)", color: "rgba(255,255,255,0.85)", lineHeight: 1.7 }} />
+      </div>
+
+      {/* P — Prayer */}
+      <div className="mb-5">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="w-6 h-6 flex items-center justify-center rounded-lg text-[11px] font-black" style={{ background: "rgba(167,139,250,0.2)", color: "#c4b5fd", border: "1px solid rgba(167,139,250,0.35)" }}>P</span>
+          <div>
+            <p className="text-[12px] font-bold" style={{ color: "#c4b5fd" }}>Prayer</p>
+            <p className="text-[10px]" style={{ color: "rgba(255,255,255,0.3)" }}>Ask God to help you live it out</p>
+          </div>
+        </div>
+        <textarea value={f.prayer} onChange={set("prayer")}
+          placeholder="Lord, help me to... (write your personal prayer here)"
+          rows={4} className={fieldCls}
+          style={{ background: "rgba(167,139,250,0.07)", border: "1px solid rgba(167,139,250,0.2)", color: "rgba(255,255,255,0.85)", lineHeight: 1.7 }} />
+      </div>
+
+      {/* Actions */}
+      <div className="flex gap-2">
+        <button onClick={onCancel}
+          className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold"
+          style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.09)", color: "rgba(255,255,255,0.4)" }}>
+          Cancel
+        </button>
+        <button onClick={() => onSave(f)}
+          disabled={saving || !canSave}
+          className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[13px] font-bold disabled:opacity-40"
+          style={{ background: "linear-gradient(135deg,rgba(var(--wf-c1),0.9),rgba(var(--wf-c2),0.8))", color: "#fff" }}>
+          {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+          {editingId ? "Update" : "Save Devotion"}
+        </button>
+      </div>
+    </div>
+  );
+});
+
+import {
+  doc, setDoc, onSnapshot,
+  collection, addDoc, deleteDoc, updateDoc, query, orderBy,
+} from "firebase/firestore";
+import { db } from "./firebase";
+
+interface BibleVerse    { verse: number; text: string; }
+interface CollectedVerse { ref: string; text: string; translation: string; savedAt: string; }
+interface DevotionNote  {
+  id: string;
+  title: string;
+  // SOAP fields
+  scripture: string;    // S — verse written out word-for-word
+  scriptureRef: string; // reference badge (e.g. "John 3:16")
+  observation: string;  // O — what is happening in the text
+  application: string;  // A — how it changes my behavior today
+  prayer: string;       // P — short prayer
+  // legacy fallback
+  body?: string;
+  createdAt: string;
+}
+
+const BIBLE_BOOKS = [
+  { name: "Genesis", chapters: 50 }, { name: "Exodus", chapters: 40 },
+  { name: "Leviticus", chapters: 27 }, { name: "Numbers", chapters: 36 },
+  { name: "Deuteronomy", chapters: 34 }, { name: "Joshua", chapters: 24 },
+  { name: "Judges", chapters: 21 }, { name: "Ruth", chapters: 4 },
+  { name: "1 Samuel", chapters: 31 }, { name: "2 Samuel", chapters: 24 },
+  { name: "1 Kings", chapters: 22 }, { name: "2 Kings", chapters: 25 },
+  { name: "1 Chronicles", chapters: 29 }, { name: "2 Chronicles", chapters: 36 },
+  { name: "Ezra", chapters: 10 }, { name: "Nehemiah", chapters: 13 },
+  { name: "Esther", chapters: 10 }, { name: "Job", chapters: 42 },
+  { name: "Psalms", chapters: 150 }, { name: "Proverbs", chapters: 31 },
+  { name: "Ecclesiastes", chapters: 12 }, { name: "Song of Solomon", chapters: 8 },
+  { name: "Isaiah", chapters: 66 }, { name: "Jeremiah", chapters: 52 },
+  { name: "Lamentations", chapters: 5 }, { name: "Ezekiel", chapters: 48 },
+  { name: "Daniel", chapters: 12 }, { name: "Hosea", chapters: 14 },
+  { name: "Joel", chapters: 3 }, { name: "Amos", chapters: 9 },
+  { name: "Obadiah", chapters: 1 }, { name: "Jonah", chapters: 4 },
+  { name: "Micah", chapters: 7 }, { name: "Nahum", chapters: 3 },
+  { name: "Habakkuk", chapters: 3 }, { name: "Zephaniah", chapters: 3 },
+  { name: "Haggai", chapters: 2 }, { name: "Zechariah", chapters: 14 },
+  { name: "Malachi", chapters: 4 },
+  { name: "Matthew", chapters: 28 }, { name: "Mark", chapters: 16 },
+  { name: "Luke", chapters: 24 }, { name: "John", chapters: 21 },
+  { name: "Acts", chapters: 28 }, { name: "Romans", chapters: 16 },
+  { name: "1 Corinthians", chapters: 16 }, { name: "2 Corinthians", chapters: 13 },
+  { name: "Galatians", chapters: 6 }, { name: "Ephesians", chapters: 6 },
+  { name: "Philippians", chapters: 4 }, { name: "Colossians", chapters: 4 },
+  { name: "1 Thessalonians", chapters: 5 }, { name: "2 Thessalonians", chapters: 3 },
+  { name: "1 Timothy", chapters: 6 }, { name: "2 Timothy", chapters: 4 },
+  { name: "Titus", chapters: 3 }, { name: "Philemon", chapters: 1 },
+  { name: "Hebrews", chapters: 13 }, { name: "James", chapters: 5 },
+  { name: "1 Peter", chapters: 5 }, { name: "2 Peter", chapters: 3 },
+  { name: "1 John", chapters: 5 }, { name: "2 John", chapters: 1 },
+  { name: "3 John", chapters: 1 }, { name: "Jude", chapters: 1 },
+  { name: "Revelation", chapters: 22 },
+];
+
+const TRANSLATIONS = [
+  { label: "NIV",  slug: "NIV",    api: "bgw", full: "New International Version" },
+  { label: "NLT",  slug: "NLT",    api: "bgw", full: "New Living Translation" },
+  { label: "ESV",  slug: "ESV",    api: "bgw", full: "English Standard Version" },
+  { label: "ERV",  slug: "ERV",    api: "bgw", full: "Easy-to-Read Version" },
+  { label: "AMP",  slug: "AMP",    api: "bgw", full: "Amplified Bible" },
+  { label: "MBB",  slug: "MBBTAG", api: "bgw", full: "Magandang Balita Biblia" },
+];
+
+const MBB_BOOK_NAMES = [
+  "Genesis","Exodo","Levitico","Mga Bilang","Deuteronomio",
+  "Josue","Mga Hukom","Ruth","1 Samuel","2 Samuel",
+  "1 Hari","2 Hari","1 Cronica","2 Cronica","Ezra",
+  "Nehemias","Ester","Job","Mga Awit","Mga Kawikaan",
+  "Mangangaral","Awit ng mga Awit","Isaias","Jeremias","Panaghoy",
+  "Ezekiel","Daniel","Hosea","Joel","Amos",
+  "Obadias","Jonas","Micas","Nahum","Habakuk",
+  "Sofonias","Hageo","Zacarias","Malaquias",
+  "Mateo","Marcos","Lucas","Juan","Mga Gawa",
+  "Mga Romano","1 Corinto","2 Corinto","Galacia","Efeso",
+  "Filipos","Colosas","1 Tesalonica","2 Tesalonica",
+  "1 Timoteo","2 Timoteo","Tito","Filemon",
+  "Mga Hebreo","Santiago","1 Pedro","2 Pedro",
+  "1 Juan","2 Juan","3 Juan","Judas","Apocalipsis",
+];
+
+const cleanText = (raw: string) =>
+  raw.replace(/\s+/g, " ").replace(/\s*Footnotes\b.*/i, "").replace(/\s*\bNext\s*$/i, "").replace(/\s*\bPrevious\s*$/i, "").trim();
+
+// ─────────────────────────────────────────────────────────────────────────────
+export default function BibleView({ userId = "guest" }: { userId?: string }) {
+
+  // ── Reader ───────────────────────────────────────────────────────────────
+  const [translation, setTranslation] = useState(TRANSLATIONS[0]);
+  const [bookIdx, setBookIdx]   = useState(42);
+  const [chapter, setChapter]   = useState(3);
+  const [verses, setVerses]     = useState<BibleVerse[]>([]);
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState<string | null>(null);
+  const [verseNum, setVerseNum] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [addedSet, setAddedSet] = useState<Set<string>>(new Set());
+  const [copiedRef, setCopiedRef] = useState<string | null>(null);
+
+  // ── Global search ────────────────────────────────────────────────────────
+  const [globalResults, setGlobalResults] = useState<{ reference: string; text: string }[]>([]);
+  const [globalTotal, setGlobalTotal]     = useState(0);
+  const [globalPage, setGlobalPage]       = useState(1);
+  const [globalLoading, setGlobalLoading] = useState(false);
+  const [globalError, setGlobalError]     = useState<string | null>(null);
+  const [globalMode, setGlobalMode]       = useState(false);
+  const [lastGlobalQuery, setLastGlobalQuery] = useState("");
+
+  // ── Panel: null | "verses" | "devotions" ─────────────────────────────────
+  const [activePanel, setActivePanel]   = useState<"verses" | "devotions" | null>(null);
+  const [isMobile, setIsMobile]         = useState(() => typeof window !== "undefined" && window.innerWidth < 640);
+
+  // ── My Verses ────────────────────────────────────────────────────────────
+  const [myVerses, setMyVerses]                 = useState<CollectedVerse[]>([]);
+  const [versesLoading, setVersesLoading]       = useState(true);
+
+  // ── My Devotions ─────────────────────────────────────────────────────────
+  const [devotions, setDevotions]               = useState<DevotionNote[]>([]);
+  const [devotionsLoading, setDevotionsLoading] = useState(true);
+  const [showNewForm, setShowNewForm]           = useState(false);
+  const [editingId, setEditingId]               = useState<string | null>(null);
+  // soapInitial drives the SoapForm child; NOT updated on keystroke
+  const blankForm = { title: "", scriptureRef: "", scripture: "", observation: "", application: "", prayer: "" };
+  const [soapInitial, setSoapInitial] = useState(blankForm);
+  const [savingDevotion, setSavingDevotion]     = useState(false);
+
+  const book = BIBLE_BOOKS[bookIdx];
+  const chapterCount = Array.from({ length: book.chapters }, (_, i) => i + 1);
+  const displayBookName = translation.slug === "MBBTAG" ? MBB_BOOK_NAMES[bookIdx] : book.name;
+
+  // ── Mobile resize ────────────────────────────────────────────────────────
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+
+  // ── Firestore: My Verses ──────────────────────────────────────────────────
+  useEffect(() => {
+    if (!userId || userId === "guest") { setVersesLoading(false); return; }
+    let unsub: (() => void) | null = null;
+    try {
+      unsub = onSnapshot(
+        doc(db, "users", userId, "bibleCollection", "verses"),
+        (snap) => {
+          try { const d = snap.data(); setMyVerses(Array.isArray(d?.items) ? d.items : []); } catch { setMyVerses([]); }
+          setVersesLoading(false);
+        },
+        () => setVersesLoading(false)
+      );
+    } catch { setVersesLoading(false); }
+    return () => { try { unsub?.(); } catch { /* noop */ } };
+  }, [userId]);
+
+  const persistVerses = useCallback(async (items: CollectedVerse[]) => {
+    if (!userId || userId === "guest") return;
+    try { await setDoc(doc(db, "users", userId, "bibleCollection", "verses"), { items }); } catch { /* noop */ }
+  }, [userId]);
+
+  // ── Firestore: My Devotions ───────────────────────────────────────────────
+  useEffect(() => {
+    if (!userId || userId === "guest") { setDevotionsLoading(false); return; }
+    let unsub: (() => void) | null = null;
+    try {
+      unsub = onSnapshot(
+        query(collection(db, "users", userId, "bibleDevotions"), orderBy("createdAt", "desc")),
+        (snap) => {
+          try { setDevotions(snap.docs.map(d => ({ id: d.id, ...d.data() } as DevotionNote))); } catch { setDevotions([]); }
+          setDevotionsLoading(false);
+        },
+        () => setDevotionsLoading(false)
+      );
+    } catch { setDevotionsLoading(false); }
+    return () => { try { unsub?.(); } catch { /* noop */ } };
+  }, [userId]);
+
+  // ── Devotion CRUD (SOAP) ──────────────────────────────────────────────
+  const saveDevotion = async (values: { title: string; scriptureRef: string; scripture: string; observation: string; application: string; prayer: string }) => {
+    const hasContent = values.title.trim() || values.scripture.trim() || values.observation.trim();
+    if (!hasContent || !userId || userId === "guest") return;
+    setSavingDevotion(true);
+    const now = new Date().toISOString();
+    const payload = { title: values.title, scriptureRef: values.scriptureRef, scripture: values.scripture, observation: values.observation, application: values.application, prayer: values.prayer };
+    try {
+      if (editingId) {
+        await updateDoc(doc(db, "users", userId, "bibleDevotions", editingId), { ...payload, updatedAt: now });
+      } else {
+        await addDoc(collection(db, "users", userId, "bibleDevotions"), { ...payload, createdAt: now });
+      }
+      setSoapInitial(blankForm);
+      setShowNewForm(false); setEditingId(null);
+    } catch { /* noop */ }
+    setSavingDevotion(false);
+  };
+
+  const startEdit = (note: DevotionNote) => {
+    setEditingId(note.id);
+    setSoapInitial({ title: note.title, scriptureRef: note.scriptureRef ?? "", scripture: (note as any).scripture ?? (note as any).body ?? "", observation: (note as any).observation ?? "", application: (note as any).application ?? "", prayer: (note as any).prayer ?? "" });
+    setShowNewForm(true);
+  };
+
+  const deleteDevotion = async (id: string) => {
+    if (!userId || userId === "guest") return;
+    try { await deleteDoc(doc(db, "users", userId, "bibleDevotions", id)); } catch { /* noop */ }
+  };
+
+  // ── My Verses helpers ─────────────────────────────────────────────────────
+  const handleCollect = (ref: string, text: string) => {
+    setMyVerses(prev => {
+      if (prev.find(v => v.ref === ref)) return prev;
+      const updated = [{ ref, text, translation: translation.label, savedAt: new Date().toISOString() }, ...prev];
+      persistVerses(updated);
+      return updated;
+    });
+    setAddedSet(prev => new Set(prev).add(ref));
+    setTimeout(() => setAddedSet(prev => { const n = new Set(prev); n.delete(ref); return n; }), 1500);
+  };
+
+  const removeVerse = (ref: string) => {
+    setMyVerses(prev => { const u = prev.filter(v => v.ref !== ref); persistVerses(u); return u; });
+  };
+
+  const handleCopy = (ref: string, text: string, tLabel: string) => {
+    navigator.clipboard.writeText(`"${text}" — ${ref} (${tLabel})`);
+    setCopiedRef(ref);
+    setTimeout(() => setCopiedRef(null), 1800);
+  };
+
+  // ── Fetch chapter ─────────────────────────────────────────────────────────
+  const fetchChapter = useCallback(async () => {
+    setLoading(true); setError(null); setVerses([]); setVerseNum(""); setSearchQuery("");
+    setGlobalMode(false); setGlobalResults([]); setGlobalTotal(0);
+    try {
+      const res = await fetch(`/api/bible/gateway?book=${encodeURIComponent(book.name)}&chapter=${chapter}&version=${translation.slug}`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      const parsed: BibleVerse[] = (data.verses ?? []).map((v: any) => ({ verse: v.verse, text: cleanText(v.text ?? "") }));
+      setVerses(parsed.filter(v => v.text.length > 0).sort((a, b) => a.verse - b.verse));
+    } catch { setError("Could not load chapter. Check your connection."); }
+    setLoading(false);
+  }, [translation, bookIdx, chapter, book.name]);
+
+  useEffect(() => { fetchChapter(); }, [fetchChapter]);
+
+  // ── Global search ─────────────────────────────────────────────────────────
+  const doGlobalSearch = useCallback(async (q: string, page = 1) => {
+    if (q.trim().length < 2) return;
+    setGlobalLoading(true); setGlobalError(null); setGlobalMode(true);
+    setLastGlobalQuery(q.trim()); setGlobalPage(page);
+    try {
+      const res = await fetch(`/api/bible/search?q=${encodeURIComponent(q.trim())}&version=${translation.slug}&page=${page}`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setGlobalResults(data.results ?? []); setGlobalTotal(data.total ?? 0);
+    } catch { setGlobalError("Search failed."); setGlobalResults([]); }
+    setGlobalLoading(false);
+  }, [translation.slug]);
+
+  const handleSearchKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Enter") return;
+    const q = searchQuery.trim();
+    if (!q) return;
+    const refMatch = q.match(/^([1-3]?\s*[a-zA-Z]+(?:\s+[a-zA-Z]+)?)\s+(\d+)(?::(\d+))?$/i);
+    if (refMatch) {
+      const bName = refMatch[1].trim().toLowerCase();
+      const chNum = parseInt(refMatch[2]);
+      const vNum  = refMatch[3] ?? "";
+      const found = BIBLE_BOOKS.findIndex((b, i) =>
+        b.name.toLowerCase().startsWith(bName) || MBB_BOOK_NAMES[i].toLowerCase().startsWith(bName)
+      );
+      if (found >= 0) {
+        setBookIdx(found); setChapter(Math.min(chNum, BIBLE_BOOKS[found].chapters));
+        setVerseNum(vNum); setSearchQuery(""); setGlobalMode(false); return;
+      }
+    }
+    doGlobalSearch(q, 1);
+  };
+
+  const clearGlobalSearch = () => {
+    setGlobalMode(false); setGlobalResults([]); setGlobalTotal(0);
+    setSearchQuery(""); setLastGlobalQuery("");
+  };
+
+  const prevChapter = () => {
+    if (chapter > 1) { setChapter(c => c - 1); return; }
+    if (bookIdx > 0) { const p = bookIdx - 1; setBookIdx(p); setChapter(BIBLE_BOOKS[p].chapters); }
+  };
+  const nextChapter = () => {
+    if (chapter < book.chapters) { setChapter(c => c + 1); return; }
+    if (bookIdx < BIBLE_BOOKS.length - 1) { setBookIdx(b => b + 1); setChapter(1); }
+  };
+
+  const q   = searchQuery.toLowerCase().trim();
+  const num = parseInt(verseNum);
+  const allItems    = verses.filter(v => !verseNum || v.verse === num).map(v => ({ verse: v.verse, text: v.text, ref: `${book.name} ${chapter}:${v.verse}` }));
+  const displayItems = q ? allItems.filter(item => item.text.toLowerCase().includes(q)) : allItems;
+
+  const sel: React.CSSProperties = {
+    background: "rgba(255,255,255,0.06)", color: "#e2e8f0",
+    border: "1px solid rgba(255,255,255,0.09)", outline: "none",
+  };
+
+  // ── PANEL CONTENT ─────────────────────────────────────────────────────────
+  const PanelContent = () => (
+    <div className="flex flex-col h-full overflow-hidden" style={{ background: "var(--wf-bg1)" }}>
+
+      {/* Tabs row */}
+      <div className="shrink-0 flex items-center gap-1.5 px-3 pt-3 pb-2">
+        {(["verses", "devotions"] as const).map(tab => (
+          <button key={tab}
+            onClick={() => setActivePanel(tab)}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[12px] font-bold transition-all"
+            style={{
+              background: activePanel === tab ? "rgba(var(--wf-c1),0.2)" : "rgba(255,255,255,0.04)",
+              border:     activePanel === tab ? "1px solid rgba(var(--wf-c1),0.4)" : "1px solid rgba(255,255,255,0.07)",
+              color:      activePanel === tab ? "var(--wf-at2)" : "rgba(255,255,255,0.4)",
+            }}>
+            {tab === "verses" ? <Bookmark size={13} /> : <ScrollText size={13} />}
+            {tab === "verses" ? "My Verses" : "Devotions"}
+            {tab === "verses" && myVerses.length > 0 && (
+              <span style={{ color: "var(--wf-at2)", fontSize: 10, fontWeight: 900 }}>({myVerses.length})</span>
+            )}
+            {tab === "devotions" && devotions.length > 0 && (
+              <span style={{ color: "var(--wf-at2)", fontSize: 10, fontWeight: 900 }}>({devotions.length})</span>
+            )}
+          </button>
+        ))}
+        {/* Close — desktop only */}
+        {!isMobile && (
+          <button onClick={() => { setActivePanel(null); setShowNewForm(false); }}
+            className="flex items-center justify-center rounded-xl transition-all ml-0.5"
+            style={{ width: 34, height: 34, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.3)", flexShrink: 0 }}>
+            <X size={14} />
+          </button>
+        )}
+      </div>
+
+      {/* ── MY VERSES ── */}
+      {activePanel === "verses" && (
+        <>
+          <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2"
+            style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.07) transparent" }}>
+            {versesLoading ? (
+              <div className="flex flex-col items-center py-16">
+                <Loader2 size={20} className="animate-spin" style={{ color: "rgba(var(--wf-c1),0.4)" }} />
+                <p className="text-[11px] mt-3" style={{ color: "rgba(255,255,255,0.2)" }}>Loading your verses…</p>
+              </div>
+            ) : myVerses.length === 0 ? (
+              <div className="flex flex-col items-center py-16 px-4 text-center">
+                <p className="text-4xl mb-3">📖</p>
+                <p className="text-[13px] font-semibold" style={{ color: "rgba(255,255,255,0.3)" }}>No saved verses yet</p>
+                <p className="text-[11px] mt-2 leading-relaxed" style={{ color: "rgba(255,255,255,0.15)" }}>
+                  Tap <strong style={{ color: "rgba(var(--wf-c1),0.6)" }}>+</strong> next to any verse to save it here.
+                </p>
+              </div>
+            ) : myVerses.map(v => (
+              <div key={v.ref} className="rounded-2xl p-3"
+                style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full"
+                    style={{ background: "rgba(var(--wf-c1),0.15)", color: "var(--wf-at2)" }}>
+                    {v.ref} · {v.translation}
+                  </span>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button onClick={() => handleCopy(v.ref, v.text, v.translation)}
+                      style={{ width: 28, height: 28, color: copiedRef === v.ref ? "#10b981" : "rgba(255,255,255,0.25)" }}
+                      className="flex items-center justify-center rounded-lg">
+                      {copiedRef === v.ref ? <Check size={13} /> : <Copy size={13} />}
+                    </button>
+                    <button onClick={() => removeVerse(v.ref)}
+                      style={{ width: 28, height: 28, color: "rgba(239,68,68,0.5)" }}
+                      className="flex items-center justify-center rounded-lg"
+                      onMouseEnter={e => (e.currentTarget.style.color = "rgba(239,68,68,0.9)")}
+                      onMouseLeave={e => (e.currentTarget.style.color = "rgba(239,68,68,0.5)")}>
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
+                <p className="text-[13px] leading-relaxed" style={{ color: "rgba(255,255,255,0.78)" }}>"{v.text}"</p>
+              </div>
+            ))}
+          </div>
+          {myVerses.length > 0 && (
+            <div className="shrink-0 px-3 pb-3 pt-2" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+              <button onClick={() => { setMyVerses([]); persistVerses([]); }}
+                className="w-full py-2 rounded-xl text-[12px] font-semibold"
+                style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.15)", color: "rgba(239,68,68,0.6)" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "rgba(239,68,68,0.1)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "rgba(239,68,68,0.06)")}>
+                Clear All Saved Verses
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── MY DEVOTIONS ── */}
+      {activePanel === "devotions" && (
+        <>
+          {showNewForm ? (
+            <SoapForm
+              initialValues={soapInitial}
+              editingId={editingId}
+              saving={savingDevotion}
+              onSave={saveDevotion}
+              onCancel={() => { setShowNewForm(false); setEditingId(null); setSoapInitial(blankForm); }}
+            />
+          ) : (
+            <>
+              <div className="shrink-0 px-3 pb-2">
+                <button
+                  onClick={() => { setEditingId(null); setSoapInitial({ ...blankForm, scriptureRef: `${displayBookName} ${chapter}` }); setShowNewForm(true); }}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[13px] font-bold"
+                  style={{ background: "rgba(var(--wf-c1),0.12)", border: "1px solid rgba(var(--wf-c1),0.3)", color: "var(--wf-at2)" }}>
+                  <Plus size={15} /> New SOAP Devotion
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-2"
+                style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.07) transparent" }}>
+                {devotionsLoading ? (
+                  <div className="flex flex-col items-center py-16">
+                    <Loader2 size={20} className="animate-spin" style={{ color: "rgba(var(--wf-c1),0.4)" }} />
+                    <p className="text-[11px] mt-3" style={{ color: "rgba(255,255,255,0.2)" }}>Loading devotions…</p>
+                  </div>
+                ) : devotions.length === 0 ? (
+                  <div className="flex flex-col items-center py-16 px-4 text-center">
+                    <p className="text-4xl mb-3">✍️</p>
+                    <p className="text-[13px] font-semibold" style={{ color: "rgba(255,255,255,0.3)" }}>No devotions yet</p>
+                    <p className="text-[11px] mt-2 leading-relaxed" style={{ color: "rgba(255,255,255,0.15)" }}>
+                      Tap <strong style={{ color: "rgba(var(--wf-c1),0.6)" }}>New Devotion</strong> to write your first reflection.
+                    </p>
+                  </div>
+                ) : devotions.map(note => (
+                  <div key={note.id} className="rounded-2xl p-3"
+                    style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                    {/* Header */}
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="min-w-0">
+                        {note.title && <p className="text-[13px] font-bold truncate" style={{ color: "rgba(255,255,255,0.88)" }}>{note.title}</p>}
+                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                          {note.scriptureRef && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                              style={{ background: "rgba(99,102,241,0.2)", color: "#a5b4fc", border: "1px solid rgba(99,102,241,0.3)" }}>
+                              📖 {note.scriptureRef}
+                            </span>
+                          )}
+                          <span className="inline-flex items-center gap-0.5 text-[9px] font-black px-1.5 py-0.5 rounded-full"
+                            style={{ background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.25)" }}>
+                            S · O · A · P
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button onClick={() => startEdit(note)}
+                          style={{ width: 28, height: 28, color: "rgba(255,255,255,0.3)" }}
+                          className="flex items-center justify-center rounded-lg"
+                          onMouseEnter={e => (e.currentTarget.style.color = "rgba(255,255,255,0.8)")}
+                          onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.3)")}>
+                          <Edit3 size={13} />
+                        </button>
+                        <button onClick={() => deleteDevotion(note.id)}
+                          style={{ width: 28, height: 28, color: "rgba(239,68,68,0.4)" }}
+                          className="flex items-center justify-center rounded-lg"
+                          onMouseEnter={e => (e.currentTarget.style.color = "rgba(239,68,68,0.9)")}
+                          onMouseLeave={e => (e.currentTarget.style.color = "rgba(239,68,68,0.4)")}>
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </div>
+                    {/* SOAP mini-preview */}
+                    <div className="space-y-1.5 mt-2">
+                      {(note.scripture || note.body) && (
+                        <div className="flex gap-2">
+                          <span className="text-[9px] font-black w-4 h-4 flex items-center justify-center rounded shrink-0 mt-0.5" style={{ background: "rgba(99,102,241,0.2)", color: "#a5b4fc" }}>S</span>
+                          <p className="text-[11px] leading-relaxed" style={{ color: "rgba(255,255,255,0.5)", overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{note.scripture || note.body}</p>
+                        </div>
+                      )}
+                      {note.observation && (
+                        <div className="flex gap-2">
+                          <span className="text-[9px] font-black w-4 h-4 flex items-center justify-center rounded shrink-0 mt-0.5" style={{ background: "rgba(251,146,60,0.2)", color: "#fdba74" }}>O</span>
+                          <p className="text-[11px] leading-relaxed" style={{ color: "rgba(255,255,255,0.5)", overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical" }}>{note.observation}</p>
+                        </div>
+                      )}
+                      {note.application && (
+                        <div className="flex gap-2">
+                          <span className="text-[9px] font-black w-4 h-4 flex items-center justify-center rounded shrink-0 mt-0.5" style={{ background: "rgba(16,185,129,0.2)", color: "#6ee7b7" }}>A</span>
+                          <p className="text-[11px] leading-relaxed" style={{ color: "rgba(255,255,255,0.5)", overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical" }}>{note.application}</p>
+                        </div>
+                      )}
+                      {note.prayer && (
+                        <div className="flex gap-2">
+                          <span className="text-[9px] font-black w-4 h-4 flex items-center justify-center rounded shrink-0 mt-0.5" style={{ background: "rgba(167,139,250,0.2)", color: "#c4b5fd" }}>P</span>
+                          <p className="text-[11px] leading-relaxed" style={{ color: "rgba(255,255,255,0.5)", overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical" }}>{note.prayer}</p>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-[10px] mt-2" style={{ color: "rgba(255,255,255,0.17)" }}>
+                      {new Date(note.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+
+  // ── MAIN RENDER ───────────────────────────────────────────────────────────
+  // On mobile: show EITHER reader OR panel (never both — no blur, no overlay)
+  // On desktop: show reader + side panel together
+  const showReader = !isMobile || activePanel === null;
+  const showPanel  = activePanel !== null;
+
+  return (
+    <div className="flex h-full" style={{ background: "var(--wf-bg1)", fontFamily: "Inter, sans-serif" }}>
+
+      {/* ── READER ── */}
+      {showReader && (
+        <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden">
+
+          {/* Header */}
+          <div className="shrink-0 px-4 sm:px-6"
+            style={{ minHeight: 60, borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="flex items-center justify-center rounded-2xl shrink-0"
+                style={{ width: 36, height: 36, background: "linear-gradient(135deg,rgba(var(--wf-c1),0.25),rgba(16,185,129,0.12))", border: "1px solid rgba(var(--wf-c1),0.3)" }}>
+                <Bookmark size={18} style={{ color: "var(--wf-at)" }} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-bold" style={{ color: "rgba(255,255,255,0.9)" }}>Bible</p>
+                <p className="text-[10px] font-semibold truncate" style={{ color: "rgba(255,255,255,0.3)", letterSpacing: "0.04em" }}>
+                  {displayBookName} {chapter} · {translation.label}
+                </p>
+              </div>
+            </div>
+            {/* Panel toggle buttons */}
+            <div className="flex items-center gap-3 shrink-0">
+              {/* My Verses */}
+              <button onClick={() => setActivePanel(p => p === "verses" ? null : "verses")}
+                className="flex items-center gap-1.5 transition-all active:scale-95 relative"
+                style={{ color: activePanel === "verses" ? "var(--wf-at2)" : "rgba(255,255,255,0.35)" }}>
+                <Bookmark size={22} className="sm:hidden" />
+                <Bookmark size={13} className="hidden sm:block" />
+                <span className="hidden sm:inline text-xs font-bold">My Verses</span>
+                {myVerses.length > 0 && (
+                  <span className="absolute -top-1 -right-1 sm:static sm:ml-0" style={{ minWidth: 14, height: 14, background: "rgba(var(--wf-c1),0.35)", color: "var(--wf-at2)", fontSize: 9, fontWeight: 900, borderRadius: 999, padding: "0 3px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {myVerses.length}
+                  </span>
+                )}
+              </button>
+              {/* Devotions */}
+              <button onClick={() => setActivePanel(p => p === "devotions" ? null : "devotions")}
+                className="flex items-center gap-1.5 transition-all active:scale-95 relative"
+                style={{ color: activePanel === "devotions" ? "var(--wf-at2)" : "rgba(255,255,255,0.35)" }}>
+                <ScrollText size={22} className="sm:hidden" />
+                <ScrollText size={13} className="hidden sm:block" />
+                <span className="hidden sm:inline text-xs font-bold">Devotions</span>
+                {devotions.length > 0 && (
+                  <span className="absolute -top-1 -right-1 sm:static sm:ml-0" style={{ minWidth: 14, height: 14, background: "rgba(var(--wf-c1),0.35)", color: "var(--wf-at2)", fontSize: 9, fontWeight: 900, borderRadius: 999, padding: "0 3px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {devotions.length}
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Controls */}
+          <div className="shrink-0 px-4 sm:px-6 pt-3 pb-2 space-y-2">
+
+            {/* ── MOBILE layout: Translation dropdown + Book/Ch/Vs on same row ── */}
+            <div className="sm:hidden space-y-2">
+              {/* Row 1: Translation dropdown + Book + Chapter + Verse */}
+              <div className="flex gap-1.5 items-center">
+                {/* Translation dropdown */}
+                <div className="relative shrink-0" style={{ width: 68 }}>
+                  <select
+                    value={translation.slug}
+                    onChange={e => { const t = TRANSLATIONS.find(x => x.slug === e.target.value); if (t) setTranslation(t); }}
+                    className="w-full appearance-none font-bold px-2 py-2.5 rounded-xl text-center"
+                    style={{ ...sel, fontSize: 12 }}>
+                    {TRANSLATIONS.map(t => (
+                      <option key={t.slug} value={t.slug} style={{ background: "var(--wf-bg2)" }}>{t.label}</option>
+                    ))}
+                  </select>
+                  <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "rgba(255,255,255,0.25)" }} />
+                </div>
+                {/* Book */}
+                <div className="relative flex-1">
+                  <select value={bookIdx} onChange={e => { setBookIdx(+e.target.value); setChapter(1); setVerseNum(""); setSearchQuery(""); }}
+                    className="w-full appearance-none font-semibold px-3 py-2.5 rounded-xl truncate" style={{ ...sel, fontSize: 13 }}>
+                    {BIBLE_BOOKS.map((b, i) => (
+                      <option key={b.name} value={i} style={{ background: "var(--wf-bg2)" }}>
+                        {translation.slug === "MBBTAG" ? MBB_BOOK_NAMES[i] : b.name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "rgba(255,255,255,0.25)" }} />
+                </div>
+                {/* Chapter */}
+                <div className="relative shrink-0" style={{ width: 52 }}>
+                  <select value={chapter} onChange={e => { setChapter(+e.target.value); setVerseNum(""); setSearchQuery(""); }}
+                    className="w-full appearance-none font-semibold px-2 py-2.5 rounded-xl text-center" style={{ ...sel, fontSize: 13 }}>
+                    {chapterCount.map(c => <option key={c} value={c} style={{ background: "var(--wf-bg2)" }}>{c}</option>)}
+                  </select>
+                  <ChevronDown size={11} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "rgba(255,255,255,0.25)" }} />
+                </div>
+                {/* Verse */}
+                <div className="relative shrink-0" style={{ width: 52 }}>
+                  <select value={verseNum} onChange={e => { setVerseNum(e.target.value); setSearchQuery(""); }}
+                    className="w-full appearance-none font-semibold px-2 py-2.5 rounded-xl text-center" style={{ ...sel, fontSize: 13 }}>
+                    <option value="" style={{ background: "var(--wf-bg2)" }}>v.</option>
+                    {verses.map(v => <option key={v.verse} value={v.verse} style={{ background: "var(--wf-bg2)" }}>{v.verse}</option>)}
+                  </select>
+                  <ChevronDown size={11} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "rgba(255,255,255,0.25)" }} />
+                </div>
+              </div>
+              {/* Row 2: Search */}
+              <div className="relative flex items-center">
+                <List size={13} className="absolute left-3 pointer-events-none" style={{ color: "rgba(var(--wf-c1),0.5)" }} />
+                <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} onKeyDown={handleSearchKey}
+                  placeholder={`Search or jump "John 3:16"`}
+                  className="w-full text-[13px] py-2.5 pl-8 pr-8 rounded-xl outline-none"
+                  style={{ background: "rgba(255,255,255,0.05)", border: searchQuery ? "1px solid rgba(var(--wf-c1),0.45)" : "1px solid rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.8)" }} />
+                {searchQuery && <button onClick={() => setSearchQuery("")} className="absolute right-3" style={{ color: "rgba(255,255,255,0.3)" }}><X size={13} /></button>}
+              </div>
+              {searchQuery && !globalMode && (
+                <p className="text-[10px] text-center" style={{ color: "rgba(var(--wf-c1),0.5)" }}>Press ⏎ Enter to search all 66 books</p>
+              )}
+            </div>
+
+            {/* ── DESKTOP layout: pills + selectors + search (unchanged) ── */}
+            <div className="hidden sm:block space-y-2">
+              {/* Translation tabs */}
+              <div className="flex gap-1 p-1 rounded-xl overflow-x-auto" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)", scrollbarWidth: "none" }}>
+                {TRANSLATIONS.map(t => (
+                  <button key={t.slug} onClick={() => setTranslation(t)}
+                    className="flex-shrink-0 py-1.5 rounded-lg text-[12px] font-bold transition-all"
+                    style={{ minWidth: 44,
+                      background: translation.slug === t.slug ? "linear-gradient(135deg,rgba(var(--wf-c1),0.9),rgba(var(--wf-c2),0.8))" : "transparent",
+                      color: translation.slug === t.slug ? "#fff" : "rgba(255,255,255,0.4)" }}
+                    title={t.full}>{t.label}</button>
+                ))}
+              </div>
+              {/* Book / Chapter / Verse */}
+              <div className="flex gap-1.5">
+                <div className="relative flex-1">
+                  <select value={bookIdx} onChange={e => { setBookIdx(+e.target.value); setChapter(1); setVerseNum(""); setSearchQuery(""); }}
+                    className="w-full appearance-none font-semibold px-3 py-2.5 rounded-xl truncate" style={{ ...sel, fontSize: 13 }}>
+                    {BIBLE_BOOKS.map((b, i) => (
+                      <option key={b.name} value={i} style={{ background: "var(--wf-bg2)" }}>
+                        {translation.slug === "MBBTAG" ? MBB_BOOK_NAMES[i] : b.name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "rgba(255,255,255,0.25)" }} />
+                </div>
+                <div className="relative" style={{ width: 56 }}>
+                  <select value={chapter} onChange={e => { setChapter(+e.target.value); setVerseNum(""); setSearchQuery(""); }}
+                    className="w-full appearance-none font-semibold px-2 py-2.5 rounded-xl text-center" style={{ ...sel, fontSize: 13 }}>
+                    {chapterCount.map(c => <option key={c} value={c} style={{ background: "var(--wf-bg2)" }}>{c}</option>)}
+                  </select>
+                  <ChevronDown size={11} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "rgba(255,255,255,0.25)" }} />
+                </div>
+                <div className="relative" style={{ width: 56 }}>
+                  <select value={verseNum} onChange={e => { setVerseNum(e.target.value); setSearchQuery(""); }}
+                    className="w-full appearance-none font-semibold px-2 py-2.5 rounded-xl text-center" style={{ ...sel, fontSize: 13 }}>
+                    <option value="" style={{ background: "var(--wf-bg2)" }}>v.</option>
+                    {verses.map(v => <option key={v.verse} value={v.verse} style={{ background: "var(--wf-bg2)" }}>{v.verse}</option>)}
+                  </select>
+                  <ChevronDown size={11} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "rgba(255,255,255,0.25)" }} />
+                </div>
+              </div>
+              {/* Search */}
+              <div className="relative flex items-center">
+                <List size={13} className="absolute left-3 pointer-events-none" style={{ color: "rgba(var(--wf-c1),0.5)" }} />
+                <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} onKeyDown={handleSearchKey}
+                  placeholder={`Search or jump "John 3:16"`}
+                  className="w-full text-[13px] py-2.5 pl-8 pr-8 rounded-xl outline-none"
+                  style={{ background: "rgba(255,255,255,0.05)", border: searchQuery ? "1px solid rgba(var(--wf-c1),0.45)" : "1px solid rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.8)" }} />
+                {searchQuery && <button onClick={() => setSearchQuery("")} className="absolute right-3" style={{ color: "rgba(255,255,255,0.3)" }}><X size={13} /></button>}
+              </div>
+              {searchQuery && !globalMode && (
+                <p className="text-[10px] text-center" style={{ color: "rgba(var(--wf-c1),0.5)" }}>Press ⏎ Enter to search all 66 books</p>
+              )}
+            </div>
+
+          </div>
+
+          {/* Chapter bar */}
+          <div className="shrink-0 px-4 sm:px-6 py-1.5 flex items-center justify-between gap-3"
+            style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: globalMode ? "rgba(var(--wf-c1),0.04)" : "rgba(255,255,255,0.015)" }}>
+            {!globalMode && (
+              <button onClick={prevChapter} disabled={bookIdx === 0 && chapter === 1}
+                className="flex items-center justify-center rounded-lg disabled:opacity-20"
+                style={{ width: 28, height: 28, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.4)" }}>
+                <ChevronLeft size={14} />
+              </button>
+            )}
+            {/* Center: title stacked above verse count */}
+            <span className="flex-1 flex flex-col items-center justify-center gap-0.5 text-center">
+              <span className="text-sm sm:text-[11px] font-bold tracking-widest uppercase" style={{ color: "rgba(var(--wf-c1),0.7)" }}>
+                {globalMode ? `🔍 "${lastGlobalQuery}" · ${translation.label}` : `${displayBookName} ${chapter} · ${translation.label}`}
+              </span>
+              {!globalMode && !loading && verses.length > 0 && (
+                <span className="text-[9px] font-medium tracking-wider uppercase" style={{ color: "rgba(255,255,255,0.18)" }}>
+                  {q ? `${displayItems.length} / ` : ""}{verses.length} verses
+                </span>
+              )}
+            </span>
+            {globalMode ? (
+              <button onClick={clearGlobalSearch} className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold"
+                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.4)" }}>
+                <X size={11} /> Clear
+              </button>
+            ) : (
+              <button onClick={nextChapter} disabled={bookIdx === BIBLE_BOOKS.length - 1 && chapter === book.chapters}
+                className="flex items-center justify-center rounded-lg disabled:opacity-20"
+                style={{ width: 28, height: 28, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.4)" }}>
+                <ChevronRight size={14} />
+              </button>
+            )}
+          </div>
+
+          {/* Verse list */}
+          <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.07) transparent", paddingBottom: 80 }}>
+            {globalMode ? (
+              <div className="px-4 sm:px-6 pt-2">
+                {globalLoading && (
+                  <div className="py-4 space-y-4">
+                    {[1,2,3,4].map(i => (
+                      <div key={i} className="rounded-2xl p-4 animate-pulse" style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                        <div className="rounded h-2.5 w-1/3 mb-3" style={{ background: "rgba(var(--wf-c1),0.15)" }} />
+                        <div className="rounded h-3 w-full mb-1.5" style={{ background: "rgba(255,255,255,0.06)" }} />
+                        <div className="rounded h-3 w-4/5" style={{ background: "rgba(255,255,255,0.04)" }} />
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {globalError && !globalLoading && (
+                  <div className="flex flex-col items-center py-10">
+                    <p className="text-[12px] font-semibold mb-2" style={{ color: "rgba(239,68,68,0.8)" }}>Search failed</p>
+                    <button onClick={() => doGlobalSearch(lastGlobalQuery, globalPage)}
+                      className="flex items-center gap-1.5 rounded-full px-4 py-2 text-[12px] font-semibold"
+                      style={{ background: "rgba(var(--wf-c1),0.15)", border: "1px solid rgba(var(--wf-c1),0.3)", color: "var(--wf-at2)" }}>
+                      <RefreshCw size={12} /> Try again
+                    </button>
+                  </div>
+                )}
+                {!globalLoading && !globalError && globalResults.length === 0 && (
+                  <div className="flex flex-col items-center py-12">
+                    <p className="text-3xl mb-3">📭</p>
+                    <p className="text-[13px] font-semibold" style={{ color: "rgba(255,255,255,0.3)" }}>No results found</p>
+                  </div>
+                )}
+                {!globalLoading && globalResults.map((result, idx) => {
+                  const hlReg = lastGlobalQuery.trim().length > 1
+                    ? new RegExp(`(${lastGlobalQuery.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi') : null;
+                  const hlText = hlReg
+                    ? result.text.replace(hlReg, '<mark style="background:rgba(var(--wf-c1),0.3);color:#e0e7ff;border-radius:3px;padding:0 2px">$1</mark>')
+                    : result.text;
+                  const ref = result.reference || "";
+                  const isAdded = addedSet.has(ref);
+                  return (
+                    <div key={`${ref}-${idx}`} className="my-2 rounded-2xl"
+                      style={{ background: isAdded ? "rgba(16,185,129,0.06)" : "rgba(255,255,255,0.025)", border: isAdded ? "1px solid rgba(16,185,129,0.2)" : "1px solid rgba(255,255,255,0.06)", padding: "12px 14px" }}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ background: "rgba(var(--wf-c1),0.15)", color: "var(--wf-at2)" }}>
+                          {ref} · {translation.label}
+                        </span>
+                      </div>
+                      <p className="text-[13px] leading-relaxed mb-3" style={{ color: "rgba(255,255,255,0.82)" }} dangerouslySetInnerHTML={{ __html: hlText }} />
+                      <div className="flex items-center gap-2 justify-end">
+                        <button onClick={() => handleCollect(ref, result.text)}
+                          className="flex items-center gap-1 rounded-full"
+                          style={{ height: 28, paddingLeft: 10, paddingRight: 10, fontSize: 11, fontWeight: 700,
+                            background: isAdded ? "rgba(16,185,129,0.15)" : "rgba(var(--wf-c1),0.15)",
+                            border: isAdded ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(var(--wf-c1),0.25)",
+                            color: isAdded ? "#34d399" : "var(--wf-at2)" }}>
+                          {isAdded ? <CheckCircle2 size={11} /> : <Plus size={11} />}
+                          {isAdded ? "Saved" : "Save"}
+                        </button>
+                        <button onClick={() => handleCopy(ref, result.text, translation.label)}
+                          className="flex items-center gap-1 rounded-full"
+                          style={{ height: 28, paddingLeft: 10, paddingRight: 10, fontSize: 11, fontWeight: 700,
+                            background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.4)" }}>
+                          {copiedRef === ref ? <Check size={11} /> : <Copy size={11} />}
+                          {copiedRef === ref ? "Copied" : "Copy"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+                {!globalLoading && globalResults.length > 0 && (
+                  <div className="flex items-center justify-between py-4">
+                    <button disabled={globalPage <= 1} onClick={() => doGlobalSearch(lastGlobalQuery, globalPage - 1)}
+                      className="flex items-center gap-1.5 rounded-full px-4 py-2 text-[12px] font-semibold disabled:opacity-30"
+                      style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.5)" }}>
+                      ← Prev
+                    </button>
+                    <span className="text-[11px]" style={{ color: "rgba(255,255,255,0.2)" }}>Page {globalPage} · {globalTotal.toLocaleString()} results</span>
+                    <button disabled={globalPage * 25 >= globalTotal} onClick={() => doGlobalSearch(lastGlobalQuery, globalPage + 1)}
+                      className="flex items-center gap-1.5 rounded-full px-4 py-2 text-[12px] font-semibold disabled:opacity-30"
+                      style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.5)" }}>
+                      Next →
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="px-4 sm:px-6 pt-2">
+                {loading && (
+                  <div className="py-4 space-y-4">
+                    {[1,2,3,4,5].map(i => (
+                      <div key={i} className="flex gap-3 animate-pulse">
+                        <div className="rounded w-5 h-4 shrink-0 mt-1" style={{ background: "rgba(255,255,255,0.07)" }} />
+                        <div className="flex-1 space-y-1.5">
+                          <div className="rounded h-3 w-full" style={{ background: "rgba(255,255,255,0.06)" }} />
+                          <div className="rounded h-3 w-4/5" style={{ background: "rgba(255,255,255,0.04)" }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {error && !loading && (
+                  <div className="flex flex-col items-center py-10">
+                    <p className="text-[12px] font-semibold mb-2" style={{ color: "rgba(239,68,68,0.8)" }}>Failed to load</p>
+                    <p className="text-[11px] mb-3" style={{ color: "rgba(255,255,255,0.2)" }}>{error}</p>
+                    <button onClick={fetchChapter}
+                      className="flex items-center gap-1.5 rounded-full px-4 py-2 text-[12px] font-semibold"
+                      style={{ background: "rgba(var(--wf-c1),0.15)", border: "1px solid rgba(var(--wf-c1),0.3)", color: "var(--wf-at2)" }}>
+                      <RefreshCw size={12} /> Try again
+                    </button>
+                  </div>
+                )}
+                {!loading && !error && q && displayItems.length === 0 && verses.length > 0 && (
+                  <div className="flex flex-col items-center py-10">
+                    <p className="text-2xl mb-2">🔍</p>
+                    <p className="text-[12px] font-semibold" style={{ color: "rgba(255,255,255,0.3)" }}>No verses match</p>
+                  </div>
+                )}
+                {displayItems.map((item, idx) => {
+                  const isAdded = addedSet.has(item.ref) || myVerses.some(c => c.ref === item.ref);
+                  const highlighted = q
+                    ? item.text.replace(new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'),
+                        '<mark style="background:rgba(var(--wf-c1),0.3);color:#e0e7ff;border-radius:3px;padding:0 2px">$1</mark>')
+                    : null;
+                  return (
+                    <div key={item.ref} className="my-1">
+                      {idx > 0 && <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)", marginBottom: 4 }} />}
+                      <div className="group flex gap-3 py-3.5 px-2 rounded-2xl transition-all"
+                        style={{ background: isAdded ? "rgba(16,185,129,0.06)" : "transparent", border: isAdded ? "1px solid rgba(16,185,129,0.15)" : "1px solid transparent" }}
+                        onMouseEnter={e => !isAdded && (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
+                        onMouseLeave={e => !isAdded && (e.currentTarget.style.background = "transparent")}>
+                        <span className="text-[15px] font-black shrink-0 mt-0.5 w-6 text-right"
+                          style={{ color: isAdded ? "#10b981" : "rgba(var(--wf-c1),0.85)" }}>
+                          {item.verse}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          {highlighted
+                            ? <p className="text-[15px] leading-[1.7]" style={{ color: "rgba(255,255,255,0.88)" }} dangerouslySetInnerHTML={{ __html: highlighted }} />
+                            : <p className="text-[15px] leading-[1.7]" style={{ color: "rgba(255,255,255,0.88)" }}>{item.text}</p>}
+                          <p className="text-[11px] mt-1.5 font-semibold" style={{ color: "rgba(255,255,255,0.25)" }}>{item.ref} · {translation.label}</p>
+                        </div>
+                        <div className="flex flex-col gap-2 shrink-0 self-start pt-0.5">
+                          <button onClick={() => handleCollect(item.ref, item.text)}
+                            className="flex items-center justify-center rounded-full"
+                            title={isAdded ? "Saved!" : "Save verse"}
+                            style={{ width: 34, height: 34, background: isAdded ? "rgba(16,185,129,0.18)" : "rgba(var(--wf-c1),0.12)", border: isAdded ? "1px solid rgba(16,185,129,0.4)" : "1px solid rgba(var(--wf-c1),0.25)", color: isAdded ? "#10b981" : "rgba(var(--wf-c1),0.9)" }}>
+                            {isAdded ? <Check size={15} /> : <PlusCircle size={15} />}
+                          </button>
+                          <button onClick={() => handleCopy(item.ref, item.text, translation.label)}
+                            className="flex items-center justify-center rounded-full"
+                            title="Copy verse"
+                            style={{ width: 34, height: 34, background: copiedRef === item.ref ? "rgba(16,185,129,0.1)" : "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: copiedRef === item.ref ? "#10b981" : "rgba(255,255,255,0.3)" }}>
+                            {copiedRef === item.ref ? <Check size={14} /> : <Copy size={14} />}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                {!loading && !error && verses.length > 0 && (
+                  <div className="flex items-center justify-between pt-6 pb-8">
+                    <button onClick={prevChapter} disabled={bookIdx === 0 && chapter === 1}
+                      className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-semibold disabled:opacity-20"
+                      style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.5)" }}>
+                      <ChevronLeft size={14} /> Prev
+                    </button>
+                    <span className="text-[11px]" style={{ color: "rgba(255,255,255,0.2)" }}>{displayBookName} {chapter}</span>
+                    <button onClick={nextChapter} disabled={bookIdx === BIBLE_BOOKS.length - 1 && chapter === book.chapters}
+                      className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-semibold disabled:opacity-20"
+                      style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.5)" }}>
+                      Next <ChevronRight size={14} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── PANEL ── */}
+      {showPanel && (
+        <div className="flex flex-col overflow-hidden"
+          style={isMobile ? {
+            // Mobile: full screen — completely replaces the reader, no blur, no overlay
+            position: "fixed", inset: 0, zIndex: 50,
+            background: "var(--wf-bg1)",
+          } : {
+            // Desktop: side panel
+            width: "clamp(280px,34%,380px)",
+            flexShrink: 0,
+            borderLeft: "1px solid rgba(255,255,255,0.07)",
+            background: "rgba(255,255,255,0.018)",
+          }}>
+          {/* Mobile: Clean header with back button */}
+          {isMobile && (
+            <div className="shrink-0 flex items-center justify-between px-4 py-4"
+              style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+              <button
+                onClick={() => { setActivePanel(null); setShowNewForm(false); }}
+                className="flex items-center gap-2 font-semibold transition-all active:scale-95"
+                style={{ fontSize: 14, color: "rgba(255,255,255,0.65)" }}>
+                <ChevronLeft size={18} />
+                Back to Reader
+              </button>
+              <span className="text-[13px] font-bold capitalize" style={{ color: "rgba(255,255,255,0.5)" }}>
+                {activePanel === "verses" ? "My Verses" : "Devotions"}
+              </span>
+            </div>
+          )}
+          <PanelContent />
+        </div>
+      )}
+    </div>
+  );
+}

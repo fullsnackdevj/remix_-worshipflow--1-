@@ -78,29 +78,27 @@ function PersonalNoteViewModal({
         className="w-full max-w-lg bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-white/10 overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-white/10">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className={`flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border shrink-0 ${cfg.cls}`}>
+        {/* Header — amber gradient */}
+        <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-rose-400 px-5 py-4 flex items-center gap-2 min-w-0">
+            <span className="flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full bg-white/20 text-white border border-white/20 shrink-0">
               {cfg.icon} {cfg.label}
             </span>
             {note.pinned && (
-              <span className="flex items-center gap-1 text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 border border-amber-200 dark:border-amber-700 px-2 py-0.5 rounded-full shrink-0">
+              <span className="flex items-center gap-1 text-[10px] font-bold text-white bg-white/20 border border-white/20 px-2.5 py-1 rounded-full shrink-0">
                 <Pin size={9} /> Pinned
               </span>
             )}
-            <span className="text-[10px] text-gray-400 ml-1 shrink-0">
+            <span className="text-[10px] text-white/70 ml-1 shrink-0">
               {relTime(note.createdAt)}{note.updatedAt && (new Date(note.updatedAt).getTime() - new Date(note.createdAt).getTime() > 2000) ? " · edited" : ""}
             </span>
-          </div>
-          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-white rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-all shrink-0 ml-2" title="Close">
+          <button onClick={onClose} className="ml-auto w-7 h-7 flex items-center justify-center rounded-lg bg-white/20 hover:bg-white/30 text-white transition-all shrink-0" title="Close">
             <X size={15} />
           </button>
         </div>
 
         {/* Body */}
         <div className="px-5 py-4 overflow-y-auto max-h-[60vh]" style={{ scrollbarWidth: "thin" }}>
-          <h2 className="text-base font-bold text-gray-900 dark:text-white mb-3 leading-snug">{note.title}</h2>
+          <h2 className="text-lg font-extrabold text-gray-900 dark:text-white mb-3 leading-snug tracking-tight">{note.title}</h2>
           <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words leading-relaxed">{note.body}</p>
         </div>
 
@@ -178,10 +176,10 @@ function PersonalNoteCard({
 
   return (
     <div
-      className={`group relative rounded-2xl border transition-all hover:shadow-md cursor-pointer ${
+      className={`group relative rounded-2xl border transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer ${
         note.pinned
-          ? "border-amber-300 dark:border-amber-600 bg-amber-50/60 dark:bg-amber-900/10"
-          : "border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/50"
+          ? "border-amber-300 dark:border-amber-600/70 bg-amber-50/70 dark:bg-amber-900/15 shadow-sm"
+          : "border-gray-200 dark:border-gray-700/50 bg-white dark:bg-gray-800/60 hover:border-amber-200 dark:hover:border-amber-800/40"
       }`}
       onDoubleClick={() => onEdit(note)}
       title="Double-click to edit"
@@ -200,17 +198,17 @@ function PersonalNoteCard({
       <div className="p-4 pt-5">
         {/* Header */}
         <div className="flex items-center justify-between gap-2 mb-3">
-          <span className={`flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${cfg.cls}`}>
+          <span className={`flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full border ${cfg.cls}`}>
             {cfg.icon} {cfg.label}
           </span>
-          <span className="text-[10px] text-gray-400">
+          <span className="text-[10px] text-gray-400 ml-auto">
             {relTime(note.createdAt)}{note.updatedAt && (new Date(note.updatedAt).getTime() - new Date(note.createdAt).getTime() > 2000) ? " · edited" : ""}
           </span>
         </div>
 
         {/* Title — clickable to open full view */}
         <h3
-          className="text-sm font-bold text-gray-900 dark:text-white mb-1.5 leading-snug cursor-pointer hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
+          className="text-sm font-bold text-gray-900 dark:text-white mb-2 leading-snug cursor-pointer hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
           onClick={() => onView(note)}
           title="Click to view full note"
         >
@@ -239,7 +237,7 @@ function PersonalNoteCard({
         )}
 
         {/* Action row — ALWAYS visible */}
-        <div className="flex items-center justify-end gap-1 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700/50">
+        <div className="flex items-center justify-end gap-0.5 mt-4 pt-3 border-t border-gray-100 dark:border-gray-700/40">
           {/* Copy */}
           <button
             onClick={() => {
@@ -367,23 +365,23 @@ function PersonalNoteFormModal({
           </div>
         )}
 
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-white/10">
-          <div className="flex items-center gap-2">
-            <Lock size={15} className="text-amber-500" />
-            <span className="text-sm font-bold text-gray-900 dark:text-white">
+        {/* Header — amber gradient top strip */}
+        <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-rose-400 px-5 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <span className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center"><Lock size={13} className="text-white" /></span>
+            <span className="text-sm font-bold text-white tracking-tight">
               {initial ? "Edit Personal Note" : "New Personal Note"}
             </span>
-            {isDirty && <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" title="Unsaved changes" />}
+            {isDirty && <span className="w-2 h-2 rounded-full bg-white/80 shrink-0 shadow-sm" title="Unsaved changes" />}
           </div>
           <button onClick={handleCloseAttempt}
-            className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-white rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-all" title="Close">
-            <X size={15} />
+            className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/20 hover:bg-white/30 text-white transition-all" title="Close">
+            <X size={14} />
           </button>
         </div>
 
         {/* Private notice */}
-        <div className="flex items-center gap-2 mx-5 mt-4 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800/40 text-xs text-amber-700 dark:text-amber-400">
+        <div className="flex items-center gap-2 mx-5 mt-4 px-3.5 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200/60 dark:border-amber-800/40 text-xs font-medium text-amber-700 dark:text-amber-300">
           <Lock size={12} className="shrink-0" />
           Only visible to you — no one else on the team can see personal notes.
         </div>
@@ -436,7 +434,7 @@ function PersonalNoteFormModal({
             Cancel
           </button>
           <button onClick={handleSave} disabled={!valid || saving}
-            className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-amber-500 hover:bg-amber-400 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+            className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-amber-500 hover:bg-amber-400 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-amber-500/30">
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
             {initial ? "Save Changes" : "Save Note"}
           </button>
@@ -596,13 +594,13 @@ export default function PersonalNotesTab({ userId, onToast, openTrigger = 0 }: P
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search personal notes…"
-            className="w-full pl-8 pr-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-400 transition"
+            className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-400 transition-all"
           />
         </div>
 
         <div className="relative" ref={catMenuRef}>
           <button onClick={() => setShowCatMenu(v => !v)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
+            className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
             {currentCatLabel} <ChevronDown size={13} className={`transition-transform ${showCatMenu ? "rotate-180" : ""}`} />
           </button>
           {showCatMenu && (
@@ -626,10 +624,10 @@ export default function PersonalNotesTab({ userId, onToast, openTrigger = 0 }: P
         </div>
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center mb-4">
-            <Lock size={28} className="text-amber-400" />
+          <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-amber-100 to-orange-100 dark:from-amber-900/30 dark:to-orange-900/20 flex items-center justify-center mb-5 shadow-inner">
+            <Lock size={32} className="text-amber-500 dark:text-amber-400" />
           </div>
-          <p className="text-base font-semibold text-gray-700 dark:text-gray-300">
+          <p className="text-base font-bold text-gray-800 dark:text-gray-200">
             {q || catFilter !== "all" ? "No notes match your search" : "No personal notes yet"}
           </p>
           <p className="text-sm text-gray-400 mt-1">
@@ -637,7 +635,7 @@ export default function PersonalNotesTab({ userId, onToast, openTrigger = 0 }: P
           </p>
           {!q && catFilter === "all" && (
             <button onClick={() => { setEditing(null); setShowForm(true); }}
-              className="mt-4 flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-white text-sm font-semibold rounded-xl transition-all">
+              className="mt-5 flex items-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-white text-sm font-semibold rounded-xl transition-all shadow-md shadow-amber-500/25">
               <Plus size={15} /> Write your first note
             </button>
           )}

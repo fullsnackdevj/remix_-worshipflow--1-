@@ -201,7 +201,7 @@ onToast("success", "Event deleted");
     return (
       <div
         onClick={() => { setSelectedEvent(ev); setFTasks([...ev.tasks]); setFMembers([...ev.assignedMembers]); setPanelMode("view"); }}
-        className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4 cursor-pointer hover:shadow-md hover:border-indigo-200 dark:hover:border-indigo-700 transition-all group"
+        className="wf-card wf-hover-card p-4 group"
       >
         {/* Header */}
         <div className="flex items-start justify-between gap-2 mb-3">
@@ -254,20 +254,18 @@ onToast("success", "Event deleted");
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-[60vh]">
-      {/* Header */}
+      {/* ─── Module Header — Overpay spec ─── */}
       <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg">
-            <LayoutGrid size={20} className="text-white" />
-          </div>
+        <div className="flex items-center gap-4">
+          <div className="w-1 h-14 rounded-full bg-gradient-to-b from-indigo-500 to-violet-500 shrink-0" />
           <div>
-            <h1 className="text-xl font-bold text-gray-900 dark:text-white">Event Manager</h1>
-            <p className="text-xs text-gray-400 dark:text-gray-500">Admin-only · Plan and track church events</p>
+            <h1 className="text-3xl font-black text-gray-900 dark:text-white tracking-tight leading-tight">Event Manager</h1>
+            <p className="text-xs text-gray-400 dark:text-gray-500 font-medium mt-0.5">Plan and track church events</p>
           </div>
         </div>
         <button
           onClick={openCreate}
-          className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 text-white rounded-xl font-semibold text-sm shadow transition-all"
+          className="wf-btn wf-btn-primary"
         >
           <Plus size={16} /> New Event
         </button>
@@ -295,8 +293,8 @@ onToast("success", "Event deleted");
                 <div className="space-y-3">
                   {colEvents.map(ev => <div key={ev.id}><EventCard ev={ev} /></div>)}
                   {colEvents.length === 0 && (
-                    <div className="py-8 text-center border-2 border-dashed border-gray-100 dark:border-gray-700 rounded-2xl">
-                      <p className="text-xs text-gray-300 dark:text-gray-600">No events</p>
+                    <div className="py-10 text-center border-2 border-dashed border-gray-100/80 dark:border-gray-700/60 rounded-[20px]">
+                      <p className="text-xs text-gray-300 dark:text-gray-600 font-medium">No events</p>
                     </div>
                   )}
                 </div>

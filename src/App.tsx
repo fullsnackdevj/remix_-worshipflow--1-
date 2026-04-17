@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense, Component } from "react";
 
 import { useAuth } from "./AuthContext";
 import { getAuth } from "firebase/auth";
@@ -13,6 +13,40 @@ import WelcomeToast from "./WelcomeToast";
 
 import BirthdatePromptModal from "./BirthdatePromptModal";
 import ProfileSetupModal from "./ProfileSetupModal";
+
+// ── Module Error Boundary — isolates crashes to a single view ────────────────
+class ModuleErrorBoundary extends Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: string }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: "" };
+  }
+  static getDerivedStateFromError(e: Error) {
+    return { hasError: true, error: e?.message ?? "Unknown error" };
+  }
+  componentDidCatch(e: Error, info: React.ErrorInfo) {
+    console.error("[ModuleErrorBoundary]", e, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center h-full gap-4 p-8">
+          <p className="text-2xl">⚠️</p>
+          <p className="text-base font-semibold text-gray-700 dark:text-gray-300">Something went wrong loading this module.</p>
+          <p className="text-xs text-gray-400 max-w-sm text-center">{this.state.error}</p>
+          <button
+            onClick={() => this.setState({ hasError: false, error: "" })}
+            className="px-4 py-2 rounded-xl text-sm font-semibold bg-indigo-600 text-white hover:bg-indigo-700 transition-all">
+            Try Again
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // ── Heavy views — lazy-loaded on first visit (code splitting) ────────────────
 const AdminPanel    = lazy(() => import("./AdminPanel"));
@@ -30,13 +64,14 @@ const MembersView      = lazy(() => import("./MembersView"));
 const TeamNotesView    = lazy(() => import("./TeamNotesView"));
 const FreedomWallView  = lazy(() => import("./FreedomWallView"));
 const PreachingView       = lazy(() => import("./PreachingView"));
+const BibleView            = lazy(() => import("./BibleView"));
 const DesignRequestsView  = lazy(() => import("./DesignRequestsView"));
 const EventsView          = lazy(() => import("./EventsView"));
 // AutoTextarea & DatePicker are tiny UI primitives — import statically to avoid extra chunk round-trips
 import AutoTextarea from "./AutoTextarea";
 import DatePicker from "./DatePicker";
 
-import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, CheckSquare, Check, Filter, Users, Calendar, Ticket, Phone, UserPlus, Camera, BookOpen, LayoutGrid, Mic2, Copy, Pencil, Shield, Mail, Bell, Lock, AlertTriangle, CheckCircle, HelpCircle, FlaskConical, NotebookPen, SquareKanban, Feather, Palette, Code2 } from "lucide-react";
+import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, CheckSquare, Check, Filter, Users, Calendar, Ticket, Phone, UserPlus, Camera, BookOpen, BookMarked, LayoutGrid, Mic2, Copy, Pencil, Shield, Mail, Bell, Lock, AlertTriangle, CheckCircle, HelpCircle, FlaskConical, NotebookPen, SquareKanban, Feather, Palette, Code2 } from "lucide-react";
 import { Song, Tag, Member, ScheduleMember, Schedule } from "./types";
 import LineupPlayer, { LineupTrack, CurrentUser } from "./LineupPlayer";
 import SongsLibraryPlayer, { LibraryTrack } from "./SongsLibraryPlayer";
@@ -332,7 +367,9 @@ export default function App() {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
   const [isDarkMode, setIsDarkMode] = useState(true);
-  const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "playground" | "admin" | "team-notes" | "rehearsal" | "freedom-wall" | "preaching" | "design-requests">("dashboard");
+  const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "playground" | "admin" | "team-notes" | "rehearsal" | "freedom-wall" | "preaching" | "design-requests" | "bible">("dashboard");
+  // Tracks when Rehearsal mobile fullscreen is active so we can hide the app header
+  const [rehearsalFullscreen, setRehearsalFullscreen] = useState(false);
   // Bump this key every time user navigates to Design Requests — forces a remount + fresh fetch
   const [designRequestsKey, setDesignRequestsKey] = useState(0);
   useEffect(() => { if (currentView === "design-requests") setDesignRequestsKey(k => k + 1); }, [currentView]);
@@ -350,6 +387,9 @@ export default function App() {
   // Events — Coming Soon teaser (same pattern, amber accent)
   const [unseenEvents, setUnseenEvents] = useState(() => !localStorage.getItem("wf_seen_events"));
   const markEventsSeen = () => { if (unseenEvents) { localStorage.setItem("wf_seen_events", "1"); setUnseenEvents(false); } };
+  // Bible — new module highlight
+  const [unseenBible, setUnseenBible] = useState(() => !localStorage.getItem("wf_seen_bible"));
+  const markBibleSeen = () => { if (unseenBible) { localStorage.setItem("wf_seen_bible", "1"); setUnseenBible(false); } };
 
   // ── Planner deep-link state (from calendar task card ⇒ open specific card) ──
   const [pendingPlannerBoardId, setPendingPlannerBoardId] = useState<string | null>(null);
@@ -358,7 +398,7 @@ export default function App() {
   // 📱 Auto-open mobile sidebar when there are unseen new modules
   // Only on mobile (< 1024px). Stops once all modules are seen.
   useEffect(() => {
-    const hasUnseen = unseenPlanner || unseenFreedomWall || unseenPreaching || unseenDesignRequests || unseenEvents;
+    const hasUnseen = unseenPlanner || unseenFreedomWall || unseenPreaching || unseenDesignRequests || unseenEvents || unseenBible;
     if (hasUnseen && window.innerWidth < 1024) {
       // Small delay so the app finishes the initial render before sliding the drawer open
       const t = setTimeout(() => setIsMobileMenuOpen(true), 400);
@@ -1119,39 +1159,74 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
           </button>
         </div>
 
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto overflow-x-hidden">
+        <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto overflow-x-hidden">
           {!isSidebarCollapsed && (
-            <p className="px-3 text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 mt-2">Worship</p>
+            <p className="px-3 text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 mt-1">Worship</p>
           )}
 
           {/* Dashboard — available to all roles */}
           <div className="relative group/tip">
             <button
               onClick={() => { setCurrentView("dashboard"); setIsMobileMenuOpen(false); }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "dashboard"
+              className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-colors font-medium text-sm ${currentView === "dashboard"
                 ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300"
                 : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
                 } ${isSidebarCollapsed ? "justify-center" : ""}`}
               title="Dashboard"
             >
-              <LayoutGrid size={20} className="shrink-0" />
+              <LayoutGrid size={18} className="shrink-0" />
               {!isSidebarCollapsed && <span>Dashboard</span>}
             </button>
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Dashboard</span>}
           </div>
 
 
+          {/* Bible — open to ALL roles */}
+          <div className="relative group/tip">
+            <button
+              onClick={() => { setCurrentView("bible"); setIsMobileMenuOpen(false); markBibleSeen(); }}
+              className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-xl font-medium text-sm transition-all ${
+                currentView === "bible"
+                  ? "bg-indigo-600/20 text-indigo-400"
+                  : unseenBible
+                    ? "text-indigo-400 dark:text-indigo-300 hover:bg-indigo-900/20"
+                    : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800/60 hover:text-gray-800 dark:hover:text-gray-200"
+              } ${isSidebarCollapsed ? "justify-center" : ""}`}
+              style={unseenBible && currentView !== "bible" ? {
+                boxShadow: "0 0 0 1px rgba(99,102,241,0.4), 0 0 12px rgba(99,102,241,0.25)",
+                animation: "newModulePulse 2s ease-in-out infinite",
+              } : {}}
+              title="Bible"
+            >
+              <span className="relative shrink-0">
+                <BookMarked size={18} />
+                {unseenBible && currentView !== "bible" && (
+                  <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-indigo-400 border border-[#1a1f2e]" />
+                )}
+              </span>
+              {!isSidebarCollapsed && (
+                <span className="flex items-center gap-2">
+                  Bible
+                  {unseenBible && currentView !== "bible" && (
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">NEW</span>
+                  )}
+                </span>
+              )}
+            </button>
+            {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Bible</span>}
+          </div>
+
           {/* Song Management */}
           <div className="relative group/tip">
             <button
               onClick={() => { setCurrentView("songs"); setIsMobileMenuOpen(false); }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "songs"
+              className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-colors font-medium text-sm ${currentView === "songs"
                 ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300"
                 : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
                 } ${isSidebarCollapsed ? "justify-center" : ""}`}
               title="Song Management"
             >
-              <Music size={20} className="shrink-0" />
+              <Music size={18} className="shrink-0" />
               {!isSidebarCollapsed && <span>Song Management</span>}
             </button>
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Song Management</span>}
@@ -1161,13 +1236,13 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
           <div className="relative group/tip">
             <button
               onClick={() => { setCurrentView("members"); setIsMobileMenuOpen(false); }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "members"
+              className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-colors font-medium text-sm ${currentView === "members"
                 ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300"
                 : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
                 } ${isSidebarCollapsed ? "justify-center" : ""}`}
               title="Team Members"
             >
-              <Users size={20} className="shrink-0" />
+              <Users size={18} className="shrink-0" />
               {!isSidebarCollapsed && <span>Team Members</span>}
             </button>
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Team Members</span>}
@@ -1177,13 +1252,13 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
           <div className="relative group/tip">
             <button
               onClick={() => { setCurrentView("schedule"); setIsMobileMenuOpen(false); }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "schedule"
+              className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-colors font-medium text-sm ${currentView === "schedule"
                 ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
                 : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:white"
                 } ${isSidebarCollapsed ? "justify-center" : ""}`}
               title="Scheduling"
             >
-              <Calendar size={20} className="shrink-0" />
+              <Calendar size={18} className="shrink-0" />
               {!isSidebarCollapsed && <span>Scheduling</span>}
             </button>
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Scheduling</span>}
@@ -1194,7 +1269,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
           <div className="relative group/tip">
             <button
               onClick={() => { markEventsSeen(); setCurrentView("events"); setIsMobileMenuOpen(false); }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all font-medium ${
+              className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-all font-medium text-sm ${
                 currentView === "events"
                   ? "bg-amber-500/15 text-amber-400"
                   : unseenEvents
@@ -1208,7 +1283,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
               title="Events"
             >
               <span className="relative shrink-0">
-                <Ticket size={20} />
+                <Ticket size={18} />
                 {unseenEvents && (
                   <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400 border border-[#1a1f2e]" />
                 )}
@@ -1224,13 +1299,13 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
           <div className="relative group/tip">
             <button
               onClick={() => { setCurrentView("team-notes"); setIsMobileMenuOpen(false); }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "team-notes"
+              className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-colors font-medium text-sm ${currentView === "team-notes"
                 ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
                 : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:white"
                 } ${isSidebarCollapsed ? "justify-center" : ""}`}
               title="Notes"
             >
-              <NotebookPen size={20} className="shrink-0" />
+              <NotebookPen size={18} className="shrink-0" />
               {!isSidebarCollapsed && <span>Notes</span>}
             </button>
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Notes</span>}
@@ -1240,13 +1315,13 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
           <div className="relative group/tip">
             <button
               onClick={() => { setCurrentView("rehearsal"); setIsMobileMenuOpen(false); }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "rehearsal"
+              className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-colors font-medium text-sm ${currentView === "rehearsal"
                 ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
                 : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:white"
                 } ${isSidebarCollapsed ? "justify-center" : ""}`}
               title="Rehearsal"
             >
-              <Mic2 size={20} className="shrink-0" />
+              <Mic2 size={18} className="shrink-0" />
               {!isSidebarCollapsed && <span>Rehearsal</span>}
             </button>
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Rehearsal</span>}
@@ -1256,7 +1331,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
           <div className="relative group/tip">
             <button
               onClick={() => { setCurrentView("planner"); setIsMobileMenuOpen(false); markPlannerSeen(); }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all font-medium ${
+              className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-all font-medium text-sm ${
                 currentView === "planner"
                   ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
                   : unseenPlanner
@@ -1270,7 +1345,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
               title="Ministry Hub"
             >
               <span className="relative shrink-0">
-                <SquareKanban size={20} />
+                <SquareKanban size={18} />
                 {unseenPlanner && currentView !== "planner" && (
                   <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-indigo-400 border border-[#1a1f2e]" />
                 )}
@@ -1287,7 +1362,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
           <div className="relative group/tip">
             <button
               onClick={() => { setCurrentView("freedom-wall"); setIsMobileMenuOpen(false); markFreedomWallSeen(); }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all font-medium ${
+              className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-all font-medium text-sm ${
                 currentView === "freedom-wall"
                   ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
                   : unseenFreedomWall
@@ -1301,7 +1376,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
               title="Freedom Wall"
             >
               <span className="relative shrink-0">
-                <Feather size={20} />
+                <Feather size={18} />
                 {unseenFreedomWall && currentView !== "freedom-wall" && (
                   <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-indigo-400 border border-[#1a1f2e]" />
                 )}
@@ -1319,7 +1394,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
             <div className="relative group/tip">
               <button
                 onClick={() => { setCurrentView("design-requests"); setIsMobileMenuOpen(false); markDesignRequestsSeen(); }}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all font-medium ${
+                className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-all font-medium text-sm ${
                   currentView === "design-requests"
                     ? "bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300"
                     : unseenDesignRequests
@@ -1333,7 +1408,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                 title="Design Requests"
               >
                 <span className="relative shrink-0">
-                  <Palette size={20} />
+                  <Palette size={18} />
                   {unseenDesignRequests && currentView !== "design-requests" && (
                     <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-violet-400 border border-[#1a1f2e]" />
                   )}
@@ -1351,7 +1426,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
           <div className="relative group/tip">
             <button
               onClick={() => { setCurrentView("preaching"); setIsMobileMenuOpen(false); markPreachingSeen(); }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium transition-all ${
+              className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-xl font-medium text-sm transition-all ${
                 currentView === "preaching"
                   ? "bg-indigo-600/20 text-indigo-400"
                   : unseenPreaching
@@ -1365,7 +1440,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
               title="Preaching"
             >
               <span className="relative shrink-0">
-                <BookOpen size={20} />
+                <BookOpen size={18} />
                 {unseenPreaching && currentView !== "preaching" && (
                   <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-indigo-400 border border-[#1a1f2e]" />
                 )}
@@ -1382,18 +1457,19 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Preaching</span>}
           </div>
 
+
           {/* Admin Panel — admin only, always hidden for QA Specialist */}
           {isRoleAdmin && !isQA && (
             <div className="relative group/tip">
               <button
                 onClick={() => { setCurrentView("admin"); setIsMobileMenuOpen(false); }}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors font-medium ${currentView === "admin"
+                className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-colors font-medium text-sm ${currentView === "admin"
                   ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300"
                   : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
                   } ${isSidebarCollapsed ? "justify-center" : ""}`}
                 title="Team Access"
               >
-                <Shield size={20} className="shrink-0" />
+                <Shield size={18} className="shrink-0" />
                 {!isSidebarCollapsed && <span>Team Access</span>}
               </button>
               {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Team Access</span>}
@@ -1423,8 +1499,8 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Header */}
-        <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 py-4 px-4 sm:px-6 flex items-center gap-3 h-16 shrink-0" style={{ ["--header-h" as any]: "64px" }}>
+        {/* Header — hidden when Rehearsal mobile fullscreen is active */}
+        <header className={`bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 py-4 px-4 sm:px-6 flex items-center gap-3 h-16 shrink-0 transition-all ${rehearsalFullscreen ? "hidden" : ""}`} style={{ ["--header-h" as any]: "64px" }}>
 
           {/* Dashboard: show hamburger (opens sidebar drawer on mobile) */}
           {currentView === "dashboard" && (
@@ -1451,7 +1527,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                 }
               }}
               className={[
-                currentView === "songs" || currentView === "members" || currentView === "schedule" || currentView === "freedom-wall" || currentView === "preaching"
+                currentView === "songs" || currentView === "members" || currentView === "schedule" || currentView === "freedom-wall" || currentView === "preaching" || currentView === "bible"
                   ? "lg:hidden"   // desktop sidebar-accessible views — mobile only
                   : "",           // detached views — always visible
                 "flex items-center gap-1 py-1.5 pl-1 pr-3 rounded-xl font-semibold",
@@ -1467,7 +1543,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
 
           <div className="flex-1 flex items-center min-w-0">
             <h1 className="text-base sm:text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap truncate">
-              {currentView === "dashboard" ? "Dashboard" : currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : currentView === "playground" ? "Playground" : currentView === "planner" ? "Ministry Hub" : currentView === "team-notes" ? "Notes" : currentView === "rehearsal" ? "Rehearsal" : currentView === "freedom-wall" ? "Freedom Wall" : currentView === "preaching" ? "Preaching" : currentView === "design-requests" ? "Design Requests" : currentView === "events" ? "Events" : "Song Management"}
+              {currentView === "dashboard" ? "Dashboard" : currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : currentView === "playground" ? "Playground" : currentView === "planner" ? "Ministry Hub" : currentView === "team-notes" ? "Notes" : currentView === "rehearsal" ? "Rehearsal" : currentView === "freedom-wall" ? "Freedom Wall" : currentView === "preaching" ? "Preaching" : currentView === "design-requests" ? "Design Requests" : currentView === "events" ? "Events" : currentView === "bible" ? "Bible" : "Song Management"}
             </h1>
           </div>
           <div className="flex items-center gap-2">
@@ -1607,10 +1683,11 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
         <main className="flex-1 overflow-y-auto overflow-x-hidden bg-gray-50 dark:bg-gray-900">
           <div className="flex flex-col h-full">
             <div className={`view-enter flex-1 overflow-x-hidden ${
-                currentView === "freedom-wall" || currentView === "preaching" || currentView === "design-requests"
+                currentView === "freedom-wall" || currentView === "preaching" || currentView === "design-requests" || currentView === "bible"
                   ? "overflow-y-hidden p-0 flex flex-col"
                   : "overflow-y-auto p-4 sm:p-6"
               }`}>
+              <ModuleErrorBoundary>
               <Suspense fallback={null}>
 
 
@@ -1782,6 +1859,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                   currentUser={user}
                   canEditSong={canEditSong}
                   showToast={showToast}
+                  onFullscreenChange={setRehearsalFullscreen}
                   onSongUpdated={(updated) => {
                     setAllSongs(prev => prev.map(s => s.id === updated.id ? updated : s));
                     // Also update the local songs cache so the change persists across navigations
@@ -1832,6 +1910,8 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                   onToast={showToast}
                   initialTab={pendingPreachingTab ?? undefined}
                 />
+              ) : currentView === "bible" ? (
+                <BibleView userId={user?.uid ?? "guest"} />
               ) : currentView === "events" && (isRoleAdmin || (myMemberProfile?.eventsAccess ?? false)) ? (
                 <EventsView
                   userId={user?.uid ?? ""}
@@ -1842,6 +1922,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                 />
               ) : null}
               </Suspense>
+              </ModuleErrorBoundary>
             </div>
           </div>
         </main>

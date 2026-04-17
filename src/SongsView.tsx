@@ -138,6 +138,46 @@ export default function SongsView({
   const [copiedField, setCopiedField] = useState<"lyrics" | "chords" | null>(null);
   const [transposeSteps, setTransposeSteps] = useState(0);
   const [formErrors, setFormErrors] = useState<{ title?: string; artist?: string }>({});
+  // Mobile detail tab: "lyrics" (default) or "chords"
+  const [detailTab, setDetailTab] = useState<"lyrics" | "chords">("lyrics");
+
+  // ── Lyrics section-label renderer ────────────────────────────────────────
+  // Parses raw lyrics text and renders section labels (VERSE, CHORUS, BRIDGE,
+  // PRE CHORUS, OUTRO, INTRO, TAG) as styled indigo caps separate from body text.
+  const renderLyrics = (text: string) => {
+    if (!text) return null;
+    const SECTION_RE = /^(?:VERSE|CHORUS|PRE[- ]?CHORUS|BRIDGE|OUTRO|INTRO|TAG|HOOK|INTERLUDE|REFRAIN|CODA)(\s+\d+)?\s*:?\s*$/i;
+    const lines = text.split('\n');
+    const elements: React.ReactNode[] = [];
+    let key = 0;
+    let pendingBlank = false;
+    for (let i = 0; i < lines.length; i++) {
+      const raw = lines[i];
+      const trimmed = raw.trim();
+      if (trimmed === '') {
+        pendingBlank = true;
+        continue;
+      }
+      if (pendingBlank) {
+        elements.push(<div key={key++} className="h-4" />);
+        pendingBlank = false;
+      }
+      if (SECTION_RE.test(trimmed)) {
+        elements.push(
+          <p key={key++} className="text-[11px] font-bold uppercase tracking-widest text-indigo-400 dark:text-indigo-400 mt-1 mb-0.5 select-none">
+            {trimmed.replace(/:$/, '')}
+          </p>
+        );
+      } else {
+        elements.push(
+          <p key={key++} className="text-sm text-gray-700 dark:text-gray-200 leading-7">
+            {raw}
+          </p>
+        );
+      }
+    }
+    return <div className="space-y-0">{elements}</div>;
+  };
 
   // ── Library mini player — state lifted to App.tsx; local helpers proxy up ──
   /** Songs that have a YouTube video_url — kept here for count / button display */
@@ -443,13 +483,37 @@ showToast("error", "Failed to load songs. Please refresh.");
   }, [hasMore]);
 
 
-  useEffect(() => { setTransposeSteps(0); }, [selectedSong?.id]);
+  useEffect(() => { setTransposeSteps(0); setDetailTab("lyrics"); }, [selectedSong?.id]);
   // Notify parent whenever the song detail panel opens or closes
   useEffect(() => { onSelectedSongChange?.(!!selectedSong); }, [selectedSong, onSelectedSongChange]);
   // When App.tsx increments clearSelectionSignal (via global Back button), close the detail panel
   useEffect(() => {
     if (clearSelectionSignal) setSelectedSong(null);
   }, [clearSelectionSignal]);
+
+  // ── Prev/Next song navigation ─────────────────────────────────────────────
+  const currentSongIndex = selectedSong ? filteredSongs.findIndex(s => s.id === selectedSong.id) : -1;
+  const hasPrev = currentSongIndex > 0;
+  const hasNext = currentSongIndex >= 0 && currentSongIndex < filteredSongs.length - 1;
+
+  const navigateSong = (dir: "prev" | "next") => {
+    if (dir === "prev" && hasPrev) setSelectedSong(filteredSongs[currentSongIndex - 1]);
+    if (dir === "next" && hasNext) setSelectedSong(filteredSongs[currentSongIndex + 1]);
+  };
+
+  // Keyboard navigation (← →) when detail panel is open
+  useEffect(() => {
+    if (!selectedSong) return;
+    const handler = (e: KeyboardEvent) => {
+      // Skip if focus is inside an input, textarea, or select
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (e.key === "ArrowLeft")  navigateSong("prev");
+      if (e.key === "ArrowRight") navigateSong("next");
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [selectedSong, currentSongIndex, hasPrev, hasNext, filteredSongs]);
 
 
   // ── Songs handlers ────────────────────────────────────────────────────────
@@ -1024,53 +1088,116 @@ showToast("error", "Failed to extract text from image. Please try again.");
           </div>
         </div>
       ) : selectedSong ? (
-        <div className="max-w-4xl mx-auto space-y-4">
+        <div className="max-w-5xl mx-auto space-y-4">
 
-          {/* Minimalist Header Card */}
+          {/* ── Header Card ─────────────────────────────────────────────────── */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-4 sm:p-6 lg:p-8">
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1 min-w-0">
                 {/* Tags */}
-                <div className="flex flex-wrap gap-2 mb-4">
+                <div className="flex flex-wrap gap-2 mb-3">
                   {selectedSong.tags.map((tag) => (
-                    <span key={tag.id} className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs sm:text-sm font-semibold ${tag.color}`}>
+                    <span key={tag.id} className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${tag.color}`}>
                       {tag.name}
                     </span>
                   ))}
                 </div>
-                {/* Title & Artist */}
-                <h2 className="text-xl sm:text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white mb-1 leading-tight">{selectedSong.title}</h2>
-                {selectedSong.artist && (
-                  <p className="text-indigo-500 dark:text-indigo-400 font-semibold text-base sm:text-lg">{selectedSong.artist}</p>
-                )}
+                {/* Title */}
+                <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-gray-900 dark:text-white mb-1 leading-tight tracking-tight">
+                  {selectedSong.title}
+                </h2>
+                {/* Artist + position counter */}
+                {selectedSong.artist ? (
+                  <div className="flex items-center gap-2">
+                    <p className="text-indigo-500 dark:text-indigo-400 font-semibold text-base sm:text-lg">
+                      {selectedSong.artist}
+                    </p>
+                    {filteredSongs.length > 1 && (
+                      <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-md"
+                        style={{ background: "rgba(99,102,241,0.1)", color: "rgba(99,102,241,0.7)" }}>
+                        {currentSongIndex + 1} / {filteredSongs.length}
+                      </span>
+                    )}
+                  </div>
+                ) : filteredSongs.length > 1 ? (
+                  <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-md"
+                    style={{ background: "rgba(99,102,241,0.1)", color: "rgba(99,102,241,0.7)" }}>
+                    {currentSongIndex + 1} / {filteredSongs.length}
+                  </span>
+                ) : null}
               </div>
-              {/* Action Buttons */}
-              <div className="flex items-center gap-2 sm:gap-3 shrink-0 pt-1">
-                <button onClick={() => handlePrint(selectedSong)} className="hidden sm:block relative group text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors duration-150">
-                  <Printer size={20} />
-                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">Print</span>
+
+              {/* Action Buttons — integrated prev/next + print/edit/delete/close */}
+              <div className="flex items-center gap-0.5 sm:gap-1 shrink-0 pt-1">
+                {/* ← Prev */}
+                {filteredSongs.length > 1 && (
+                  <button
+                    onClick={() => navigateSong("prev")}
+                    disabled={!hasPrev}
+                    title={hasPrev ? `← ${filteredSongs[currentSongIndex - 1]?.title}` : "No previous song"}
+                    className="w-9 h-9 flex items-center justify-center rounded-xl transition-all disabled:opacity-20 disabled:cursor-not-allowed"
+                    style={{
+                      color: hasPrev ? "rgba(99,102,241,0.9)" : "rgba(156,163,175,0.5)",
+                      background: hasPrev ? "rgba(99,102,241,0.08)" : "transparent",
+                    }}>
+                    <ChevronLeft size={18} />
+                  </button>
+                )}
+                {/* → Next */}
+                {filteredSongs.length > 1 && (
+                  <button
+                    onClick={() => navigateSong("next")}
+                    disabled={!hasNext}
+                    title={hasNext ? `${filteredSongs[currentSongIndex + 1]?.title} →` : "No next song"}
+                    className="w-9 h-9 flex items-center justify-center rounded-xl transition-all disabled:opacity-20 disabled:cursor-not-allowed mr-1"
+                    style={{
+                      color: hasNext ? "rgba(99,102,241,0.9)" : "rgba(156,163,175,0.5)",
+                      background: hasNext ? "rgba(99,102,241,0.08)" : "transparent",
+                    }}>
+                    <ChevronRight size={18} />
+                  </button>
+                )}
+                {/* Print — desktop only */}
+                <button
+                  onClick={() => handlePrint(selectedSong)}
+                  title="Print"
+                  className="hidden sm:flex w-9 h-9 items-center justify-center rounded-xl text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-all"
+                >
+                  <Printer size={18} />
                 </button>
+                {/* Edit */}
                 {canEditSong && (
-                  <button onClick={() => openEditor(selectedSong)} className="relative group text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors duration-150">
-                    <Edit size={20} />
-                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">Edit</span>
+                  <button
+                    onClick={() => openEditor(selectedSong)}
+                    title="Edit song"
+                    className="w-9 h-9 flex items-center justify-center rounded-xl text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-all"
+                  >
+                    <Edit size={18} />
                   </button>
                 )}
+                {/* Delete */}
                 {canDeleteSong && (
-                  <button onClick={() => handleDeleteSong(selectedSong.id)} className="relative group text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-colors duration-150">
-                    <Trash2 size={20} />
-                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">Delete</span>
+                  <button
+                    onClick={() => handleDeleteSong(selectedSong.id)}
+                    title="Delete song"
+                    className="w-9 h-9 flex items-center justify-center rounded-xl text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
+                  >
+                    <Trash2 size={18} />
                   </button>
                 )}
-                <button onClick={() => setSelectedSong(null)} className="relative group text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 transition-colors duration-150">
-                  <X size={20} />
-                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">Close</span>
+                {/* Close */}
+                <button
+                  onClick={() => setSelectedSong(null)}
+                  title="Close"
+                  className="w-9 h-9 flex items-center justify-center rounded-xl text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all"
+                >
+                  <X size={18} />
                 </button>
               </div>
             </div>
 
             {/* Divider + Meta */}
-            <div className="mt-5 pt-5 border-t border-gray-200 dark:border-gray-700 space-y-2">
+            <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-700 space-y-1.5">
               {(() => {
                 const fmtDate = (iso: string) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
                 const fmtName = (full: string) => {
@@ -1079,7 +1206,6 @@ showToast("error", "Failed to extract text from image. Please try again.");
                   return `${parts[0]} ${parts[parts.length - 1][0]}.`;
                 };
                 const Avatar = ({ name, photo }: { name?: string; photo?: string }) => {
-                  // Try to find live photo from allMembers by matching name
                   const liveMember = name ? allMembers.find(m => m.name.toLowerCase().startsWith(name.split(' ')[0].toLowerCase())) : null;
                   const src = liveMember?.photo || photo;
                   const colors = ["bg-indigo-500","bg-violet-500","bg-pink-500","bg-emerald-500","bg-amber-500","bg-sky-500"];
@@ -1123,10 +1249,39 @@ showToast("error", "Failed to extract text from image. Please try again.");
             </div>
           </div>
 
+          {/* ── Mobile Tab Bar (Lyrics / Chords) ──────────────────────────────
+               Visible only on < lg screens. On lg+ the two panels are side-by-side.
+          ────────────────────────────────────────────────────────────────────── */}
+          <div className="lg:hidden flex bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-1 gap-1">
+            <button
+              onClick={() => setDetailTab("lyrics")}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                detailTab === "lyrics"
+                  ? "bg-indigo-600 text-white shadow-sm"
+                  : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+              }`}
+            >
+              <BookOpen size={15} />
+              Lyrics
+            </button>
+            <button
+              onClick={() => setDetailTab("chords")}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                detailTab === "chords"
+                  ? "bg-purple-600 text-white shadow-sm"
+                  : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+              }`}
+            >
+              <Guitar size={15} />
+              Chords
+            </button>
+          </div>
 
-          {/* Lyrics & Chords Cards */}
+          {/* ── Lyrics & Chords Panels ──────────────────────────────────────── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-            <div className="bg-white dark:bg-[#1E2938] rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col">
+
+            {/* ── LYRICS PANEL ── */}
+            <div className={`bg-white dark:bg-[#1E2938] rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col ${detailTab === "chords" ? "hidden lg:flex" : "flex"}`}>
               <div className="flex items-center justify-between gap-2 px-4 sm:px-6 py-4 border-b border-gray-100 dark:border-gray-700">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-indigo-500" />
@@ -1147,11 +1302,16 @@ showToast("error", "Failed to extract text from image. Please try again.");
                 )}
               </div>
               <div className="p-4 sm:p-6 flex-1 overflow-auto">
-                <pre className="whitespace-pre-wrap font-sans text-sm text-gray-700 dark:text-gray-200 leading-relaxed">{selectedSong.lyrics || "No lyrics added."}</pre>
+                {selectedSong.lyrics
+                  ? renderLyrics(selectedSong.lyrics)
+                  : <p className="text-sm text-gray-400 dark:text-gray-600 italic">No lyrics added.</p>
+                }
               </div>
             </div>
-            <div className="bg-white dark:bg-[#1E2938] rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col">
-              {/* Chords Header with Transposer */}
+
+            {/* ── CHORDS PANEL ── */}
+            <div className={`bg-white dark:bg-[#1E2938] rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col ${detailTab === "lyrics" ? "hidden lg:flex" : "flex"}`}>
+              {/* Chords header with transposer */}
               <div className="flex items-center justify-between gap-2 px-4 sm:px-6 py-4 border-b border-gray-100 dark:border-gray-700">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-purple-500" />
@@ -1159,13 +1319,12 @@ showToast("error", "Failed to extract text from image. Please try again.");
                 </div>
                 {selectedSong.chords && (
                   <div className="flex items-center gap-1">
-                    {/* – semitone */}
+                    {/* Transpose down */}
                     <button
                       onClick={() => setTransposeSteps(s => s - 1)}
                       title="Transpose down"
-                      className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 hover:bg-purple-100 dark:hover:bg-purple-900/40 hover:text-purple-600 dark:hover:text-purple-400 font-bold text-base transition-colors"
+                      className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 hover:bg-purple-100 dark:hover:bg-purple-900/40 hover:text-purple-600 dark:hover:text-purple-400 font-bold text-base transition-colors"
                     >−</button>
-
                     {/* Key badge — click to reset */}
                     <button
                       onClick={() => setTransposeSteps(0)}
@@ -1173,22 +1332,19 @@ showToast("error", "Failed to extract text from image. Please try again.");
                       className={`px-2 py-0.5 rounded-md text-xs font-semibold min-w-[52px] text-center transition-colors ${transposeSteps === 0
                         ? "bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
                         : "bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300"
-                        }`}
+                      }`}
                     >
                       {transposeSteps === 0 ? "Original" : transposeSteps > 0 ? `+${transposeSteps}` : `${transposeSteps}`}
                     </button>
-
-                    {/* + semitone */}
+                    {/* Transpose up */}
                     <button
                       onClick={() => setTransposeSteps(s => s + 1)}
                       title="Transpose up"
-                      className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 hover:bg-purple-100 dark:hover:bg-purple-900/40 hover:text-purple-600 dark:hover:text-purple-400 font-bold text-base transition-colors"
+                      className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 hover:bg-purple-100 dark:hover:bg-purple-900/40 hover:text-purple-600 dark:hover:text-purple-400 font-bold text-base transition-colors"
                     >+</button>
-
                     {/* Divider */}
                     <div className="w-px h-4 bg-gray-200 dark:bg-gray-600 mx-1" />
-
-                    {/* Copy (copies transposed version) */}
+                    {/* Copy transposed */}
                     <button
                       onClick={() => {
                         const text = transposeChords(selectedSong.chords!, transposeSteps);
@@ -1206,7 +1362,7 @@ showToast("error", "Failed to extract text from image. Please try again.");
               </div>
               <div className="p-4 sm:p-6 flex-1 overflow-auto">
                 {selectedSong.chords ? (
-                  <pre className="whitespace-pre-wrap font-sans text-sm text-gray-700 dark:text-gray-200 leading-relaxed">
+                  <pre className="whitespace-pre-wrap font-mono text-sm text-gray-700 dark:text-gray-200 leading-7">
                     {transposeChords(selectedSong.chords, transposeSteps)}
                   </pre>
                 ) : (
@@ -1220,6 +1376,7 @@ showToast("error", "Failed to extract text from image. Please try again.");
                 )}
               </div>
             </div>
+
           </div>
         </div>
       ) : (
@@ -1480,7 +1637,7 @@ showToast("error", "Failed to extract text from image. Please try again.");
 
           {/* ── GRID VIEW ─────────────────────────────────── */}
           {songView === "grid" && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5">
               {isLoadingSongs ? (
                 Array.from({ length: 6 }).map((_, i) => (
                   <div key={i} className="bg-white dark:bg-gray-800 rounded-2xl p-6 border border-gray-200 dark:border-gray-700 shadow-sm animate-pulse">
@@ -1502,11 +1659,14 @@ showToast("error", "Failed to extract text from image. Please try again.");
                 <div
                   key={song.id}
                   onClick={() => isSelectionMode ? toggleSongSelection(song.id) : setSelectedSong(song)}
-                  className={`bg-white dark:bg-gray-800 rounded-2xl p-6 border transition-all cursor-pointer group flex flex-col h-full relative ${selectedSongIds.includes(song.id)
-                    ? "border-indigo-500 ring-2 ring-indigo-200 dark:ring-indigo-900 shadow-md"
-                    : "border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-500"
+                  className={`bg-white dark:bg-gray-800 rounded-2xl p-5 border transition-all duration-150 cursor-pointer group flex flex-col relative
+                    hover:-translate-y-0.5
+                    ${selectedSongIds.includes(song.id)
+                      ? "border-indigo-500 ring-2 ring-indigo-200 dark:ring-indigo-900 shadow-md"
+                      : "border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-lg hover:border-indigo-300 dark:hover:border-indigo-600/70"
                     }`}
                 >
+                  {/* Selection checkbox */}
                   {isSelectionMode && (
                     <div className="absolute top-4 right-4 z-10">
                       {selectedSongIds.includes(song.id) ? (
@@ -1516,38 +1676,43 @@ showToast("error", "Failed to extract text from image. Please try again.");
                       )}
                     </div>
                   )}
-                  <div className="flex items-start justify-between gap-2 mb-0.5">
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors line-clamp-1">
+
+                  {/* Title row */}
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <h3 className="text-base font-bold text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors line-clamp-2 leading-snug">
                       {song.title}
                     </h3>
-                    {!isSelectionMode && (
-                      <div className="flex items-center gap-1 shrink-0">
-                        {song.video_url && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); onOpenVideo?.(song.video_url!); }}
-                            title="Watch Video"
-                            className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors relative group/tooltip"
-                          >
-                            <CustomYoutubeIcon size={22} />
-                            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover/tooltip:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">Watch Video</span>
-                          </button>
-                        )}
-                      </div>
+                    {!isSelectionMode && song.video_url && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onOpenVideo?.(song.video_url!); }}
+                        title="Watch Video"
+                        className="shrink-0 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors relative group/tooltip"
+                      >
+                        <CustomYoutubeIcon size={20} />
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover/tooltip:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">Watch Video</span>
+                      </button>
                     )}
                   </div>
-                  {song.artist && <p className="text-sm text-gray-500 dark:text-gray-400 mb-2 font-medium">{song.artist}</p>}
-                  <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-3 uppercase tracking-wider font-medium">
-                    {song.created_at ? new Date(song.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : ""}
-                  </p>
-                  <div className="flex flex-wrap gap-2 mb-4">
+
+                  {/* Artist */}
+                  {song.artist && (
+                    <p className="text-xs text-indigo-500 dark:text-indigo-400 font-semibold mb-3 truncate">{song.artist}</p>
+                  )}
+
+                  {/* Tags */}
+                  <div className="flex flex-wrap gap-1.5 mt-auto">
                     {Array.isArray(song.tags) && song.tags.slice(0, 3).map((tag) => (
-                      <span key={tag.id} className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${tag.color}`}>{tag.name}</span>
+                      <span key={tag.id} className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${tag.color}`}>{tag.name}</span>
                     ))}
                     {Array.isArray(song.tags) && song.tags.length > 3 && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">+{song.tags.length - 3}</span>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">+{song.tags.length - 3}</span>
                     )}
                   </div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-3 mt-auto">{song.lyrics}</p>
+
+                  {/* Date footer */}
+                  <p className="text-[10px] text-gray-400 dark:text-gray-600 mt-3 font-medium">
+                    {song.created_at ? new Date(song.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ""}
+                  </p>
                 </div>
               ))}
               {!isLoadingSongs && (!Array.isArray(filteredSongs) || filteredSongs.length === 0) && (
@@ -1603,9 +1768,9 @@ showToast("error", "Failed to extract text from image. Please try again.");
                 <div
                   key={song.id}
                   onClick={() => isSelectionMode ? toggleSongSelection(song.id) : setSelectedSong(song)}
-                  className={`grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-2 sm:gap-4 items-center px-4 py-3 rounded-xl border cursor-pointer group transition-all ${selectedSongIds.includes(song.id)
+                  className={`grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-2 sm:gap-4 items-center px-4 py-4 rounded-xl border cursor-pointer group transition-all duration-150 ${selectedSongIds.includes(song.id)
                     ? "bg-indigo-50 dark:bg-indigo-900/20 border-indigo-300 dark:border-indigo-700"
-                    : "bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700/60 hover:bg-gray-50 dark:hover:bg-gray-700/50 hover:border-indigo-200 dark:hover:border-indigo-700"
+                    : "bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700/60 hover:bg-gray-50 dark:hover:bg-gray-700/50 hover:border-indigo-200 dark:hover:border-indigo-700/70"
                     }`}
                 >
                   {/* Title + Artist */}
@@ -1618,8 +1783,8 @@ showToast("error", "Failed to extract text from image. Please try again.");
                       </div>
                     )}
                     <div className="min-w-0">
-                      <p className="font-semibold text-sm text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate">{song.title}</p>
-                      {song.artist && <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{song.artist}</p>}
+                      <p className="font-bold text-sm text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate">{song.title}</p>
+                      {song.artist && <p className="text-xs text-indigo-500 dark:text-indigo-400 font-semibold truncate">{song.artist}</p>}
                     </div>
                   </div>
                   {/* Tags */}
