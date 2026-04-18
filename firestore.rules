@@ -38,6 +38,16 @@ service cloud.firestore {
       allow delete: if request.auth != null;
     }
 
+    // ── Bible module — user-owned data ────────────────────────────────────────
+    // My Verses (single aggregated doc per user)
+    match /users/{userId}/bibleCollection/{docId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    // My Devotions (one doc per devotion entry)
+    match /users/{userId}/bibleDevotions/{devotionId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
     // ── All other collections ──────────────────────────────────────────────────
     // All other reads/writes go through Netlify serverless functions
     // (server-side Admin SDK) — deny direct client access.

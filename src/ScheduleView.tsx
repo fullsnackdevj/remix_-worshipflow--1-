@@ -624,13 +624,15 @@ showToast("error", "Could not save acknowledgment. Try again.");
 
         {/* Left: view toggle */}
         <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-xl p-0.5 gap-0.5 shrink-0">
-          <button onClick={() => setScheduleView("month")} className={`flex items-center gap-1.5 px-3 py-2 rounded-[10px] text-sm font-semibold transition-all ${scheduleView === "month" ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"}`}>
-            <Calendar size={14} />
-            <span className="hidden min-[375px]:inline">Month</span>
+          <button onClick={() => setScheduleView("month")} className={`flex items-center justify-center gap-1.5 w-10 h-10 sm:w-auto sm:h-auto sm:px-3 sm:py-2 rounded-[10px] text-sm font-semibold transition-all ${scheduleView === "month" ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"}`}>
+            <Calendar size={20} className="sm:hidden" />
+            <Calendar size={14} className="hidden sm:block" />
+            <span className="hidden sm:inline">Month</span>
           </button>
-          <button onClick={() => setScheduleView("list")} className={`flex items-center gap-1.5 px-3 py-2 rounded-[10px] text-sm font-semibold transition-all ${scheduleView === "list" ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"}`}>
-            <List size={14} />
-            <span className="hidden min-[375px]:inline">List</span>
+          <button onClick={() => setScheduleView("list")} className={`flex items-center justify-center gap-1.5 w-10 h-10 sm:w-auto sm:h-auto sm:px-3 sm:py-2 rounded-[10px] text-sm font-semibold transition-all ${scheduleView === "list" ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"}`}>
+            <List size={20} className="sm:hidden" />
+            <List size={14} className="hidden sm:block" />
+            <span className="hidden sm:inline">List</span>
           </button>
         </div>
 
@@ -666,19 +668,17 @@ showToast("error", "Could not save acknowledgment. Try again.");
             if (canAdd) {
               return (
                 <button onClick={() => { setSelectedEventId(null); setSchedPanelMode("edit"); openBlankEventForm(selectedScheduleDate!); }}
-                  className="flex items-center gap-2 px-3 sm:px-4 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-semibold transition-all shadow-sm shadow-indigo-500/30 whitespace-nowrap">
-                  <Plus size={16} />
-                  <span className="hidden sm:inline">{label}</span>
-                  <span className="sm:hidden">Add</span>
+                  className="flex items-center justify-center gap-2 w-9 h-9 sm:w-auto sm:h-auto sm:px-4 sm:py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-semibold transition-all shadow-sm shadow-indigo-500/30">
+                  <Plus size={18} />
+                  <span className="hidden sm:inline whitespace-nowrap">{label}</span>
                 </button>
               );
             }
             return (
               <button disabled title={disabledTitle}
-                className="flex items-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-sm font-semibold bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed select-none whitespace-nowrap">
-                <Plus size={16} />
-                <span className="hidden sm:inline">{label}</span>
-                <span className="sm:hidden">Add</span>
+                className="flex items-center justify-center gap-2 w-9 h-9 sm:w-auto sm:h-auto sm:px-4 sm:py-2.5 rounded-xl text-sm font-semibold bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed select-none">
+                <Plus size={18} />
+                <span className="hidden sm:inline whitespace-nowrap">{label}</span>
               </button>
             );
           })()}
