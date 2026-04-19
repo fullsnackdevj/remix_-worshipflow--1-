@@ -84,23 +84,49 @@ function getDb() {
       });
     }
     db = admin.firestore();
-    // Set a connection timeout so Firestore calls don't hang indefinitely
-    db.settings({ ignoreUndefinedProperties: true });
+    // preferRest: true forces HTTPS/REST instead of gRPC.
+    // gRPC uses persistent TCP which is often blocked by mobile carriers / NAT.
+    // REST uses standard port 443 (HTTPS) which always works on any network.
+    db.settings({ ignoreUndefinedProperties: true, preferRest: true });
   }
   return db;
 }
 
-// Global 10-second timeout middleware — every API route must respond within 10s
+// Global 30-second timeout middleware — every API route must respond within 30s
+// (30s allows for slow Firebase connections, e.g. mobile hotspot)
 app.use('/api', (req, res, next) => {
   const timeout = setTimeout(() => {
     if (!res.headersSent) {
-      console.error(`[TIMEOUT] ${req.method} ${req.path} timed out after 10s`);
+      console.error(`[TIMEOUT] ${req.method} ${req.path} timed out after 30s`);
       res.status(503).json({ error: 'Service temporarily unavailable. Please try again.' });
     }
-  }, 10000);
+  }, 30000);
   res.on('finish', () => clearTimeout(timeout));
   res.on('close', () => clearTimeout(timeout));
   next();
+});
+
+// ── Global crash guard ────────────────────────────────────────────────────────
+// Prevents the server from crashing when a Firestore query completes AFTER the
+// timeout middleware already sent a 503 response (ERR_HTTP_HEADERS_SENT).
+// This is a known race condition when Firebase is slow (e.g. on a mobile hotspot).
+process.on('uncaughtException', (err: any) => {
+  if (err?.code === 'ERR_HTTP_HEADERS_SENT') {
+    // Harmless — the timeout already responded, ignore the late Firestore reply
+    console.warn('[WARN] Late Firestore response after timeout (harmless, suppressed)', err?.message);
+    return;
+  }
+  // Any other uncaught exception IS serious — log it and exit
+  console.error('[FATAL] Uncaught exception:', err);
+  process.exit(1);
+});
+process.on('unhandledRejection', (reason: any) => {
+  if (reason?.code === 'ERR_HTTP_HEADERS_SENT') {
+    console.warn('[WARN] Late Firestore rejection after timeout (harmless, suppressed)', reason?.message);
+    return;
+  }
+  console.error('[WARN] Unhandled rejection:', reason);
+  // Do NOT exit — unhandled rejections are common with optional Firestore calls
 });
 
 // ── Notification helpers ────────────────────────────────────────────────────
@@ -2113,12 +2139,13 @@ app.get("/api/planner/boards", async (req, res) => {
   if (!firestore) return res.status(503).json({ error: "DB unavailable" });
   try {
     const s = await firestore.collection("pg_boards").orderBy("createdAt", "desc").get();
+    if (res.headersSent) return;
     const showArchived = req.query.archived === 'true';
     const docs = s.docs
       .map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? null } as any))
       .filter((b: any) => showArchived ? !!b.archived : !b.archived);
     res.json(docs);
-  } catch { res.status(500).json({ error: "Failed" }); }
+  } catch (e: any) { if (!res.headersSent) res.status(500).json({ error: "Failed" }); }
 });
 
 // GET /api/planner/boards/archived — kept for backwards compat, delegates to query param
@@ -3041,6 +3068,26 @@ app.patch("/api/freedom-wall/:id/move", async (req, res) => {
   } catch { res.status(500).json({ error: "Failed to move note" }); }
 });
 
+// Normalise any dueDate value to a plain "YYYY-MM-DD" string.
+// Planner cards may store dates as ISO strings, Firestore Timestamps, or display
+// strings (e.g. "Apr 17, 2026"). The scheduling calendar compares with YYYY-MM-DD
+// strings, so we must normalise before returning.
+function normalizeDueDate(d: any): string | null {
+  if (!d) return null;
+  // Firestore Timestamp object
+  if (typeof d === "object" && typeof d.toDate === "function") {
+    return d.toDate().toISOString().slice(0, 10);
+  }
+  if (typeof d === "string") {
+    // Already YYYY-MM-DD (possibly with time)
+    if (/^\d{4}-\d{2}-\d{2}/.test(d)) return d.slice(0, 10);
+    // Phrased date like "Apr 17, 2026"
+    const parsed = new Date(d);
+    if (!isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+  }
+  return null;
+}
+
 // GET /api/planner/my-cards — calendar integration
 // Cards store members as display names. We support both memberName and userEmail queries
 // and merge the results to handle mixed-format data in Firestore.
@@ -3087,10 +3134,12 @@ app.get("/api/planner/my-cards", async (req, res) => {
       }
     }
 
-    // Filter to only cards with a dueDate
+    // Filter to only cards with a parseable dueDate
     const cards = allDocs
       .map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? null } as any))
-      .filter((c: any) => !!c.dueDate && !c.archived);
+      .filter((c: any) => !!c.dueDate && !c.archived)
+      .map((c: any) => ({ ...c, dueDate: normalizeDueDate(c.dueDate) }))
+      .filter((c: any) => !!c.dueDate); // drop cards where date couldn't be parsed
 
     if (cards.length === 0) return res.json([]);
 
@@ -3102,17 +3151,31 @@ app.get("/api/planner/my-cards", async (req, res) => {
     const boardTitleMap: Record<string, string> = {};
     boardSnaps.forEach(bs => { if (bs.exists) boardTitleMap[bs.id] = (bs.data() as any).title || "Board"; });
 
-    const result = cards.map((c: any) => ({
-      id: c.id,
-      boardId: c.boardId,
-      boardTitle: boardTitleMap[c.boardId] || "Ministry Hub",
-      listId: c.listId,
-      title: c.title,
-      dueDate: c.dueDate,
-      startDate: c.startDate ?? null,
-      completed: c.completed ?? false,
-      members: c.members ?? [],
-    }));
+    // Batch-fetch list titles to determine completed status
+    // Cards have no `completed` field — done-ness is determined by the list name (DONE/COMPLETED column)
+    const listIds = [...new Set(cards.map((c: any) => c.listId as string))];
+    const listSnaps = await Promise.all(
+      listIds.map((lid: string) => firestore!.collection("pg_lists").doc(lid).get())
+    );
+    const listTitleMap: Record<string, string> = {};
+    listSnaps.forEach(ls => { if (ls.exists) listTitleMap[ls.id] = (ls.data() as any).title || ""; });
+
+    const result = cards.map((c: any) => {
+      const listTitle = listTitleMap[c.listId] || "";
+      const isDoneList = /done|complete/i.test(listTitle);
+      return {
+        id: c.id,
+        boardId: c.boardId,
+        boardTitle: boardTitleMap[c.boardId] || "Ministry Hub",
+        listId: c.listId,
+        listTitle,
+        title: c.title,
+        dueDate: c.dueDate,
+        startDate: c.startDate ?? null,
+        completed: isDoneList || c.completed === true,
+        members: c.members ?? [],
+      };
+    });
 
     res.json(result);
   } catch (e: any) {

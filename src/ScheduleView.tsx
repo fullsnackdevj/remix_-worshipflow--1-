@@ -376,17 +376,18 @@ const openScheduleEditor = (dateStr: string) => {
   const eventsOnDate = allSchedules.filter(s => s.date === dateStr);
   const mmdd = dateStr.slice(5);
   const hasBirthdays = (birthdayMap[mmdd] ?? []).length > 0;
+  const hasTasks = myPlannerCards.some(c => c.dueDate === dateStr || c.startDate === dateStr);
   setSelectedScheduleDate(dateStr);
   if (eventsOnDate.length === 0) {
-    if (isPastDate && !hasBirthdays) {
-      // Past date with no events and no birthdays — nothing to show
+    if (isPastDate && !hasBirthdays && !hasTasks) {
+      // Past date with no events, no birthdays, no tasks — nothing to show
       setSelectedScheduleDate(null);
       return;
     }
-    // Has birthdays or it's a future date — open panel in view mode
+    // Has birthdays/tasks or it's a future date — open panel in view mode
     setSchedPanelMode("view");
     setSelectedEventId(null);
-    if (hasBirthdays) onEventPanelOpen?.();
+    if (hasBirthdays || hasTasks) onEventPanelOpen?.();
   } else if (eventsOnDate.length === 1) {
     openEventById(eventsOnDate[0].id, dateStr);
     // onEventPanelOpen called inside openEventById
@@ -707,12 +708,15 @@ showToast("error", "Could not save acknowledgment. Try again.");
                   const isSelected = dateStr === selectedScheduleDate;
                   const isCellPast = dateStr < todayStr;
                   const cellHasEvents = schedEvents.length > 0;
+                  const cellHasTasks = myPlannerCards.some(c => c.dueDate === dateStr || c.startDate === dateStr);
+                  const cellHasBdays = (birthdayMap[dateStr.slice(5)] ?? []).length > 0;
+                  const isDeadCell = isCellPast && !cellHasEvents && !cellHasTasks && !cellHasBdays;
                   return (
                     <button
                       key={dateStr}
                       onClick={() => openScheduleEditor(dateStr)}
-                      title={isCellPast && !cellHasEvents ? "Past date — no new events can be added" : undefined}
-                      className={`group relative min-h-[80px] lg:min-h-[110px] border-b border-r border-gray-100 dark:border-gray-700/40 p-1.5 lg:p-2 text-left transition-all duration-150 ${isCellPast && !cellHasEvents ? "opacity-35 cursor-not-allowed" : "hover:bg-indigo-50/70 dark:hover:bg-indigo-900/20"} ${isSelected ? "bg-indigo-50 dark:bg-indigo-900/30 ring-1 ring-inset ring-indigo-300 dark:ring-indigo-700" : ""}`}
+                      title={isDeadCell ? "Past date — no events or tasks" : undefined}
+                      className={`group relative min-h-[80px] lg:min-h-[110px] border-b border-r border-gray-100 dark:border-gray-700/40 p-1.5 lg:p-2 text-left transition-all duration-150 ${isDeadCell ? "opacity-35 cursor-not-allowed" : "hover:bg-indigo-50/70 dark:hover:bg-indigo-900/20"} ${isSelected ? "bg-indigo-50 dark:bg-indigo-900/30 ring-1 ring-inset ring-indigo-300 dark:ring-indigo-700" : ""}`}
                     >
                       <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold mb-1 transition-colors ${isToday ? "bg-indigo-600 text-white shadow-sm shadow-indigo-500/40" : isSelected ? "text-indigo-600 dark:text-indigo-400" : "text-gray-600 dark:text-gray-400"}`}>{day}</span>
                       {(canWriteSchedule || isLeader) && !isCellPast && (
@@ -754,15 +758,21 @@ showToast("error", "Could not save acknowledgment. Try again.");
                       })()}
                       {/* Ministry Hub task pill */}
                       {(() => {
-                        const tasksOnDay = myPlannerCards.filter(c => c.dueDate === dateStr);
+                        const tasksOnDay = myPlannerCards.filter(c => c.dueDate === dateStr || c.startDate === dateStr);
                         if (!tasksOnDay.length) return null;
-                        const allDone = tasksOnDay.every(c => c.completed);
+                        const allDone = tasksOnDay.length > 0 && tasksOnDay.every(c => c.completed);
                         const doneCt = tasksOnDay.filter(c => c.completed).length;
                         return (
-                          <div className="flex items-center gap-0.5 mt-0.5">
-                            <SquareKanban size={9} className={allDone ? "text-emerald-500" : "text-amber-500"} />
-                            <p className={`text-[10px] font-semibold leading-tight ${allDone ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
-                              {doneCt}/{tasksOnDay.length} task{tasksOnDay.length !== 1 ? "s" : ""}
+                          <div className={`flex items-center gap-0.5 mt-0.5 px-1 py-0.5 rounded-md ${
+                            allDone
+                              ? "bg-emerald-100/80 dark:bg-emerald-900/30"
+                              : "bg-amber-100/80 dark:bg-amber-900/30"
+                          }`}>
+                            <SquareKanban size={9} className={allDone ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-500"} />
+                            <p className={`text-[10px] font-bold leading-tight ${
+                              allDone ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-400"
+                            }`}>
+                              {doneCt}/{tasksOnDay.length}
                             </p>
                           </div>
                         );
@@ -928,12 +938,12 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
         </div>
 
         {/* SIDE PANEL */}
-        {selectedScheduleDate && (() => { const _mmdd = selectedScheduleDate.slice(5); const _hasBd = (birthdayMap[_mmdd] ?? []).length > 0; const _hasTasks = myPlannerCards.some(c => c.dueDate === selectedScheduleDate); return (selectedDateEvents.length > 0 || schedPanelMode === "edit" || _hasBd || _hasTasks); })() && (
+        {selectedScheduleDate && (() => { const _mmdd = selectedScheduleDate.slice(5); const _hasBd = (birthdayMap[_mmdd] ?? []).length > 0; const _hasTasks = myPlannerCards.some(c => c.dueDate === selectedScheduleDate || c.startDate === selectedScheduleDate); return (selectedDateEvents.length > 0 || schedPanelMode === "edit" || _hasBd || _hasTasks); })() && (
           <div className="md:hidden fixed inset-0 bg-black/50 z-40" onClick={closeScheduleEditor} />
         )}
-        {selectedScheduleDate && (() => { const _mmdd = selectedScheduleDate.slice(5); const _hasBd = (birthdayMap[_mmdd] ?? []).length > 0; const _hasTasks = myPlannerCards.some(c => c.dueDate === selectedScheduleDate); return (selectedDateEvents.length > 0 || schedPanelMode === "edit" || _hasBd || _hasTasks); })() && (() => {
+        {selectedScheduleDate && (() => { const _mmdd = selectedScheduleDate.slice(5); const _hasBd = (birthdayMap[_mmdd] ?? []).length > 0; const _hasTasks = myPlannerCards.some(c => c.dueDate === selectedScheduleDate || c.startDate === selectedScheduleDate); return (selectedDateEvents.length > 0 || schedPanelMode === "edit" || _hasBd || _hasTasks); })() && (() => {
           const isDatePast = selectedScheduleDate < todayStr;
-          const tasksOnThisDay = myPlannerCards.filter(c => c.dueDate === selectedScheduleDate);
+          const tasksOnThisDay = myPlannerCards.filter(c => c.dueDate === selectedScheduleDate || c.startDate === selectedScheduleDate);
           const showDayView = (selectedDateEvents.length >= 1 || (birthdayMap[selectedScheduleDate.slice(5)] ?? []).length > 0 || tasksOnThisDay.length > 0) && !selectedEventId && schedPanelMode !== "edit";
           const bdaysOnDate = birthdayMap[selectedScheduleDate.slice(5)] ?? [];
           if (showDayView) {
@@ -1009,22 +1019,34 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                 {(() => {
                   if (!tasksOnThisDay.length) return null;
                   const doneCount = tasksOnThisDay.filter(c => c.completed).length;
+                  const allTasksDone = doneCount === tasksOnThisDay.length;
                   return (
                     <div className="mb-4">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-1.5">
-                          <SquareKanban size={12} className="text-amber-500" />
-                          <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">My Tasks</p>
+                          <SquareKanban size={12} className={allTasksDone ? "text-emerald-500" : "text-amber-500"} />
+                          <p className={`text-xs font-semibold uppercase tracking-wider ${
+                            allTasksDone ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"
+                          }`}>My Tasks</p>
                         </div>
-                        <span className="text-[10px] font-semibold text-gray-400">{doneCount}/{tasksOnThisDay.length} done</span>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                          allTasksDone
+                            ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400"
+                            : "text-gray-400"
+                        }`}>{doneCount}/{tasksOnThisDay.length} done</span>
                       </div>
                       <div className="space-y-1.5">
                         {tasksOnThisDay.map(card => (
-                          <div key={card.id} className={`flex items-start gap-2.5 p-2.5 rounded-xl border transition-all ${
-                            card.completed
-                              ? "bg-emerald-50 dark:bg-emerald-900/15 border-emerald-300 dark:border-emerald-700/50"
-                              : "bg-amber-50 dark:bg-amber-900/15 border-amber-200 dark:border-amber-700/40"
-                          }`}>
+                          <button
+                            key={card.id}
+                            onClick={() => onNavigateToPlanner?.({ boardId: card.boardId, cardId: card.id })}
+                            title="Open in Ministry Hub"
+                            className={`w-full flex items-start gap-2.5 p-2.5 rounded-xl border transition-all text-left group ${
+                              card.completed
+                                ? "bg-emerald-50 dark:bg-emerald-900/15 border-emerald-300 dark:border-emerald-700/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/30"
+                                : "bg-amber-50 dark:bg-amber-900/15 border-amber-200 dark:border-amber-700/40 hover:bg-amber-100 dark:hover:bg-amber-900/30"
+                            }`}
+                          >
                             <div className="shrink-0 mt-0.5">
                               {card.completed
                                 ? <CheckCircle2 size={14} className="text-emerald-500" />
@@ -1038,20 +1060,10 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                                 card.completed ? "text-emerald-600 dark:text-emerald-500" : "text-amber-600 dark:text-amber-500"
                               }`}>{card.boardTitle}</p>
                             </div>
-                            {onNavigateToPlanner && (
-                              <button
-                                onClick={() => onNavigateToPlanner({ boardId: card.boardId, cardId: card.id })}
-                                title="Open card in Ministry Hub"
-                                className={`shrink-0 p-1.5 rounded-lg transition-all ${
-                                  card.completed
-                                    ? "text-emerald-500 hover:text-white hover:bg-emerald-500 dark:hover:bg-emerald-600"
-                                    : "text-amber-500 hover:text-white hover:bg-amber-500 dark:hover:bg-amber-600"
-                                }`}
-                              >
-                                <ExternalLink size={12} />
-                              </button>
-                            )}
-                          </div>
+                            <ChevronRight size={14} className={`shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity ${
+                              card.completed ? "text-emerald-500" : "text-amber-500"
+                            }`} />
+                          </button>
                         ))}
                       </div>
                     </div>

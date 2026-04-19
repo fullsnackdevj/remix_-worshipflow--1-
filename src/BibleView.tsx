@@ -232,6 +232,7 @@ export default function BibleView({ userId = "guest" }: { userId?: string }) {
   const [globalError, setGlobalError]     = useState<string | null>(null);
   const [globalMode, setGlobalMode]       = useState(false);
   const [lastGlobalQuery, setLastGlobalQuery] = useState("");
+  const [openAccordions, setOpenAccordions] = useState<Set<string>>(new Set());
 
   // ── Panel: null | "verses" | "devotions" ─────────────────────────────────
   const [activePanel, setActivePanel]   = useState<"verses" | "devotions" | null>(null);
@@ -421,7 +422,7 @@ export default function BibleView({ userId = "guest" }: { userId?: string }) {
 
   const clearGlobalSearch = () => {
     setGlobalMode(false); setGlobalResults([]); setGlobalTotal(0);
-    setSearchQuery(""); setLastGlobalQuery("");
+    setSearchQuery(""); setLastGlobalQuery(""); setOpenAccordions(new Set());
   };
 
   const prevChapter = () => {
@@ -832,7 +833,7 @@ export default function BibleView({ userId = "guest" }: { userId?: string }) {
               <div className="relative flex items-center">
                 <List size={13} className="absolute left-3 pointer-events-none" style={{ color: "rgba(var(--wf-c1),0.5)" }} />
                 <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} onKeyDown={handleSearchKey}
-                  placeholder={`Search or jump "John 3:16"`}
+                  placeholder="Search a word in this chapter, or press Enter to search all 66 books"
                   className="w-full text-[13px] py-2.5 pl-8 pr-8 rounded-xl outline-none"
                   style={{ background: "rgba(255,255,255,0.05)", border: searchQuery ? "1px solid rgba(var(--wf-c1),0.45)" : "1px solid rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.8)" }} />
                 {searchQuery && <button onClick={() => setSearchQuery("")} className="absolute right-3" style={{ color: "rgba(255,255,255,0.3)" }}><X size={13} /></button>}
@@ -888,7 +889,7 @@ export default function BibleView({ userId = "guest" }: { userId?: string }) {
               <div className="relative flex items-center">
                 <List size={15} className="absolute left-3.5 pointer-events-none" style={{ color: "rgba(var(--wf-c1),0.5)" }} />
                 <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} onKeyDown={handleSearchKey}
-                  placeholder={`Search or jump "John 3:16"`}
+                  placeholder="Search a word in this chapter, or press Enter to search all 66 books"
                   className="w-full text-[15px] py-3 pl-10 pr-9 rounded-xl outline-none"
                   style={{ background: "rgba(255,255,255,0.05)", border: searchQuery ? "1px solid rgba(var(--wf-c1),0.45)" : "1px solid rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.8)" }} />
                 {searchQuery && <button onClick={() => setSearchQuery("")} className="absolute right-3" style={{ color: "rgba(255,255,255,0.3)" }}><X size={15} /></button>}
@@ -966,44 +967,99 @@ export default function BibleView({ userId = "guest" }: { userId?: string }) {
                     <p className="text-[13px] font-semibold" style={{ color: "rgba(255,255,255,0.3)" }}>No results found</p>
                   </div>
                 )}
-                {!globalLoading && globalResults.map((result, idx) => {
+                {!globalLoading && (() => {
+                  const byBook: Record<string, { reference: string; text: string }[]> = {};
+                  globalResults.forEach(r => {
+                    const m = r.reference.match(/^(.+?)\s+\d+:\d+$/);
+                    const bk = m ? m[1].trim() : r.reference;
+                    if (!byBook[bk]) byBook[bk] = [];
+                    byBook[bk].push(r);
+                  });
                   const hlReg = lastGlobalQuery.trim().length > 1
                     ? new RegExp(`(${lastGlobalQuery.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi') : null;
-                  const hlText = hlReg
-                    ? result.text.replace(hlReg, '<mark style="background:rgba(var(--wf-c1),0.3);color:#e0e7ff;border-radius:3px;padding:0 2px">$1</mark>')
-                    : result.text;
-                  const ref = result.reference || "";
-                  const isAdded = addedSet.has(ref);
-                  return (
-                    <div key={`${ref}-${idx}`} className="my-2 rounded-2xl"
-                      style={{ background: isAdded ? "rgba(16,185,129,0.06)" : "rgba(255,255,255,0.025)", border: isAdded ? "1px solid rgba(16,185,129,0.2)" : "1px solid rgba(255,255,255,0.06)", padding: "12px 14px" }}>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ background: "rgba(var(--wf-c1),0.15)", color: "var(--wf-at2)" }}>
-                          {ref} · {translation.label}
-                        </span>
-                      </div>
-                      <p className="text-[13px] leading-relaxed mb-3" style={{ color: "rgba(255,255,255,0.82)" }} dangerouslySetInnerHTML={{ __html: hlText }} />
-                      <div className="flex items-center gap-2 justify-end">
-                        <button onClick={() => handleCollect(ref, result.text)}
-                          className="flex items-center gap-1 rounded-full"
-                          style={{ height: 28, paddingLeft: 10, paddingRight: 10, fontSize: 11, fontWeight: 700,
-                            background: isAdded ? "rgba(16,185,129,0.15)" : "rgba(var(--wf-c1),0.15)",
-                            border: isAdded ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(var(--wf-c1),0.25)",
-                            color: isAdded ? "#34d399" : "var(--wf-at2)" }}>
-                          {isAdded ? <CheckCircle2 size={11} /> : <Plus size={11} />}
-                          {isAdded ? "Saved" : "Save"}
+                  return Object.entries(byBook).map(([bookName, results]) => {
+                    const isOpen = openAccordions.has(bookName);
+                    const toggle = () => setOpenAccordions(prev => {
+                      const n = new Set(prev); isOpen ? n.delete(bookName) : n.add(bookName); return n;
+                    });
+                    return (
+                      <div key={bookName} className="mb-2 rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.07)" }}>
+                        <button onClick={toggle} className="w-full flex items-center justify-between px-4 py-3 transition-all"
+                          style={{ background: isOpen ? "rgba(var(--wf-c1),0.12)" : "rgba(255,255,255,0.03)", borderBottom: isOpen ? "1px solid rgba(var(--wf-c1),0.2)" : "none" }}>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[13px] font-bold" style={{ color: isOpen ? "var(--wf-at2)" : "rgba(255,255,255,0.75)" }}>{bookName}</span>
+                            <span className="text-[10px] font-black px-2 py-0.5 rounded-full" style={{ background: "rgba(var(--wf-c1),0.2)", color: "var(--wf-at2)" }}>
+                              {results.length} {results.length === 1 ? "match" : "matches"}
+                            </span>
+                          </div>
+                          <ChevronDown size={14} style={{ color: "rgba(255,255,255,0.3)", transform: isOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
                         </button>
-                        <button onClick={() => handleCopy(ref, result.text, translation.label)}
-                          className="flex items-center gap-1 rounded-full"
-                          style={{ height: 28, paddingLeft: 10, paddingRight: 10, fontSize: 11, fontWeight: 700,
-                            background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.4)" }}>
-                          {copiedRef === ref ? <Check size={11} /> : <Copy size={11} />}
-                          {copiedRef === ref ? "Copied" : "Copy"}
-                        </button>
+                        {isOpen && (
+                          <div>
+                            {results.map((result, idx) => {
+                              const ref = result.reference || "";
+                              const isAdded = addedSet.has(ref);
+                              const hlText = hlReg
+                                ? result.text.replace(hlReg, '<mark style="background:rgba(var(--wf-c1),0.3);color:#e0e7ff;border-radius:3px;padding:0 2px">$1</mark>')
+                                : result.text;
+                              return (
+                                <div key={`${ref}-${idx}`} style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                                  <div className="group flex gap-3 py-3.5 px-3 transition-all"
+                                    style={{ background: isAdded ? "rgba(16,185,129,0.06)" : "transparent", border: isAdded ? "1px solid rgba(16,185,129,0.12)" : "1px solid transparent" }}
+                                    onMouseEnter={e => !isAdded && (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
+                                    onMouseLeave={e => !isAdded && (e.currentTarget.style.background = "transparent")}>
+                                    {/* Left: verse reference chip */}
+                                    <span className="text-[11px] font-black shrink-0 mt-1 min-w-[52px]"
+                                      style={{ color: isAdded ? "#10b981" : "rgba(var(--wf-c1),0.85)" }}>
+                                      {ref.match(/\d+:\d+$/)?.[0] ?? ""}
+                                    </span>
+                                    {/* Middle: text + ref label */}
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-[15px] sm:text-[16px] leading-[1.75]" style={{ color: "rgba(255,255,255,0.88)" }} dangerouslySetInnerHTML={{ __html: hlText }} />
+                                      <div className="flex items-center justify-between mt-1.5">
+                                        <p className="text-[11px] font-semibold" style={{ color: "rgba(255,255,255,0.25)" }}>{ref} · {translation.label}</p>
+                                        {/* Mobile buttons inline */}
+                                        <div className="flex items-center gap-2 sm:hidden">
+                                          <button onClick={() => handleCollect(ref, result.text)}
+                                            className="flex items-center justify-center rounded-full"
+                                            title={isAdded ? "Saved!" : "Save verse"}
+                                            style={{ width: 36, height: 36, background: isAdded ? "rgba(16,185,129,0.18)" : "rgba(var(--wf-c1),0.12)", border: isAdded ? "1px solid rgba(16,185,129,0.4)" : "1px solid rgba(var(--wf-c1),0.25)", color: isAdded ? "#10b981" : "rgba(var(--wf-c1),0.9)" }}>
+                                            {isAdded ? <Check size={16} /> : <PlusCircle size={16} />}
+                                          </button>
+                                          <button onClick={() => handleCopy(ref, result.text, translation.label)}
+                                            className="flex items-center justify-center rounded-full"
+                                            title="Copy verse"
+                                            style={{ width: 36, height: 36, background: copiedRef === ref ? "rgba(16,185,129,0.1)" : "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: copiedRef === ref ? "#10b981" : "rgba(255,255,255,0.3)" }}>
+                                            {copiedRef === ref ? <Check size={15} /> : <Copy size={15} />}
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    {/* Desktop: stacked circular buttons on right */}
+                                    <div className="hidden sm:flex flex-col gap-2 shrink-0 self-start pt-0.5">
+                                      <button onClick={() => handleCollect(ref, result.text)}
+                                        className="flex items-center justify-center rounded-full"
+                                        title={isAdded ? "Saved!" : "Save verse"}
+                                        style={{ width: 36, height: 36, background: isAdded ? "rgba(16,185,129,0.18)" : "rgba(var(--wf-c1),0.12)", border: isAdded ? "1px solid rgba(16,185,129,0.4)" : "1px solid rgba(var(--wf-c1),0.25)", color: isAdded ? "#10b981" : "rgba(var(--wf-c1),0.9)" }}>
+                                        {isAdded ? <Check size={16} /> : <PlusCircle size={16} />}
+                                      </button>
+                                      <button onClick={() => handleCopy(ref, result.text, translation.label)}
+                                        className="flex items-center justify-center rounded-full"
+                                        title="Copy verse"
+                                        style={{ width: 36, height: 36, background: copiedRef === ref ? "rgba(16,185,129,0.1)" : "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: copiedRef === ref ? "#10b981" : "rgba(255,255,255,0.3)" }}>
+                                        {copiedRef === ref ? <Check size={15} /> : <Copy size={15} />}
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  });
+                })()}
                 {!globalLoading && globalResults.length > 0 && (
                   <div className="flex items-center justify-between py-4">
                     <button disabled={globalPage <= 1} onClick={() => doGlobalSearch(lastGlobalQuery, globalPage - 1)}

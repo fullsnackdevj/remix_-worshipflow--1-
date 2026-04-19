@@ -1551,8 +1551,8 @@ showToast("error", "Failed to extract text from image. Please try again.");
                   {/* Total Songs Count */}
                   <div className="h-9 flex items-center text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-3 rounded-xl whitespace-nowrap flex-shrink-0">
                     {debouncedQuery || selectedTagIds.length > 0
-                      ? <>{filteredSongs.length}<span className="hidden sm:inline"> of {allSongs.length}</span> <span className="hidden sm:inline">{allSongs.length === 1 ? 'Song' : 'Songs'}</span></>
-                      : <>{allSongs.length} <span className="hidden sm:inline">{allSongs.length === 1 ? 'Song' : 'Songs'} Total</span><span className="sm:hidden">Songs</span></>
+                      ? <>{filteredSongs.length}<span className="hidden sm:inline"> of {allSongs.length}</span>{" "}<span className="hidden sm:inline">{allSongs.length === 1 ? 'Song' : 'Songs'}</span></>
+                      : <>{allSongs.length}{" "}<span className="hidden sm:inline">{allSongs.length === 1 ? 'Song' : 'Songs'} Total</span><span className="sm:hidden">Songs</span></>
                     }
                   </div>
                   {/* Grid / List toggle */}

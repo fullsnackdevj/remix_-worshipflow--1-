@@ -287,10 +287,11 @@ interface TaskItem {
 }
 
 function MyTasksCard({
-    userName, userEmail, members, onNavigate,
+    userName, userEmail, members, onNavigate, onVisibilityChange,
 }: {
     userName: string; userEmail: string; members: Member[];
     onNavigate: (view: string, opts?: { boardId?: string; cardId?: string }) => void;
+    onVisibilityChange?: (visible: boolean) => void;
 }) {
     const [tasks, setTasks] = useState<TaskItem[]>([]);
     const [loading, setLoading] = useState(true);
@@ -362,7 +363,19 @@ function MyTasksCard({
     const inProgress = tasks.filter(t => /in.?progress/i.test(t.listName));
     const done       = tasks.filter(t => /done|complete/i.test(t.listName));
     const other      = tasks.filter(t => !todo.includes(t) && !inProgress.includes(t) && !done.includes(t));
-    const ordered    = [...inProgress, ...todo, ...other, ...done];
+    const pending    = [...inProgress, ...todo, ...other];
+    const ordered    = [...pending, ...done];
+
+    // "All done" state: tasks exist but none are pending
+    const allDone = tasks.length > 0 && pending.length === 0;
+
+    // Hide the card entirely when still loading, no tasks, or all done
+    if (loading || ordered.length === 0 || allDone) {
+        onVisibilityChange?.(false);
+        return null;
+    }
+
+    onVisibilityChange?.(true);
 
     return (
         <Tile className="flex flex-col h-full">
@@ -372,66 +385,56 @@ function MyTasksCard({
                 action="Ministry Hub"
                 onAction={() => onNavigate("planner")}
             />
-            {loading ? (
-                <div className="p-5 space-y-3 animate-pulse">
-                    {[1,2,3].map(i => (
-                        <div key={i} className="flex items-center gap-3">
-                            <div className="w-2 h-2 rounded-full bg-gray-200 dark:bg-gray-700 shrink-0" />
-                            <div className="flex-1 h-3 bg-gray-200 dark:bg-gray-700 rounded" />
-                            <div className="w-16 h-3 bg-gray-200 dark:bg-gray-700 rounded" />
-                        </div>
-                    ))}
-                </div>
-            ) : ordered.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 gap-2 text-gray-400">
-                    <ListTodo size={22} className="opacity-30 float" />
-                    <p className="text-sm">No tasks assigned to you</p>
-                    <p className="text-xs text-gray-400/70">Cards assigned to you will appear here</p>
-                </div>
-            ) : (
-                <div className="divide-y divide-gray-100 dark:divide-gray-700 overflow-y-auto flex-1" style={{ maxHeight: 240, scrollbarWidth: 'thin' }}>
-                    {ordered.map(t => {
-                        const isIP   = /in.?progress/i.test(t.listName);
-                        const isDone = /done|complete/i.test(t.listName);
-                        return (
-                            <button
-                                key={t.cardId}
-                                onClick={() => onNavigate("planner", { boardId: t.boardId, cardId: t.cardId })}
-                                className="w-full flex items-start gap-3 px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors text-left group"
-                            >
-                                {/* Status dot */}
-                                <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${
-                                    isDone ? 'bg-emerald-500' : isIP ? 'bg-blue-500 animate-pulse' : 'bg-gray-300 dark:bg-gray-600'
-                                }`} />
-                                <div className="flex-1 min-w-0">
-                                    <p className={`text-sm font-semibold truncate ${
-                                        isDone ? 'line-through text-gray-400' : 'text-gray-900 dark:text-white group-hover:text-indigo-500 dark:group-hover:text-indigo-400'
-                                    }`}>{t.cardTitle}</p>
-                                    <p className="text-xs text-gray-400 truncate mt-0.5">
-                                        <span className="font-medium">{t.boardTitle}</span>
-                                        {t.assignedBy && (
-                                            <span className="ml-1.5">
-                                                {" | "}
-                                                {t.assignedBy === "Self-assigned"
-                                                    ? <span className="text-violet-400 dark:text-violet-400">Self-assigned</span>
-                                                    : <span>Assigned by: <span className="text-gray-300 dark:text-gray-300 font-medium">{t.assignedBy}</span></span>
-                                                }
-                                            </span>
-                                        )}
-                                    </p>
-                                </div>
-                                <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full leading-none mt-1 ${
-                                    isDone ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400'
-                                    : isIP  ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400'
-                                    : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
-                                }`}>{isDone ? 'Done' : isIP ? 'In Progress' : 'To Do'}</span>
-                            </button>
-                        );
-                    })}
-                </div>
-            )}
+            <div className="divide-y divide-gray-100 dark:divide-gray-700 overflow-y-auto flex-1" style={{ maxHeight: 240, scrollbarWidth: 'thin' }}>
+                {ordered.map(t => {
+                    const isIP   = /in.?progress/i.test(t.listName);
+                    const isDone = /done|complete/i.test(t.listName);
+                    return (
+                        <button
+                            key={t.cardId}
+                            onClick={() => onNavigate("planner", { boardId: t.boardId, cardId: t.cardId })}
+                            className="w-full flex items-start gap-3 px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors text-left group"
+                        >
+                            {/* Status dot */}
+                            <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${
+                                isDone ? 'bg-emerald-500' : isIP ? 'bg-blue-500 animate-pulse' : 'bg-gray-300 dark:bg-gray-600'
+                            }`} />
+                            <div className="flex-1 min-w-0">
+                                <p className={`text-sm font-semibold truncate ${
+                                    isDone ? 'line-through text-gray-400' : 'text-gray-900 dark:text-white group-hover:text-indigo-500 dark:group-hover:text-indigo-400'
+                                }`}>{t.cardTitle}</p>
+                                <p className="text-xs text-gray-400 truncate mt-0.5">
+                                    <span className="font-medium">{t.boardTitle}</span>
+                                    {t.assignedBy && (
+                                        <span className="ml-1.5">
+                                            {" | "}
+                                            {t.assignedBy === "Self-assigned"
+                                                ? <span className="text-violet-400 dark:text-violet-400">Self-assigned</span>
+                                                : <span>Assigned by: <span className="text-gray-300 dark:text-gray-300 font-medium">{t.assignedBy}</span></span>
+                                            }
+                                        </span>
+                                    )}
+                                </p>
+                            </div>
+                            <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full leading-none mt-1 ${
+                                isDone ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400'
+                                : isIP  ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400'
+                                : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                            }`}>{isDone ? 'Done' : isIP ? 'In Progress' : 'To Do'}</span>
+                        </button>
+                    );
+                })}
+            </div>
             <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 shrink-0">
-                <p className="text-xs text-gray-400">{tasks.length} task{tasks.length !== 1 ? 's' : ''} assigned · {inProgress.length} in progress</p>
+                {allDone ? (
+                    <p className="text-xs text-emerald-500 font-medium">
+                        ✓ {done.length}/{tasks.length} done · all clear
+                    </p>
+                ) : (
+                    <p className="text-xs text-gray-400">
+                        {tasks.length} task{tasks.length !== 1 ? 's' : ''} assigned · {inProgress.length} in progress
+                    </p>
+                )}
             </div>
         </Tile>
     );
@@ -554,6 +557,7 @@ export default function AdminDashboard({
     const isDismissed = (n: Note) => (n.reactions?.nevermind?.length ?? 0) > 0;
     const openBugs = notes.filter(n => n.type === "bug" && !n.resolved && !isDismissed(n)).length;
     const openFeqs = notes.filter(n => n.type === "feature" && !n.resolved && !isDismissed(n)).length;
+    const [hasActiveTasks, setHasActiveTasks] = useState(true); // start true to avoid layout flash
 
     const resolvedNotes = notes.filter(n => n.resolved).length;
     const totalNotes = notes.length;
@@ -818,10 +822,12 @@ export default function AdminDashboard({
 
             {/* ── Top section — Overpay 8px grid: generous gap-4, 3-col desktop ── */}
             <div className="grid grid-cols-1 lg:grid-cols-[2fr_1.5fr_1.5fr] gap-4">
-                {/* LEFT — Daily Bible Verse */}
-                <VerseOfTheDay userId={userId} userName={userName.split(" ")[0] || userName} userPhoto="" />
+                {/* LEFT — Daily Bible Verse: span 2 cols when tasks are hidden */}
+                <div className={hasActiveTasks ? "" : "lg:col-span-2"}>
+                  <VerseOfTheDay userId={userId} userName={userName.split(" ")[0] || userName} userPhoto="" />
+                </div>
                 {/* CENTER — My Tasks */}
-                <MyTasksCard userName={userName} userEmail={userEmail} members={members} onNavigate={onNavigate} />
+                <MyTasksCard userName={userName} userEmail={userEmail} members={members} onNavigate={onNavigate} onVisibilityChange={setHasActiveTasks} />
                 {/* RIGHT — 2×2 metric tiles: Overpay 4-col desktop spec → 2×2 grid */}
                 <div className="grid grid-cols-2 gap-4">
                     <div className="stagger-1">

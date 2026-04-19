@@ -3206,7 +3206,18 @@ Rules:
         } catch (e) { return json(500, { error: "Failed to delete note" }); }
     }
 
-    // ── GET /planner/my-cards?userEmail=...&memberName=... ── calendar integration
+    // ── GET /planner/my-cards?userEmail=...&memberName=... — calendar integration
+    // Normalise any dueDate value to a plain "YYYY-MM-DD" string.
+    const normalizeDueDate = (d: any): string | null => {
+        if (!d) return null;
+        if (typeof d === "object" && typeof d.toDate === "function") return d.toDate().toISOString().slice(0, 10);
+        if (typeof d === "string") {
+            if (/^\d{4}-\d{2}-\d{2}/.test(d)) return d.slice(0, 10);
+            const p = new Date(d);
+            if (!isNaN(p.getTime())) return p.toISOString().slice(0, 10);
+        }
+        return null;
+    };
     if (rawPath === "/planner/my-cards" && method === "GET") {
         const userEmail  = (event.queryStringParameters?.userEmail  || "").trim().toLowerCase();
         const memberName = (event.queryStringParameters?.memberName || "").trim();
@@ -3241,7 +3252,14 @@ Rules:
             }
             const cards = allDocs
                 .map(d => ({ id: d.id, ...d.data(), createdAt: (d.data().createdAt as any)?.toDate?.()?.toISOString() ?? null } as any))
-                .filter((c: any) => !!c.dueDate && !c.archived);
+                .filter((c: any) => !c.archived)
+                .map((c: any) => ({
+                    ...c,
+                    dueDate: normalizeDueDate(c.dueDate),
+                    startDate: normalizeDueDate(c.startDate ?? null),
+                }))
+                // Keep cards that have at least one of: dueDate or startDate
+                .filter((c: any) => !!c.dueDate || !!c.startDate);
 
             if (cards.length === 0) return json(200, []);
 
@@ -3250,17 +3268,27 @@ Rules:
             const boardTitleMap: Record<string, string> = {};
             boardSnaps.forEach(bs => { if (bs.exists) boardTitleMap[bs.id] = (bs.data() as any).title || "Board"; });
 
-            const result = cards.map((c: any) => ({
-                id: c.id,
-                boardId: c.boardId,
-                boardTitle: boardTitleMap[c.boardId] || "Ministry Hub",
-                listId: c.listId,
-                title: c.title,
-                dueDate: c.dueDate,
-                startDate: c.startDate ?? null,
-                completed: c.completed ?? false,
-                members: c.members ?? [],
-            }));
+            const listIds = [...new Set<string>(cards.map((c: any) => c.listId as string))];
+            const listSnaps = await Promise.all(listIds.map((lid: string) => firestore.collection("pg_lists").doc(lid).get()));
+            const listTitleMap: Record<string, string> = {};
+            listSnaps.forEach(ls => { if (ls.exists) listTitleMap[ls.id] = (ls.data() as any).title || ""; });
+
+            const result = cards.map((c: any) => {
+                const listTitle = listTitleMap[c.listId] || "";
+                const isDoneList = /done|complete/i.test(listTitle);
+                return ({
+                    id: c.id,
+                    boardId: c.boardId,
+                    boardTitle: boardTitleMap[c.boardId] || "Ministry Hub",
+                    listId: c.listId,
+                    listTitle,
+                    title: c.title,
+                    dueDate: c.dueDate,
+                    startDate: c.startDate ?? null,
+                    completed: isDoneList || c.completed === true,
+                    members: c.members ?? [],
+                });
+            });
             return json(200, result);
         } catch (e: any) {
             console.error("[GET /planner/my-cards]", e?.message);

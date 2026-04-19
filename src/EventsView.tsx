@@ -10,7 +10,7 @@ import {
   Plus, X, Ticket, Calendar, MapPin, Users, Wallet,
   Copy, Check, CheckCircle2, XCircle, Clock, Circle, UserCheck, Trash2, Pencil,
   ChevronLeft, Download, Search, Loader2, RefreshCw,
-  Smartphone, ArrowRight, Building2, QrCode, Share2, ExternalLink,
+  Smartphone, ArrowRight, Building2, QrCode, Share2, ExternalLink, Image,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -46,6 +46,7 @@ interface MinistryEvent {
   expenses?: { label: string; amount: number }[];
   contributionTiers?: { name: string; amount: number }[];  // flexible tiers e.g. Working, Student, Honorary…
   memberOptions?: { id: string; name: string; photo: string }[]; // roster for self-reg form
+  bannerUrl?: string;
 }
 
 interface Registrant {
@@ -168,6 +169,11 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
   const [fBankAcctNum, setFBankAcctNum] = useState("");
   const [fInstructions, setFInstructions] = useState("");
 
+  // Banner
+  const [fBannerFile, setFBannerFile] = useState<File | null>(null);
+  const [fBannerPreview, setFBannerPreview] = useState("");
+  const [fBannerError, setFBannerError] = useState("");
+
   // Path-based URLs: /r/ID (registration), /d/ID (dashboard)
   // iOS PWA standalone mode silently drops query params from shared links
   // but always preserves the URL path — so /r/ID format works reliably on mobile.
@@ -287,6 +293,7 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
     setFBankName(""); setFBankAcctName(""); setFBankAcctNum(""); setFInstructions("");
     setFType("external"); setFTiers([{ name: "Working", amount: "" }, { name: "Student", amount: "" }]);
     setFCollectorId(""); setFExpenses([{ label: "", amount: "" }]);
+    setFBannerFile(null); setFBannerPreview(""); setFBannerError("");
     setCreateStep(1);
   };
 
@@ -315,6 +322,10 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
         ? ev.expenses!.map(e => ({ label: e.label, amount: String(e.amount) }))
         : [{ label: "", amount: "" }]
     );
+    // Pre-fill banner preview if event has one
+    setFBannerFile(null);
+    setFBannerPreview(ev.bannerUrl ?? "");
+    setFBannerError("");
     setShowEdit(true);
   };
 
@@ -326,6 +337,14 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
     }
     setSaving(true);
     try {
+      // Upload new banner if selected
+      let bannerUrl = selectedEvent.bannerUrl ?? "";
+      if (fBannerFile) {
+        const snap = await uploadBytes(sRef(storage, `events/banners/${uid()}_${fBannerFile.name}`), fBannerFile);
+        bannerUrl = await getDownloadURL(snap.ref);
+      } else if (!fBannerPreview) {
+        bannerUrl = ""; // user cleared the banner
+      }
       const updates: Record<string, unknown> = {
         title:       fTitle.trim(),
         description: fDesc.trim(),
@@ -334,6 +353,7 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
         venue:       fVenue.trim(),
         price:       parseFloat(fPrice) || 0,
         capacity:    fCapacity ? parseInt(fCapacity) : null,
+        bannerUrl,
       };
       if (selectedEvent.type === "internal") {
         const collectorMember = members.find(m => m.id === fCollectorId);
@@ -384,12 +404,35 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
   const pickImage = (
     fileSetter: (f: File) => void,
     previewSetter: (s: string) => void,
+    maxMB = 5,
+    errorSetter?: (s: string) => void,
   ) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
+    if (f.size > maxMB * 1024 * 1024) {
+      errorSetter?.(`File too large — max ${maxMB} MB`);
+      e.target.value = "";
+      return;
+    }
+    errorSetter?.("");
     fileSetter(f);
     const reader = new FileReader();
     reader.onload = ev => previewSetter(ev.target?.result as string);
+    reader.readAsDataURL(f);
+  };
+
+  const pickBanner = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (f.size > 5 * 1024 * 1024) {
+      setFBannerError("Banner is too large — maximum file size is 5 MB.");
+      e.target.value = "";
+      return;
+    }
+    setFBannerError("");
+    setFBannerFile(f);
+    const reader = new FileReader();
+    reader.onload = ev => setFBannerPreview(ev.target?.result as string);
     reader.readAsDataURL(f);
   };
 
@@ -414,6 +457,11 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
 
       let gcashQRUrl = "";
       let mayaQRUrl  = "";
+      let bannerUrl  = "";
+      if (fBannerFile) {
+        const snap = await uploadBytes(sRef(storage, `events/banners/${uid()}_${fBannerFile.name}`), fBannerFile);
+        bannerUrl = await getDownloadURL(snap.ref);
+      }
       if (fType === "external") {
         if (fGcashFile) {
           const snap = await uploadBytes(sRef(storage, `events/gcash-${uid()}.jpg`), fGcashFile);
@@ -435,6 +483,7 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
         price:       parseFloat(fPrice) || 0,
         capacity:    fCapacity ? parseInt(fCapacity) : null,
         status:      "open",
+        bannerUrl,
         paymentInfo: { gcashQRUrl, mayaQRUrl,
           bankName: fBankName.trim(), bankAccountName: fBankAcctName.trim(),
           bankAccountNumber: fBankAcctNum.trim(), instructions: fInstructions.trim(),
@@ -543,119 +592,127 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
     const isPast = new Date(selectedEvent.date + "T00:00:00") < new Date();
     return (
       <div className="min-h-[60vh]">
-        {/* ── Gradient Hero Header ── */}
-        <div className="bg-gradient-to-br from-amber-600 via-orange-500 to-rose-500 rounded-2xl p-5 mb-5 shadow-lg shadow-amber-500/20">
-          {/* Back + actions row */}
-          <div className="flex items-center gap-3 mb-3 flex-wrap">
+        {/* ── Slim Header ── */}
+        <div className="mb-5">
+          {/* Back row */}
+          <div className="flex items-center gap-2 mb-3">
             <button
               onClick={() => { setSelectedEvent(null); setRegistrants([]); setSearchQuery(""); }}
-              className="flex items-center gap-1.5 text-sm text-white/80 hover:text-white transition-colors"
+              className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors font-medium"
             >
-              <ChevronLeft size={16} /> Back
+              <ChevronLeft size={15} /> Back to Events
             </button>
-            <span className="text-white/30">/</span>
-            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold ${
+            <span className="text-gray-700 text-xs">/</span>
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
               selectedEvent.status === "open" && !isPast
-                ? "bg-white/20 text-white border border-white/30"
-                : "bg-black/20 text-white/70 border border-white/10"
+                ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                : "bg-gray-700/60 text-gray-500 border-gray-600/40"
             }`}>
-              {selectedEvent.status === "open" && !isPast ? "● Open" : "● Closed"}
+              <span className={`w-1.5 h-1.5 rounded-full ${selectedEvent.status === "open" && !isPast ? "bg-emerald-400" : "bg-gray-500"}`} />
+              {selectedEvent.status === "open" && !isPast ? "Open" : "Closed"}
             </span>
             {isAdmin && (
-              <div className="flex items-center gap-1.5 ml-auto shrink-0">
-                <button
-                  onClick={() => openEdit(selectedEvent)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-white bg-white/20 hover:bg-white/30 transition-all"
-                >
-                  <Pencil size={12} /> Edit
+              <div className="flex items-center gap-1.5 ml-auto">
+                <button onClick={() => openEdit(selectedEvent)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-gray-300 bg-gray-800 hover:bg-gray-700 border border-gray-700/60 hover:border-gray-600 transition-all">
+                  <Pencil size={11} /> Edit
                 </button>
-                <button
-                  onClick={() => setShowDeleteConfirm(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-rose-100 bg-rose-900/40 hover:bg-rose-900/60 border border-rose-400/30 transition-all"
-                >
-                  <Trash2 size={12} /> Delete
+                <button onClick={() => setShowDeleteConfirm(true)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-red-400 bg-red-900/20 hover:bg-red-900/40 border border-red-800/40 transition-all">
+                  <Trash2 size={11} /> Delete
                 </button>
               </div>
             )}
           </div>
-          {/* Title */}
-          <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight leading-snug mb-3">{selectedEvent.title}</h1>
 
-          {/* Info pills inside hero */}
-          <div className="flex flex-wrap gap-2.5">
-            <span className="flex items-center gap-1.5 text-xs font-medium text-white/90 bg-white/15 px-3 py-1.5 rounded-full">
-              <Calendar size={11} className="shrink-0" />
+          {/* ── Banner image ── */}
+          {selectedEvent.bannerUrl && (
+            <div className="w-full overflow-x-auto mb-4">
+              <div className="min-w-[640px] rounded-2xl overflow-hidden border border-gray-700/40 shadow-lg shadow-black/30">
+                <img
+                  src={selectedEvent.bannerUrl}
+                  alt={`${selectedEvent.title} banner`}
+                  className="w-full h-auto block"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Title + meta */}
+          <h1 className="text-xl font-black text-white tracking-tight leading-tight mb-2">{selectedEvent.title}</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="flex items-center gap-1.5 text-xs text-gray-400">
+              <Calendar size={11} className="text-amber-400" />
               {formatDate(selectedEvent.date)}{selectedEvent.time && ` · ${selectedEvent.time}`}
             </span>
-            <span className="flex items-center gap-1.5 text-xs font-medium text-white/90 bg-white/15 px-3 py-1.5 rounded-full">
-              <MapPin size={11} className="shrink-0" />
+            <span className="text-gray-700">·</span>
+            <span className="flex items-center gap-1.5 text-xs text-gray-400">
+              <MapPin size={11} className="text-violet-400" />
               {selectedEvent.venue}
             </span>
             {selectedEvent.type !== "internal" && selectedEvent.price > 0 && (
-              <span className="flex items-center gap-1.5 text-xs font-medium text-white/90 bg-white/15 px-3 py-1.5 rounded-full">
-                <Wallet size={11} className="shrink-0" />
-                {formatPHP(selectedEvent.price)} / person
-              </span>
+              <>
+                <span className="text-gray-700">·</span>
+                <span className="flex items-center gap-1.5 text-xs text-gray-400">
+                  <Wallet size={11} className="text-emerald-400" />
+                  {formatPHP(selectedEvent.price)}/person
+                </span>
+              </>
             )}
-            {selectedEvent.type === "internal" && (
-              <span className="flex items-center gap-1.5 text-xs font-medium text-white/90 bg-white/15 px-3 py-1.5 rounded-full">
-                <Wallet size={11} className="shrink-0" />
-                {(selectedEvent.contributionTiers ?? [
-                  { name: "Working", amount: selectedEvent.workingAmount ?? 0 },
-                  { name: "Student", amount: selectedEvent.studentAmount ?? 0 },
-                ]).map((t, i, arr) => (
-                  <span key={i}>{t.name}: {formatPHP(t.amount)}{i < arr.length - 1 ? " ·" : ""}</span>
-                ))}
-              </span>
-            )}
-            <span className="flex items-center gap-1.5 text-xs font-medium text-white/90 bg-white/15 px-3 py-1.5 rounded-full">
-              <Users size={11} className="shrink-0" />
-              {registrants.length} registered{selectedEvent.capacity ? ` / ${selectedEvent.capacity} slots` : ""}
-            </span>
+          </div>
+
+          {/* Stats row */}
+          <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-800">
+            {[
+              { label: "Total",    value: active.length,   cls: "text-white",        dot: "bg-gray-500" },
+              { label: "Pending",  value: pending,         cls: "text-amber-400",   dot: "bg-amber-400" },
+              { label: "Paid",     value: paid,            cls: "text-emerald-400", dot: "bg-emerald-400" },
+              { label: "Rejected", value: rejected,        cls: "text-red-400",     dot: "bg-red-400" },
+            ].map(s => (
+              <div key={s.label} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-800/80 border border-gray-700/50">
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.dot}`} />
+                <span className={`text-sm font-black ${s.cls}`}>{s.value}</span>
+                <span className="text-[10px] text-gray-500 font-medium">{s.label}</span>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* ── Premium Tab Switcher ── */}
-        <div className="flex gap-1 mb-6 bg-gray-800/80 p-1 rounded-2xl border border-gray-700/50">
+        {/* ── Tabs ── */}
+        <div className="flex gap-0 mb-5 border-b border-gray-800">
           {selectedEvent.type === "internal" ? (
             (["contributions", "budget", "share"] as const).map(tab => (
-              <button
-                key={tab}
-                onClick={() => setDetailTab(tab)}
-                className={`flex-1 py-2.5 px-2 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+              <button key={tab} onClick={() => setDetailTab(tab)}
+                className={`relative px-4 py-2.5 text-xs font-bold transition-all ${
                   detailTab === tab
-                    ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md shadow-amber-500/25"
-                    : "text-gray-400 hover:text-gray-200 hover:bg-white/5"
-                }`}
-              >
-                {tab === "contributions" ? "👥 Members" : tab === "budget" ? "💰 Budget" : "📤 Share"}
+                    ? "text-amber-400"
+                    : "text-gray-500 hover:text-gray-300"
+                }`}>
+                {tab === "contributions" ? "Members" : tab === "budget" ? "Budget" : "Share"}
                 {tab === "contributions" && (
-                  <span className={`ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                    detailTab === tab ? "bg-white/25" : "bg-gray-700"
+                  <span className={`ml-1.5 text-[9px] font-black px-1.5 py-0.5 rounded-full ${
+                    detailTab === tab ? "bg-amber-500/25 text-amber-300" : "bg-gray-700 text-gray-500"
                   }`}>{contributions.length}</span>
                 )}
+                {detailTab === tab && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-400 rounded-full" />}
               </button>
             ))
           ) : (
             (["registrants", "finance", "share"] as const).map(tab => (
-              <button
-                key={tab}
-                onClick={() => setDetailTab(tab)}
-                className={`flex-1 py-2.5 px-2 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
-                  detailTab === tab
-                    ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md shadow-amber-500/25"
-                    : "text-gray-400 hover:text-gray-200 hover:bg-white/5"
-                }`}
-              >
-                {tab === "share" ? "📤 Share" : tab === "registrants" ? "👥 Registrants" : "💰 Finance"}
+              <button key={tab} onClick={() => setDetailTab(tab)}
+                className={`relative px-4 py-2.5 text-xs font-bold transition-all ${
+                  detailTab === tab ? "text-amber-400" : "text-gray-500 hover:text-gray-300"
+                }`}>
+                {tab === "registrants" ? "Registrants" : tab === "finance" ? "Finance" : "Share"}
                 {tab === "registrants" && (
-                  <span className={`ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                    detailTab === tab ? "bg-white/25" : "bg-gray-700"
-                  }`}>{registrants.length}</span>
+                  <span className={`ml-1.5 text-[9px] font-black px-1.5 py-0.5 rounded-full ${
+                    detailTab === tab ? "bg-amber-500/25 text-amber-300" : "bg-gray-700 text-gray-500"
+                  }`}>{active.length}</span>
                 )}
                 {tab === "finance" && pending > 0 && (
-                  <span className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-rose-900/50 text-rose-300">{pending}</span>
+                  <span className="ml-1.5 text-[9px] font-black px-1.5 py-0.5 rounded-full bg-red-900/60 text-red-300">{pending}</span>
                 )}
+                {detailTab === tab && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-400 rounded-full" />}
               </button>
             ))
           )}
@@ -664,238 +721,194 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
         {/* ─── REGISTRANTS tab ─── */}
         {detailTab === "registrants" && (
           <div>
-            <div className="relative mb-3">
-              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" />
-              <input
-                value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Search name, phone, email…"
-                className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-700/60 bg-gray-800/60 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-indigo-500/60 transition-colors"
-              />
-            </div>
-
-            {/* Status filter pills */}
-            <div className="flex gap-2 mb-4 flex-wrap">
-              {([
-                { key: "all",            label: "All",      count: active.length },
-                { key: "pending_review", label: "Pending",  count: pending },
-                { key: "paid",           label: "Paid",     count: paid },
-                { key: "rejected",       label: "Rejected", count: rejected },
-                { key: "archived",       label: "Archived", count: archived.length },
-              ] as const).map(({ key, label, count }) => (
-                <button
-                  key={key}
-                  onClick={() => setStatusFilter(key)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
-                    statusFilter === key
-                      ? key === "all"            ? "bg-white/10 border-white/20 text-white"
-                      : key === "pending_review" ? "bg-amber-500/20 border-amber-500/40 text-amber-300"
-                      : key === "paid"           ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300"
-                      : key === "archived"       ? "bg-gray-500/20 border-gray-500/40 text-gray-300"
-                      :                           "bg-red-500/20 border-red-500/40 text-red-300"
-                      : "bg-transparent border-gray-700/50 text-gray-500 hover:border-gray-600 hover:text-gray-400"
-                  }`}
-                >
-                  {label}
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                    statusFilter === key
-                      ? key === "pending_review" ? "bg-amber-500/30 text-amber-200"
-                      : key === "paid"           ? "bg-emerald-500/30 text-emerald-200"
-                      : key === "rejected"       ? "bg-red-500/30 text-red-200"
-                      : key === "archived"       ? "bg-gray-500/30 text-gray-300"
-                      :                           "bg-white/10 text-white/70"
-                      : "bg-gray-700/60 text-gray-500"
-                  }`}>{count}</span>
-                </button>
-              ))}
+            {/* Search + filter row */}
+            <div className="flex items-center gap-2 mb-4 flex-wrap">
+              <div className="relative flex-1 min-w-[180px]">
+                <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" />
+                <input
+                  value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Search name, phone, email…"
+                  className="w-full pl-8 pr-3 py-2 rounded-xl border border-gray-700/60 bg-gray-800/50 text-xs text-gray-200 placeholder-gray-600 outline-none focus:border-amber-500/40 transition-colors"
+                />
+              </div>
+              <div className="flex gap-1">
+                {([
+                  { key: "all",            label: "All",      count: active.length },
+                  { key: "pending_review", label: "Pending",  count: pending },
+                  { key: "paid",           label: "Paid",     count: paid },
+                  { key: "rejected",       label: "Rejected", count: rejected },
+                  { key: "archived",       label: "Archived", count: archived.length },
+                ] as const).map(({ key, label, count }) => (
+                  <button key={key} onClick={() => setStatusFilter(key)}
+                    className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold border transition-all ${
+                      statusFilter === key
+                        ? key === "pending_review" ? "bg-amber-500/20 border-amber-500/40 text-amber-300"
+                        : key === "paid"           ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300"
+                        : key === "rejected"       ? "bg-red-500/20 border-red-500/40 text-red-300"
+                        : key === "archived"       ? "bg-gray-600/30 border-gray-500/40 text-gray-300"
+                        :                           "bg-white/10 border-white/20 text-white"
+                        : "bg-transparent border-gray-700/40 text-gray-600 hover:text-gray-400 hover:border-gray-600"
+                    }`}>
+                    {label} <span className="font-black opacity-60">{count}</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
             {registrantsLoading ? (
               <div className="flex items-center justify-center py-16">
-                <Loader2 size={24} className="animate-spin text-amber-400" />
+                <Loader2 size={22} className="animate-spin text-amber-400" />
               </div>
             ) : filtered.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
-                <Users size={32} className="text-gray-700 mb-3" />
-                <p className="text-sm text-gray-500">
-                  {statusFilter === "archived" ? "No archived registrants" : searchQuery ? "No matching registrants" : "No registrants yet"}
+                <div className="w-12 h-12 rounded-2xl bg-gray-800 border border-gray-700 flex items-center justify-center mb-3">
+                  <Users size={20} className="text-gray-600" />
+                </div>
+                <p className="text-sm font-semibold text-gray-400 mb-1">
+                  {statusFilter === "archived" ? "No archived entries" : searchQuery ? "No matches" : "No registrants yet"}
                 </p>
-                <p className="text-xs text-gray-600 mt-1">
-                  {statusFilter === "archived" ? "Check a registrant's checkbox to archive them" : "Share the link to start collecting sign-ups"}
+                <p className="text-xs text-gray-600">
+                  {statusFilter !== "archived" && !searchQuery && "Share the link to collect sign-ups"}
                 </p>
               </div>
             ) : (
-              <div className="space-y-2">
-                {filtered.map(r => (
-                  <div key={r.id}
-                    className={`border rounded-2xl transition-all duration-200 ${
-                      r.archived
-                        ? "bg-gray-800/20 border-gray-700/20 opacity-60"
-                        : r.paymentStatus === "rejected"
-                          ? "bg-red-950/20 border-red-800/30"
-                          : r.paymentStatus === "paid"
-                            ? "bg-emerald-900/10 border-emerald-700/20"
-                            : "bg-gray-800/60 border-gray-700/40 hover:border-amber-500/30 hover:shadow-sm"
-                    }`}
-                  >
-                    {/* Main row */}
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-4">
-                      {/* Archive checkbox */}
-                      <label className="shrink-0 cursor-pointer group" title={r.archived ? "Archived" : "Archive this registrant"}>
-                        <input
-                          type="checkbox"
-                          checked={!!r.archived}
-                          onChange={() => r.archived ? restoreRegistrant(r.id) : archiveRegistrant(r.id)}
-                          className="hidden"
-                        />
-                        <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${
-                          r.archived
-                            ? "bg-gray-500 border-gray-500"
-                            : "border-gray-600 group-hover:border-gray-400"
+              <div className="rounded-2xl border border-gray-700/50 overflow-hidden">
+                {/* Table header */}
+                <div className="hidden sm:grid grid-cols-[auto_1fr_auto_auto] gap-3 items-center px-4 py-2.5 bg-gray-800/80 border-b border-gray-700/50">
+                  <div className="w-4" />
+                  <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Registrant</p>
+                  <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Status</p>
+                  <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest text-right">Actions</p>
+                </div>
+
+                <div className="divide-y divide-gray-800/80">
+                  {filtered.map((r, idx) => (
+                    <div key={r.id} className={`transition-colors ${
+                      r.archived ? "bg-gray-800/20 opacity-50"
+                      : r.paymentStatus === "paid" ? "bg-emerald-950/20 hover:bg-emerald-950/30"
+                      : r.paymentStatus === "rejected" ? "bg-red-950/15 hover:bg-red-950/25"
+                      : "bg-gray-900/60 hover:bg-gray-800/60"
+                    }`}>
+                      {/* Main compact row */}
+                      <div className="flex items-center gap-3 px-4 py-3">
+                        {/* Archive checkbox */}
+                        <label className="shrink-0 cursor-pointer" title={r.archived ? "Restore" : "Archive"}>
+                          <input type="checkbox" checked={!!r.archived}
+                            onChange={() => r.archived ? restoreRegistrant(r.id) : archiveRegistrant(r.id)}
+                            className="hidden" />
+                          <div className={`w-3.5 h-3.5 rounded border-[1.5px] flex items-center justify-center transition-all ${
+                            r.archived ? "bg-gray-500 border-gray-500" : "border-gray-600 hover:border-gray-400"
+                          }`}>
+                            {r.archived && <Check size={9} className="text-white" />}
+                          </div>
+                        </label>
+
+                        {/* Avatar */}
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-black text-xs shrink-0 ${
+                          r.archived ? "bg-gray-700"
+                          : r.paymentStatus === "paid" ? "bg-gradient-to-br from-emerald-500 to-teal-600"
+                          : r.paymentStatus === "rejected" ? "bg-gray-700"
+                          : "bg-gradient-to-br from-amber-500 to-orange-600"
                         }`}>
-                          {r.archived && <Check size={10} className="text-white" />}
+                          {r.fullName[0]?.toUpperCase()}
                         </div>
-                      </label>
-                      {/* Avatar */}
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-extrabold text-sm shrink-0 shadow-sm ${
-                        r.archived
-                          ? "bg-gray-700"
-                          : r.paymentStatus === "rejected"
-                            ? "bg-gray-700"
-                            : r.paymentStatus === "paid"
-                              ? "bg-gradient-to-br from-emerald-500 to-teal-600"
-                              : "bg-gradient-to-br from-amber-500 to-orange-600"
-                      }`}>
-                        {r.fullName[0]?.toUpperCase()}
-                      </div>
-                      {/* Info */}
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-sm font-semibold leading-snug ${
-                          r.paymentStatus === "rejected" ? "text-gray-400 line-through" : "text-white"
-                        }`}>{r.fullName}</p>
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
-                          <span className="text-xs text-gray-400">{r.phone}</span>
-                          {r.email  && <span className="text-xs text-gray-500">· {r.email}</span>}
-                          {r.church && <span className="text-xs text-gray-500">· {r.church}</span>}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                          <Badge s={r.paymentStatus} />
-                          <span className="text-[10px] text-gray-600">via {METHOD_LABELS[r.paymentMethod] ?? r.paymentMethod}</span>
-                          {r.referenceNumber && (
-                            <span className="text-[10px] text-gray-500">Ref: {r.referenceNumber}</span>
+
+                        {/* Name + details */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className={`text-sm font-semibold leading-none ${
+                              r.paymentStatus === "rejected" ? "text-gray-500 line-through" : "text-white"
+                            }`}>{r.fullName}</p>
+                            {/* Status badge */}
+                            <span className={`inline-flex items-center h-4 px-1.5 rounded text-[9px] font-black uppercase tracking-wide border ${
+                              r.paymentStatus === "paid"           ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/25"
+                              : r.paymentStatus === "rejected"     ? "bg-red-500/15 text-red-400 border-red-500/25"
+                              :                                       "bg-amber-500/15 text-amber-400 border-amber-500/25"
+                            }`}>
+                              {r.paymentStatus === "paid" ? "Paid" : r.paymentStatus === "rejected" ? "Rejected" : "Pending"}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                            <span className="text-[11px] text-gray-500">{r.phone}</span>
+                            {r.email && <span className="text-[11px] text-gray-600">· {r.email}</span>}
+                            {r.church && <span className="text-[11px] text-gray-600">· {r.church}</span>}
+                            <span className="text-[11px] text-gray-600">via {METHOD_LABELS[r.paymentMethod] ?? r.paymentMethod}</span>
+                            {r.referenceNumber && <span className="text-[11px] text-gray-600">Ref: {r.referenceNumber}</span>}
+                            {r.proofUrl && (
+                              <a href={r.proofUrl} target="_blank" rel="noreferrer"
+                                className="text-[10px] font-bold text-violet-400 hover:text-violet-300 flex items-center gap-0.5 transition-colors">
+                                <ExternalLink size={9} /> Proof
+                              </a>
+                            )}
+                          </div>
+                          {r.paymentStatus === "rejected" && r.rejectionNote && (
+                            <p className="text-[10px] text-red-400/70 mt-0.5 italic">↳ {r.rejectionNote}</p>
                           )}
-                          {r.proofUrl && (
-                            <a
-                              href={r.proofUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="flex items-center gap-1 text-[10px] font-semibold text-violet-400 hover:text-violet-300 border border-violet-500/30 bg-violet-500/10 px-1.5 py-0.5 rounded-md transition-colors"
-                            >
-                              <ExternalLink size={9} /> View Proof
-                            </a>
+                          {r.paymentStatus === "paid" && r.confirmedBy && (
+                            <p className="text-[10px] text-emerald-500/70 mt-0.5">✓ Confirmed by {r.confirmedBy}</p>
                           )}
                         </div>
-                        {/* Rejection note */}
-                        {r.paymentStatus === "rejected" && r.rejectionNote && (
-                          <div className="flex items-start gap-1.5 mt-2 px-2 py-1.5 bg-red-500/10 border border-red-500/20 rounded-lg">
-                            <XCircle size={11} className="text-red-400 shrink-0 mt-0.5" />
-                            <p className="text-[11px] text-red-300/80 leading-relaxed">{r.rejectionNote}</p>
+
+                        {/* Action buttons */}
+                        {!r.archived && rejectingId !== r.id && (
+                          <div className="flex items-center gap-1 shrink-0 ml-auto">
+                            {r.paymentStatus === "pending_review" && (
+                              <>
+                                <button
+                                  onClick={() => { const url = `${origin}/r/${selectedEvent.id}?registrant=${r.id}`; navigator.clipboard.writeText(url); setCopiedLinkId(r.id); setTimeout(() => setCopiedLinkId(null), 2000); }}
+                                  className="h-7 px-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-400 text-[10px] font-bold hover:border-indigo-500/50 hover:text-indigo-400 transition-all flex items-center gap-1"
+                                >
+                                  {copiedLinkId === r.id ? <><Check size={9} /> OK</> : <><Copy size={9} /> Link</>}
+                                </button>
+                                <button onClick={() => confirmPayment(r.id)} disabled={actioningId === r.id}
+                                  className="h-7 px-2.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[10px] font-black hover:bg-emerald-500/25 transition-all disabled:opacity-50 flex items-center gap-1">
+                                  {actioningId === r.id ? <Loader2 size={10} className="animate-spin" /> : <CheckCircle2 size={10} />} Confirm
+                                </button>
+                                <button onClick={() => { setRejectingId(r.id); setRejectNote(""); }} disabled={actioningId === r.id}
+                                  className="h-7 px-2.5 rounded-lg bg-red-500/10 border border-red-500/25 text-red-400 text-[10px] font-black hover:bg-red-500/20 transition-all disabled:opacity-50 flex items-center gap-1">
+                                  <XCircle size={10} /> Reject
+                                </button>
+                              </>
+                            )}
+                            {r.paymentStatus === "rejected" && (
+                              <>
+                                <button
+                                  onClick={() => { const url = `${origin}/r/${selectedEvent.id}?registrant=${r.id}`; navigator.clipboard.writeText(url); setCopiedLinkId(r.id); setTimeout(() => setCopiedLinkId(null), 2000); }}
+                                  className="h-7 px-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-400 text-[10px] font-bold hover:border-indigo-500/50 hover:text-indigo-400 transition-all flex items-center gap-1"
+                                >
+                                  {copiedLinkId === r.id ? <><Check size={9} /> OK</> : <><Copy size={9} /> Link</>}
+                                </button>
+                                <button onClick={() => reopenPayment(r.id)} disabled={actioningId === r.id}
+                                  className="h-7 px-2.5 rounded-lg bg-gray-700/60 border border-gray-600 text-gray-300 text-[10px] font-bold hover:bg-amber-500/20 hover:text-amber-300 hover:border-amber-500/30 transition-all disabled:opacity-50 flex items-center gap-1">
+                                  {actioningId === r.id ? <Loader2 size={10} className="animate-spin" /> : null} ↩ Reopen
+                                </button>
+                              </>
+                            )}
                           </div>
                         )}
                       </div>
-                      {/* Action buttons — hidden on archived cards */}
-                      {!r.archived && r.paymentStatus === "pending_review" && rejectingId !== r.id && (
-                        <div className="flex gap-1.5 shrink-0 flex-wrap justify-end">
-                          <button
-                            onClick={() => {
-                              const url = `${origin}/r/${selectedEvent.id}?registrant=${r.id}`;
-                              navigator.clipboard.writeText(url);
-                              setCopiedLinkId(r.id);
-                              setTimeout(() => setCopiedLinkId(null), 2000);
-                            }}
-                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-gray-700/60 text-gray-300 border border-gray-600/40 text-[11px] font-semibold hover:bg-indigo-600/20 hover:text-indigo-300 hover:border-indigo-500/30 transition-all"
-                          >
-                            {copiedLinkId === r.id ? <><Check size={10} /> Copied</> : <><Copy size={10} /> Link</>}
-                          </button>
-                          <button
-                            onClick={() => confirmPayment(r.id)} disabled={actioningId === r.id}
-                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[11px] font-bold hover:bg-emerald-500/25 transition-all disabled:opacity-50"
-                          >
-                            {actioningId === r.id
-                              ? <Loader2 size={10} className="animate-spin" />
-                              : <CheckCircle2 size={12} />}
-                            Confirm
-                          </button>
-                          <button
-                            onClick={() => { setRejectingId(r.id); setRejectNote(""); }}
-                            disabled={actioningId === r.id}
-                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 text-[11px] font-bold hover:bg-red-500/20 transition-all disabled:opacity-50"
-                          >
-                            <XCircle size={12} /> Reject
-                          </button>
-                        </div>
-                      )}
-                      {!r.archived && r.paymentStatus === "paid" && (
-                        <div className="flex items-center gap-1.5 text-emerald-400 text-xs shrink-0">
-                          <CheckCircle2 size={14} />
-                          <span className="font-medium">Confirmed{r.confirmedBy ? ` by ${r.confirmedBy}` : ""}</span>
-                        </div>
-                      )}
-                      {/* Reopen + Copy Link for rejected */}
-                      {!r.archived && r.paymentStatus === "rejected" && (
-                        <div className="flex gap-2 shrink-0">
-                          <button
-                            onClick={() => {
-                              const url = `${origin}/r/${selectedEvent.id}?registrant=${r.id}`;
-                              navigator.clipboard.writeText(url);
-                              setCopiedLinkId(r.id);
-                              setTimeout(() => setCopiedLinkId(null), 2000);
-                            }}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 text-xs font-semibold hover:bg-indigo-600/30 transition-colors"
-                          >
-                            {copiedLinkId === r.id ? <><Check size={11} /> Copied!</> : <><Copy size={11} /> Copy Link</>}
-                          </button>
-                          <button
-                            onClick={() => reopenPayment(r.id)} disabled={actioningId === r.id}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-700/60 text-gray-300 border border-gray-600/40 text-xs font-semibold hover:bg-amber-500/20 hover:text-amber-300 hover:border-amber-500/30 transition-all disabled:opacity-50"
-                          >
-                            {actioningId === r.id
-                              ? <Loader2 size={11} className="animate-spin" />
-                              : <span className="text-base leading-none">↩</span>}
-                            Reopen
-                          </button>
+
+                      {/* Inline reject reason input */}
+                      {rejectingId === r.id && (
+                        <div className="px-4 pb-3 pt-0 border-t border-red-900/30">
+                          <p className="text-[10px] text-red-400/60 font-semibold uppercase tracking-wider mb-1.5 mt-2">Rejection reason <span className="normal-case font-normal opacity-60">(optional)</span></p>
+                          <div className="flex gap-2">
+                            <input autoFocus value={rejectNote} onChange={e => setRejectNote(e.target.value)}
+                              onKeyDown={e => e.key === "Enter" && rejectPayment(r.id, rejectNote)}
+                              placeholder="e.g. Payment name doesn't match…"
+                              className="flex-1 px-3 py-1.5 rounded-lg border border-red-800/40 bg-red-950/30 text-xs text-gray-200 placeholder-gray-600 outline-none focus:border-red-500/50" />
+                            <button onClick={() => { setRejectingId(null); setRejectNote(""); }}
+                              className="px-3 py-1.5 rounded-lg border border-gray-700 text-xs text-gray-400 hover:bg-gray-800 transition-colors">Cancel</button>
+                            <button onClick={() => rejectPayment(r.id, rejectNote)} disabled={actioningId === r.id}
+                              className="px-3 py-1.5 rounded-lg bg-red-600/30 hover:bg-red-600/50 text-red-300 border border-red-500/30 text-xs font-bold transition-colors disabled:opacity-50 flex items-center gap-1.5">
+                              {actioningId === r.id ? <Loader2 size={10} className="animate-spin" /> : <XCircle size={12} />} Reject
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
-
-                    {/* Inline reject reason input — expands when Reject clicked */}
-                    {rejectingId === r.id && (
-                      <div className="px-4 pb-4 border-t border-red-800/20 pt-3 space-y-2">
-                        <p className="text-[11px] text-red-300/70 font-semibold uppercase tracking-wider">Reason for Rejection <span className="normal-case font-normal text-gray-600">(optional)</span></p>
-                        <input
-                          autoFocus
-                          value={rejectNote}
-                          onChange={e => setRejectNote(e.target.value)}
-                          onKeyDown={e => e.key === "Enter" && rejectPayment(r.id, rejectNote)}
-                          placeholder={"e.g. \"Payment name doesn't match\", \"Duplicate entry\"…"}
-                          className="w-full px-3 py-2 rounded-lg border border-red-800/40 bg-red-950/30 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-red-500/50 transition-colors"
-                        />
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => { setRejectingId(null); setRejectNote(""); }}
-                            className="flex-1 py-2 rounded-lg border border-gray-700/60 text-xs text-gray-400 hover:bg-gray-800 transition-colors"
-                          >Cancel</button>
-                          <button
-                            onClick={() => rejectPayment(r.id, rejectNote)} disabled={actioningId === r.id}
-                            className="flex-1 py-2 rounded-lg bg-red-600/30 hover:bg-red-600/50 text-red-300 border border-red-500/30 text-xs font-bold transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
-                          >
-                            {actioningId === r.id ? <Loader2 size={11} className="animate-spin" /> : <XCircle size={13} />}
-                            Confirm Reject
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -1379,6 +1392,61 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
                 <input value={fVenue} onChange={e => setFVenue(e.target.value)}
                   className="w-full px-3 py-2.5 rounded-xl border border-gray-700/60 bg-gray-800/60 text-sm text-white outline-none focus:border-indigo-500/60 transition-colors" />
               </div>
+
+              {/* ── Banner Image ── */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <Image size={11} /> Event Banner
+                    <span className="normal-case font-normal text-gray-600 ml-1">(optional)</span>
+                  </label>
+                  <span className="text-[10px] text-gray-600">1200 × 400 px · Max 5 MB</span>
+                </div>
+
+                {fBannerPreview ? (
+                  <div className="space-y-2">
+                    {/* Preview */}
+                    <div className="relative rounded-xl overflow-hidden border border-gray-700/60">
+                      <img
+                        src={fBannerPreview}
+                        alt="Event banner"
+                        className="w-full h-auto block"
+                      />
+                    </div>
+                    {/* Action row — clearly visible below the image */}
+                    <div className="flex items-center gap-2">
+                      <label className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 text-indigo-300 text-xs font-semibold cursor-pointer transition-all">
+                        <input type="file" accept="image/*" onChange={pickBanner} className="hidden" />
+                        <Image size={12} />
+                        {fBannerFile ? "Replace Image" : "Change Image"}
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => { setFBannerFile(null); setFBannerPreview(""); setFBannerError(""); }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 text-red-400 text-xs font-semibold transition-all"
+                      >
+                        <X size={12} /> Remove
+                      </button>
+                    </div>
+                    {fBannerFile && (
+                      <p className="text-[10px] text-gray-500 truncate">New file: {fBannerFile.name}</p>
+                    )}
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center justify-center w-full h-24 rounded-xl border-2 border-dashed border-gray-700/60 hover:border-indigo-500/50 bg-gray-800/30 hover:bg-gray-800/60 cursor-pointer transition-all group">
+                    <input type="file" accept="image/*" onChange={pickBanner} className="hidden" />
+                    <Image size={18} className="text-gray-600 group-hover:text-indigo-400 mb-1 transition-colors" />
+                    <p className="text-xs text-gray-500 group-hover:text-gray-300 transition-colors">Click to upload banner</p>
+                    <p className="text-[10px] text-gray-600 mt-0.5">PNG, JPG, WebP · Max 5 MB</p>
+                  </label>
+                )}
+                {fBannerError && (
+                  <p className="text-[11px] text-red-400 mt-1.5 flex items-center gap-1">
+                    <XCircle size={11} /> {fBannerError}
+                  </p>
+                )}
+              </div>
+
               {selectedEvent.type === "internal" ? (
                 <>
                   {/* Dynamic contribution tiers */}
@@ -1589,36 +1657,51 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
               <button
                 key={ev.id}
                 onClick={() => { setSelectedEvent(ev); setDetailTab(ev.type === "internal" ? "contributions" : "registrants"); setSearchQuery(""); }}
-                className="text-left bg-gray-800/60 border border-gray-700/50 hover:border-amber-500/40 rounded-2xl p-5 transition-all duration-200 hover:shadow-xl hover:shadow-amber-500/10 hover:-translate-y-0.5 group"
+                className="text-left bg-gray-800/60 border border-gray-700/50 hover:border-amber-500/40 rounded-2xl overflow-hidden transition-all duration-200 hover:shadow-xl hover:shadow-amber-500/10 hover:-translate-y-0.5 group"
               >
-                {/* Card top accent */}
-                <div className={`h-1 -mx-5 -mt-5 mb-4 rounded-t-2xl ${
-                  ev.type === "internal"
-                    ? "bg-gradient-to-r from-violet-500 to-purple-600"
-                    : isOpen
-                      ? "bg-gradient-to-r from-amber-500 to-orange-500"
-                      : "bg-gray-700"
-                }`} />
-
-                <div className="flex items-start justify-between gap-2 mb-3">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                      isOpen
-                        ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
-                        : "bg-gray-500/15 text-gray-400 border-gray-600/30"
-                    }`}>
-                      {isOpen ? "● Open" : "● Closed"}
-                    </span>
-                    {ev.type === "internal" && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-500/15 text-violet-400 border border-violet-500/30">Team</span>
-                    )}
+                {/* Banner image OR thin accent bar */}
+                {ev.bannerUrl ? (
+                  <div className="relative w-full h-32">
+                    <img src={ev.bannerUrl} alt="" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-gray-900/70 via-transparent to-black/30" />
+                    <div className="absolute top-2.5 left-3 right-3 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border backdrop-blur-sm ${
+                          isOpen ? "bg-emerald-900/60 text-emerald-300 border-emerald-500/40" : "bg-gray-900/60 text-gray-400 border-gray-600/40"
+                        }`}>{isOpen ? "● Open" : "● Closed"}</span>
+                        {ev.type === "internal" && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-900/60 text-violet-300 border border-violet-500/40 backdrop-blur-sm">Team</span>
+                        )}
+                      </div>
+                      <ArrowRight size={14} className="text-white/60 group-hover:text-amber-400 transition-colors shrink-0" />
+                    </div>
                   </div>
-                  <ArrowRight size={14} className="text-gray-600 group-hover:text-amber-400 transition-colors shrink-0 mt-0.5" />
-                </div>
+                ) : (
+                  <div className={`h-1 ${
+                    ev.type === "internal" ? "bg-gradient-to-r from-violet-500 to-purple-600"
+                    : isOpen ? "bg-gradient-to-r from-amber-500 to-orange-500" : "bg-gray-700"
+                  }`} />
+                )}
 
-                <h3 className="text-base font-bold text-white leading-snug mb-3 truncate">{ev.title}</h3>
+                <div className="p-5">
+                  {/* Status row — only when no banner */}
+                  {!ev.bannerUrl && (
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                          isOpen ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" : "bg-gray-500/15 text-gray-400 border-gray-600/30"
+                        }`}>{isOpen ? "● Open" : "● Closed"}</span>
+                        {ev.type === "internal" && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-500/15 text-violet-400 border border-violet-500/30">Team</span>
+                        )}
+                      </div>
+                      <ArrowRight size={14} className="text-gray-600 group-hover:text-amber-400 transition-colors shrink-0 mt-0.5" />
+                    </div>
+                  )}
 
-                <div className="space-y-1.5 mb-4">
+                  <h3 className="text-base font-bold text-white leading-snug mb-3 truncate">{ev.title}</h3>
+
+                  <div className="space-y-1.5 mb-4">
                   <div className="flex items-center gap-1.5 text-xs text-gray-400">
                     <Calendar size={11} className="text-amber-400/70 shrink-0" />
                     {d.toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
@@ -1647,11 +1730,12 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
                   )}
                 </div>
 
-                <div className="flex items-center pt-3 border-t border-gray-700/40 text-xs text-gray-500">
-                  <div className="flex items-center gap-1">
-                    <QrCode size={11} /> Share & Register
+                  <div className="flex items-center pt-3 border-t border-gray-700/40 text-xs text-gray-500">
+                    <div className="flex items-center gap-1">
+                      <QrCode size={11} /> Share &amp; Register
+                    </div>
+                    <ArrowRight size={12} className="ml-auto text-gray-600 group-hover:text-amber-400 transition-colors" />
                   </div>
-                  <ArrowRight size={12} className="ml-auto text-gray-600 group-hover:text-amber-400 transition-colors" />
                 </div>
               </button>
             );
@@ -1758,6 +1842,52 @@ export default function EventsView({ userId, userName, isAdmin, members, onToast
                       className="w-full px-3 py-2.5 rounded-xl border border-gray-700/60 bg-gray-800/60 text-sm text-white placeholder-gray-600 outline-none focus:border-amber-500/60 transition-colors"
                     />
                   </div>
+
+                  {/* ── Event Banner ── */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                        <Image size={11} /> Event Banner
+                        <span className="normal-case font-normal text-gray-600 ml-1">(optional)</span>
+                      </label>
+                      <span className="text-[10px] text-gray-600">Recommended: 1200 × 400 px · Max 5 MB</span>
+                    </div>
+
+                    {fBannerPreview ? (
+                      <div className="relative">
+                        <img
+                          src={fBannerPreview}
+                          alt="Event banner preview"
+                          className="w-full h-28 object-cover rounded-xl border border-gray-700/60"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent rounded-xl" />
+                        <button
+                          type="button"
+                          onClick={() => { setFBannerFile(null); setFBannerPreview(""); setFBannerError(""); }}
+                          className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/60 hover:bg-red-600 text-white flex items-center justify-center transition-colors"
+                          title="Remove banner"
+                        >
+                          <X size={12} />
+                        </button>
+                        <span className="absolute bottom-2 left-2 text-[10px] text-white/70 font-medium">
+                          {fBannerFile ? fBannerFile.name : "Current banner"}
+                        </span>
+                      </div>
+                    ) : (
+                      <label className="flex flex-col items-center justify-center w-full h-28 rounded-xl border-2 border-dashed border-gray-700/60 hover:border-amber-500/50 bg-gray-800/30 hover:bg-gray-800/60 cursor-pointer transition-all group">
+                        <input type="file" accept="image/*" onChange={pickBanner} className="hidden" />
+                        <Image size={20} className="text-gray-600 group-hover:text-amber-400 mb-1.5 transition-colors" />
+                        <p className="text-xs text-gray-500 group-hover:text-gray-300 transition-colors font-medium">Click to upload banner</p>
+                        <p className="text-[10px] text-gray-600 mt-0.5">PNG, JPG, WebP · Max 5 MB</p>
+                      </label>
+                    )}
+                    {fBannerError && (
+                      <p className="text-[11px] text-red-400 mt-1.5 flex items-center gap-1">
+                        <XCircle size={11} /> {fBannerError}
+                      </p>
+                    )}
+                  </div>
+
                   {/* Price + Capacity — external events only */}
                   {fType !== "internal" && (
                   <div className="grid grid-cols-2 gap-3">
