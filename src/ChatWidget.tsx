@@ -344,6 +344,16 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
   // ── Mobile long-press context menu ───────────────────────────────────────────
   const [longPressTarget, setLongPressTarget] = useState<{ msg: ChatMessage; isTeam: boolean } | null>(null);
   const [fabDragging, setFabDragging] = useState(false);
+  // ── FAB dismiss (hide for this session) ───────────────────────────────────────
+  const [fabDismissed, setFabDismissed] = useState(() => {
+    try { return sessionStorage.getItem("wf_fab_dismissed") === "1"; } catch { return false; }
+  });
+  const dismissFab = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setFabDismissed(true);
+    try { sessionStorage.setItem("wf_fab_dismissed", "1"); } catch {}
+  };
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressMoved = useRef(false);
 
@@ -1660,6 +1670,10 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
           0%   { transform: scale(1);   opacity: 0.7; }
           70%  { transform: scale(2.4); opacity: 0;   }
           100% { transform: scale(2.4); opacity: 0;   }
+        }
+        @keyframes fabDismissReveal {
+          from { opacity: 0; transform: scale(0.5); }
+          to   { opacity: 1; transform: scale(1); }
         }
         .fab-spin     { animation: fab-spin 5s linear infinite; }
         .fab-breathe  { animation: fab-breathe 3s ease-in-out infinite; }
@@ -3740,7 +3754,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
 
       {/* ── Floating Action Button ───────────────────────────────────────── */}
       {/* Mobile-only draggable FAB (circular, shown when chat closed) */}
-      {!open && (
+      {!open && !fabDismissed && (
         <button
           ref={fabElRef}
           aria-label="Open team chat"
@@ -3846,6 +3860,29 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
               {totalUnread > 9 ? "9+" : totalUnread}
             </span>
           )}
+
+          {/* ── Dismiss (✕) badge — top-left corner, only when not dragging */}
+          {!fabDragging && (
+            <span
+              onPointerDown={e => { e.stopPropagation(); e.preventDefault(); }}
+              onClick={dismissFab}
+              role="button"
+              aria-label="Hide chat icon"
+              title="Dismiss — hide chat button"
+              className="absolute -top-1.5 -left-1.5 w-[18px] h-[18px] flex items-center justify-center rounded-full text-gray-300 hover:text-white transition-all z-30 cursor-pointer"
+              style={{
+                background: "rgba(15,10,30,0.92)",
+                border: "1px solid rgba(167,139,250,0.4)",
+                fontSize: "9px",
+                lineHeight: 1,
+                boxShadow: "0 1px 6px rgba(0,0,0,0.6)",
+                animation: "fabDismissReveal 0.3s ease 1.8s both",
+              }}
+            >
+              ✕
+            </span>
+          )}
+
         </button>
       )}
 

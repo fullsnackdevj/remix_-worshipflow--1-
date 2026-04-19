@@ -166,7 +166,7 @@ export default function InternalMemberFormPage() {
   const canSubmit = name.trim().length >= 2 && selectedTier && isValidAmount() && !alreadySigned && !checkingDupe;
 
   return (
-    <div className="min-h-screen bg-[#0d0f14] flex flex-col items-center justify-start py-8 px-4">
+    <div className="min-h-screen bg-[#0d0f14] flex flex-col items-center justify-start py-8 px-4 overflow-x-hidden">
       <div className="w-full max-w-sm">
 
         {/* Header */}
@@ -174,28 +174,28 @@ export default function InternalMemberFormPage() {
           <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/20 shrink-0">
             <Users size={18} className="text-white" />
           </div>
-          <div>
-            <p className="text-[10px] text-amber-400 font-bold uppercase tracking-widest">Team Contribution</p>
-            <h1 className="text-lg font-bold text-white leading-tight">{event.title}</h1>
+          <div className="min-w-0">
+            <p className="text-xs text-amber-400 font-bold uppercase tracking-widest">Team Contribution</p>
+            <h1 className="text-lg font-bold text-white leading-tight truncate">{event.title}</h1>
           </div>
         </div>
 
         {/* Event info strip */}
         <div className="bg-gray-800/50 border border-gray-700/40 rounded-2xl p-4 mb-6 space-y-2">
-          <div className="flex items-center gap-2 text-xs text-gray-400">
-            <Calendar size={12} className="text-amber-400 shrink-0" />
-            {formatDate(event.date)}{event.time && ` · ${event.time}`}
+          <div className="flex items-center gap-2 text-sm text-gray-400">
+            <Calendar size={14} className="text-amber-400 shrink-0" />
+            <span className="leading-snug">{formatDate(event.date)}{event.time && ` · ${event.time}`}</span>
           </div>
-          <div className="flex items-center gap-2 text-xs text-gray-400">
-            <MapPin size={12} className="text-violet-400 shrink-0" />
-            {event.venue}
+          <div className="flex items-center gap-2 text-sm text-gray-400">
+            <MapPin size={14} className="text-violet-400 shrink-0" />
+            <span className="leading-snug">{event.venue}</span>
           </div>
           {/* Tier rate chips */}
           {tiers.length > 0 && (
             <div className="pt-2 border-t border-gray-700/40 flex flex-wrap gap-2">
               {tiers.map((t, i) => (
                 <div key={i} className="px-3 py-1.5 bg-gray-700/40 rounded-xl text-center">
-                  <p className="text-[10px] text-gray-500 uppercase tracking-wider">{t.name}</p>
+                  <p className="text-xs text-gray-500 uppercase tracking-wider">{t.name}</p>
                   <p className="text-sm font-bold text-white">{formatPHP(t.amount)}</p>
                 </div>
               ))}
@@ -205,7 +205,7 @@ export default function InternalMemberFormPage() {
 
         {/* Form card */}
         <div className="bg-gray-900/80 border border-gray-700/40 rounded-2xl p-5 space-y-5">
-          <h2 className="text-sm font-bold text-white">Sign Up for this Event</h2>
+          <h2 className="text-base font-bold text-white">Sign Up for this Event</h2>
 
           {/* ── 1. Name ──────────────────────────────────────── */}
           <div>
@@ -218,16 +218,16 @@ export default function InternalMemberFormPage() {
               onChange={e => { setName(e.target.value); setAlreadySigned(false); }}
               onBlur={checkDuplicate}
               placeholder="e.g. Jay Halichic"
-              className="w-full px-3 py-2.5 rounded-xl border border-gray-700/60 bg-gray-800/60 text-sm text-white placeholder-gray-600 outline-none focus:border-amber-500/60 transition-colors"
+              className="w-full px-3 py-3 rounded-xl border border-gray-700/60 bg-gray-800/60 text-base text-white placeholder-gray-600 outline-none focus:border-amber-500/60 transition-colors"
             />
             {checkingDupe && (
-              <p className="text-[11px] text-gray-500 mt-1 flex items-center gap-1">
-                <Loader2 size={10} className="animate-spin" /> Checking…
+              <p className="text-xs text-gray-500 mt-1.5 flex items-center gap-1">
+                <Loader2 size={12} className="animate-spin" /> Checking…
               </p>
             )}
             {alreadySigned && !checkingDupe && (
-              <p className="text-[11px] text-amber-400 mt-1.5 flex items-center gap-1">
-                <AlertCircle size={12} /> You've already signed up for this event.
+              <p className="text-sm text-amber-400 mt-1.5 flex items-center gap-1.5">
+                <AlertCircle size={14} /> You've already signed up for this event.
               </p>
             )}
           </div>
@@ -252,7 +252,7 @@ export default function InternalMemberFormPage() {
                         : "border-gray-700/50 hover:border-gray-600"
                     }`}
                   >
-                    <p className={`text-xs font-semibold ${selectedTier?.name === t.name ? "text-indigo-300" : "text-gray-500"}`}>
+                    <p className={`text-sm font-semibold ${selectedTier?.name === t.name ? "text-indigo-300" : "text-gray-500"}`}>
                       {t.name}
                     </p>
                     <p className={`text-base font-black mt-0.5 ${selectedTier?.name === t.name ? "text-white" : "text-gray-400"}`}>
@@ -266,37 +266,37 @@ export default function InternalMemberFormPage() {
 
           {/* ── 3. Actual Amount ─────────────────────────────── */}
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex-1 min-w-0">
                 Amount I Can Contribute *
               </label>
               {selectedTier && parseFloat(customAmount) !== selectedTier.amount && (
                 <button
                   onClick={() => setCustomAmount(String(selectedTier.amount))}
-                  className="text-[10px] text-amber-400 hover:text-amber-300 transition-colors"
+                  className="text-xs text-amber-400 hover:text-amber-300 transition-colors shrink-0"
                 >
                   Reset to {formatPHP(selectedTier.amount)}
                 </button>
               )}
             </div>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">₱</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-base">₱</span>
               <input
                 type="number"
                 min="0"
                 value={customAmount}
                 onChange={e => setCustomAmount(e.target.value)}
                 placeholder="Enter amount"
-                className="w-full pl-7 pr-3 py-3 rounded-xl border border-gray-700/60 bg-gray-800/60 text-lg font-bold text-white placeholder-gray-600 outline-none focus:border-amber-500/60 transition-colors"
+                className="w-full pl-8 pr-3 py-3 rounded-xl border border-gray-700/60 bg-gray-800/60 text-lg font-bold text-white placeholder-gray-600 outline-none focus:border-amber-500/60 transition-colors"
               />
             </div>
             {selectedTier && parseFloat(customAmount) > selectedTier.amount && (
-              <p className="text-[11px] text-emerald-400 mt-1.5">
+              <p className="text-sm text-emerald-400 mt-1.5">
                 🙏 Exceeding target — thank you for the extra generosity!
               </p>
             )}
             {selectedTier && parseFloat(customAmount) < selectedTier.amount && parseFloat(customAmount) >= 0 && customAmount !== "" && (
-              <p className="text-[11px] text-amber-400 mt-1.5">
+              <p className="text-sm text-amber-400 mt-1.5">
                 ⚠️ Below the {selectedTier.name} rate of {formatPHP(selectedTier.amount)}
               </p>
             )}
@@ -306,7 +306,7 @@ export default function InternalMemberFormPage() {
           <button
             onClick={handleSubmit}
             disabled={!canSubmit || submitting}
-            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-sm shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2"
+            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-base shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2"
           >
             {submitting
               ? <><Loader2 size={16} className="animate-spin" /> Submitting…</>
@@ -315,12 +315,12 @@ export default function InternalMemberFormPage() {
                 : "✓ Confirm My Participation"}
           </button>
 
-          <p className="text-[11px] text-gray-600 text-center leading-relaxed">
+          <p className="text-xs text-gray-600 text-center leading-relaxed">
             The collector will mark you as paid once your money is received.
           </p>
         </div>
 
-        <p className="text-center text-[10px] text-gray-700 mt-6">WorshipFlow · Team Events</p>
+        <p className="text-center text-xs text-gray-700 mt-6">WorshipFlow · Team Events</p>
       </div>
     </div>
   );

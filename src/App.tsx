@@ -67,11 +67,12 @@ const PreachingView       = lazy(() => import("./PreachingView"));
 const BibleView            = lazy(() => import("./BibleView"));
 const DesignRequestsView  = lazy(() => import("./DesignRequestsView"));
 const EventsView          = lazy(() => import("./EventsView"));
+const PlaylistView        = lazy(() => import("./PlaylistView"));
 // AutoTextarea & DatePicker are tiny UI primitives — import statically to avoid extra chunk round-trips
 import AutoTextarea from "./AutoTextarea";
 import DatePicker from "./DatePicker";
 
-import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, CheckSquare, Check, Filter, Users, Calendar, Ticket, Phone, UserPlus, Camera, BookOpen, BookMarked, LayoutGrid, Mic2, Copy, Pencil, Shield, Mail, Bell, Lock, AlertTriangle, CheckCircle, HelpCircle, FlaskConical, NotebookPen, SquareKanban, Feather, Palette, Code2 } from "lucide-react";
+import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, CheckSquare, Check, Filter, Users, Calendar, Ticket, Phone, UserPlus, Camera, BookOpen, BookMarked, LayoutGrid, Mic2, Copy, Pencil, Shield, Mail, Bell, Lock, AlertTriangle, CheckCircle, HelpCircle, FlaskConical, NotebookPen, SquareKanban, Feather, Palette, Code2, ListMusic } from "lucide-react";
 import { Song, Tag, Member, ScheduleMember, Schedule } from "./types";
 import LineupPlayer, { LineupTrack, CurrentUser } from "./LineupPlayer";
 import SongsLibraryPlayer, { LibraryTrack } from "./SongsLibraryPlayer";
@@ -367,7 +368,7 @@ export default function App() {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
   const [isDarkMode, setIsDarkMode] = useState(true);
-  const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "playground" | "admin" | "team-notes" | "rehearsal" | "freedom-wall" | "preaching" | "design-requests" | "bible">("dashboard");
+  const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "playground" | "admin" | "team-notes" | "rehearsal" | "freedom-wall" | "preaching" | "design-requests" | "bible" | "playlist">("dashboard");
   // Tracks when Rehearsal mobile fullscreen is active so we can hide the app header
   const [rehearsalFullscreen, setRehearsalFullscreen] = useState(false);
   // Bump this key every time user navigates to Design Requests — forces a remount + fresh fetch
@@ -390,6 +391,9 @@ export default function App() {
   // Bible — new module highlight
   const [unseenBible, setUnseenBible] = useState(() => !localStorage.getItem("wf_seen_bible"));
   const markBibleSeen = () => { if (unseenBible) { localStorage.setItem("wf_seen_bible", "1"); setUnseenBible(false); } };
+  // Playlist — new module highlight
+  const [unseenPlaylist, setUnseenPlaylist] = useState(() => !localStorage.getItem("wf_seen_playlist"));
+  const markPlaylistSeen = () => { if (unseenPlaylist) { localStorage.setItem("wf_seen_playlist", "1"); setUnseenPlaylist(false); } };
 
   // ── Planner deep-link state (from calendar task card ⇒ open specific card) ──
   const [pendingPlannerBoardId, setPendingPlannerBoardId] = useState<string | null>(null);
@@ -1232,6 +1236,41 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Song Management</span>}
           </div>
 
+          {/* ── Playlist ── */}
+          <div className="relative group/tip">
+            <button
+              onClick={() => { setCurrentView("playlist"); setIsMobileMenuOpen(false); markPlaylistSeen(); }}
+              className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-xl font-medium text-sm transition-all ${
+                currentView === "playlist"
+                  ? "bg-indigo-600/20 text-indigo-400 dark:bg-indigo-600/20 dark:text-indigo-300"
+                  : unseenPlaylist
+                    ? "text-indigo-400 dark:text-indigo-300 hover:bg-indigo-900/20"
+                    : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+              } ${isSidebarCollapsed ? "justify-center" : ""}`}
+              style={unseenPlaylist && currentView !== "playlist" ? {
+                boxShadow: "0 0 0 1px rgba(99,102,241,0.4), 0 0 12px rgba(99,102,241,0.25)",
+                animation: "newModulePulse 2s ease-in-out infinite",
+              } : {}}
+              title="Playlist"
+            >
+              <span className="relative shrink-0">
+                <ListMusic size={18} />
+                {unseenPlaylist && currentView !== "playlist" && (
+                  <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-indigo-400 border border-[#1a1f2e]" />
+                )}
+              </span>
+              {!isSidebarCollapsed && (
+                <span className="flex items-center gap-2">
+                  Playlist
+                  {unseenPlaylist && currentView !== "playlist" && (
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">NEW</span>
+                  )}
+                </span>
+              )}
+            </button>
+            {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Playlist</span>}
+          </div>
+
           {/* Team Members */}
           <div className="relative group/tip">
             <button
@@ -1543,7 +1582,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
 
           <div className="flex-1 flex items-center min-w-0">
             <h1 className="text-base sm:text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap truncate">
-              {currentView === "dashboard" ? "Dashboard" : currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : currentView === "playground" ? "Playground" : currentView === "planner" ? "Ministry Hub" : currentView === "team-notes" ? "Notes" : currentView === "rehearsal" ? "Rehearsal" : currentView === "freedom-wall" ? "Freedom Wall" : currentView === "preaching" ? "Preaching" : currentView === "design-requests" ? "Design Requests" : currentView === "events" ? "Events" : currentView === "bible" ? "Bible" : "Song Management"}
+              {currentView === "dashboard" ? "Dashboard" : currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : currentView === "playground" ? "Playground" : currentView === "planner" ? "Ministry Hub" : currentView === "team-notes" ? "Notes" : currentView === "rehearsal" ? "Rehearsal" : currentView === "freedom-wall" ? "Freedom Wall" : currentView === "preaching" ? "Preaching" : currentView === "design-requests" ? "Design Requests" : currentView === "events" ? "Events" : currentView === "bible" ? "Bible" : currentView === "playlist" ? "Playlist" : "Song Management"}
             </h1>
           </div>
           <div className="flex items-center gap-2">
@@ -1683,7 +1722,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
         <main className="flex-1 overflow-y-auto overflow-x-hidden bg-gray-50 dark:bg-gray-900">
           <div className="flex flex-col h-full">
             <div className={`view-enter flex-1 overflow-x-hidden ${
-                currentView === "freedom-wall" || currentView === "preaching" || currentView === "design-requests" || currentView === "bible"
+                currentView === "freedom-wall" || currentView === "preaching" || currentView === "design-requests" || currentView === "bible" || currentView === "playlist"
                   ? "overflow-y-hidden p-0 flex flex-col"
                   : "overflow-y-auto p-4 sm:p-6"
               }`}>
@@ -1847,6 +1886,12 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                   onOpenLibraryPlayer={openLibraryPlayer}
                   isLibraryPlayerOpen={libraryOpen}
                   isLineupOpen={lineupOpen}
+                />
+              ) : currentView === "playlist" ? (
+                <PlaylistView
+                  allSongs={allSongs}
+                  showToast={showToast}
+                  onOpenVideo={openVideo}
                 />
               ) : currentView === "rehearsal" ? (
                 <RehearsalView

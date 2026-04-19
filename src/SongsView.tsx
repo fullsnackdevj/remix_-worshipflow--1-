@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { getAuth } from "firebase/auth";
 import AutoTextarea from "./AutoTextarea";
 import { Song, Tag } from "./types";
@@ -6,8 +7,9 @@ import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, ChevronLeft
   ChevronDown, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users,
   Calendar, Phone, UserPlus, Camera, LayoutGrid, List, BookOpen, Mic2, Copy, Pencil,
   Shield, Mail, Guitar, Sliders, Palette, Lock, AlertTriangle, CheckCircle, BookMarked,
-  HandMetal, Headphones, HelpCircle, Undo2, Redo2, Play } from "lucide-react";
+  HandMetal, Headphones, HelpCircle, Undo2, Redo2, Play, ListMusic, BookmarkPlus } from "lucide-react";
 import SongsLibraryPlayer, { LibraryTrack } from "./SongsLibraryPlayer";
+import { loadPlaylists, addSongToPlaylist, Playlist } from "./PlaylistView";
 
 // ── Module-level helpers ──────────────────────────────────────────────────────
 const CustomYoutubeIcon = ({ size = 24, className = "" }: { size?: number, className?: string }) => (
@@ -23,6 +25,217 @@ const CustomVideoBtnIcon = ({ size = 20, className = "" }: { size?: number, clas
     <path d="M10 8.5L15 12L10 15.5V8.5Z" fill="white" />
   </svg>
 );
+
+// ── Add-to-Playlist popover ───────────────────────────────────────────────────
+// Uses createPortal so the dropdown renders at <body> level — never clipped or
+// hidden behind other cards. Position is calculated SYNCHRONOUSLY on click.
+function AddToPlaylistBtn({ song, showToast }: { song: Song; showToast: (type: string, msg: string) => void }) {
+  const [open, setOpen]       = useState(false);
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [creating, setCreating]   = useState(false);
+  const [newName, setNewName]     = useState("");
+  const [dropStyle, setDropStyle] = useState<React.CSSProperties>({});
+
+  const btnRef   = useRef<HTMLButtonElement>(null);
+  const dropRef  = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const DROPDOWN_W = 240;
+
+  // ── Open / close ────────────────────────────────────────────────────────
+  const openDropdown = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (open) { setOpen(false); return; }
+
+    // Read fresh playlist list
+    setPlaylists(loadPlaylists());
+    setCreating(false);
+    setNewName("");
+
+    // Compute position RIGHT NOW from the button's bounding rect
+    if (btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      const top  = rect.bottom + 6;                          // 6px gap below button
+      // Align right edge of dropdown with right edge of button;
+      // clamp so it never goes off the left or right of viewport
+      let left = rect.right - DROPDOWN_W;
+      if (left < 8) left = 8;
+      if (left + DROPDOWN_W > window.innerWidth - 8) left = window.innerWidth - DROPDOWN_W - 8;
+
+      setDropStyle({
+        position: "fixed",
+        top,
+        left,
+        width: DROPDOWN_W,
+        zIndex: 99999,
+      });
+    }
+
+    setOpen(true);
+  };
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (btnRef.current?.contains(t) || dropRef.current?.contains(t)) return;
+      setOpen(false);
+    };
+    document.addEventListener("mousedown", handler, true);
+    return () => document.removeEventListener("mousedown", handler, true);
+  }, [open]);
+
+  // Close on any scroll (so dropdown doesn't drift)
+  useEffect(() => {
+    if (!open) return;
+    const handler = () => setOpen(false);
+    window.addEventListener("scroll", handler, true);
+    return () => window.removeEventListener("scroll", handler, true);
+  }, [open]);
+
+  // Focus new-playlist input when creating
+  useEffect(() => {
+    if (creating) setTimeout(() => inputRef.current?.focus(), 40);
+  }, [creating]);
+
+  // ── Actions ─────────────────────────────────────────────────────────────
+  const handleAdd = (playlistId: string, playlistName: string) => {
+    const result = addSongToPlaylist(playlistId, song.id);
+    if (result === "added")   showToast("success", `Added to "${playlistName}"`);
+    else if (result === "already") showToast("error", `Already in "${playlistName}"`);
+    setOpen(false);
+  };
+
+  const handleCreateAndAdd = () => {
+    const name = newName.trim();
+    if (!name) return;
+    const existing = loadPlaylists();
+    const newPl: Playlist = {
+      id: `pl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      name, emoji: "🎵",
+      songIds: [song.id],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    try { localStorage.setItem("wf_playlists_v1", JSON.stringify([...existing, newPl])); } catch { }
+    showToast("success", `Created "${name}" and added song!`);
+    // Refresh local list so the new playlist shows immediately next time
+    setPlaylists([...existing, newPl]);
+    setOpen(false);
+  };
+
+  const inPlaylistIds = new Set(playlists.filter(p => p.songIds.includes(song.id)).map(p => p.id));
+
+  // ── Dropdown content (portal) ────────────────────────────────────────────
+  const dropdown = open ? createPortal(
+    <div
+      ref={dropRef}
+      style={dropStyle}
+      onMouseDown={e => e.stopPropagation()}
+      onClick={e => e.stopPropagation()}
+      className="bg-[#1a1f2e] border border-gray-700/80 rounded-2xl shadow-2xl overflow-hidden"
+    >
+      <div className="p-2">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 px-3 py-2 select-none">
+          Add to Playlist
+        </p>
+
+        {playlists.length === 0 && !creating && (
+          <p className="text-xs text-gray-600 px-3 pb-2">No playlists yet.</p>
+        )}
+
+        <div className="max-h-52 overflow-y-auto">
+          {playlists.map(pl => (
+            <button
+              key={pl.id}
+              onMouseDown={e => e.stopPropagation()}
+              onClick={() => handleAdd(pl.id, pl.name)}
+              disabled={inPlaylistIds.has(pl.id)}
+              className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm transition-colors text-left ${
+                inPlaylistIds.has(pl.id)
+                  ? "text-indigo-400 bg-indigo-900/20 cursor-default"
+                  : "text-gray-300 hover:bg-gray-800 hover:text-white"
+              }`}
+            >
+              <span className="text-base shrink-0">{pl.emoji ?? "🎵"}</span>
+              <span className="flex-1 truncate">{pl.name}</span>
+              {inPlaylistIds.has(pl.id) && <Check size={12} className="shrink-0 text-indigo-400" />}
+              <span className="text-[10px] text-gray-600 shrink-0">{pl.songIds.length}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Create new playlist */}
+        <div className="border-t border-gray-800 mt-1 pt-1">
+          {creating ? (
+            <div className="flex items-center gap-1 px-1 py-1">
+              <input
+                ref={inputRef}
+                type="text"
+                value={newName}
+                onChange={e => setNewName(e.target.value)}
+                onKeyDown={e => {
+                  e.stopPropagation();
+                  if (e.key === "Enter")  handleCreateAndAdd();
+                  if (e.key === "Escape") setCreating(false);
+                }}
+                placeholder="Playlist name..."
+                maxLength={60}
+                className="flex-1 px-2.5 py-1.5 bg-gray-800 border border-gray-600 rounded-lg text-xs text-white placeholder-gray-500 outline-none focus:border-indigo-500"
+              />
+              <button onMouseDown={e => e.stopPropagation()} onClick={handleCreateAndAdd}
+                className="p-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 shrink-0">
+                <Check size={12} />
+              </button>
+              <button onMouseDown={e => e.stopPropagation()} onClick={() => setCreating(false)}
+                className="p-1.5 rounded-lg hover:bg-gray-800 text-gray-400 shrink-0">
+                <X size={12} />
+              </button>
+            </div>
+          ) : (
+            <button
+              onMouseDown={e => e.stopPropagation()}
+              onClick={() => setCreating(true)}
+              className="flex items-center gap-2 w-full px-3 py-2.5 rounded-xl text-xs text-indigo-400 hover:bg-indigo-900/20 transition-colors"
+            >
+              <Plus size={13} /> New Playlist
+            </button>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  ) : null;
+
+  // ── Render ───────────────────────────────────────────────────────────────
+  return (
+    <>
+      <button
+        ref={btnRef}
+        onMouseDown={e => e.stopPropagation()}
+        onClick={openDropdown}
+        title="Add to Playlist"
+        className={`shrink-0 p-1 rounded-lg transition-colors relative group/pltooltip ${
+          inPlaylistIds.size > 0
+            ? "text-indigo-400 hover:bg-indigo-900/30"
+            : "hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-indigo-500"
+        }`}
+      >
+        <ListMusic size={15} />
+        {inPlaylistIds.size > 0 && (
+          <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-indigo-500 border border-white dark:border-gray-800" />
+        )}
+        {/* Tooltip */}
+        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 bg-gray-900 text-white text-[10px] rounded-lg opacity-0 group-hover/pltooltip:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10 shadow-lg">
+          {inPlaylistIds.size > 0 ? `In ${inPlaylistIds.size} playlist${inPlaylistIds.size > 1 ? "s" : ""}` : "Add to Playlist"}
+        </span>
+      </button>
+      {dropdown}
+    </>
+  );
+}
 
 
 // ── Chord Transposer ──────────────────────────────────────────────────────────
@@ -1682,16 +1895,19 @@ showToast("error", "Failed to extract text from image. Please try again.");
                     <h3 className="text-base font-bold text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors line-clamp-2 leading-snug">
                       {song.title}
                     </h3>
-                    {!isSelectionMode && song.video_url && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); onOpenVideo?.(song.video_url!); }}
-                        title="Watch Video"
-                        className="shrink-0 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors relative group/tooltip"
-                      >
-                        <CustomYoutubeIcon size={20} />
-                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover/tooltip:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">Watch Video</span>
-                      </button>
-                    )}
+                    <div className="flex items-center gap-0.5 shrink-0" onClick={e => e.stopPropagation()}>
+                      {!isSelectionMode && <AddToPlaylistBtn song={song} showToast={showToast} />}
+                      {!isSelectionMode && song.video_url && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onOpenVideo?.(song.video_url!); }}
+                          title="Watch Video"
+                          className="shrink-0 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors relative group/tooltip"
+                        >
+                          <CustomYoutubeIcon size={20} />
+                          <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover/tooltip:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">Watch Video</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Artist */}
@@ -1800,8 +2016,9 @@ showToast("error", "Failed to extract text from image. Please try again.");
                   <p className="text-[11px] text-gray-400 dark:text-gray-500 w-32 whitespace-nowrap">
                     {song.created_at ? new Date(song.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : "—"}
                   </p>
-                  {/* Video icon */}
-                  <div className="w-6 flex items-center justify-end">
+                  {/* Video + playlist icons */}
+                  <div className="w-14 flex items-center justify-end gap-0.5" onClick={e => e.stopPropagation()}>
+                    {!isSelectionMode && <AddToPlaylistBtn song={song} showToast={showToast} />}
                     {song.video_url && !isSelectionMode && (
                       <button
                         onClick={(e) => { e.stopPropagation(); onOpenVideo?.(song.video_url!); }}
