@@ -16,6 +16,7 @@ const EventRegistrationPage    = lazy(() => import('./EventRegistrationPage.tsx'
 const EventDashboardPage       = lazy(() => import('./EventDashboardPage.tsx'));
 const InternalContributionPage = lazy(() => import('./InternalContributionPage.tsx'));
 const InternalMemberFormPage   = lazy(() => import('./InternalMemberFormPage.tsx'));
+const PublicPlaylistPage       = lazy(() => import('./PublicPlaylistPage.tsx'));
 
 // Returning users skip the full splash — first visit gets brand impression, repeat visits feel instant
 const isReturning = (() => { try { return !!sessionStorage.getItem('wf_visited'); } catch { return false; } })();
@@ -88,19 +89,31 @@ function Root() {
 
   // Path-based: /r/EVENT_ID  → registration
   //             /d/EVENT_ID  → dashboard
+  //             /p/SLUG      → public playlist
   const pathRegMatch  = pathname.match(/^\/r\/([^/?#]+)/);
   const pathDashMatch = pathname.match(/^\/d\/([^/?#]+)/);
+  const pathPlayMatch = pathname.match(/^\/p\/([^/?#]+)/);
 
   const publicEventId = pathRegMatch?.[1] ?? pathDashMatch?.[1] ?? params.get('event');
   const publicRegId   = params.get('registrant') ?? undefined;
   // Determine view: path-based takes priority over query param
   const publicView    = pathDashMatch ? 'dashboard' : params.get('view');
+  const publicPlaylistSlug = pathPlayMatch?.[1] ?? null;
 
   const fallback = (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#030712' }}>
-      <div style={{ width: 32, height: 32, border: '3px solid transparent', borderTopColor: '#f59e0b', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+      <div style={{ width: 32, height: 32, border: '3px solid transparent', borderTopColor: '#6d28d9', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
     </div>
   );
+
+  // ── Public playlist: /p/:slug ───────────────────────────────────────────
+  if (publicPlaylistSlug) {
+    return (
+      <Suspense fallback={fallback}>
+        <PublicPlaylistPage slug={publicPlaylistSlug} />
+      </Suspense>
+    );
+  }
 
   if (publicEventId && publicView === 'dashboard') {
     return (

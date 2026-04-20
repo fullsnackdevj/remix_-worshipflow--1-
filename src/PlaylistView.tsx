@@ -5,7 +5,7 @@ import {
   ListMusic, Plus, Trash2, Edit3, Check, X, Music, Play, Pause,
   Search, BookOpen, Guitar, MoreVertical, Copy, Shuffle,
   SkipBack, SkipForward, Repeat, Repeat1, Volume2, VolumeX,
-  Mic2, Pencil, ArrowUp, ArrowDown, ChevronLeft,
+  Mic2, Pencil, ArrowUp, ArrowDown, ChevronLeft, Share2, Globe, Link,
 } from "lucide-react";
 import { Song } from "./types";
 import {
@@ -59,7 +59,7 @@ function EmojiPicker({ selected, onSelect, onClose }: {
       className="absolute z-[500] top-full left-0 mt-1 p-2 bg-[#1a1f2e] border border-gray-700 rounded-2xl shadow-2xl grid grid-cols-5 gap-1">
       {EMOJIS.map(e => (
         <button key={e} onClick={() => { onSelect(e); onClose(); }}
-          className={`w-9 h-9 flex items-center justify-center rounded-xl text-lg hover:bg-gray-700 transition-colors ${selected === e ? "bg-indigo-600/30 ring-1 ring-indigo-500" : ""}`}>
+          className={`w-11 h-11 flex items-center justify-center rounded-xl text-xl hover:bg-gray-700 transition-colors ${selected === e ? "bg-indigo-600/30 ring-1 ring-indigo-500" : ""}`}>
           {e}
         </button>
       ))}
@@ -83,12 +83,13 @@ interface Props {
   allSongs: Song[];
   showToast: (type: string, msg: string) => void;
   onOpenVideo?: (url: string) => void;
+  onNavigateToSongs?: () => void;
 }
 
 // =============================================================================
 // Main component
 // =============================================================================
-export default function PlaylistView({ allSongs, showToast }: Props) {
+export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }: Props) {
 
   // ── Playlist state ─────────────────────────────────────────────────────────
   const [playlists, setPlaylists]         = useState<Playlist[]>(() => loadPlaylists());
@@ -108,7 +109,98 @@ export default function PlaylistView({ allSongs, showToast }: Props) {
   const [dragId, setDragId]               = useState<string | null>(null);
   const [dragOver, setDragOver]           = useState<number | null>(null);
   const [editSongId, setEditSongId]       = useState<string | null>(null);
-  const [mobileShowList, setMobileShowList] = useState(!activeId); // mobile: show list or content
+  const [mobileShowList, setMobileShowList]     = useState(!activeId); // mobile: show list or content
+  const [mobileLyricsOpen, setMobileLyricsOpen] = useState(false);    // mobile: lyrics/chords sheet
+  const [mobileLyricTab, setMobileLyricTab]     = useState<"lyrics" | "chords">("lyrics");
+
+  // ── Share / Publish state ──────────────────────────────────────────────────
+  const [shareModalPlaylistId, setShareModalPlaylistId] = useState<string | null>(null);
+  const [shareSlug, setShareSlug]                       = useState("");
+  const [shareDescription, setShareDescription]         = useState("");
+  const [shareSlugAvailable, setShareSlugAvailable]     = useState<boolean | null>(null);
+  const [sharePublishing, setSharePublishing]           = useState(false);
+  const [sharePublishedSlug, setSharePublishedSlug]     = useState<string | null>(null);
+  const [shareLinkCopied, setShareLinkCopied]           = useState(false);
+
+  // Slug auto-generation helper
+  const toSlug = (name: string) =>
+    name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+
+  const openShareModal = (pl: Playlist) => {
+    const slug = toSlug(pl.name);
+    setShareModalPlaylistId(pl.id);
+    setShareSlug(slug);
+    setShareDescription("");
+    setShareSlugAvailable(null);
+    setSharePublishedSlug(null);
+    setShareLinkCopied(false);
+    setMenuId(null);
+    // Check availability immediately
+    checkSlug(slug);
+  };
+
+  const checkSlug = async (slug: string) => {
+    if (!slug || slug.length < 3) { setShareSlugAvailable(null); return; }
+    setShareSlugAvailable(null);
+    try {
+      const r = await fetch(`/api/public-playlist/check-slug?slug=${encodeURIComponent(slug)}`);
+      const d = await r.json();
+      setShareSlugAvailable(d.available);
+    } catch { setShareSlugAvailable(null); }
+  };
+
+  const publishPlaylist = async () => {
+    if (!shareModalPlaylistId || !shareSlug) return;
+    const pl = playlists.find(p => p.id === shareModalPlaylistId);
+    if (!pl) return;
+    const songs = pl.songIds
+      .map(id => allSongs.find(s => s.id === id))
+      .filter(Boolean)
+      .map(s => ({
+        id: s!.id, title: s!.title, artist: s!.artist ?? "",
+        youtubeUrl: s!.video_url ?? "",   // Song type uses video_url
+        lyrics: s!.lyrics ?? "", chords: s!.chords ?? "",
+      }));
+    setSharePublishing(true);
+    try {
+      const r = await fetch("/api/public-playlist/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          slug: shareSlug,
+          playlist: { name: pl.name, emoji: pl.emoji ?? "🎵", description: shareDescription },
+          songs,
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) { showToast("error", d.error ?? "Failed to publish"); return; }
+      // ── Save slug back onto the playlist so renames stay in sync ──
+      setPlaylists(prev => {
+        const updated = prev.map(x => x.id === shareModalPlaylistId ? { ...x, publishedSlug: shareSlug } : x);
+        return updated;
+      });
+      setSharePublishedSlug(shareSlug);
+      showToast("success", "Playlist published! Link is ready to share.");
+    } catch { showToast("error", "Network error. Please try again."); }
+    finally { setSharePublishing(false); }
+  };
+
+  const unpublishPlaylist = async () => {
+    if (!sharePublishedSlug) return;
+    setSharePublishing(true);
+    try {
+      await fetch("/api/public-playlist/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug: sharePublishedSlug, playlist: { name: "", emoji: "" }, songs: [], unpublish: true }),
+      });
+      // ── Clear publishedSlug from the playlist ──
+      setPlaylists(prev => prev.map(x => x.id === shareModalPlaylistId ? { ...x, publishedSlug: undefined } : x));
+      setSharePublishedSlug(null);
+      showToast("info", "Public link removed.");
+    } catch { showToast("error", "Failed to remove link."); }
+    finally { setSharePublishing(false); }
+  };
 
   // ── Player state ───────────────────────────────────────────────────────────
   const [currentSongId, setCurrentSongId] = useState<string | null>(null);
@@ -397,7 +489,19 @@ export default function PlaylistView({ allSongs, showToast }: Props) {
   const saveEdit = (id: string) => {
     const name = editName.trim();
     if (!name) { setEditingId(null); return; }
-    setPlaylists(p => p.map(x => x.id === id ? { ...x, name, updatedAt: new Date().toISOString() } : x));
+    setPlaylists(p => {
+      const updated = p.map(x => x.id === id ? { ...x, name, updatedAt: new Date().toISOString() } : x);
+      // ── Auto-sync name to Firestore if this playlist is publicly shared ──
+      const pl = updated.find(x => x.id === id);
+      if (pl?.publishedSlug) {
+        fetch("/api/public-playlist/sync-name", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ slug: pl.publishedSlug, name, emoji: pl.emoji ?? "🎵" }),
+        }).catch(() => { /* silent — non-critical */ });
+      }
+      return updated;
+    });
     setEditingId(null);
   };
 
@@ -470,14 +574,14 @@ export default function PlaylistView({ allSongs, showToast }: Props) {
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-800/50 shrink-0">
             <div className="flex items-center gap-2">
-              <ListMusic size={15} className="text-indigo-400 shrink-0" />
+              <ListMusic size={16} className="text-indigo-400 shrink-0" />
               <span className="text-sm font-bold text-white tracking-tight">My Playlists</span>
             </div>
             <button
               onClick={() => setCreating(v => !v)}
               title="New playlist"
-              className="p-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors shrink-0">
-              <Plus size={13} />
+              className="p-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors shrink-0">
+              <Plus size={15} />
             </button>
           </div>
 
@@ -488,7 +592,7 @@ export default function PlaylistView({ allSongs, showToast }: Props) {
                 <div className="relative shrink-0">
                   <button
                     onClick={() => setShowEmoji(v => !v)}
-                    className="w-8 h-8 rounded-lg bg-gray-800 border border-gray-700 hover:border-indigo-500 flex items-center justify-center text-base transition-colors">
+                    className="w-10 h-10 rounded-lg bg-gray-800 border border-gray-700 hover:border-indigo-500 flex items-center justify-center text-xl transition-colors">
                     {newEmoji}
                   </button>
                   {showEmojiPicker && (
@@ -505,8 +609,8 @@ export default function PlaylistView({ allSongs, showToast }: Props) {
                   placeholder="Playlist name…" maxLength={60}
                   className="flex-1 min-w-0 px-2.5 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white placeholder-gray-500 outline-none focus:border-indigo-500 transition-colors"
                 />
-                <button onClick={createPlaylist} className="p-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white shrink-0 transition-colors"><Check size={12} /></button>
-                <button onClick={() => { setCreating(false); setNewName(""); }} className="p-1.5 rounded-lg hover:bg-gray-800 text-gray-400 shrink-0 transition-colors"><X size={12} /></button>
+                <button onClick={createPlaylist} className="p-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white shrink-0 transition-colors"><Check size={14} /></button>
+                <button onClick={() => { setCreating(false); setNewName(""); }} className="p-2 rounded-lg hover:bg-gray-800 text-gray-400 shrink-0 transition-colors"><X size={14} /></button>
               </div>
             </div>
           )}
@@ -546,7 +650,12 @@ export default function PlaylistView({ allSongs, showToast }: Props) {
                     />
                   ) : (
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold truncate leading-tight">{pl.name}</p>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <p className="text-sm font-semibold truncate leading-tight">{pl.name}</p>
+                        {pl.publishedSlug && (
+                          <span className="shrink-0 text-[9px] font-black uppercase tracking-wider text-emerald-400 bg-emerald-400/10 border border-emerald-500/30 rounded px-1 py-px">Live</span>
+                        )}
+                      </div>
                       <p className="text-xs text-gray-500 mt-0.5">{pl.songIds.length} {pl.songIds.length === 1 ? "song" : "songs"}</p>
                     </div>
                   )}
@@ -556,12 +665,24 @@ export default function PlaylistView({ allSongs, showToast }: Props) {
                     <div className="relative shrink-0" ref={menuId === pl.id ? menuRef : undefined}>
                       <button
                         onClick={e => { e.stopPropagation(); setMenuId(v => v === pl.id ? null : pl.id); }}
-                        className="opacity-0 group-hover:opacity-100 p-1 rounded-md hover:bg-gray-700 text-gray-500 hover:text-white transition-all"
+                        className="opacity-0 group-hover:opacity-100 p-1.5 rounded-md hover:bg-gray-700 text-gray-500 hover:text-white transition-all"
                       >
-                        <MoreVertical size={13} />
+                        <MoreVertical size={15} />
                       </button>
                       {menuId === pl.id && (
                         <div className="absolute right-0 top-full mt-1 w-40 bg-[#1a1f2e] border border-gray-700/80 rounded-xl shadow-2xl z-[400] overflow-hidden">
+                          {onNavigateToSongs && (
+                            <button onClick={() => { setMenuId(null); onNavigateToSongs(); }}
+                              className="flex items-center gap-2 w-full px-3 py-2.5 text-sm text-indigo-300 hover:bg-indigo-900/30 hover:text-indigo-200 transition-colors text-left">
+                              <Plus size={12} /> Add Songs
+                            </button>
+                          )}
+                          {onNavigateToSongs && <div className="h-px bg-gray-800 mx-2" />}
+                          <button onClick={() => openShareModal(pl)}
+                            className="flex items-center gap-2 w-full px-3 py-2.5 text-sm text-emerald-400 hover:bg-emerald-900/20 hover:text-emerald-300 transition-colors text-left">
+                            <Share2 size={12} /> Share Link
+                          </button>
+                          <div className="h-px bg-gray-800 mx-2" />
                           <button onClick={() => { setEditingId(pl.id); setEditName(pl.name); setMenuId(null); }}
                             className="flex items-center gap-2 w-full px-3 py-2.5 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors text-left">
                             <Edit3 size={12} /> Rename
@@ -589,25 +710,25 @@ export default function PlaylistView({ allSongs, showToast }: Props) {
         {mobileShowList && (
           <div className="lg:hidden flex flex-col flex-1 min-w-0 overflow-hidden bg-[#0d0f14]">
             {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-800/50 shrink-0">
-              <div className="flex items-center gap-2">
-                <ListMusic size={15} className="text-indigo-400 shrink-0" />
-                <span className="text-sm font-bold text-white tracking-tight">My Playlists</span>
+            <div className="flex items-center justify-between px-4 py-4 border-b border-gray-800/50 shrink-0">
+              <div className="flex items-center gap-3">
+                <ListMusic size={20} className="text-indigo-400 shrink-0" />
+                <span className="text-base font-bold text-white tracking-tight">My Playlists</span>
               </div>
               <button
                 onClick={() => setCreating(v => !v)}
                 title="New playlist"
-                className="p-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors shrink-0">
-                <Plus size={13} />
+                className="p-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white transition-colors shrink-0 active:scale-95">
+                <Plus size={18} />
               </button>
             </div>
 
             {/* Create form */}
             {creating && (
-              <div className="px-3 py-2.5 border-b border-gray-800/50 bg-[#111318] shrink-0">
-                <div className="flex items-center gap-2">
+              <div className="px-4 py-3 border-b border-gray-800/50 bg-[#111318] shrink-0">
+                <div className="flex items-center gap-3">
                   <button onClick={() => setShowEmoji(v => !v)}
-                    className="text-xl w-9 h-9 rounded-lg bg-gray-800 hover:bg-gray-700 flex items-center justify-center shrink-0 transition-colors">
+                    className="text-2xl w-12 h-12 rounded-xl bg-gray-800 hover:bg-gray-700 flex items-center justify-center shrink-0 transition-colors">
                     {newEmoji}
                   </button>
                   <input
@@ -616,10 +737,10 @@ export default function PlaylistView({ allSongs, showToast }: Props) {
                     onChange={e => setNewName(e.target.value)}
                     onKeyDown={e => { if (e.key === "Enter") createPlaylist(); if (e.key === "Escape") setCreating(false); }}
                     placeholder="Playlist name…"
-                    className="flex-1 bg-gray-800/80 border border-gray-700/60 rounded-lg px-3 py-1.5 text-sm text-white placeholder-gray-600 outline-none focus:border-indigo-500/60"
+                    className="flex-1 bg-gray-800/80 border border-gray-700/60 rounded-xl px-4 py-3 text-base text-white placeholder-gray-600 outline-none focus:border-indigo-500/60"
                   />
-                  <button onClick={createPlaylist} className="p-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"><Check size={13} /></button>
-                  <button onClick={() => setCreating(false)} className="p-1.5 rounded-lg hover:bg-gray-800 text-gray-500 hover:text-white transition-colors"><X size={13} /></button>
+                  <button onClick={createPlaylist} className="p-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white transition-colors active:scale-95"><Check size={16} /></button>
+                  <button onClick={() => setCreating(false)} className="p-3 rounded-xl hover:bg-gray-800 text-gray-500 hover:text-white transition-colors active:scale-95"><X size={16} /></button>
                 </div>
               </div>
             )}
@@ -639,11 +760,11 @@ export default function PlaylistView({ allSongs, showToast }: Props) {
                     <div
                       key={pl.id}
                       onClick={() => { if (!isEdit) { setActiveId(pl.id); setMobileShowList(false); } }}
-                      className={`group flex items-center gap-3 px-3 py-3 rounded-xl cursor-pointer transition-all mb-0.5 ${
+                      className={`group flex items-center gap-4 px-4 py-4 rounded-2xl cursor-pointer transition-all mb-1 ${
                         isActive ? "bg-indigo-500/15 ring-1 ring-inset ring-indigo-500/25" : "hover:bg-gray-800/60"
                       }`}
                     >
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0 ${
+                      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shrink-0 ${
                         isActive ? "bg-indigo-600/40 border border-indigo-500/40" : "bg-gray-800"
                       }`}>{pl.emoji}</div>
                       {isEdit ? (
@@ -654,36 +775,53 @@ export default function PlaylistView({ allSongs, showToast }: Props) {
                           onKeyDown={e => { if (e.key === "Enter") saveEdit(pl.id); if (e.key === "Escape") setEditingId(null); }}
                           onBlur={() => saveEdit(pl.id)}
                           onClick={e => e.stopPropagation()}
-                          className="flex-1 bg-gray-800 rounded-lg px-2 py-1 text-sm text-white border border-indigo-500/50 outline-none"
+                          className="flex-1 bg-gray-800 rounded-xl px-3 py-2.5 text-base text-white border border-indigo-500/50 outline-none"
                         />
                       ) : (
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold truncate leading-tight text-white">{pl.name}</p>
-                          <p className="text-xs text-gray-500 mt-0.5">{pl.songIds.length} {pl.songIds.length === 1 ? "song" : "songs"}</p>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <p className="text-base font-semibold truncate leading-tight text-white">{pl.name}</p>
+                            {pl.publishedSlug && (
+                              <span className="shrink-0 text-[9px] font-black uppercase tracking-wider text-emerald-400 bg-emerald-400/10 border border-emerald-500/30 rounded px-1 py-px">Live</span>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-500 mt-0.5">{pl.songIds.length} {pl.songIds.length === 1 ? "song" : "songs"}</p>
                         </div>
                       )}
                       {!isEdit && (
                         <div className="relative shrink-0" ref={menuId === pl.id ? menuRef : undefined}>
                           <button
                             onClick={e => { e.stopPropagation(); setMenuId(v => v === pl.id ? null : pl.id); }}
-                            className="p-1 rounded-md hover:bg-gray-700 text-gray-500 hover:text-white transition-all"
+                            className="p-3 rounded-xl hover:bg-gray-700 text-gray-400 hover:text-white transition-all active:scale-90"
                           >
-                            <MoreVertical size={13} />
+                            <MoreVertical size={18} />
                           </button>
                           {menuId === pl.id && (
-                            <div className="absolute right-0 top-full mt-1 w-40 bg-[#1a1f2e] border border-gray-700/80 rounded-xl shadow-2xl z-[400] overflow-hidden">
+                            <div className="absolute right-0 top-full mt-1 w-48 bg-[#1a1f2e] border border-gray-700/80 rounded-2xl shadow-2xl z-[400] overflow-hidden">
+                              {onNavigateToSongs && (
+                                <button onClick={e => { e.stopPropagation(); setMenuId(null); onNavigateToSongs(); }}
+                                  className="flex items-center gap-3 w-full px-4 py-4 text-base text-indigo-300 hover:bg-indigo-900/30 hover:text-indigo-200 transition-colors text-left">
+                                  <Plus size={16} /> Add Songs
+                                </button>
+                              )}
+                              {onNavigateToSongs && <div className="h-px bg-gray-800 mx-3" />}
+                              <button onClick={e => { e.stopPropagation(); openShareModal(pl); }}
+                                className="flex items-center gap-3 w-full px-4 py-4 text-base text-emerald-400 hover:bg-emerald-900/20 hover:text-emerald-300 transition-colors text-left">
+                                <Share2 size={16} /> Share Link
+                              </button>
+                              <div className="h-px bg-gray-800 mx-3" />
                               <button onClick={e => { e.stopPropagation(); setEditingId(pl.id); setEditName(pl.name); setMenuId(null); }}
-                                className="flex items-center gap-2 w-full px-3 py-2.5 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors text-left">
-                                <Edit3 size={12} /> Rename
+                                className="flex items-center gap-3 w-full px-4 py-4 text-base text-gray-300 hover:bg-gray-800 hover:text-white transition-colors text-left">
+                                <Edit3 size={16} /> Rename
                               </button>
                               <button onClick={e => { e.stopPropagation(); duplicatePlaylist(pl); }}
-                                className="flex items-center gap-2 w-full px-3 py-2.5 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors text-left">
-                                <Copy size={12} /> Duplicate
+                                className="flex items-center gap-3 w-full px-4 py-4 text-base text-gray-300 hover:bg-gray-800 hover:text-white transition-colors text-left">
+                                <Copy size={16} /> Duplicate
                               </button>
-                              <div className="h-px bg-gray-800 mx-2" />
+                              <div className="h-px bg-gray-800 mx-3" />
                               <button onClick={e => { e.stopPropagation(); setMenuId(null); deletePlaylist(pl.id); }}
-                                className="flex items-center gap-2 w-full px-3 py-2.5 text-sm text-red-400 hover:bg-red-900/20 hover:text-red-300 transition-colors text-left">
-                                <Trash2 size={12} /> Delete
+                                className="flex items-center gap-3 w-full px-4 py-4 text-base text-red-400 hover:bg-red-900/20 hover:text-red-300 transition-colors text-left">
+                                <Trash2 size={16} /> Delete
                               </button>
                             </div>
                           )}
@@ -775,56 +913,63 @@ export default function PlaylistView({ allSongs, showToast }: Props) {
                 {/* Mobile back button */}
                 <button
                   onClick={() => { setMobileShowList(true); setEditingId(null); setMenuId(null); }}
-                  className="lg:hidden flex items-center gap-1.5 text-xs text-gray-400 hover:text-indigo-400 transition-colors mb-3 -ml-0.5 active:scale-95"
+                  className="lg:hidden flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gray-800/80 hover:bg-gray-700/80 text-sm text-white font-semibold transition-all mb-4 active:scale-95 self-start"
                 >
-                  <ChevronLeft size={16} />
-                  <span className="font-semibold">All Playlists</span>
+                  <ChevronLeft size={18} />
+                  All Playlists
                 </button>
-                <div className="flex items-center gap-3">
-                  {/* Cover art — compact on mobile */}
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl bg-gradient-to-br from-indigo-700/60 to-purple-900/60 border border-indigo-600/20 flex items-center justify-center text-3xl sm:text-4xl shadow-xl shrink-0 select-none">
+                <div className="flex items-center gap-4">
+                  {/* Cover art — comfortable on mobile */}
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-br from-indigo-700/60 to-purple-900/60 border border-indigo-600/20 flex items-center justify-center text-4xl sm:text-5xl shadow-xl shrink-0 select-none">
                     {activePlaylist.emoji ?? "🎵"}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-400 mb-0.5">Playlist</p>
-                    <h2 className="text-base sm:text-lg font-black text-white leading-tight truncate">{activePlaylist.name}</h2>
-                    <p className="text-xs text-gray-500 mt-0.5 truncate">
+                    <p className="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-0.5">Playlist</p>
+                    <h2 className="text-lg sm:text-xl font-black text-white leading-tight truncate">{activePlaylist.name}</h2>
+                    <p className="text-sm text-gray-500 mt-0.5 truncate">
                       {activePlaylist.songIds.length} {activePlaylist.songIds.length === 1 ? "song" : "songs"}
                       {currentSong && <span className="text-indigo-400"> · {currentSong.title}</span>}
                     </p>
-                    {/* Buttons — always inline, compact */}
-                    <div className="flex items-center gap-2 mt-2">
+                    {/* Buttons — bigger for comfortable tapping */}
+                    <div className="flex items-center gap-2 mt-3 flex-wrap">
                       <button
                         onClick={() => { if (hasSongs) playSong(playlistSongs[0].id); }}
                         disabled={!hasSongs}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white font-bold text-xs transition-all active:scale-95 shadow-md">
-                        <Play size={11} className="fill-white" /> Play All
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white font-bold text-sm transition-all active:scale-95 shadow-md">
+                        <Play size={14} className="fill-white" /> Play All
                       </button>
                       <button
                         onClick={doShuffle}
                         disabled={!hasSongs}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full font-bold text-xs transition-all active:scale-95 disabled:opacity-40 ${
+                        className={`flex items-center gap-2 px-4 py-2.5 rounded-full font-bold text-sm transition-all active:scale-95 disabled:opacity-40 ${
                           isShuffle ? "bg-emerald-600/80 text-white" : "bg-gray-800 text-gray-300 hover:bg-gray-700"
                         }`}>
-                        <Shuffle size={11} /> Shuffle
+                        <Shuffle size={14} /> Shuffle
                       </button>
+                      {currentSong && (
+                        <button
+                          onClick={() => setMobileLyricsOpen(true)}
+                          className="lg:hidden flex items-center gap-2 px-4 py-2.5 rounded-full font-bold text-sm bg-purple-700/60 hover:bg-purple-700 text-white transition-all active:scale-95">
+                          <BookOpen size={14} /> Lyrics
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* ── Search ── */}
-              <div className="px-5 pb-2 shrink-0">
+              <div className="px-4 sm:px-5 pb-2 shrink-0">
                 <div className="relative">
-                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+                  <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
                   <input
                     type="text" placeholder="Search in playlist…" value={searchQ}
                     onChange={e => setSearchQ(e.target.value)}
-                    className="w-full pl-9 pr-8 py-2 bg-gray-800/50 border border-gray-700/50 rounded-xl text-sm text-white placeholder-gray-500 outline-none focus:border-indigo-500 transition-colors"
+                    className="w-full pl-11 pr-10 py-3 bg-gray-800/50 border border-gray-700/50 rounded-xl text-sm text-white placeholder-gray-500 outline-none focus:border-indigo-500 transition-colors"
                   />
                   {searchQ && (
-                    <button onClick={() => setSearchQ("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors">
-                      <X size={13} />
+                    <button onClick={() => setSearchQ("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors p-1">
+                      <X size={15} />
                     </button>
                   )}
                 </div>
@@ -854,15 +999,25 @@ export default function PlaylistView({ allSongs, showToast }: Props) {
                         <div className="w-16 h-16 rounded-2xl bg-gray-800/50 flex items-center justify-center">
                           <Music size={28} className="text-gray-600" />
                         </div>
-                        <div>
+                        <div className="text-center">
                           <p className="text-base font-semibold text-gray-500">No songs yet</p>
-                          <p className="text-sm text-gray-600 mt-1 max-w-xs leading-relaxed">Go to Song Management and tap the <ListMusic size={13} className="inline" /> icon on any song to add it here.</p>
+                          <p className="text-sm text-gray-600 mt-1 max-w-xs leading-relaxed">
+                            Go to Song Management and tap the <ListMusic size={13} className="inline" /> icon on any song to add it here.
+                          </p>
                         </div>
+                        {onNavigateToSongs && (
+                          <button
+                            onClick={onNavigateToSongs}
+                            className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-700 hover:opacity-90 text-white font-semibold text-sm shadow-lg shadow-indigo-900/30 transition-all active:scale-95 mt-2"
+                          >
+                            <Plus size={16} /> Add Songs
+                          </button>
+                        )}
                       </>
                     )}
                   </div>
                 ) : (
-                  <div className="divide-y divide-gray-800/60 pt-1">
+                  <div className="divide-y divide-gray-800/40 pt-1">
                     {filteredSongs.map((song, idx) => {
                       const isNow = currentSongId === song.id;
                       return (
@@ -875,42 +1030,42 @@ export default function PlaylistView({ allSongs, showToast }: Props) {
                           onDrop={() => handleDrop(idx)}
                           onDragEnd={() => { setDragId(null); setDragOver(null); }}
                           onClick={() => playSong(song.id)}
-                          className={`group grid items-center px-1 py-2.5 rounded-xl cursor-pointer transition-all duration-100 select-none ${
+                          className={`group grid items-center px-2 py-3.5 rounded-2xl cursor-pointer transition-all duration-100 select-none ${
                             isNow
                               ? "bg-indigo-500/15 ring-1 ring-indigo-500/20"
                               : dragOver === idx && dragId !== song.id
                                 ? "bg-indigo-500/10 ring-1 ring-indigo-500/30"
                                 : "hover:bg-gray-800/50"
                           }`}
-                          style={{ gridTemplateColumns: "2rem 1fr 2rem" }}
+                          style={{ gridTemplateColumns: "2.5rem 1fr 3rem" }}
                         >
                           {/* # or playing indicator */}
                           <div className="flex items-center justify-center w-full">
                             {isNow && isPlaying
                               ? <SoundBar />
                               : isNow
-                                ? <Music size={13} className="text-indigo-400" />
+                                ? <Music size={16} className="text-indigo-400" />
                                 : <>
-                                    <span className="text-xs text-gray-600 group-hover:hidden tabular-nums">{idx + 1}</span>
-                                    <Play size={13} className="hidden group-hover:block text-white fill-white" />
+                                    <span className="text-sm text-gray-600 group-hover:hidden tabular-nums">{idx + 1}</span>
+                                    <Play size={16} className="hidden group-hover:block text-white fill-white" />
                                   </>
                             }
                           </div>
 
                           {/* Title / artist */}
                           <div className="min-w-0 pr-2">
-                            <p className={`text-sm font-semibold truncate ${isNow ? "text-indigo-300" : "text-white"}`}>{song.title}</p>
-                            {song.artist && <p className="text-xs text-gray-500 truncate mt-0.5">{song.artist}</p>}
+                            <p className={`text-base font-semibold truncate ${isNow ? "text-indigo-300" : "text-white"}`}>{song.title}</p>
+                            {song.artist && <p className="text-sm text-gray-500 truncate mt-0.5">{song.artist}</p>}
                           </div>
 
-                          {/* Edit button — always visible and accessible */}
+                          {/* Edit button — fat touch target */}
                           <div className="flex items-center justify-center">
                             <button
                               onClick={e => { e.stopPropagation(); setEditSongId(song.id); }}
                               title="Edit"
-                              className="p-1.5 rounded-lg text-gray-600 hover:text-indigo-400 hover:bg-indigo-400/10 transition-all active:scale-90"
+                              className="w-11 h-11 flex items-center justify-center rounded-xl text-gray-500 hover:text-indigo-400 hover:bg-indigo-400/10 transition-all active:scale-90"
                             >
-                              <Pencil size={13} />
+                              <Pencil size={18} />
                             </button>
                           </div>
                         </div>
@@ -1006,6 +1161,208 @@ export default function PlaylistView({ allSongs, showToast }: Props) {
           );
         })()} 
 
+        {/* ── Share / Publish Modal ─────────────────────────────────────────── */}
+        {shareModalPlaylistId && (() => {
+          const pl = playlists.find(p => p.id === shareModalPlaylistId);
+          if (!pl) return null;
+          const publicUrl = `${window.location.origin}/p/${shareSlug}`;
+          return (
+            <>
+              {/* Backdrop */}
+              <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" onClick={() => setShareModalPlaylistId(null)} />
+              {/* Modal */}
+              <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-50 max-w-md mx-auto bg-[#13151c] border border-gray-700/60 rounded-3xl shadow-2xl overflow-hidden">
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-800/50">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-emerald-600/20 flex items-center justify-center">
+                      <Globe size={18} className="text-emerald-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-base font-bold text-white">Share Public Link</h2>
+                      <p className="text-xs text-gray-500">{pl.emoji} {pl.name}</p>
+                    </div>
+                  </div>
+                  <button onClick={() => setShareModalPlaylistId(null)}
+                    className="p-2 rounded-xl hover:bg-gray-800 text-gray-500 hover:text-white transition-all">
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <div className="px-6 py-5 space-y-5">
+                  {/* Slug editor */}
+                  <div>
+                    <label className="text-xs font-bold uppercase tracking-widest text-gray-500 block mb-2">Public URL Slug</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 text-xs font-mono pointer-events-none">/p/</span>
+                      <input
+                        value={shareSlug}
+                        onChange={e => {
+                          const v = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "");
+                          setShareSlug(v);
+                          setShareSlugAvailable(null);
+                          setSharePublishedSlug(null);
+                        }}
+                        onBlur={() => checkSlug(shareSlug)}
+                        placeholder="my-awesome-playlist"
+                        className="w-full pl-9 pr-10 py-3 bg-gray-800/60 border border-gray-700/60 rounded-xl text-sm text-white font-mono outline-none focus:border-emerald-500/60 transition-colors"
+                        maxLength={60}
+                      />
+                      {/* Availability indicator */}
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 text-sm">
+                        {shareSlugAvailable === true  && <span className="text-emerald-400">✓</span>}
+                        {shareSlugAvailable === false && <span className="text-red-400">✗</span>}
+                        {shareSlugAvailable === null  && shareSlug.length >= 3 && <span className="text-gray-600">…</span>}
+                      </div>
+                    </div>
+                    {shareSlugAvailable === false && (
+                      <p className="text-xs text-red-400 mt-1.5">This slug is already taken. Choose a different one.</p>
+                    )}
+                    {shareSlugAvailable === true && (
+                      <p className="text-xs text-emerald-400 mt-1.5">✓ Available!</p>
+                    )}
+                  </div>
+
+                  {/* Description (optional) */}
+                  <div>
+                    <label className="text-xs font-bold uppercase tracking-widest text-gray-500 block mb-2">Description <span className="font-normal text-gray-600">(optional)</span></label>
+                    <input
+                      value={shareDescription}
+                      onChange={e => setShareDescription(e.target.value)}
+                      placeholder="e.g. YC 2026 Worship Concert setlist"
+                      className="w-full px-4 py-3 bg-gray-800/60 border border-gray-700/60 rounded-xl text-sm text-white outline-none focus:border-emerald-500/60 transition-colors"
+                      maxLength={120}
+                    />
+                  </div>
+
+                  {/* Published link */}
+                  {sharePublishedSlug && (
+                    <div className="bg-emerald-900/20 border border-emerald-700/40 rounded-2xl p-4">
+                      <p className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-2">🌐 Live Public Link</p>
+                      <div className="flex items-center gap-2">
+                        <p className="flex-1 text-xs text-emerald-300 font-mono break-all">{publicUrl}</p>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(publicUrl);
+                            setShareLinkCopied(true);
+                            setTimeout(() => setShareLinkCopied(false), 2000);
+                          }}
+                          className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-all active:scale-95"
+                        >
+                          {shareLinkCopied ? <Check size={13} /> : <Link size={13} />}
+                          {shareLinkCopied ? "Copied!" : "Copy"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Song count info */}
+                  <p className="text-xs text-gray-600">
+                    {pl.songIds.length} {pl.songIds.length === 1 ? "song" : "songs"} will be included as a public snapshot.
+                    Updates to the playlist won't reflect until you republish.
+                  </p>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center gap-3 px-6 pb-6">
+                  {sharePublishedSlug ? (
+                    <>
+                      <button
+                        onClick={publishPlaylist}
+                        disabled={sharePublishing || shareSlugAvailable === false}
+                        className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-bold text-sm transition-all active:scale-95"
+                      >
+                        {sharePublishing ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><Share2 size={15} /> Republish</>}
+                      </button>
+                      <button
+                        onClick={unpublishPlaylist}
+                        disabled={sharePublishing}
+                        className="px-4 py-3 rounded-2xl text-red-400 hover:bg-red-900/20 font-semibold text-sm transition-all active:scale-95 disabled:opacity-40"
+                      >
+                        Remove
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={publishPlaylist}
+                      disabled={sharePublishing || !shareSlug || shareSlugAvailable === false}
+                      className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:opacity-90 disabled:opacity-40 text-white font-bold text-sm transition-all active:scale-95 shadow-lg"
+                    >
+                      {sharePublishing
+                        ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        : <><Globe size={15} /> Publish &amp; Get Link</>}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </>
+          );
+        })()}
+
+        {mobileLyricsOpen && currentSong && (
+          <>
+            {/* Backdrop */}
+            <div
+              className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
+              onClick={() => setMobileLyricsOpen(false)}
+            />
+            {/* Sheet */}
+            <div
+              className="fixed bottom-0 left-0 right-0 z-50 bg-[#13151c] border-t border-gray-700/60 rounded-t-3xl shadow-2xl animate-slide-up lg:hidden flex flex-col"
+              style={{ maxHeight: "80vh" }}
+            >
+              {/* Handle */}
+              <div className="flex justify-center pt-3 pb-2 shrink-0">
+                <div className="w-10 h-1 rounded-full bg-gray-700" />
+              </div>
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 pb-3 shrink-0">
+                <div className="min-w-0 flex-1 pr-3">
+                  <p className="text-xs font-bold uppercase tracking-widest text-purple-400">Now Playing</p>
+                  <p className="text-base font-bold text-white truncate">{currentSong.title}</p>
+                  {currentSong.artist && <p className="text-sm text-gray-500 truncate">{currentSong.artist}</p>}
+                </div>
+                <button
+                  onClick={() => setMobileLyricsOpen(false)}
+                  className="p-2.5 rounded-xl hover:bg-gray-800 text-gray-500 hover:text-white transition-all active:scale-90 shrink-0"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              {/* Tab bar */}
+              <div className="flex items-center gap-2 px-5 pb-3 shrink-0 border-b border-gray-800/50">
+                <button
+                  onClick={() => setMobileLyricTab("lyrics")}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                    mobileLyricTab === "lyrics" ? "bg-indigo-600 text-white" : "text-gray-500 hover:text-gray-300 bg-gray-800/60"
+                  }`}>
+                  <BookOpen size={15} /> Lyrics
+                </button>
+                <button
+                  onClick={() => setMobileLyricTab("chords")}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                    mobileLyricTab === "chords" ? "bg-purple-600 text-white" : "text-gray-500 hover:text-gray-300 bg-gray-800/60"
+                  }`}>
+                  <Guitar size={15} /> Chords
+                </button>
+              </div>
+              {/* Scrollable content */}
+              <div className="flex-1 overflow-y-auto px-5 py-4">
+                {mobileLyricTab === "lyrics" ? (
+                  currentSong.lyrics
+                    ? <div className="space-y-0">{renderLyrics(currentSong.lyrics)}</div>
+                    : <p className="text-sm text-gray-600 italic mt-2">No lyrics saved for this song.</p>
+                ) : (
+                  currentSong.chords
+                    ? <pre className="text-base text-gray-300 font-mono whitespace-pre-wrap leading-8">{currentSong.chords}</pre>
+                    : <p className="text-sm text-gray-600 italic mt-2">No chords saved for this song.</p>
+                )}
+              </div>
+              <div className="h-6 shrink-0" />
+            </div>
+          </>
+        )} 
+
         {/* ── RIGHT: Video + Lyrics/Chords ───────────────────────────────── */}
         <div className="hidden lg:flex flex-col w-[340px] xl:w-[400px] shrink-0 overflow-hidden bg-[#0a0c10]">
 
@@ -1078,55 +1435,55 @@ export default function PlaylistView({ allSongs, showToast }: Props) {
       {/* ══ BOTTOM PLAYER BAR ══════════════════════════════════════════════ */}
       <div className="shrink-0 border-t border-gray-800/60 bg-[#0a0c10]">
 
-        {/* Mobile: thin progress strip across the very top of the bar */}
-        <div className="relative h-0.5 bg-gray-800 lg:hidden">
-          <div className="h-full bg-indigo-500" style={{ width: `${progress * 100}%` }} />
+        {/* Mobile: visible + scrubable progress strip */}
+        <div className="relative h-1.5 bg-gray-800 lg:hidden">
+          <div className="h-full bg-gradient-to-r from-indigo-500 to-purple-600 rounded-r-full" style={{ width: `${progress * 100}%` }} />
           <input
             type="range" min={0} max={1} step={0.001} value={progress}
             onChange={handleSeek}
             disabled={!currentSong || duration === 0}
-            className="absolute inset-0 w-full opacity-0 h-3 -top-1 cursor-pointer disabled:cursor-not-allowed"
+            className="absolute inset-0 w-full opacity-0 h-6 -top-2 cursor-pointer disabled:cursor-not-allowed"
           />
         </div>
 
-        <div className="flex items-center px-3 sm:px-6 py-2 gap-2 sm:gap-3">
+        <div className="flex items-center px-4 sm:px-6 py-3 gap-3 sm:gap-4">
 
           {/* Thumbnail + song info */}
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 lg:w-52 lg:flex-none">
-            <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center text-lg shrink-0 ${
+          <div className="flex items-center gap-3 min-w-0 flex-1 lg:w-52 lg:flex-none">
+            <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0 ${
               currentSong
                 ? "bg-gradient-to-br from-indigo-700/70 to-purple-900/70 border border-indigo-600/20"
                 : "bg-gray-800"
             }`}>
-              {currentSong ? (activePlaylist?.emoji ?? "🎵") : <Music size={14} className="text-gray-600" />}
+              {currentSong ? (activePlaylist?.emoji ?? "🎵") : <Music size={16} className="text-gray-600" />}
             </div>
             <div className="min-w-0">
-              <p className={`text-xs sm:text-sm font-semibold truncate leading-tight ${currentSong ? "text-white" : "text-gray-600"}`}>
+              <p className={`text-sm font-semibold truncate leading-tight ${currentSong ? "text-white" : "text-gray-600"}`}>
                 {currentSong?.title ?? "Nothing playing"}
               </p>
               {currentSong?.artist && (
-                <p className="text-[10px] sm:text-xs text-gray-500 truncate mt-0.5">{currentSong.artist}</p>
+                <p className="text-xs text-gray-500 truncate mt-0.5">{currentSong.artist}</p>
               )}
             </div>
           </div>
 
-          {/* Mobile: compact prev / play / next only */}
+          {/* Mobile: bigger prev / play / next — fat tap targets */}
           <div className="flex items-center gap-2 lg:hidden shrink-0">
             <button onClick={handlePrev} disabled={!currentSong}
-              className="text-gray-400 hover:text-white disabled:opacity-25 transition-colors p-1">
-              <SkipBack size={18} />
+              className="text-gray-400 hover:text-white disabled:opacity-25 transition-colors p-2.5 rounded-xl active:scale-90">
+              <SkipBack size={22} />
             </button>
             <button onClick={togglePlay}
-              className={`w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-95 ${
+              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-lg ${
                 currentSong ? "bg-white hover:bg-gray-100" : "bg-gray-700 cursor-default"
               }`}>
               {isPlaying
-                ? <Pause size={15} className="text-gray-900 fill-gray-900" />
-                : <Play  size={15} className="text-gray-900 fill-gray-900 ml-0.5" />}
+                ? <Pause size={20} className="text-gray-900 fill-gray-900" />
+                : <Play  size={20} className="text-gray-900 fill-gray-900 ml-0.5" />}
             </button>
             <button onClick={handleNext} disabled={!currentSong}
-              className="text-gray-400 hover:text-white disabled:opacity-25 transition-colors p-1">
-              <SkipForward size={18} />
+              className="text-gray-400 hover:text-white disabled:opacity-25 transition-colors p-2.5 rounded-xl active:scale-90">
+              <SkipForward size={22} />
             </button>
           </div>
 

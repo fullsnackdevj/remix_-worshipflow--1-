@@ -3870,8 +3870,88 @@ Rules:
         }
     }
 
-    return json(404, { error: "Not found" });
+    // ── GET /public-playlist/:slug ——————————————————————————————————————————————
+    // No auth required. Returns the published playlist + song snapshots.
+    const publicPlaylistMatch = rawPath.match(/^\/public-playlist\/([^/]+)$/);
+    if (publicPlaylistMatch && method === "GET") {
+        const slug = publicPlaylistMatch[1];
+        if (!firestore) return json(500, { error: "DB unavailable" });
+        try {
+            const doc = await firestore.collection("sharedPlaylists").doc(slug).get();
+            if (!doc.exists) return json(404, { error: "Playlist not found" });
+            const data = doc.data() as Record<string, any>;
+            return json(200, data, {
+                "Cache-Control": "public, max-age=30, stale-while-revalidate=60",
+                "Access-Control-Allow-Origin": "*",
+            });
+        } catch (e: any) {
+            console.error("[public-playlist/get]", e?.message);
+            return json(500, { error: "Failed to load playlist" });
+        }
+    }
 
+    // ── GET /public-playlist/check-slug?slug=... ———————————————————————————————
+    if (rawPath === "/public-playlist/check-slug" && method === "GET") {
+        const slugToCheck = event.queryStringParameters?.slug ?? "";
+        if (!slugToCheck) return json(400, { error: "slug required" });
+        if (!firestore) return json(500, { error: "DB unavailable" });
+        try {
+            const doc = await firestore.collection("sharedPlaylists").doc(slugToCheck).get();
+            return json(200, { available: !doc.exists });
+        } catch { return json(200, { available: true }); }
+    }
+
+    // ── POST /public-playlist/sync-name ————————————————————————————————————————
+    // Lightweight name/emoji sync — called on every playlist rename in the app.
+    if (rawPath === "/public-playlist/sync-name" && method === "POST") {
+        if (!firestore) return json(500, { error: "DB unavailable" });
+        const { slug, name, emoji } = body as { slug: string; name: string; emoji?: string };
+        if (!slug || !name) return json(400, { error: "slug and name required" });
+        try {
+            const ref = firestore.collection("sharedPlaylists").doc(slug);
+            const snap = await ref.get();
+            if (!snap.exists) return json(404, { error: "Playlist not found" });
+            await ref.update({ name, emoji: emoji ?? "🎵", updatedAt: new Date().toISOString() });
+            return json(200, { success: true });
+        } catch (e: any) {
+            console.error("[public-playlist/sync-name]", e?.message);
+            return json(500, { error: "Failed to sync name" });
+        }
+    }
+
+    // ── POST /public-playlist/publish ——————————————————————————————————————————
+    if (rawPath === "/public-playlist/publish" && method === "POST") {
+        if (!firestore) return json(500, { error: "DB unavailable" });
+        const { slug, playlist: pl, songs, unpublish } = body as {
+            slug: string;
+            playlist: { name: string; emoji: string; description?: string };
+            songs: Array<{ id: string; title: string; artist?: string; youtubeUrl?: string; lyrics?: string; chords?: string }>;
+            unpublish?: boolean;
+        };
+        if (!slug) return json(400, { error: "slug required" });
+        if (!/^[a-z0-9-]{3,80}$/.test(slug))
+            return json(400, { error: "Invalid slug. Use only lowercase letters, numbers and hyphens (3–80 chars)." });
+        try {
+            const ref = firestore.collection("sharedPlaylists").doc(slug);
+            if (unpublish) { await ref.delete(); return json(200, { success: true, unpublished: true }); }
+            await ref.set({
+                name:        pl.name,
+                emoji:       pl.emoji ?? "🎵",
+                description: pl.description ?? "",
+                songs:       (songs ?? []).map(s => ({
+                    id: s.id, title: s.title, artist: s.artist ?? "",
+                    youtubeUrl: s.youtubeUrl ?? "", lyrics: s.lyrics ?? "", chords: s.chords ?? "",
+                })),
+                publishedAt: new Date().toISOString(),
+            });
+            return json(200, { success: true, slug });
+        } catch (e: any) {
+            console.error("[public-playlist/publish]", e?.message);
+            return json(500, { error: "Failed to publish playlist" });
+        }
+    }
+
+    return json(404, { error: "Not found" });
 
 };
 

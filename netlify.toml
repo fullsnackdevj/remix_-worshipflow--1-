@@ -27,6 +27,12 @@
   to = "/index.html"
   status = 200
 
+# ── Public playlist path ──────────────────────────────────────────────────────
+[[redirects]]
+  from = "/p/*"
+  to = "/index.html"
+  status = 200
+
 # ── SPA fallback ─────────────────────────────────────────────────────────────
 [[redirects]]
   from = "/*"

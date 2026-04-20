@@ -1892,6 +1892,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                   allSongs={allSongs}
                   showToast={showToast}
                   onOpenVideo={openVideo}
+                  onNavigateToSongs={() => setCurrentView("songs")}
                 />
               ) : currentView === "rehearsal" ? (
                 <RehearsalView

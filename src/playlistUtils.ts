@@ -8,6 +8,7 @@ export interface Playlist {
   createdAt: string;
   updatedAt: string;
   emoji?: string;
+  publishedSlug?: string; // set when the playlist has an active public link
 }
 
 const STORAGE_KEY = "wf_playlists_v1";

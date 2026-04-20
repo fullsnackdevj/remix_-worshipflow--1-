@@ -3187,6 +3187,92 @@ app.get("/api/planner/my-cards", async (req, res) => {
 
 
 
+// ── PUBLIC PLAYLIST ───────────────────────────────────────────────────────────
+
+// GET /api/public-playlist/check-slug?slug=... — check if slug is taken
+// Must be defined BEFORE the :slug wildcard route
+app.get("/api/public-playlist/check-slug", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const slug = (req.query.slug as string || "").trim();
+  if (!slug) return res.status(400).json({ error: "slug required" });
+  try {
+    const doc = await firestore.collection("sharedPlaylists").doc(slug).get();
+    res.json({ available: !doc.exists });
+  } catch { res.json({ available: true }); }
+});
+
+// POST /api/public-playlist/sync-name — lightweight name/emoji update (no song refresh)
+// Called automatically when the user renames a published playlist inside the app.
+app.post("/api/public-playlist/sync-name", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { slug, name, emoji } = req.body as { slug: string; name: string; emoji?: string };
+  if (!slug || !name) return res.status(400).json({ error: "slug and name required" });
+  try {
+    const ref = firestore.collection("sharedPlaylists").doc(slug);
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ error: "Playlist not found" });
+    await ref.update({ name, emoji: emoji ?? "🎵", updatedAt: new Date().toISOString() });
+    res.json({ success: true });
+  } catch (e: any) {
+    console.error("[public-playlist/sync-name]", e?.message);
+    res.status(500).json({ error: "Failed to sync name" });
+  }
+});
+
+// GET /api/public-playlist/:slug — public, no auth required
+app.get("/api/public-playlist/:slug", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { slug } = req.params;
+  try {
+    const doc = await firestore.collection("sharedPlaylists").doc(slug).get();
+    if (!doc.exists) return res.status(404).json({ error: "Playlist not found" });
+    res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
+    res.json(doc.data());
+  } catch (e: any) {
+    console.error("[public-playlist GET]", e?.message);
+    res.status(500).json({ error: "Failed to load playlist" });
+  }
+});
+
+// POST /api/public-playlist/publish — publish or unpublish
+app.post("/api/public-playlist/publish", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { slug, playlist: pl, songs, unpublish } = req.body as {
+    slug: string;
+    playlist: { name: string; emoji: string; description?: string };
+    songs: Array<{ id: string; title: string; artist?: string; youtubeUrl?: string; lyrics?: string; chords?: string }>;
+    unpublish?: boolean;
+  };
+  if (!slug) return res.status(400).json({ error: "slug required" });
+  if (!/^[a-z0-9-]{3,80}$/.test(slug))
+    return res.status(400).json({ error: "Invalid slug. Use only lowercase letters, numbers and hyphens (3–80 chars)." });
+  try {
+    const ref = firestore.collection("sharedPlaylists").doc(slug);
+    if (unpublish) {
+      await ref.delete();
+      return res.json({ success: true, unpublished: true });
+    }
+    await ref.set({
+      name:        pl.name,
+      emoji:       pl.emoji ?? "🎵",
+      description: pl.description ?? "",
+      songs:       (songs ?? []).map(s => ({
+        id: s.id, title: s.title, artist: s.artist ?? "",
+        youtubeUrl: s.youtubeUrl ?? "", lyrics: s.lyrics ?? "", chords: s.chords ?? "",
+      })),
+      publishedAt: new Date().toISOString(),
+    });
+    res.json({ success: true, slug });
+  } catch (e: any) {
+    console.error("[public-playlist PUBLISH]", e?.message);
+    res.status(500).json({ error: "Failed to publish playlist" });
+  }
+});
+
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
