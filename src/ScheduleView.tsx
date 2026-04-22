@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { toSafeTitle } from "./utils/textFormatting";
 import { getAuth } from "firebase/auth";
 import { db } from "./firebase";
 import { doc, getDoc } from "firebase/firestore";
@@ -527,7 +528,7 @@ showToast("error", err.message || "Could not send notification.");
   }
 };
 
-// \u2500\u2500 Lineup acknowledgment (heart) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+// ── Lineup acknowledgment (heart) ──────────────────────────────────────────
 const handleLineupAck = async (scheduleId: string) => {
   if (isAcking) return;
   const cu = getAuth().currentUser;
@@ -914,8 +915,8 @@ showToast("error", "Could not save acknowledgment. Try again.");
                                 const sSong = allSongs.find(sg => sg.id === s.songLineup?.solemn);
                                 if (jSong || sSong) {
                                   lines.push(""); lines.push("Song Line-up:");
-                                  if (jSong) { lines.push(`Joyful: ${jSong.title}${jSong.artist ? ` - ${jSong.artist}` : ""}`); if (jSong.video_url) lines.push(`Link: ${jSong.video_url}`); }
-                                  if (sSong) { lines.push(""); lines.push(`Solemn: ${sSong.title}${sSong.artist ? ` - ${sSong.artist}` : ""}`); if (sSong.video_url) lines.push(`Link: ${sSong.video_url}`); }
+                                  if (jSong) { lines.push(`Joyful: ${toSafeTitle(jSong.title)}${jSong.artist ? ` - ${jSong.artist}` : ""}`); if (jSong.video_url) lines.push(`Link: ${jSong.video_url}`); }
+                                  if (sSong) { lines.push(""); lines.push(`Solemn: ${toSafeTitle(sSong.title)}${sSong.artist ? ` - ${sSong.artist}` : ""}`); if (sSong.video_url) lines.push(`Link: ${sSong.video_url}`); }
                                 }
                               } else {
                                 (s.assignments || []).forEach((a: any) => { lines.push(""); lines.push(`${a.role}: ${(a.members || []).map((m: any) => m.name).join(", ") || "(none)"}`); });
@@ -1200,8 +1201,8 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                         const sSong = allSongs.find(sg => sg.id === editSchedSongLineup.solemn);
                         if (jSong || sSong) {
                           lines.push(""); lines.push("Song Line-up:");
-                          if (jSong) { lines.push(`Joyful: ${jSong.title}${jSong.artist ? ` - ${jSong.artist}` : ""}`); if (jSong.video_url) lines.push(`Link: ${jSong.video_url}`); }
-                          if (sSong) { lines.push(""); lines.push(`Solemn: ${sSong.title}${sSong.artist ? ` - ${sSong.artist}` : ""}`); if (sSong.video_url) lines.push(`Link: ${sSong.video_url}`); }
+                          if (jSong) { lines.push(`Joyful: ${toSafeTitle(jSong.title)}${jSong.artist ? ` - ${jSong.artist}` : ""}`); if (jSong.video_url) lines.push(`Link: ${jSong.video_url}`); }
+                          if (sSong) { lines.push(""); lines.push(`Solemn: ${toSafeTitle(sSong.title)}${sSong.artist ? ` - ${sSong.artist}` : ""}`); if (sSong.video_url) lines.push(`Link: ${sSong.video_url}`); }
                         }
                       } else {
                         editSchedAssignments.forEach(asgn => { lines.push(""); lines.push(`${asgn.role}: ${asgn.members.map(m => m.name).join(", ") || "(none)"}`); });
@@ -1297,8 +1298,8 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                         {(editSchedSongLineup.joyful || editSchedSongLineup.solemn) && (
                           <div>
                             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Song Line-Up</p>
-                            {editSchedSongLineup.joyful && (() => { const s = allSongs.find(sg => sg.id === editSchedSongLineup.joyful); return s ? <p className="text-sm mb-1"><Sun size={12} className="inline-block mr-1" /> <span className="font-semibold text-amber-500 uppercase text-xs">Joyful</span>{" "}{s.video_url ? <button onClick={() => onOpenVideo?.(s.video_url!)} className="text-gray-900 dark:text-white hover:text-amber-500 dark:hover:text-amber-400 underline underline-offset-2 decoration-amber-400/60 transition-colors">{s.title} <span className="inline-block text-[10px] text-amber-400 align-middle">▶</span></button> : <span className="text-gray-900 dark:text-white">{s.title}</span>}</p> : null; })()}
-                            {editSchedSongLineup.solemn && (() => { const s = allSongs.find(sg => sg.id === editSchedSongLineup.solemn); return s ? <p className="text-sm"><Music size={12} className="inline-block mr-1" /> <span className="font-semibold text-indigo-400 uppercase text-xs">Solemn</span>{" "}{s.video_url ? <button onClick={() => onOpenVideo?.(s.video_url!)} className="text-gray-900 dark:text-white hover:text-indigo-400 dark:hover:text-indigo-300 underline underline-offset-2 decoration-indigo-400/60 transition-colors">{s.title} <span className="inline-block text-[10px] text-indigo-400 align-middle">▶</span></button> : <span className="text-gray-900 dark:text-white">{s.title}</span>}</p> : null; })()}
+                            {editSchedSongLineup.joyful && (() => { const s = allSongs.find(sg => sg.id === editSchedSongLineup.joyful); return s ? <p className="text-sm mb-1"><Sun size={12} className="inline-block mr-1" /> <span className="font-semibold text-amber-500 uppercase text-xs">Joyful</span>{" "}{s.video_url ? <button onClick={() => onOpenVideo?.(s.video_url!)} className="text-gray-900 dark:text-white hover:text-amber-500 dark:hover:text-amber-400 underline underline-offset-2 decoration-amber-400/60 transition-colors">{toSafeTitle(s.title)} <span className="inline-block text-[10px] text-amber-400 align-middle">▶</span></button> : <span className="text-gray-900 dark:text-white">{toSafeTitle(s.title)}</span>}</p> : null; })()}
+                            {editSchedSongLineup.solemn && (() => { const s = allSongs.find(sg => sg.id === editSchedSongLineup.solemn); return s ? <p className="text-sm"><Music size={12} className="inline-block mr-1" /> <span className="font-semibold text-indigo-400 uppercase text-xs">Solemn</span>{" "}{s.video_url ? <button onClick={() => onOpenVideo?.(s.video_url!)} className="text-gray-900 dark:text-white hover:text-indigo-400 dark:hover:text-indigo-300 underline underline-offset-2 decoration-indigo-400/60 transition-colors">{toSafeTitle(s.title)} <span className="inline-block text-[10px] text-indigo-400 align-middle">▶</span></button> : <span className="text-gray-900 dark:text-white">{toSafeTitle(s.title)}</span>}</p> : null; })()}
                           </div>
                         )}
                       </>
@@ -1832,7 +1833,7 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                                     {editSchedSongLineup.solemn === sg.id && <div className="w-2 h-2 rounded-full bg-white" />}
                                   </div>
                                   <div className="flex-1 text-left min-w-0">
-                                    <p className="font-medium truncate">{sg.title}</p>
+                                    <p className="font-medium truncate">{toSafeTitle(sg.title)}</p>
                                     {sg.artist && <p className={`text-[11px] truncate ${editSchedSongLineup.solemn === sg.id ? "text-indigo-200" : "text-gray-400"}`}>{sg.artist}</p>}
                                   </div>
                                 </button>
@@ -1993,13 +1994,13 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                           {sSong && (
                             <div style={{ color: "#1e293b", fontSize: 13, fontWeight: 500, marginTop: 5 }}>
                               <span style={{ display: "inline-block", background: "#ede9fe", color: "#6d28d9", fontSize: 10, fontWeight: 700, textTransform: "uppercase", padding: "2px 7px", borderRadius: 4, marginRight: 6 }}>Solemn</span>
-                              {sSong.title}
+                              {sSong.title ? toSafeTitle(sSong.title) : ""}
                             </div>
                           )}
                           {jSong && (
                             <div style={{ color: "#1e293b", fontSize: 13, fontWeight: 500, marginTop: 5 }}>
                               <span style={{ display: "inline-block", background: "#dcfce7", color: "#166534", fontSize: 10, fontWeight: 700, textTransform: "uppercase", padding: "2px 7px", borderRadius: 4, marginRight: 6 }}>Joyful</span>
-                              {jSong.title}
+                              {jSong.title ? toSafeTitle(jSong.title) : ""}
                             </div>
                           )}
                         </div>

@@ -6,6 +6,7 @@ import VerseOfTheDay from "./VerseOfTheDay";
 import BirthdayCard from "./BirthdayCard";
 import BirthdayBanner from "./BirthdayBanner";
 import AssemblyBell from "./AssemblyBell";
+import { toSafeTitle } from "./utils/textFormatting";
 import {
     Music, Users, Calendar, NotepadText, ChevronRight, Clock,
     Bug, Lightbulb, CheckCircle2, AlertCircle, Shield, Bell, UserCheck,
@@ -36,13 +37,14 @@ interface Props {
 }
 
 const ROLE_STYLE: Record<string, { label: string; bg: string; text: string; border: string; glow: string }> = {
-    admin: { label: "Admin", bg: "bg-amber-500/15", text: "text-amber-300", border: "border-amber-400/30", glow: "rgba(245,158,11,0.28)" },
-    leader: { label: "Worship Leader", bg: "bg-indigo-500/15", text: "text-indigo-300", border: "border-indigo-500/40", glow: "rgba(99,102,241,0.28)" },
-    planning_lead: { label: "Planning Lead", bg: "bg-rose-500/15", text: "text-rose-300", border: "border-rose-500/40", glow: "rgba(244,63,94,0.25)" },
-    musician: { label: "Musician", bg: "bg-purple-500/15", text: "text-purple-300", border: "border-purple-500/40", glow: "rgba(168,85,247,0.25)" },
-    audio_tech: { label: "Audio / Tech", bg: "bg-teal-500/15", text: "text-teal-300", border: "border-teal-500/40", glow: "rgba(20,184,166,0.25)" },
-    member: { label: "Member", bg: "bg-gray-500/10", text: "text-gray-400", border: "border-gray-500/20", glow: "none" },
-    qa_specialist: { label: "QA Specialist", bg: "bg-fuchsia-500/15", text: "text-fuchsia-300", border: "border-fuchsia-500/40", glow: "rgba(217,70,239,0.25)" },
+    // text: light-mode value first (dark: pair for dark mode) — ensures WCAG AA 4.5:1 contrast in both modes
+    admin: { label: "Admin", bg: "bg-amber-500/15", text: "text-amber-700 dark:text-amber-300", border: "border-amber-400/30", glow: "rgba(245,158,11,0.28)" },
+    leader: { label: "Worship Leader", bg: "bg-indigo-500/15", text: "text-indigo-700 dark:text-indigo-300", border: "border-indigo-500/40", glow: "rgba(99,102,241,0.28)" },
+    planning_lead: { label: "Planning Lead", bg: "bg-rose-500/15", text: "text-rose-700 dark:text-rose-300", border: "border-rose-500/40", glow: "rgba(244,63,94,0.25)" },
+    musician: { label: "Musician", bg: "bg-purple-500/15", text: "text-purple-700 dark:text-purple-300", border: "border-purple-500/40", glow: "rgba(168,85,247,0.25)" },
+    audio_tech: { label: "Audio / Tech", bg: "bg-teal-500/15", text: "text-teal-700 dark:text-teal-300", border: "border-teal-500/40", glow: "rgba(20,184,166,0.25)" },
+    member: { label: "Member", bg: "bg-gray-500/10", text: "text-gray-600 dark:text-gray-400", border: "border-gray-500/20", glow: "none" },
+    qa_specialist: { label: "QA Specialist", bg: "bg-fuchsia-500/15", text: "text-fuchsia-700 dark:text-fuchsia-300", border: "border-fuchsia-500/40", glow: "rgba(217,70,239,0.25)" },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -78,12 +80,13 @@ function svcColor(t?: string) {
 }
 function greeting() { const h = new Date().getHours(); return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"; }
 
-// ── Design System: Overpay structural tokens applied to WorshipFlow ──────────
-// Card surface: subtle border elevation over heavy shadows (dark mode safe)
+// ── Design System v2.0: WorshipFlow standard tokens ──────────────────────────
+// Card surface: rounded-2xl (16px) everywhere — standardized across all modules
 // Padding: 24px internal (p-6) per Overpay Data Card spec
-// Radius: 20px (rounded-[20px]) for cards, 12px (rounded-xl) for inner elements
+// Radius: 16px (rounded-2xl) for cards, 12px (rounded-xl) for inner elements
 // Hover: translate-y-0.5 lift + border accent — no color shift
-const CARD = "bg-white dark:bg-gray-800/90 rounded-[20px] border border-gray-200/80 dark:border-gray-700/60 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.05)] dark:shadow-[0_4px_20px_-2px_rgba(0,0,0,0.3)]";
+// Shadow: 2px 12px light / 4px 20px dark (refined from 4px 20px -2px)
+const CARD = "bg-white dark:bg-gray-800/90 rounded-2xl border border-gray-200 dark:border-gray-700/60 shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_20px_-2px_rgba(0,0,0,0.35)]";
 
 // ── Bento Tile ────────────────────────────────────────────────────────────────
 function Tile({ children, className = "", onClick, style }: {
@@ -91,7 +94,7 @@ function Tile({ children, className = "", onClick, style }: {
 }) {
     return (
         <div onClick={onClick} style={style}
-            className={`${CARD} overflow-hidden
+            className={`${CARD} flex flex-col h-full overflow-hidden
                 ${onClick ? "cursor-pointer hover:-translate-y-0.5 hover:border-indigo-300/60 dark:hover:border-indigo-600/50 hover:shadow-[0_8px_24px_-4px_rgba(0,0,0,0.08)] dark:hover:shadow-[0_8px_24px_-4px_rgba(0,0,0,0.4)] transition-all duration-200" : ""}
                 ${className}`}>
             {children}
@@ -99,20 +102,22 @@ function Tile({ children, className = "", onClick, style }: {
     );
 }
 
-// ── Card header — Overpay spec: icon chip + title left, action right ─────────
+// ── Card header — Design System v2.0: icon chip w-8 h-8 (32px), 16px icon ───
 function CardHeader({ icon, title, action, onAction }: {
     icon: React.ReactNode; title: string; action?: string; onAction?: () => void;
 }) {
     return (
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100/80 dark:border-gray-700/60">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-700/60">
             <div className="flex items-center gap-2.5">
-                <span className="w-7 h-7 rounded-xl bg-gray-100 dark:bg-gray-700/80 flex items-center justify-center shrink-0">
+                {/* STANDARD icon chip: w-8 h-8, rounded-xl */}
+                <span className="w-8 h-8 rounded-xl bg-gray-100 dark:bg-gray-700/80 flex items-center justify-center shrink-0">
                     {icon}
                 </span>
-                <span className="font-semibold text-gray-900 dark:text-white text-sm tracking-tight">{title}</span>
+                {/* H2 — Card section title: base size, bold, dark */}
+                <h2 className="font-bold text-gray-900 dark:text-white text-base tracking-tight">{title}</h2>
             </div>
             {action && onAction && (
-                <button onClick={onAction} className="text-xs text-indigo-500 hover:text-indigo-400 flex items-center gap-1 font-medium transition-colors">
+                <button onClick={onAction} className="text-sm text-indigo-500 hover:text-indigo-400 flex items-center gap-1 font-medium transition-colors">
                     {action}<ChevronRight size={13} />
                 </button>
             )}
@@ -120,20 +125,22 @@ function CardHeader({ icon, title, action, onAction }: {
     );
 }
 
-// ── Metric tile — Overpay 24px padding, stronger type hierarchy ───────────────
+// ── Metric tile — Design System v2.0: w-10 h-10 icon chip, 20px icon ─────────
 function MetricTile({ label, value, sub, iconBg, icon, onClick }: {
     label: string; value: number; sub: string; iconBg: string; icon: React.ReactNode; onClick?: () => void;
 }) {
     return (
-        <Tile className="p-6 flex flex-col justify-between" onClick={onClick}>
-            <div className="flex items-start justify-between mb-4">
+        <Tile className="p-5 sm:p-6 flex flex-col justify-between min-h-[120px]" onClick={onClick}>
+            <div className="flex items-start justify-between mb-3">
+                {/* Icon chip: w-10 h-10, 20px icon — standard for stat tiles */}
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${iconBg}`}>{icon}</div>
-                <ArrowUpRight size={14} className="text-gray-300 dark:text-gray-600 mt-0.5 group-hover:text-indigo-400 transition-colors" />
+                <ArrowUpRight size={16} className="text-gray-300 dark:text-gray-600 mt-0.5 transition-colors" />
             </div>
             <div>
                 <p className="text-4xl font-black text-gray-900 dark:text-white tracking-tight leading-none">{value}</p>
-                <p className="text-sm font-bold text-gray-600 dark:text-gray-300 mt-2 tracking-tight">{label}</p>
-                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 font-medium">{sub}</p>
+                {/* H3 — Stat name: text-base bold, secondary */}
+                <h3 className="text-base font-bold text-gray-700 dark:text-gray-300 mt-2 tracking-tight">{label}</h3>
+                <p className="text-sm text-gray-400 dark:text-gray-500 mt-0.5 font-medium">{sub}</p>
             </div>
         </Tile>
     );
@@ -164,9 +171,9 @@ function NextServiceTile({ ev, songs, members, myMemberId, onClick }: {
 
     if (!ev) return (
         <Tile className="p-6 flex flex-col gap-3 h-full" onClick={onClick}>
-            <div className="flex items-center gap-2 text-sm font-semibold text-indigo-600 dark:text-indigo-400 mb-1">
+            <h2 className="flex items-center gap-2 text-base font-bold text-indigo-600 dark:text-indigo-400 mb-1">
                 <Calendar size={15} /> Church Events
-            </div>
+            </h2>
             <div className="flex flex-col items-center justify-center flex-1 gap-3 py-4">
                 <div className="w-12 h-12 rounded-2xl bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
                     <Calendar size={22} className="text-gray-400" />
@@ -199,51 +206,68 @@ function NextServiceTile({ ev, songs, members, myMemberId, onClick }: {
                 action="Full schedule"
                 onAction={onClick}
             />
-            <div className="p-5 flex-1 space-y-4">
-                {/* Date + event */}
-                <div className="flex items-start gap-4">
-                    <div className="flex flex-col items-center justify-center w-14 h-14 rounded-xl bg-indigo-600 text-white shrink-0 shadow-md">
-                        <p className="text-[9px] font-bold uppercase text-indigo-200">{d.toLocaleDateString("en", { month: "short" })}</p>
-                        <p className="text-2xl font-black leading-tight">{d.getDate()}</p>
-                        <p className="text-[9px] text-indigo-300">{d.toLocaleDateString("en", { weekday: "short" })}</p>
+            <div className="p-5 flex-1 flex flex-col gap-3">
+                {/* Date + event — compact header row */}
+                <div className="flex items-center gap-3">
+                    {/* Compact date chip */}
+                    <div className="flex flex-col items-center justify-center w-12 rounded-xl bg-indigo-600 text-white shrink-0 shadow-md py-1.5">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-300 leading-none">{d.toLocaleDateString("en", { month: "short" })}</p>
+                        <p className="text-[26px] font-black leading-tight">{d.getDate()}</p>
+                        <p className="text-[10px] font-semibold text-indigo-300 leading-none">{d.toLocaleDateString("en", { weekday: "short" })}</p>
                     </div>
+                    {/* Event info */}
                     <div className="min-w-0 flex-1">
-                        <div className="flex items-start justify-between gap-2">
-                            <p className="text-lg font-bold text-gray-900 dark:text-white leading-tight truncate">{ev.eventName ?? "Event"}</p>
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${isUrgent ? "bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400" : "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300"}`}>{du}</span>
+                        <div className="flex items-center flex-wrap gap-x-1.5 gap-y-1 mb-0.5">
+                            <h3 className="text-[15px] font-bold text-gray-900 dark:text-white leading-snug">{ev.eventName ?? "Event"}</h3>
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full shrink-0 ${isUrgent ? "bg-red-500 text-white" : "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300"}`}>{du}</span>
                         </div>
-                        {["sunday service", "midweek service"].includes((ev.eventName ?? "").toLowerCase())
-                            ? <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full mt-1 inline-block ${svcColor(ev.serviceType)}`}>{svcLabel(ev.serviceType)}</span>
-                            : <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full mt-1 inline-block bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">Custom Event</span>
-                        }
-                        {ev.worshipLeader && <p className="text-xs text-gray-400 mt-1 flex items-center gap-1"><Mic2 size={10} />Leader: {ev.worshipLeader.name}</p>}
+                        {ev.worshipLeader && (
+                            <p className="text-xs text-gray-400 flex items-center gap-1">
+                                <Mic2 size={10} className="shrink-0" />
+                                Leader: <span className="font-medium text-gray-600 dark:text-gray-300">{ev.worshipLeader.name}</span>
+                            </p>
+                        )}
                     </div>
                 </div>
+
+                {/* Divider */}
+                <div className="border-t border-gray-100 dark:border-gray-700/60" />
+
                 {/* My role */}
                 {myRoles.length > 0 && (
-                    <div>
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1.5">My Role</p>
-                        <div className="flex flex-wrap gap-1.5">
-                            {myRoles.map(r => (
-                                <span key={r} className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-xs font-semibold">
-                                    <Mic2 size={10} />{r}
-                                </span>
-                            ))}
-                        </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500 shrink-0">My Role</span>
+                        {myRoles.map(r => (
+                            <span key={r} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-xs font-semibold">
+                                <Mic2 size={9} />{r}
+                            </span>
+                        ))}
                     </div>
                 )}
-                {/* Songs */}
+
+                {/* Songs to prepare */}
                 {(solemn || joyful) && (
-                    <div>
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1.5 flex items-center gap-1"><Music size={9} />Songs to Prepare</p>
-                        <div className="space-y-1.5">
-                            {solemn && <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/30 rounded-xl text-xs"><Music size={11} className="text-indigo-500" /><span className="text-gray-400">Solemn:</span><span className="font-semibold text-gray-900 dark:text-gray-100 truncate">{solemn.title}</span></div>}
-                            {joyful && <div className="flex items-center gap-2 px-3 py-1.5 bg-violet-50 dark:bg-violet-900/20 border border-violet-100 dark:border-violet-800/30 rounded-xl text-xs"><Star size={11} className="text-violet-500" /><span className="text-gray-400">Joyful:</span><span className="font-semibold text-gray-900 dark:text-gray-100 truncate">{joyful.title}</span></div>}
-                        </div>
+                    <div className="space-y-1.5">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 flex items-center gap-1"><Music size={10} />Songs to Prepare</p>
+                        {solemn && (
+                            <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/30 rounded-lg text-xs">
+                                <Music size={11} className="text-indigo-400 shrink-0" />
+                                <span className="text-gray-400 shrink-0">Solemn</span>
+                                <span className="font-semibold text-gray-900 dark:text-gray-100 truncate">{toSafeTitle(solemn.title)}</span>
+                            </div>
+                        )}
+                        {joyful && (
+                            <div className="flex items-center gap-2 px-3 py-1.5 bg-violet-50 dark:bg-violet-900/20 border border-violet-100 dark:border-violet-800/30 rounded-lg text-xs">
+                                <Star size={11} className="text-violet-400 shrink-0" />
+                                <span className="text-gray-400 shrink-0">Joyful</span>
+                                <span className="font-semibold text-gray-900 dark:text-gray-100 truncate">{toSafeTitle(joyful.title)}</span>
+                            </div>
+                        )}
                     </div>
                 )}
-                {/* Avatar row */}
-                <div className="flex items-center gap-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+
+                {/* Avatar row — mt-auto pins to bottom of card */}
+                <div className="mt-auto pt-3 border-t border-gray-100 dark:border-gray-700/60 flex items-center gap-2">
                     <div className="flex -space-x-1.5">
                         {[
                             ev.worshipLeader,
@@ -255,16 +279,16 @@ function NextServiceTile({ ev, songs, members, myMemberId, onClick }: {
                             const initials = (m!.name || "?")[0].toUpperCase();
                             return photo ? (
                                 <img key={i} src={photo} alt={m!.name}
-                                    className="w-6 h-6 rounded-full object-cover border-2 border-white dark:border-gray-800"
+                                    className="w-6 h-6 rounded-full object-cover border-2 border-gray-100 dark:border-gray-800"
                                     onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
                             ) : (
-                                <div key={i} className="w-6 h-6 rounded-full bg-indigo-500 border-2 border-white dark:border-gray-800 flex items-center justify-center text-[9px] font-bold text-white">
+                                <div key={i} className="w-6 h-6 rounded-full bg-indigo-500 border-2 border-gray-100 dark:border-gray-800 flex items-center justify-center text-[10px] font-bold text-white">
                                     {initials}
                                 </div>
                             );
                         })}
                     </div>
-                    <p className="text-xs text-gray-400">
+                    <p className="text-xs text-gray-400 font-medium">
                         {[
                             ev.worshipLeader,
                             ...(ev.musicians ?? []),
@@ -403,20 +427,20 @@ function MyTasksCard({
                                 <p className={`text-sm font-semibold truncate ${
                                     isDone ? 'line-through text-gray-400' : 'text-gray-900 dark:text-white group-hover:text-indigo-500 dark:group-hover:text-indigo-400'
                                 }`}>{t.cardTitle}</p>
-                                <p className="text-xs text-gray-400 truncate mt-0.5">
+                                <p className="text-sm text-gray-400 truncate mt-0.5">
                                     <span className="font-medium">{t.boardTitle}</span>
                                     {t.assignedBy && (
                                         <span className="ml-1.5">
                                             {" | "}
                                             {t.assignedBy === "Self-assigned"
-                                                ? <span className="text-violet-400 dark:text-violet-400">Self-assigned</span>
-                                                : <span>Assigned by: <span className="text-gray-300 dark:text-gray-300 font-medium">{t.assignedBy}</span></span>
+                                                ? <span className="text-violet-600 dark:text-violet-400">Self-assigned</span>
+                                                : <span>Assigned by: <span className="text-gray-600 dark:text-gray-300 font-medium">{t.assignedBy}</span></span>
                                             }
                                         </span>
                                     )}
                                 </p>
                             </div>
-                            <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full leading-none mt-1 ${
+                            <span className={`shrink-0 text-sm font-bold px-2.5 py-0.5 rounded-full leading-none mt-1 ${
                                 isDone ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400'
                                 : isIP  ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400'
                                 : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
@@ -427,11 +451,11 @@ function MyTasksCard({
             </div>
             <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 shrink-0">
                 {allDone ? (
-                    <p className="text-xs text-emerald-500 font-medium">
+                    <p className="text-sm text-emerald-500 font-medium">
                         ✓ {done.length}/{tasks.length} done · all clear
                     </p>
                 ) : (
-                    <p className="text-xs text-gray-400">
+                    <p className="text-sm text-gray-400">
                         {tasks.length} task{tasks.length !== 1 ? 's' : ''} assigned · {inProgress.length} in progress
                     </p>
                 )}
@@ -456,76 +480,80 @@ function TopListenersCard({ currentUserId }: { currentUserId: string }) {
     }, []);
 
     const RANK_STYLES = [
-        "bg-amber-400/20 text-amber-400 border-amber-400/40",   // 🥇 #1
-        "bg-gray-300/20 text-gray-400 border-gray-400/40",      // 🥈 #2
-        "bg-orange-400/20 text-orange-400 border-orange-400/40",// 🥉 #3
-        "bg-gray-100/10 text-gray-500 border-gray-500/20 dark:bg-gray-700/20", // #4
-        "bg-gray-100/10 text-gray-500 border-gray-500/20 dark:bg-gray-700/20", // #5
+        "bg-amber-400/20 text-amber-600 dark:text-amber-400 border-amber-400/40",   // 🥇 #1 — amber-600 in light for contrast
+        "bg-gray-200 dark:bg-gray-300/20 text-gray-600 dark:text-gray-400 border-gray-400/40",      // 🥈 #2
+        "bg-orange-400/20 text-orange-600 dark:text-orange-400 border-orange-400/40",// 🥉 #3 — orange-600 in light
+        "bg-gray-100 dark:bg-gray-700/20 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-500/20", // #4
+        "bg-gray-100 dark:bg-gray-700/20 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-500/20", // #5
     ];
     const RANK_LABELS = ["🥇", "🥈", "🥉", "4", "5"];
 
-    return (
-        <Tile className="min-h-[260px]">
+    if (loading) return (
+        <Tile className="">
             <CardHeader icon={<Headphones size={14} className="text-indigo-500" />} title="Top Song Lineup Listeners" />
-            {loading ? (
-                <div className="p-5 space-y-3 animate-pulse">
-                    {[1,2,3].map(i => (
-                        <div key={i} className="flex items-center gap-3">
-                            <div className="w-7 h-7 rounded-full bg-gray-200 dark:bg-gray-700" />
-                            <div className="w-7 h-7 rounded-full bg-gray-200 dark:bg-gray-700" />
-                            <div className="flex-1 h-3 bg-gray-200 dark:bg-gray-700 rounded" />
-                            <div className="w-10 h-3 bg-gray-200 dark:bg-gray-700 rounded" />
-                        </div>
-                    ))}
-                </div>
-            ) : entries.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-10 gap-2 text-gray-400">
-                    <Headphones size={24} className="opacity-30 float" />
-                    <p className="text-sm">No listens recorded yet</p>
-                    <p className="text-xs text-gray-400/70">Finish a song in the Lineup Player to appear here</p>
-                </div>
-            ) : (
-                <div className="divide-y divide-gray-100 dark:divide-gray-700">
-                    {entries.map((e, i) => {
-                        const isMe = e.userId === currentUserId;
-                        const init = (e.name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
-                        return (
-                            <div key={e.userId}
-                                className={`flex items-center gap-3 px-5 py-3 transition-colors ${
-                                    isMe ? "bg-indigo-50/60 dark:bg-indigo-900/15" : "hover:bg-gray-50 dark:hover:bg-gray-700/30"
-                                }`}>
-                                {/* Rank badge */}
-                                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-black border shrink-0 ${RANK_STYLES[i]}`}>
-                                    {RANK_LABELS[i]}
-                                </div>
-                                {/* Avatar */}
-                                {e.photo?.startsWith("http") ? (
-                                    <img src={e.photo} alt={e.name}
-                                        className="w-7 h-7 rounded-full object-cover border-2 border-white dark:border-gray-800 shrink-0" />
-                                ) : (
-                                    <div className="w-7 h-7 rounded-full bg-indigo-500 border-2 border-white dark:border-gray-800 flex items-center justify-center text-[9px] font-bold text-white shrink-0">
-                                        {init}
-                                    </div>
-                                )}
-                                {/* Name */}
-                                <div className="flex-1 min-w-0">
-                                    <p className={`text-sm font-semibold truncate ${
-                                        isMe ? "text-indigo-600 dark:text-indigo-400" : "text-gray-900 dark:text-white"
-                                    }`}>
-                                        {isMe ? `${e.name.split(" ")[0]} (You)` : e.name}
-                                    </p>
-                                </div>
-                                {/* Count badge */}
-                                <span className="shrink-0 text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300">
-                                    {e.count}x listened
-                                </span>
+            <div className="p-5 space-y-3 animate-pulse">
+                {[1,2,3].map(i => (
+                    <div key={i} className="flex items-center gap-3">
+                        <div className="w-7 h-7 rounded-full bg-gray-200 dark:bg-gray-700" />
+                        <div className="w-7 h-7 rounded-full bg-gray-200 dark:bg-gray-700" />
+                        <div className="flex-1 h-3 bg-gray-200 dark:bg-gray-700 rounded" />
+                        <div className="w-10 h-3 bg-gray-200 dark:bg-gray-700 rounded" />
+                    </div>
+                ))}
+            </div>
+        </Tile>
+    );
+
+    if (entries.length === 0) return (
+        <Tile className="">
+            <CardHeader icon={<Headphones size={14} className="text-indigo-500" />} title="Top Song Lineup Listeners" />
+            <div className="flex flex-col items-center justify-center py-8 gap-2 text-gray-400 px-5 text-center">
+                <Headphones size={22} className="opacity-30" />
+                <p className="text-sm font-medium">No listens recorded yet</p>
+                <p className="text-xs text-gray-400/70">Finish a song in the Lineup Player to appear here</p>
+            </div>
+        </Tile>
+    );
+
+    return (
+        <Tile className="">
+            <CardHeader icon={<Headphones size={14} className="text-indigo-500" />} title="Top Song Lineup Listeners" />
+            <div className="divide-y divide-gray-100 dark:divide-gray-700 flex-1 overflow-y-auto scrollbar-hide">
+                {entries.map((e, i) => {
+                    const isMe = e.userId === currentUserId;
+                    const init = (e.name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+                    return (
+                        <div key={e.userId}
+                            className={`flex items-center gap-3 px-5 py-3 transition-colors ${
+                                isMe ? "bg-indigo-50 dark:bg-indigo-900/15 border-l-2 border-indigo-400 dark:border-indigo-600" : "hover:bg-gray-50 dark:hover:bg-gray-700/30"
+                            }`}>
+                            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-black border shrink-0 ${RANK_STYLES[i]}`}>
+                                {RANK_LABELS[i]}
                             </div>
-                        );
-                    })}
-                </div>
-            )}
-            <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60">
-                <p className="text-xs text-gray-400">Auto-tracked · updated when songs finish playing</p>
+                            {e.photo?.startsWith("http") ? (
+                                <img src={e.photo} alt={e.name}
+                                    className="w-7 h-7 rounded-full object-cover border-2 border-gray-100 dark:border-gray-800 shrink-0" />
+                            ) : (
+                                <div className="w-7 h-7 rounded-full bg-indigo-500 border-2 border-gray-100 dark:border-gray-800 flex items-center justify-center text-sm font-bold text-white shrink-0">
+                                    {init}
+                                </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                                <p className={`text-sm font-semibold truncate ${
+                                    isMe ? "text-indigo-600 dark:text-indigo-400" : "text-gray-900 dark:text-white"
+                                }`}>
+                                    {isMe ? `${e.name.split(" ")[0]} (You)` : e.name}
+                                </p>
+                            </div>
+                            <span className="shrink-0 text-sm font-bold px-2.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300">
+                                {e.count}x listened
+                            </span>
+                        </div>
+                    );
+                })}
+            </div>
+            <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 shrink-0">
+                <p className="text-sm text-gray-400">Auto-tracked · updated when songs finish playing</p>
             </div>
         </Tile>
     );
@@ -592,6 +620,7 @@ export default function AdminDashboard({
     const formatBroadcastDate = (iso: string) => {
         try {
             const d = new Date(iso);
+            if (!iso || isNaN(d.getTime())) return "Recently";
             const mm = String(d.getMonth() + 1).padStart(2, "0");
             const dd = String(d.getDate()).padStart(2, "0");
             const yy = String(d.getFullYear()).slice(2);
@@ -599,7 +628,7 @@ export default function AdminDashboard({
             h = h % 12 || 12;
             const min = String(d.getMinutes()).padStart(2, "0");
             return `${mm}-${dd}-${yy} | ${h}:${min} ${ampm}`;
-        } catch { return ""; }
+        } catch { return "Recently"; }
     };
 
     // ── Birthday detection ─────────────────────────────────────────────────────
@@ -679,68 +708,96 @@ export default function AdminDashboard({
 
     return (
         <div className="space-y-5 p-0">
-            {/* ── Greeting — Overpay: generous spacing, stronger type hierarchy ── */}
-            <div className="flex items-center justify-between gap-4 pt-1">
-                <div className="flex items-center gap-4">
-                    {/* Left accent bar — kept as brand pulse indicator */}
-                    <div className="w-1 h-16 rounded-full bg-gradient-to-b from-indigo-500 to-violet-500 shrink-0" />
-                    <div>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">
-                            {greeting()},{" "}
-                            <span className={`font-semibold ${(ROLE_STYLE[userRole] ?? ROLE_STYLE.admin).text}`}>
-                                {(ROLE_STYLE[userRole] ?? ROLE_STYLE.admin).label}
-                            </span>
-                        </p>
-                        {/* Overpay h1: 2.25rem bold, tight tracking */}
-                        <h1 className="text-4xl font-black text-gray-900 dark:text-white leading-tight tracking-tight">{first} 👋</h1>
-                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 font-medium">{new Date().toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</p>
+            {/* ── Hero Header ─────────────────────────────────────────────── */}
+            <div className="relative rounded-2xl overflow-hidden bg-white dark:bg-gray-800/90 border border-gray-200 dark:border-gray-700/60 shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_20px_-2px_rgba(0,0,0,0.35)]">
+                {/* Gradient accent line at top */}
+                <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-indigo-500 via-violet-500 to-purple-500" />
+                {/* Subtle glow wash */}
+                <div className="absolute inset-y-0 left-0 w-56 bg-gradient-to-r from-indigo-500/[0.04] to-transparent pointer-events-none" />
+
+                <div className="relative flex items-center justify-between gap-4 px-6 py-5">
+                    {/* LEFT — Avatar + Greeting */}
+                    <div className="flex items-center gap-4 min-w-0">
+                        {/* Avatar */}
+                        <div className="relative shrink-0">
+                            {userPhoto ? (
+                                <img src={userPhoto} alt={userName}
+                                    className="w-14 h-14 rounded-2xl object-cover ring-2 ring-indigo-500/30 shadow-md" />
+                            ) : (
+                                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-md ring-2 ring-indigo-500/30">
+                                    <span className="text-xl font-black text-white">{first[0]}</span>
+                                </div>
+                            )}
+                            <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white dark:border-gray-800" />
+                        </div>
+                        {/* Text */}
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                                <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{greeting()}</p>
+                                <span className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full border ${(ROLE_STYLE[userRole] ?? ROLE_STYLE.admin).bg} ${(ROLE_STYLE[userRole] ?? ROLE_STYLE.admin).border} ${(ROLE_STYLE[userRole] ?? ROLE_STYLE.admin).text}`}
+                                    style={{ boxShadow: (ROLE_STYLE[userRole] ?? ROLE_STYLE.admin).glow !== "none" ? `0 0 8px 1px ${(ROLE_STYLE[userRole] ?? ROLE_STYLE.admin).glow}` : undefined }}>
+                                    <Shield size={10} />{(ROLE_STYLE[userRole] ?? ROLE_STYLE.admin).label}
+                                </span>
+                            </div>
+                            <h1 className="text-2xl font-black text-gray-900 dark:text-white leading-tight tracking-tight truncate">
+                                {first} 👋
+                            </h1>
+                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 font-medium">
+                                {new Date().toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+                            </p>
+                        </div>
                     </div>
-                </div>
-                <div className="flex flex-col items-end gap-2 shrink-0">
-                    {/* ── Listen to Lineup — pulsing circle icon */}
-                    {onOpenLineup && lineupTrackCount > 0 && (
-                        <div className="relative group">
-                            {/* Pulse ring — only when not blocked */}
-                            {!isLineupOpen && !isLibraryOpen && <span className="absolute inset-0 rounded-full bg-indigo-500/30 animate-ping" />}
-                            <button
-                                onClick={isLineupOpen || isLibraryOpen ? undefined : onOpenLineup}
-                                disabled={isLineupOpen || isLibraryOpen}
-                                className={`relative w-9 h-9 flex items-center justify-center rounded-full transition-transform ${
-                                    isLineupOpen || isLibraryOpen
-                                        ? "bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed"
-                                        : "bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg hover:scale-110 active:scale-95"
-                                }`}
-                            >
-                                <ListMusic size={15} />
-                            </button>
-                            {/* Tooltip */}
-                            <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity shadow-xl">
-                                {isLineupOpen ? "Now Playing" : isLibraryOpen ? "Close Library Player first" : "Lineup Available"}
-                                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
+
+                    {/* RIGHT — Stats + Actions */}
+                    <div className="flex items-center gap-3 shrink-0 flex-wrap justify-end">
+                        {/* Quick stat pills — hidden on mobile */}
+                        <div className="hidden sm:flex items-center gap-2">
+                            <div className="flex flex-col items-center px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/30 min-w-[52px]">
+                                <span className="text-base font-black text-indigo-600 dark:text-indigo-400 leading-tight">{songs.length}</span>
+                                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Songs</span>
+                            </div>
+                            <div className="flex flex-col items-center px-3 py-1.5 rounded-xl bg-violet-50 dark:bg-violet-900/20 border border-violet-100 dark:border-violet-800/30 min-w-[52px]">
+                                <span className="text-base font-black text-violet-600 dark:text-violet-400 leading-tight">{members.length}</span>
+                                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Team</span>
+                            </div>
+                            <div className="flex flex-col items-center px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800/30 min-w-[52px]">
+                                <span className="text-base font-black text-emerald-600 dark:text-emerald-400 leading-tight">{upcomingEvents.length}</span>
+                                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Events</span>
                             </div>
                         </div>
-                    )}
-
-
-                    {/* ── Assembly Bell — temporarily hidden globally (re-enable when ready) ── */}
-                    {false && userRole === "admin" && userId && (
-                        <AssemblyBell
-                            userId={userId}
-                            userName={userName}
-                            userPhoto={userPhoto || ""}
-                            members={members}
-                            fullWidth
-                        />
-                    )}
-
-                    {!loadingExtra && pendingUsers.length > 0 && (
-                        <button onClick={() => onNavigate("admin")}
-                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 text-amber-700 dark:text-amber-400 text-xs font-semibold hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors">
-                            <UserCheck size={11} />{pendingUsers.length} pending
-                        </button>
-                    )}
+                        {/* Divider */}
+                        <div className="hidden sm:block w-px h-8 bg-gray-200 dark:bg-gray-700" />
+                        {/* Actions */}
+                        <div className="flex items-center gap-2 sm:self-stretch">
+                            {onOpenLineup && lineupTrackCount > 0 && (
+                                <div className="relative group flex items-center sm:self-stretch">
+                                    {!isLineupOpen && !isLibraryOpen && <span className="absolute inset-0 rounded-xl bg-indigo-500/30 animate-ping" />}
+                                    <button
+                                        onClick={isLineupOpen || isLibraryOpen ? undefined : onOpenLineup}
+                                        disabled={isLineupOpen || isLibraryOpen}
+                                        title={isLineupOpen ? "Now Playing" : isLibraryOpen ? "Close Library Player first" : "Lineup Available"}
+                                        className={`relative flex items-center gap-1.5 px-4 py-2 sm:py-0 sm:h-full rounded-xl text-sm font-semibold transition-all ${
+                                            isLineupOpen || isLibraryOpen
+                                                ? "bg-gray-100 dark:bg-gray-700 text-gray-400 cursor-not-allowed"
+                                                : "bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-md hover:shadow-lg hover:scale-105 active:scale-95"
+                                        }`}
+                                    >
+                                        <ListMusic size={13} />
+                                        <span>Lineup</span>
+                                    </button>
+                                </div>
+                            )}
+                            {!loadingExtra && pendingUsers.length > 0 && (
+                                <button onClick={() => onNavigate("admin")}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 text-amber-700 dark:text-amber-400 text-sm font-semibold hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors">
+                                    <UserCheck size={13} />{pendingUsers.length} pending
+                                </button>
+                            )}
+                        </div>
+                    </div>
                 </div>
             </div>
+
 
 
             {/* ── Birthday Banner — static, informational only ─────────── */}
@@ -752,6 +809,8 @@ export default function AdminDashboard({
 
             {/* ── Birthday Modal ──────────────────────────────────────────── */}
             <style>{`
+              .scrollbar-hide::-webkit-scrollbar { display: none; }
+              .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
               @keyframes bdBackdropIn {
                 from { opacity: 0; }
                 to   { opacity: 1; }
@@ -820,34 +879,38 @@ export default function AdminDashboard({
                 </div>
             )}
 
-            {/* ── Top section — Overpay 8px grid: generous gap-4, 3-col desktop ── */}
-            <div className="grid grid-cols-1 lg:grid-cols-[2fr_1.5fr_1.5fr] gap-4">
+            {/* ── Top section:
+                Mobile (< 640px):   1-col stack — verse, then tasks, then 2x2 stats
+                Tablet (640–1023px): verse full width, then 4-col stats horizontal row
+                Desktop (1024px+):  3-col: [verse | tasks | 2x2 stats]
+            ── */}
+            <div className="grid grid-cols-1 lg:grid-cols-[2fr_1.5fr_1.5fr] gap-5">
                 {/* LEFT — Daily Bible Verse: span 2 cols when tasks are hidden */}
                 <div className={hasActiveTasks ? "" : "lg:col-span-2"}>
                   <VerseOfTheDay userId={userId} userName={userName.split(" ")[0] || userName} userPhoto="" />
                 </div>
-                {/* CENTER — My Tasks */}
+                {/* CENTER — My Tasks (hidden at tablet/mobile when empty) */}
                 <MyTasksCard userName={userName} userEmail={userEmail} members={members} onNavigate={onNavigate} onVisibilityChange={setHasActiveTasks} />
-                {/* RIGHT — 2×2 metric tiles: Overpay 4-col desktop spec → 2×2 grid */}
-                <div className="grid grid-cols-2 gap-4">
+                {/* RIGHT — Stat tiles: 2x2 on desktop, 4-col horizontal on tablet (sm:) */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 gap-3 sm:gap-4">
                     <div className="stagger-1">
                     <MetricTile label="Songs" value={songs.length} sub={`${songsUsed} in services`}
-                        iconBg="bg-indigo-100 dark:bg-indigo-900/40" icon={<Music size={16} className="text-indigo-600 dark:text-indigo-400" />}
+                        iconBg="bg-indigo-100 dark:bg-indigo-900/40" icon={<Music size={20} className="text-indigo-600 dark:text-indigo-400" />}
                         onClick={() => onNavigate("songs")} />
                     </div>
                     <div className="stagger-2">
                     <MetricTile label="Members" value={members.length} sub={`${members.filter(m => m.status !== "inactive").length} active`}
-                        iconBg="bg-violet-100 dark:bg-violet-900/40" icon={<Users size={16} className="text-violet-600 dark:text-violet-400" />}
+                        iconBg="bg-violet-100 dark:bg-violet-900/40" icon={<Users size={20} className="text-violet-600 dark:text-violet-400" />}
                         onClick={() => onNavigate("members")} />
                     </div>
                     <div className="stagger-3">
                     <MetricTile label="Events" value={totalEvents} sub={`${upcomingEvents.length} upcoming`}
-                        iconBg="bg-emerald-100 dark:bg-emerald-900/40" icon={<Zap size={16} className="text-emerald-600 dark:text-emerald-400" />}
+                        iconBg="bg-emerald-100 dark:bg-emerald-900/40" icon={<Zap size={20} className="text-emerald-600 dark:text-emerald-400" />}
                         onClick={() => onNavigate("schedule")} />
                     </div>
                     <div className="stagger-4">
                     <MetricTile label="Issues" value={openBugs + openFeqs} sub={`${openBugs} bugs · ${openFeqs} req`}
-                        iconBg="bg-amber-100 dark:bg-amber-900/40" icon={<AlertCircle size={16} className="text-amber-600 dark:text-amber-400" />} />
+                        iconBg="bg-amber-100 dark:bg-amber-900/40" icon={<AlertCircle size={20} className="text-amber-600 dark:text-amber-400" />} />
                     </div>
                 </div>
             </div>
@@ -855,20 +918,21 @@ export default function AdminDashboard({
 
 
             {/*
-             * BENTO GRID — Overpay 12-col spec adapted:
-             * Mobile  (0–640):    1-col, vertical stack
-             * Tablet  (641–1024): 2-col grid
-             * Desktop (1025+):    3-col grid, max breathing room
+             * BENTO GRID — Design System v2.0 responsive breakpoints:
+             * Mobile  (0–639px):   1-col, vertical stack
+             * Tablet  (640–1023px): 2-col grid (sm:grid-cols-2)
+             * Desktop (1024–1279px): 2-col grid (lg:grid-cols-2)
+             * Wide    (1280px+):   3-col grid (xl:grid-cols-3)
              */}
-            <div className="grid gap-5 grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-5 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
 
                 {/* ── ROW 1 ─────────────────────────── */}
 
-                {/* Top Song Lineup Listeners */}
+                {/* Top Song Lineup Listeners — height is self-managed (collapses when empty) */}
                 <div className="stagger-3"><TopListenersCard currentUserId={userId} /></div>
 
                 {/* Church Events */}
-                <div className="stagger-4"><NextServiceTile ev={nextEvent} songs={songs} members={members} myMemberId={myMemberId} onClick={() => onNavigate("schedule")} /></div>
+                <div className="stagger-4 h-[360px]"><NextServiceTile ev={nextEvent} songs={songs} members={members} myMemberId={myMemberId} onClick={() => onNavigate("schedule")} /></div>
 
                 {/* Upcoming Events — current + next month, including birthdays */}
                 {(() => {
@@ -904,9 +968,9 @@ export default function AdminDashboard({
                     const overflow = merged.slice(5);
 
                     return (
-                        <Tile className="min-h-[260px]">
+                        <div className="h-[360px]"><Tile className="">
                             <CardHeader icon={<Clock size={14} className="text-indigo-500" />} title="Upcoming Events" action="Full calendar" onAction={() => onNavigate("schedule")} />
-                            <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                            <div className="divide-y divide-gray-100 dark:divide-gray-700 flex-1 overflow-y-auto scrollbar-hide">
                                 {first5.length === 0 ? (
                                     <div className="flex items-center gap-3 px-5 py-4"><Calendar size={16} className="text-gray-300" /><p className="text-sm text-gray-400">Nothing this month or next</p></div>
                                 ) : first5.map((ev, i) => {
@@ -915,37 +979,37 @@ export default function AdminDashboard({
                                     return (
                                         <div key={ev.id} className={`flex items-center gap-3 px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors ${i === 0 ? "bg-indigo-50/50 dark:bg-indigo-900/10" : ""}`}>
                                             <div className={`flex flex-col items-center justify-center w-10 h-10 rounded-xl shrink-0 ${isBday ? "bg-pink-500 text-white" : i === 0 ? "bg-indigo-600 text-white" : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"}`}>
-                                                <p className="text-[8px] font-bold uppercase opacity-80">{d.toLocaleDateString("en", { month: "short" })}</p>
+                                                <p className="text-[10px] font-bold uppercase opacity-80">{d.toLocaleDateString("en", { month: "short" })}</p>
                                                 <p className="text-sm font-black leading-none">{d.getDate()}</p>
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{ev.label}</p>
-                                                <p className="text-xs text-gray-400 truncate">{ev.sub}</p>
+                                                <p className="text-sm text-gray-400 truncate">{ev.sub}</p>
                                             </div>
-                                            <span className={`text-xs font-semibold shrink-0 ${i === 0 ? "text-indigo-600 dark:text-indigo-400" : "text-gray-400"}`}>{daysUntil(ev.date)}</span>
+                                            <span className={`text-sm font-semibold shrink-0 ${i === 0 ? "text-indigo-600 dark:text-indigo-400" : "text-gray-400"}`}>{daysUntil(ev.date)}</span>
                                         </div>
                                     );
                                 })}
                             </div>
                             {overflow.length > 0 && (
-                                <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700">
-                                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">+{overflow.length} more</p>
+                                <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 shrink-0">
+                                    <p className="text-sm font-semibold text-gray-400 mb-2">+{overflow.length} more</p>
                                     <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
                                         {overflow.map(ev => {
                                             const d = new Date(ev.date + "T00:00:00");
                                             const isBday = ev.kind === "birthday";
                                             return (
                                                 <div key={ev.id} className={`shrink-0 flex flex-col items-center px-3 py-2 rounded-xl border text-center min-w-[68px] ${isBday ? "bg-pink-500/10 border-pink-400/30" : "bg-indigo-50 dark:bg-indigo-900/20 border-indigo-100 dark:border-indigo-800/30"}`}>
-                                                    <p className="text-[9px] font-bold uppercase text-gray-400">{d.toLocaleDateString("en", { month: "short" })}</p>
+                                                    <p className="text-[10px] font-bold uppercase text-gray-400">{d.toLocaleDateString("en", { month: "short" })}</p>
                                                     <p className={`text-base font-black leading-tight ${isBday ? "text-pink-500" : "text-indigo-600 dark:text-indigo-400"}`}>{d.getDate()}</p>
-                                                    <p className="text-[9px] text-gray-400 truncate max-w-[60px]">{ev.label.replace("🎂 ", "").split("'")[0]}</p>
+                                                    <p className="text-sm text-gray-400 truncate max-w-[60px]">{ev.label.replace("🎂 ", "").split("'")[0]}</p>
                                                 </div>
                                             );
                                         })}
                                     </div>
                                 </div>
                             )}
-                        </Tile>
+                        </Tile></div>
                     );
                 })()}
 
@@ -953,15 +1017,15 @@ export default function AdminDashboard({
                 {/* ── ROW 2 ─────────────────────────── */}
 
                 {/* Recently Added Songs */}
-                <Tile className="min-h-[260px]" onClick={() => onNavigate("songs")}>
-                    <CardHeader icon={<TrendingUp size={13} className="text-violet-500" />} title="Recently Added Songs" action="Library" onAction={() => onNavigate("songs")} />
+                <div className="h-[360px]"><Tile className="" onClick={() => onNavigate("songs")}>
+                    <CardHeader icon={<TrendingUp size={16} className="text-violet-500" />} title="Recently Added Songs" action="Library" onAction={() => onNavigate("songs")} />
                     {recentSongs.length === 0 ? (
                         <div className="flex flex-col items-center py-10 gap-3">
                             <BookOpen size={24} className="text-indigo-300 opacity-50" />
                             <p className="text-sm text-gray-400">No songs yet</p>
                         </div>
                     ) : (
-                        <div className="divide-y divide-gray-100/80 dark:divide-gray-700/60">
+                        <div className="flex-1 overflow-y-auto scrollbar-hide divide-y divide-gray-100 dark:divide-gray-700/60">
                             {recentSongs.map(s => (
                                 <div key={s.id} className="flex items-center gap-3 px-6 py-3.5 hover:bg-gray-50 dark:hover:bg-gray-700/20 transition-colors">
                                     <div className="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center shrink-0">
@@ -969,22 +1033,22 @@ export default function AdminDashboard({
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <p className="text-sm font-semibold text-gray-900 dark:text-white truncate tracking-tight">{s.title}</p>
-                                        <p className="text-xs text-gray-400 truncate mt-0.5">{s.artist}</p>
+                                        <p className="text-sm text-gray-400 truncate mt-0.5">{s.artist}</p>
                                     </div>
-                                    {s.created_at && <p className="text-xs text-gray-400 shrink-0 font-medium">{relDate(s.created_at)}</p>}
+                                    {s.created_at && <p className="text-sm text-gray-400 shrink-0 font-medium">{relDate(s.created_at)}</p>}
                                 </div>
                             ))}
                         </div>
                     )}
-                    <div className="px-6 py-3.5 border-t border-gray-100/80 dark:border-gray-700/60 bg-gray-50/60 dark:bg-gray-800/40">
-                        <p className="text-xs text-gray-400 font-medium">{songs.length} songs · {songsUsed} used in services</p>
+                    <div className="px-6 py-3.5 border-t border-gray-100/80 dark:border-gray-700/60 bg-gray-50/60 dark:bg-gray-800/40 shrink-0">
+                        <p className="text-sm text-gray-400 font-medium">{songs.length} songs · {songsUsed} used in services</p>
                     </div>
-                </Tile>
+                </Tile></div>
 
                 {/* Team by Role */}
-                <Tile className="min-h-[260px]" onClick={() => onNavigate("members")}>
-                    <CardHeader icon={<Users size={13} className="text-violet-500" />} title="Team by Role" action="All members" onAction={() => onNavigate("members")} />
-                    <div className="px-6 py-5 space-y-4">
+                <div className="h-[360px]"><Tile className="" onClick={() => onNavigate("members")}>
+                    <CardHeader icon={<Users size={16} className="text-violet-500" />} title="Team by Role" action="All members" onAction={() => onNavigate("members")} />
+                    <div className="flex-1 overflow-y-auto scrollbar-hide px-6 py-5 space-y-4">
                         {roleGroups.length === 0 ? (
                             <p className="text-sm text-gray-400">No members yet</p>
                         ) : roleGroups.slice(0, 5).map(([role, count]) => (
@@ -1000,23 +1064,24 @@ export default function AdminDashboard({
                             </div>
                         ))}
                     </div>
-                    <div className="px-6 py-3.5 border-t border-gray-100/80 dark:border-gray-700/60 bg-gray-50/60 dark:bg-gray-800/40">
-                        <p className="text-xs text-gray-400 font-medium">{members.length} total team members</p>
+                    <div className="px-6 py-3.5 border-t border-gray-100/80 dark:border-gray-700/60 bg-gray-50/60 dark:bg-gray-800/40 shrink-0">
+                        <p className="text-sm text-gray-400 font-medium">{members.length} total team members</p>
                     </div>
-                </Tile>
+                </Tile></div>
 
                 {/* What's New */}
-                <Tile className="h-full flex flex-col">
-                    <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100/80 dark:border-gray-700/60 shrink-0">
-                        <div className="flex items-center gap-2.5">
-                            <span className="w-7 h-7 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0">
-                                <Megaphone size={13} className="text-amber-500" />
+                <div className="h-[360px]"><Tile className="">
+                    <div className="flex items-start justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-700/60 shrink-0 gap-3">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                            {/* STANDARD icon chip w-8 h-8 */}
+                            <span className="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0">
+                                <Megaphone size={16} className="text-amber-500" />
                             </span>
-                            <span className="font-semibold text-gray-900 dark:text-white text-sm tracking-tight">
+                            <h2 className="font-bold text-gray-900 dark:text-white text-base tracking-tight truncate">
                                 {latestBroadcast?.title ?? "What's New in WorshipFlow"}
-                            </span>
+                            </h2>
                         </div>
-                        <button onClick={() => onNavigate("admin")} className="text-xs text-indigo-500 hover:text-indigo-400 flex items-center gap-1 font-medium transition-colors">
+                        <button onClick={() => onNavigate("admin")} className="text-sm text-indigo-500 hover:text-indigo-400 flex items-center gap-1 font-medium transition-colors shrink-0 mt-0.5">
                             Manage <ChevronRight size={13} />
                         </button>
                     </div>
@@ -1038,9 +1103,9 @@ export default function AdminDashboard({
                         ) : latestBroadcast ? (
                             <>
                                 {latestBroadcast.createdAt && (
-                                    <span className="text-xs text-gray-400 font-medium block mb-2">Updated: {formatBroadcastDate(latestBroadcast.createdAt)}</span>
+                                    <span className="text-sm text-gray-400 font-medium block mb-2">Updated: {formatBroadcastDate(latestBroadcast.createdAt)}</span>
                                 )}
-                                <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">{latestBroadcast.message}</p>
+                                <p className="text-base text-gray-500 dark:text-gray-400 mb-3">{latestBroadcast.message}</p>
                                 <ul className="space-y-2.5">
                                     {(latestBroadcast.bulletPoints ?? []).filter(Boolean).map((h: string, i: number) => (
                                         <li key={i} className="flex items-start gap-2.5 text-sm text-gray-700 dark:text-gray-200">
@@ -1056,7 +1121,7 @@ export default function AdminDashboard({
                             </div>
                         )}
                     </div>
-                </Tile>
+                </Tile></div>
 
 
             </div>

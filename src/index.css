@@ -119,9 +119,58 @@ html[data-theme="blush"] {
   --wf-at3: #f472b6;   /* pink-400 — tertiary labels       */
 
   /* ── Overlays & borders ────────────────────────────────────────────────── */
+
   --wf-overlay: rgba(0,0,0,0.85);
   --wf-tab-border: #ec4899;
 }
+
+/* ── Bible Reader — adaptive light / dark variables ───────────────────────────
+   Light is :root default; html.dark provides dark overrides.
+   BibleView uses var(--wf-reader-*) ONLY — never raw rgba(255,255,255,x) anymore.
+   ─────────────────────────────────────────────────────────────────────────── */
+:root {
+  /* Module backgrounds */
+  --wf-reader-bg:         #f5f7fa;                  /* canvas bg */
+  --wf-reader-surface-f:  rgba(0,0,0,0.015);         /* faintest surface tint */
+  --wf-reader-surface:    rgba(0,0,0,0.04);           /* standard surface */
+  --wf-reader-surface-hi: rgba(0,0,0,0.06);           /* raised surface / select bg */
+  /* Borders */
+  --wf-reader-border:     rgba(0,0,0,0.08);           /* standard border */
+  --wf-reader-border-s:   rgba(0,0,0,0.12);           /* strong border */
+  /* Text hierarchy */
+  --wf-reader-text-1:     rgba(17,24,39,0.9);         /* primary body / verse text */
+  --wf-reader-text-2:     rgba(75,85,99,0.9);         /* secondary / labels */
+  --wf-reader-text-3:     rgba(107,114,128,1);         /* muted text */
+  --wf-reader-text-4:     rgba(156,163,175,1);         /* very muted / captions */
+  /* Select / dropdown */
+  --wf-reader-sel-bg:     #eef0f4;                    /* <option> background */
+  --wf-reader-sel-text:   #111827;                    /* select text color */
+  --wf-reader-sel-border: rgba(0,0,0,0.10);           /* select border */
+}
+
+/* Dark mode overrides — applied when html has .dark class */
+html.dark {
+  --wf-reader-bg:         #0a0a16;
+  --wf-reader-surface-f:  rgba(255,255,255,0.018);
+  --wf-reader-surface:    rgba(255,255,255,0.05);
+  --wf-reader-surface-hi: rgba(255,255,255,0.06);
+  --wf-reader-border:     rgba(255,255,255,0.07);
+  --wf-reader-border-s:   rgba(255,255,255,0.09);
+  --wf-reader-text-1:     rgba(255,255,255,0.88);
+  --wf-reader-text-2:     rgba(255,255,255,0.4);
+  --wf-reader-text-3:     rgba(255,255,255,0.25);
+  --wf-reader-text-4:     rgba(255,255,255,0.17);
+  --wf-reader-sel-bg:     #12121e;
+  --wf-reader-sel-text:   #e2e8f0;
+  --wf-reader-sel-border: rgba(255,255,255,0.09);
+}
+/* Luxury theme — pure black surface */
+html.dark[data-theme="luxury"],
+html.dark[data-theme="blush"] {
+  --wf-reader-bg:     #000;
+  --wf-reader-sel-bg: #080808;
+}
+
 
 body {
   @apply antialiased text-gray-900 bg-gray-50 dark:text-gray-100 dark:bg-gray-900;
@@ -148,18 +197,45 @@ body {
    .wf-hover-card        — Clickable card hover: lift + border accent
    ═══════════════════════════════════════════════════════════════════════════ */
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   WORSHIPFLOW TYPOGRAPHY SCALE — OFFICIAL STANDARD (v2.1)
+   ──────────────────────────────────────────────────────────────────────────
+   RULE: Minimum font size is 14px (text-sm) across ALL modules.
+   Body sentences and descriptions are 16px (text-base).
+   ──────────────────────────────────────────────────────────────────────────
+   SIZE         CLASS       PX    USAGE
+   ─────────────────────────────────────────────────────────────────────────
+   Stat number  text-4xl    36px  Metric tile numbers (e.g. "44 Songs")
+   Hero name    text-3xl    30px  Greeting "Jay 👋"
+   Body text    text-base   16px  Sentences, descriptions, verse quote,
+                                  broadcast messages, insight paragraph
+   Labels       text-sm     14px  MINIMUM — card titles, nav items, badges,
+                                  timestamps, pills, captions, footer notes,
+                                  section headers (UPPERCASE), metadata
+   ──────────────────────────────────────────────────────────────────────────
+   EXCEPTIONS (text-[10px] only — narrow spatial constraints):
+   - Month label "APR" inside w-10 h-10 or smaller date chip circles
+   - Tooltip overlay text (non-reading, decorative UI)
+   - Avatar initials inside w-6 h-6 (24px) circles only
+   ──────────────────────────────────────────────────────────────────────────
+   WCAG 2.1 AA compliance:
+   - text-base (16px) normal weight → minimum contrast 4.5:1
+   - text-sm (14px) bold weight   → minimum contrast 4.5:1
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 /* ── Card surface ─────────────────────────────────────────────────────────── */
+/* STANDARD: rounded-2xl (16px) everywhere — no more rounded-[20px] */
 .wf-card {
   background-color: white;
-  border-radius: 20px;
-  border: 1px solid rgba(229, 231, 235, 0.8);           /* gray-200/80 */
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);     /* Overpay soft */
+  border-radius: 1rem;                                  /* 16px — rounded-2xl */
+  border: 1px solid rgba(229, 231, 235, 0.9);           /* gray-200 */
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);          /* refined soft */
   overflow: hidden;
 }
 .dark .wf-card {
-  background-color: rgba(31, 41, 55, 0.9);              /* gray-800/90 */
-  border-color: rgba(55, 65, 81, 0.6);                  /* gray-700/60 */
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.3);      /* Overpay soft-dark */
+  background-color: rgba(31, 41, 55, 0.95);             /* gray-800 */
+  border-color: rgba(55, 65, 81, 0.7);                  /* gray-700 */
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.35);
 }
 
 /* Hover lift variant — apply to clickable cards */
@@ -180,21 +256,21 @@ body {
 }
 
 /* ── Card header bar ──────────────────────────────────────────────────────── */
-/* Always 24px horizontal padding (Overpay spec), 16px vertical, icon chip */
+/* Standard: 24px h-pad, 16px v-pad, icon chip w-8 h-8 with 16px icon */
 .wf-card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 1rem 1.5rem;                                /* py-4 px-6 */
-  border-bottom: 1px solid rgba(243, 244, 246, 0.8);  /* gray-100/80 */
+  border-bottom: 1px solid rgba(243, 244, 246, 0.9);
 }
 .dark .wf-card-header {
-  border-bottom-color: rgba(55, 65, 81, 0.6);         /* gray-700/60 */
+  border-bottom-color: rgba(55, 65, 81, 0.65);
 }
 
 /* ── Card body ────────────────────────────────────────────────────────────── */
 .wf-card-body {
-  padding: 1.5rem;                                      /* 24px — Overpay spec */
+  padding: 1.5rem;                                      /* 24px */
 }
 
 /* ── Card footer ──────────────────────────────────────────────────────────── */
@@ -330,14 +406,140 @@ body {
 }
 
 /* ── Module content area spacing ─────────────────────────────────────────── */
-/* Wraps the main scrollable content of any module view */
+/* Standard wrapper for ALL module main content areas */
 .wf-module-content {
-  max-width: 80rem;                /* Overpay desktop: 1440px max */
+  max-width: 80rem;                /* 1280px max width */
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;                   /* 20px — generous breathing room */
+  gap: 1.25rem;                   /* 20px vertical rhythm */
   padding-bottom: 2.5rem;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   WORSHIPFLOW DESIGN SYSTEM v2.0 — Component Standard Classes
+   Established via Dashboard module. Apply to ALL modules going forward.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* ── Page background — use on main content scroll area ───────────────────── */
+.wf-page-bg {
+  background-color: #f5f7fa;
+}
+.dark .wf-page-bg {
+  background-color: #0f1117;
+}
+
+/* ── Sidebar — proper light + dark ───────────────────────────────────────── */
+/* CRITICAL: Sidebar must be white in light, dark navy in dark. Never hardcode bg-gray-900 alone. */
+.wf-sidebar {
+  background-color: #ffffff;
+  border-right: 1px solid rgba(229, 231, 235, 0.9);
+}
+.dark .wf-sidebar {
+  background-color: #0e0e1c;
+  border-right-color: rgba(55, 65, 81, 0.5);
+}
+
+/* ── Topbar / header — light + dark ─────────────────────────────────────── */
+.wf-topbar {
+  background-color: #ffffff;
+  border-bottom: 1px solid rgba(229, 231, 235, 0.9);
+}
+.dark .wf-topbar {
+  background-color: #0e0e1c;
+  border-bottom-color: rgba(55, 65, 81, 0.5);
+}
+
+/* ── Card icon chip — STANDARD: w-8 h-8, rounded-xl, 16px icon ───────────── */
+/* Replace all w-7 h-7 chips with this class */
+.wf-icon-chip {
+  width: 2rem;            /* 32px / w-8 */
+  height: 2rem;
+  border-radius: 0.75rem; /* rounded-xl */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* ── Standard nav item ───────────────────────────────────────────────────── */
+.wf-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;          /* gap-2.5 */
+  padding: 0.625rem 0.75rem; /* py-2.5 px-3 */
+  border-radius: 0.75rem; /* rounded-xl */
+  font-size: 0.875rem;    /* text-sm */
+  font-weight: 500;       /* font-medium */
+  width: 100%;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  color: rgb(75, 85, 99); /* text-gray-600 */
+}
+.dark .wf-nav-item {
+  color: rgb(156, 163, 175); /* text-gray-400 */
+}
+.wf-nav-item:hover {
+  background-color: rgb(243, 244, 246); /* bg-gray-100 */
+  color: rgb(17, 24, 39); /* text-gray-900 */
+}
+.dark .wf-nav-item:hover {
+  background-color: rgba(31, 41, 55, 0.7); /* dark:hover:bg-gray-800 */
+  color: rgb(229, 231, 235); /* text-gray-200 */
+}
+.wf-nav-item.active {
+  background-color: rgba(99, 102, 241, 0.1);
+  color: rgb(79, 70, 229); /* text-indigo-700 */
+  font-weight: 600;
+}
+.dark .wf-nav-item.active {
+  background-color: rgba(99, 102, 241, 0.2);
+  color: rgb(129, 140, 248); /* text-indigo-400 */
+}
+
+/* ── Greeting card accent bar ────────────────────────────────────────────── */
+/* Left border accent line in greeting header — 4px wide, indigo-violet gradient */
+.wf-accent-bar {
+  width: 4px;
+  border-radius: 9999px;
+  background: linear-gradient(to bottom, #6366f1, #8b5cf6);
+  flex-shrink: 0;
+  align-self: stretch;
+  min-height: 3.5rem;
+}
+
+/* ── Stat / metric grid ──────────────────────────────────────────────────── */
+/* Mobile: 2x2. Tablet (sm:): 4-col horizontal row. Desktop: stays 2x2 in right column. */
+.wf-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+@media (min-width: 640px) and (max-width: 1023px) {
+  /* Tablet: 4-col horizontal row — shows all stats immediately */
+  .wf-stats-grid-tablet-row {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* ── Announcement / broadcast badge ─────────────────────────────────────── */
+.wf-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.625rem;  /* 10px */
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background-color: rgba(34, 197, 94, 0.15);
+  color: rgb(22, 163, 74);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+.dark .wf-live-badge {
+  background-color: rgba(34, 197, 94, 0.12);
+  color: rgb(74, 222, 128);
+  border-color: rgba(34, 197, 94, 0.25);
 }
 
 /* ── View transition — springy premium feel ─────────────────────────────── */

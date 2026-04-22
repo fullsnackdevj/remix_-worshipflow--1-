@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from "react";
+import { toSafeTitle } from "./utils/textFormatting";
 import { createPortal } from "react-dom";
 import { getAuth } from "firebase/auth";
 import AutoTextarea from "./AutoTextarea";
@@ -1893,7 +1894,7 @@ showToast("error", "Failed to extract text from image. Please try again.");
                   {/* Title row */}
                   <div className="flex items-start justify-between gap-2 mb-1">
                     <h3 className="text-base font-bold text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors line-clamp-2 leading-snug">
-                      {song.title}
+                      {toSafeTitle(song.title)}
                     </h3>
                     <div className="flex items-center gap-0.5 shrink-0" onClick={e => e.stopPropagation()}>
                       {!isSelectionMode && <AddToPlaylistBtn song={song} showToast={showToast} />}
@@ -1999,7 +2000,7 @@ showToast("error", "Failed to extract text from image. Please try again.");
                       </div>
                     )}
                     <div className="min-w-0">
-                      <p className="font-bold text-sm text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate">{song.title}</p>
+                      <p className="font-bold text-sm text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate">{toSafeTitle(song.title)}</p>
                       {song.artist && <p className="text-xs text-indigo-500 dark:text-indigo-400 font-semibold truncate">{song.artist}</p>}
                     </div>
                   </div>

@@ -972,7 +972,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
   const canWriteMembers = isRoleAdmin || isQARole; // Worship Leader removed; QA Specialist added
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-gray-900 font-sans text-gray-900 dark:text-gray-100 overflow-hidden">
+    <div className="flex h-screen wf-page-bg font-sans text-gray-900 dark:text-gray-100 overflow-hidden">
 
       {/* 🔔 Push Notification Permission Banner — iOS-safe (requires user tap) */}
       {showPushPrompt && (
@@ -1139,24 +1139,24 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
       {/* 👋 Welcome Toast — shows once on very first login */}
       <WelcomeToast />
 
-      {/* Mobile Overlay */}
+      {/* Mobile Overlay - with proper backdrop blur */}
       {isMobileMenuOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-20 lg:hidden"
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-20 lg:hidden"
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
 
-      {/* Sidebar */}
-      <div className={`fixed lg:static inset-y-0 left-0 z-30 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col transition-all duration-300 transform overflow-x-visible ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"} ${isSidebarCollapsed ? "w-20" : "w-64"}`}>
+      {/* Sidebar — wf-sidebar handles light (white) + dark (navy) correctly */}
+      <div className={`wf-sidebar fixed lg:static inset-y-0 left-0 z-30 flex flex-col transition-all duration-300 transform overflow-x-visible ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"} ${isSidebarCollapsed ? "w-20" : "w-64"}`}>
 
-        <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between h-16">
+        <div className="p-4 border-b border-gray-200 dark:border-gray-700/60 flex items-center justify-between h-16">
           <div className={`flex items-center gap-2 overflow-hidden whitespace-nowrap ${isSidebarCollapsed ? "justify-center w-full" : ""}`}>
             <img src="/icon-192x192.png" alt="WorshipFlow" className="w-8 h-8 shrink-0 shadow-md" />
-            {!isSidebarCollapsed && <span className="text-xl font-bold dark:text-white">WorshipFlow</span>}
+            {!isSidebarCollapsed && <span className="text-xl font-bold text-gray-900 dark:text-white">WorshipFlow</span>}
           </div>
           <button
-            className="lg:hidden p-1 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
+            className="lg:hidden p-1 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800/60 rounded-lg transition-colors"
             onClick={() => setIsMobileMenuOpen(false)}
           >
             <X size={20} />
@@ -1518,7 +1518,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
           )}
         </nav>
 
-        <div className="p-3 border-t border-gray-200 dark:border-gray-800 flex items-center justify-center gap-2">
+        <div className="p-3 border-t border-gray-200 dark:border-gray-700/60 flex items-center justify-center gap-2">
           {isAdmin && (
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
@@ -1540,8 +1540,8 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Header — hidden when Rehearsal mobile fullscreen is active */}
-        <header className={`bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 py-4 px-4 sm:px-6 flex items-center gap-3 h-16 shrink-0 transition-all ${rehearsalFullscreen ? "hidden" : ""}`} style={{ ["--header-h" as any]: "64px" }}>
+        {/* Header — wf-topbar handles light (white) + dark (navy) | hidden when Rehearsal mobile fullscreen is active */}
+        <header className={`wf-topbar py-4 px-4 sm:px-6 flex items-center gap-4 h-16 shrink-0 transition-all ${rehearsalFullscreen ? "hidden" : ""}`} style={{ ["--header-h" as any]: "64px" }}>
 
           {/* Dashboard: show hamburger (opens sidebar drawer on mobile) */}
           {currentView === "dashboard" && (
@@ -1721,7 +1721,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
 
         {/* Content Area — overflow-x MUST be hidden to prevent Freedom Wall's
              4000px canvas from bleeding into the rest of the app layout */}
-        <main className="flex-1 overflow-y-auto overflow-x-hidden bg-gray-50 dark:bg-gray-900">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden wf-page-bg">
           <div className="flex flex-col h-full">
             <div className={`view-enter flex-1 overflow-x-hidden ${
                 currentView === "freedom-wall" || currentView === "preaching" || currentView === "design-requests" || currentView === "bible" || currentView === "playlist"

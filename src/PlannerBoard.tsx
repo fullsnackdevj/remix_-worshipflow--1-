@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
+import { toSafeTitle } from "./utils/textFormatting";
 import {
   Plus, X, ChevronLeft, ChevronRight, MoreHorizontal, Check,
   Trash2, Archive, AlignLeft, CheckSquare, Settings,
@@ -527,8 +528,7 @@ onToast("success", `️ Moved back to "${todoList.title}"`);
   const deleteChecklist = (clId: string) => save({ checklists: c.checklists.filter(cl => cl.id !== clId) });
   const deleteItem = (clId: string, itemId: string) => save({ checklists: c.checklists.map(cl => cl.id === clId ? { ...cl, items: cl.items.filter(i => i.id !== itemId) } : cl) });
   const renameItem = (clId: string, itemId: string, text: string) => {
-    const cap = (s: string) => s.trim().replace(/\b\w/g, c => c.toUpperCase());
-    const newText = cap(text);
+    const newText = toSafeTitle(text);
     if (!newText) return;
     save({ checklists: c.checklists.map(cl => cl.id === clId ? { ...cl, items: cl.items.map(i => i.id === itemId ? { ...i, text: newText } : i) } : cl) });
     setEditingItem(null);
@@ -662,7 +662,7 @@ onToast("success", `️ Moved back to "${todoList.title}"`);
             <div className="flex items-start gap-3 mb-4">
               <textarea value={c.title} readOnly={!isEditable}
                 onChange={isEditable ? e => setC(p => ({ ...p, title: e.target.value })) : undefined}
-                onBlur={isEditable ? () => { const cap = (s: string) => s.trim().replace(/\b\w/g, c => c.toUpperCase()); const capitalized = cap(c.title); if (capitalized !== c.title) setC(p => ({ ...p, title: capitalized })); save({ title: capitalized }); } : undefined} rows={1}
+                onBlur={isEditable ? () => { const capitalized = toSafeTitle(c.title); if (capitalized !== c.title) setC(p => ({ ...p, title: capitalized })); save({ title: capitalized }); } : undefined} rows={1}
                 className={`flex-1 bg-transparent font-bold text-[22px] leading-snug focus:outline-none resize-none placeholder-gray-600 ${c.completed ? "line-through text-gray-500" : "text-white"} ${!isEditable ? "cursor-default" : ""}`} />
             </div>
             {/* Action buttons — full access + not completed only */}
@@ -2423,8 +2423,7 @@ catch { onToast("error", "Failed to create list"); }
     if (!newCardTitle.trim() || !activeBoard || isCreatingCard) return;
     setIsCreatingCard(true);
     try {
-      const cap = (s: string) => s.trim().replace(/\b\w/g, c => c.toUpperCase());
-      const r = await apiFetch("/planner/cards", { method: "POST", body: JSON.stringify({ boardId: activeBoard.id, listId, title: cap(newCardTitle.trim()), createdBy: { name: currentUser?.name || "Someone", photo: currentUser?.photo || "" } }) });
+      const r = await apiFetch("/planner/cards", { method: "POST", body: JSON.stringify({ boardId: activeBoard.id, listId, title: toSafeTitle(newCardTitle.trim()), createdBy: { name: currentUser?.name || "Someone", photo: currentUser?.photo || "" } }) });
       const { id } = await r.json();
       const listTitle = lists.find(l => l.id === listId)?.title ?? "this list";
       apiFetch(`/planner/cards/${id}/activity`, { method: "POST", body: JSON.stringify({ type: "create", actorName: currentUser?.name || "Someone", actorPhoto: currentUser?.photo || "", text: `added this card to ${listTitle}` }) }).catch(() => {});

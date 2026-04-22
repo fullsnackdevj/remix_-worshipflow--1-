@@ -5,7 +5,7 @@ import { useTheme } from "./ThemeContext";
 
 interface Props { userId: string; userName: string; userPhoto: string; }
 
-const CARD = "bg-white dark:bg-gray-800/90 rounded-[20px] border border-gray-200/80 dark:border-gray-700/60 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.05)] dark:shadow-[0_4px_20px_-2px_rgba(0,0,0,0.3)]";
+const CARD = "bg-white dark:bg-gray-800/90 rounded-2xl border border-gray-200 dark:border-gray-700/60 shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_20px_-2px_rgba(0,0,0,0.35)]";
 
 const VERSE_REACTIONS = [
     { key: "prayer",  label: "Praying",   icon: "🙏" },
@@ -106,24 +106,31 @@ export default function VerseOfTheDay({ userId }: Props) {
         <div className={`${CARD} overflow-hidden h-full flex flex-col`}>
 
             {/* ── Header — matches CardHeader style exactly ── */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100/80 dark:border-gray-700/60 shrink-0">
-                <div className="flex items-center gap-2.5">
-                    <span className="w-7 h-7 rounded-xl bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center shrink-0">
-                        <BookOpen size={14} className={isLuxury ? "text-blue-400" : "text-indigo-500"} />
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100/80 dark:border-gray-700/60 shrink-0 gap-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                    {/* Icon chip: standardized w-8 h-8 rounded-xl, 16px icon */}
+                    <span className="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center shrink-0">
+                        <BookOpen size={16} className={isLuxury ? "text-blue-400" : "text-indigo-500"} />
                     </span>
-                    <span className="font-semibold text-gray-900 dark:text-white text-sm tracking-tight">
+                    <span className="font-semibold text-gray-900 dark:text-white text-sm tracking-tight whitespace-nowrap">
                         Verse of the Day
                     </span>
                 </div>
-                <div className="flex items-center gap-2">
-                    <span className="text-[11px] text-gray-400 dark:text-gray-500 font-medium">
-                        {phNow().toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric" })}
+                <div className="flex items-center gap-2 shrink-0">
+                    {/* Short date on mobile, full date on sm+ */}
+                    <span className="text-xs sm:text-sm text-gray-400 dark:text-gray-500 font-medium whitespace-nowrap">
+                        <span className="sm:hidden">
+                            {phNow().toLocaleDateString("en", { month: "short", day: "numeric" })}
+                        </span>
+                        <span className="hidden sm:inline">
+                            {phNow().toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric" })}
+                        </span>
                     </span>
                     <button
                         onClick={copyVerse}
                         disabled={copyState === "loading"}
                         title={copyState === "done" ? "Copied!" : "Copy verse"}
-                        className={`flex items-center justify-center w-7 h-7 rounded-lg border transition-all disabled:opacity-60 ${
+                        className={`flex items-center justify-center w-7 h-7 rounded-lg border transition-all disabled:opacity-60 shrink-0 ${
                             copyState === "done"
                                 ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700/40 text-green-600 dark:text-green-400"
                                 : "bg-gray-50 dark:bg-gray-700/60 border-gray-200 dark:border-gray-600/60 text-gray-400 dark:text-gray-500 hover:text-indigo-500 dark:hover:text-indigo-400"
@@ -134,23 +141,23 @@ export default function VerseOfTheDay({ userId }: Props) {
                 </div>
             </div>
 
-            {/* ── Body: 2-col on wide, stacked on narrow ── */}
-            <div className="flex flex-col sm:flex-row flex-1 min-h-0">
+            {/* ── Body: Stacks vertically on mobile + tablet; side-by-side only on lg+ ── */}
+            <div className="flex flex-col lg:flex-row flex-1 min-h-0">
 
-                {/* LEFT — Quote + reference + reactions */}
-                <div className="flex flex-col justify-between px-6 pt-5 pb-5 flex-1 sm:border-r border-gray-100/80 dark:border-gray-700/60">
+                {/* LEFT — Quote + reference + reactions: always full width on mobile/tablet */}
+                <div className="flex flex-col justify-between px-6 pt-5 pb-5 flex-1 lg:border-r border-gray-100/80 dark:border-gray-700/60">
                     <div>
-                        <blockquote className="text-[15px] sm:text-[16px] font-semibold leading-[1.75] text-gray-900 dark:text-white">
+                        <blockquote className="text-base font-semibold leading-[1.8] text-gray-900 dark:text-white">
                             "{verse.text}"
                         </blockquote>
-                        <p className={`mt-2.5 text-[12px] font-bold tracking-wide ${isLuxury ? "text-blue-500 dark:text-blue-400" : "text-indigo-500 dark:text-indigo-400"}`}>
+                        <p className={`mt-2.5 text-sm font-bold tracking-wide ${isLuxury ? "text-blue-500 dark:text-blue-400" : "text-indigo-500 dark:text-indigo-400"}`}>
                             — {verse.ref}&nbsp;
                             <span className="text-gray-400 dark:text-gray-500 font-medium">(NIV)</span>
                         </p>
                     </div>
 
-                    {/* Reactions */}
-                    <div className="mt-4 flex flex-wrap gap-1.5 items-center">
+                    {/* Reactions — overflow-x scroll on mobile, wrap on desktop */}
+                    <div className="mt-4 flex gap-1.5 items-center overflow-x-auto pb-0.5" style={{ scrollbarWidth: "none" }}>
                         {VERSE_REACTIONS.map(({ key, label, icon }) => {
                             const users = reactions[key] ?? [];
                             const reacted = users.includes(userId);
@@ -168,7 +175,7 @@ export default function VerseOfTheDay({ userId }: Props) {
                                 >
                                     <span className="leading-none" style={{ fontSize: 14 }}>{icon}</span>
                                     {users.length > 0 && (
-                                        <span className={`text-[11px] font-bold tabular-nums ${reacted ? "text-indigo-600 dark:text-indigo-300" : "text-gray-500 dark:text-gray-400"}`}>
+                                        <span className={`text-sm font-bold tabular-nums ${reacted ? "text-indigo-600 dark:text-indigo-300" : "text-gray-500 dark:text-gray-400"}`}>
                                             {users.length}
                                         </span>
                                     )}
@@ -180,32 +187,28 @@ export default function VerseOfTheDay({ userId }: Props) {
                             );
                         })}
                         {totalReactions > 0 && (
-                            <span className="text-[11px] text-gray-400 dark:text-gray-500 ml-0.5">
+                            <span className="text-sm text-gray-400 dark:text-gray-500 ml-0.5">
                                 {totalReactions} reaction{totalReactions !== 1 ? "s" : ""}
                             </span>
                         )}
                     </div>
                 </div>
 
-                {/* RIGHT — Insight + Cross Refs */}
+                {/* RIGHT — Insight + Cross Refs: HIDDEN on mobile/tablet, flex on lg+ only */}
                 {verse.insight && (
-                    <div className="sm:w-[42%] px-6 pt-5 pb-5 flex flex-col gap-3 bg-gray-50/50 dark:bg-gray-900/30">
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 shrink-0">
-                            Insight
-                        </p>
-                        <p className="text-[13px] leading-[1.8] text-gray-600 dark:text-gray-300 flex-1">
+                    <div className="hidden lg:flex lg:w-[42%] px-6 pt-5 pb-5 flex-col gap-3 bg-gray-50/50 dark:bg-gray-900/30 border-l border-gray-100/80 dark:border-gray-700/60">
+                        <h4 className="text-sm font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 shrink-0">INSIGHT</h4>
+                        <p className="text-base leading-relaxed text-gray-600 dark:text-gray-300 flex-1">
                             {verse.insight}
                         </p>
                         {verse.cross.length > 0 && (
                             <div className="shrink-0 pt-2 border-t border-gray-100 dark:border-gray-700/60">
-                                <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1.5">
-                                    Cross References
-                                </p>
+                                <h4 className="text-sm font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1.5">CROSS REFERENCES</h4>
                                 <div className="flex flex-wrap gap-1.5">
                                     {verse.cross.map(c => (
                                         <span
                                             key={c}
-                                            className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${
+                                            className={`text-sm font-semibold px-2.5 py-0.5 rounded-full border ${
                                                 isLuxury
                                                     ? "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700/40"
                                                     : "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-700/40"
