@@ -1236,7 +1236,8 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Song Management</span>}
           </div>
 
-          {/* ── Playlist ── */}
+          {/* ── Playlist — Admin only ── */}
+          {isRoleAdmin && (
           <div className="relative group/tip">
             <button
               onClick={() => { setCurrentView("playlist"); setIsMobileMenuOpen(false); markPlaylistSeen(); }}
@@ -1270,6 +1271,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
             </button>
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Playlist</span>}
           </div>
+          )}
 
           {/* Team Members */}
           <div className="relative group/tip">
@@ -1888,12 +1890,14 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                   isLineupOpen={lineupOpen}
                 />
               ) : currentView === "playlist" ? (
+                isRoleAdmin ? (
                 <PlaylistView
                   allSongs={allSongs}
                   showToast={showToast}
                   onOpenVideo={openVideo}
                   onNavigateToSongs={() => setCurrentView("songs")}
                 />
+                ) : <>{setCurrentView("dashboard")}</>
               ) : currentView === "rehearsal" ? (
                 <RehearsalView
                   allSchedules={allSchedules}
