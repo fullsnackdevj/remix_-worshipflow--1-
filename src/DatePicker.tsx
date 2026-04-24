@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback, useLayoutEffect } from "react";
 import { ChevronLeft, ChevronRight, ChevronDown, X, CalendarDays } from "lucide-react";
 
 interface DatePickerProps {
@@ -54,6 +54,8 @@ export default function DatePicker({
   const [viewMonth, setViewMonth] = useState(parsed?.m ?? today.getMonth() + 1);
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
 
   // Close on outside click
   useEffect(() => {
@@ -74,6 +76,26 @@ export default function DatePicker({
     setYearMode(false);
     setOpen(o => !o);
   };
+
+  // Recompute dropdown position whenever it opens
+  useLayoutEffect(() => {
+    if (!open) return;
+    const el = triggerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const openUpward = spaceBelow < 340 && spaceAbove > spaceBelow;
+    setDropdownStyle({
+      position: "fixed",
+      zIndex: 9999,
+      left: Math.max(8, Math.min(rect.left, window.innerWidth - 300)),
+      ...(openUpward
+        ? { bottom: window.innerHeight - rect.top + 8 }
+        : { top: rect.bottom + 8 }),
+      minWidth: Math.min(300, window.innerWidth - 16),
+    });
+  }, [open]);
 
   const prevMonth = useCallback(() =>
     setViewMonth(m => { if (m === 1) { setViewYear(y => y - 1); return 12; } return m - 1; }), []);
@@ -140,6 +162,7 @@ export default function DatePicker({
       ) : (
         // Standard form-style trigger
         <button
+          ref={triggerRef}
           type="button"
           onClick={handleOpen}
           className={[
@@ -173,16 +196,12 @@ export default function DatePicker({
         </button>
       )}
 
-      {/* ── Dropdown ── */}
+      {/* ── Dropdown (fixed-position, never clipped by overflow:hidden) ── */}
       {open && (
-        <div className={[
-          "absolute z-[300] top-full mt-2",
-          dropdownAlign === "right" ? "right-0" : "left-0",
-          "min-w-[280px] max-w-[340px]",
-          "bg-white dark:bg-gray-900",
-          "border border-gray-200 dark:border-gray-700",
-          "rounded-2xl shadow-2xl overflow-hidden",
-        ].join(" ")}>
+        <div
+          style={dropdownStyle}
+          className="max-w-[340px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-2xl overflow-hidden"
+        >
 
           {/* ── Header ── */}
           <div className="flex items-center px-4 pt-4 pb-2 gap-1">

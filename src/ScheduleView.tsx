@@ -621,30 +621,42 @@ showToast("error", "Could not save acknowledgment. Try again.");
   return (
     <>
     <div className="max-w-7xl mx-auto">
-      {/* Single toolbar row: [Month|List] — [< Apr 2026 >] — [Add Event] */}
+      {/* Toolbar */}
       <div className="flex items-center justify-between gap-2 mb-5">
 
         {/* Left: view toggle */}
-        <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-xl p-0.5 gap-0.5 shrink-0">
-          <button onClick={() => setScheduleView("month")} className={`flex items-center justify-center gap-1.5 w-10 h-10 sm:w-auto sm:h-auto sm:px-3 sm:py-2 rounded-[10px] text-sm font-semibold transition-all ${scheduleView === "month" ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"}`}>
-            <Calendar size={20} className="sm:hidden" />
-            <Calendar size={14} className="hidden sm:block" />
+        <div className="flex items-center bg-gray-100 dark:bg-gray-800/80 rounded-2xl p-1 gap-0.5 shrink-0 border border-gray-200 dark:border-gray-700/60">
+          <button onClick={() => setScheduleView("month")} className={`flex items-center justify-center gap-1.5 w-9 h-9 sm:w-auto sm:h-auto sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold tracking-wide transition-all ${
+            scheduleView === "month"
+              ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm"
+              : "text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+          }`}>
+            <Calendar size={14} />
             <span className="hidden sm:inline">Month</span>
           </button>
-          <button onClick={() => setScheduleView("list")} className={`flex items-center justify-center gap-1.5 w-10 h-10 sm:w-auto sm:h-auto sm:px-3 sm:py-2 rounded-[10px] text-sm font-semibold transition-all ${scheduleView === "list" ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"}`}>
-            <List size={20} className="sm:hidden" />
-            <List size={14} className="hidden sm:block" />
+          <button onClick={() => setScheduleView("list")} className={`flex items-center justify-center gap-1.5 w-9 h-9 sm:w-auto sm:h-auto sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold tracking-wide transition-all ${
+            scheduleView === "list"
+              ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm"
+              : "text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+          }`}>
+            <List size={14} />
             <span className="hidden sm:inline">List</span>
           </button>
         </div>
 
         {/* Center: month navigation */}
-        <div className="flex items-center gap-0.5 sm:gap-1">
-          <button onClick={() => setCalendarMonth(new Date(year, month - 1, 1))} className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-all text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"><ChevronLeft size={18} /></button>
-          <h2 className="font-extrabold text-gray-900 dark:text-white text-base sm:text-lg min-w-[120px] sm:min-w-[160px] text-center tracking-tight">
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setCalendarMonth(new Date(year, month - 1, 1))}
+            className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-all text-gray-400 dark:text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+          ><ChevronLeft size={16} /></button>
+          <h2 className="font-black text-gray-900 dark:text-white text-sm sm:text-base min-w-[110px] sm:min-w-[148px] text-center tracking-tight">
             {calendarMonth.toLocaleDateString("en", { month: "long", year: "numeric" })}
           </h2>
-          <button onClick={() => setCalendarMonth(new Date(year, month + 1, 1))} className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-all text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"><ChevronRight size={18} /></button>
+          <button
+            onClick={() => setCalendarMonth(new Date(year, month + 1, 1))}
+            className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-all text-gray-400 dark:text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+          ><ChevronRight size={16} /></button>
         </div>
 
         {/* Right: Add Event button */}
@@ -657,7 +669,7 @@ showToast("error", "Could not save acknowledgment. Try again.");
             const isPast = !!selectedScheduleDate && selectedScheduleDate < todayStr;
             const isFormOpen = schedPanelMode === "edit";
             const canAdd = (canWriteSchedule || leaderCanAddOnDate) && !isListView && hasDate && !isFormOpen && selectedDateEvents.length === 0;
-            const label = hasExisting ? "Add Another Event" : "Add Event";
+            const label = hasExisting ? "Add Another" : "Add Event";
             const disabledTitle = isPast && !canBypassPast
                ? "This date has passed — cannot add events"
                : (!canWriteSchedule && !isLeader)
@@ -669,17 +681,19 @@ showToast("error", "Could not save acknowledgment. Try again.");
                      : "Select a date on the calendar first";
             if (canAdd) {
               return (
-                <button onClick={() => { setSelectedEventId(null); setSchedPanelMode("edit"); openBlankEventForm(selectedScheduleDate!); }}
-                  className="flex items-center justify-center gap-2 w-9 h-9 sm:w-auto sm:h-auto sm:px-4 sm:py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-semibold transition-all shadow-sm shadow-indigo-500/30">
-                  <Plus size={18} />
+                <button
+                  onClick={() => { setSelectedEventId(null); setSchedPanelMode("edit"); openBlankEventForm(selectedScheduleDate!); }}
+                  className="flex items-center justify-center gap-1.5 h-9 px-3 sm:px-4 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 active:scale-[0.97] text-xs font-bold transition-all shadow-sm shadow-indigo-500/25"
+                >
+                  <Plus size={15} />
                   <span className="hidden sm:inline whitespace-nowrap">{label}</span>
                 </button>
               );
             }
             return (
               <button disabled title={disabledTitle}
-                className="flex items-center justify-center gap-2 w-9 h-9 sm:w-auto sm:h-auto sm:px-4 sm:py-2.5 rounded-xl text-sm font-semibold bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed select-none">
-                <Plus size={18} />
+                className="flex items-center justify-center gap-1.5 h-9 px-3 sm:px-4 rounded-xl text-xs font-bold bg-gray-100 dark:bg-gray-800 text-gray-300 dark:text-gray-600 cursor-not-allowed select-none">
+                <Plus size={15} />
                 <span className="hidden sm:inline whitespace-nowrap">{label}</span>
               </button>
             );
@@ -691,15 +705,16 @@ showToast("error", "Could not save acknowledgment. Try again.");
       <div className="flex gap-4 relative">
         <div className="flex-1 min-w-0">
           {scheduleView === "month" ? (
-            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-              <div className="grid grid-cols-7 border-b border-gray-100 dark:border-gray-700/60">
+            <div className="bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200 dark:border-gray-700/60 overflow-hidden shadow-sm">
+              {/* Day-of-week header */}
+              <div className="grid grid-cols-7 bg-gray-50 dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700/60">
                 {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(d => (
-                  <div key={d} className="py-2.5 text-center text-[11px] font-bold text-gray-400 dark:text-gray-600 uppercase tracking-widest">{d}</div>
+                  <div key={d} className="py-2.5 text-center text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">{d}</div>
                 ))}
               </div>
               <div className="grid grid-cols-7">
                 {Array.from({ length: firstDow }).map((_, i) => (
-                  <div key={`e${i}`} className="min-h-[80px] lg:min-h-[110px] border-b border-r border-gray-100 dark:border-gray-700/40" />
+                  <div key={`e${i}`} className="min-h-[76px] lg:min-h-[100px] border-b border-r border-gray-100 dark:border-gray-700/30 bg-gray-50/50 dark:bg-gray-800/30" />
                 ))}
                 {Array.from({ length: daysInMonth }).map((_, i) => {
                   const day = i + 1;
@@ -717,41 +732,57 @@ showToast("error", "Could not save acknowledgment. Try again.");
                       key={dateStr}
                       onClick={() => openScheduleEditor(dateStr)}
                       title={isDeadCell ? "Past date — no events or tasks" : undefined}
-                      className={`group relative min-h-[80px] lg:min-h-[110px] border-b border-r border-gray-100 dark:border-gray-700/40 p-1.5 lg:p-2 text-left transition-all duration-150 ${isDeadCell ? "opacity-35 cursor-not-allowed" : "hover:bg-indigo-50/70 dark:hover:bg-indigo-900/20"} ${isSelected ? "bg-indigo-50 dark:bg-indigo-900/30 ring-1 ring-inset ring-indigo-300 dark:ring-indigo-700" : ""}`}
+                      className={[
+                        "group relative min-h-[76px] lg:min-h-[100px] border-b border-r border-gray-100 dark:border-gray-700/30 p-1.5 text-left transition-all duration-150",
+                        isDeadCell ? "opacity-30 cursor-not-allowed" : "hover:bg-indigo-50/60 dark:hover:bg-indigo-900/15",
+                        isSelected ? "bg-indigo-50/80 dark:bg-indigo-900/25 ring-1 ring-inset ring-indigo-300 dark:ring-indigo-700/60" : "",
+                        isCellPast && !isDeadCell ? "bg-gray-50/40 dark:bg-transparent" : "",
+                      ].join(" ")}
                     >
-                      <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold mb-1 transition-colors ${isToday ? "bg-indigo-600 text-white shadow-sm shadow-indigo-500/40" : isSelected ? "text-indigo-600 dark:text-indigo-400" : "text-gray-600 dark:text-gray-400"}`}>{day}</span>
-                      {(canWriteSchedule || isLeader) && !isCellPast && (
-                        <span
-                          onClick={e => { e.stopPropagation(); openBlankEventForm(dateStr); }}
-                          className="hidden sm:flex absolute top-1.5 right-1.5 w-5 h-5 items-center justify-center rounded-full bg-indigo-600 text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:bg-indigo-700"
-                          title="Add event on this day"
-                        >+</span>
-                      )}
+                      {/* Day number */}
+                      <div className="flex items-center justify-between mb-1">
+                        <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold transition-colors ${
+                          isToday
+                            ? "bg-indigo-600 text-white shadow-sm"
+                            : isSelected
+                              ? "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-300"
+                              : isCellPast
+                                ? "text-gray-300 dark:text-gray-600"
+                                : "text-gray-700 dark:text-gray-300"
+                        }`}>{day}</span>
+                        {(canWriteSchedule || isLeader) && !isCellPast && (
+                          <span
+                            onClick={e => { e.stopPropagation(); openBlankEventForm(dateStr); }}
+                            className="hidden sm:flex w-5 h-5 items-center justify-center rounded-full bg-indigo-600 text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:bg-indigo-700 shrink-0"
+                            title="Add event on this day"
+                          >+</span>
+                        )}
+                      </div>
+                      {/* Event pills */}
                       {schedEvents.length > 0 && (() => {
-                        const palette = [
-                          { dot: "bg-indigo-500", text: "text-indigo-600 dark:text-indigo-400" },
-                          { dot: "bg-amber-500", text: "text-amber-600 dark:text-amber-400" },
-                          { dot: "bg-emerald-500", text: "text-emerald-600 dark:text-emerald-400" },
-                          { dot: "bg-rose-500", text: "text-rose-600 dark:text-rose-400" },
-                          { dot: "bg-violet-500", text: "text-violet-600 dark:text-violet-400" },
+                        const pillStyles = [
+                          "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300",
+                          "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300",
+                          "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300",
+                          "bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300",
+                          "bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300",
                         ];
                         if (schedEvents.length >= 3) {
                           return (
-                            <div className="flex flex-col gap-0.5">
-                              <p className="text-xs font-semibold text-fuchsia-600 dark:text-fuchsia-300 leading-tight">● {schedEvents.length} events</p>
-                            </div>
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-fuchsia-100 dark:bg-fuchsia-900/40 text-fuchsia-700 dark:text-fuchsia-300">
+                              ● {schedEvents.length} events
+                            </span>
                           );
                         }
                         return (
                           <div className="flex flex-col gap-0.5">
                             {schedEvents.map((ev, ei) => {
                               const nm = (ev as any).eventName || (ev.serviceType === "sunday" ? "Sunday Service" : "Midweek Service");
-                              const clr = palette[ei % palette.length];
+                              const pillCls = pillStyles[ei % pillStyles.length];
                               return (
-                                <div key={ei} className="flex items-center gap-1">
-                                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${clr.dot}`} />
-                                   <p className={`text-[11px] lg:text-xs font-semibold truncate leading-tight ${clr.text}`}>{nm}</p>
-                                </div>
+                                <span key={ei} className={`truncate text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-tight ${pillCls}`}>
+                                  {nm}
+                                </span>
                               );
                             })}
                           </div>
@@ -761,20 +792,15 @@ showToast("error", "Could not save acknowledgment. Try again.");
                       {(() => {
                         const tasksOnDay = myPlannerCards.filter(c => c.dueDate === dateStr || c.startDate === dateStr);
                         if (!tasksOnDay.length) return null;
-                        const allDone = tasksOnDay.length > 0 && tasksOnDay.every(c => c.completed);
+                        const allDone = tasksOnDay.every(c => c.completed);
                         const doneCt = tasksOnDay.filter(c => c.completed).length;
                         return (
-                          <div className={`flex items-center gap-0.5 mt-0.5 px-1 py-0.5 rounded-md ${
-                            allDone
-                              ? "bg-emerald-100/80 dark:bg-emerald-900/30"
-                              : "bg-amber-100/80 dark:bg-amber-900/30"
+                          <div className={`inline-flex items-center gap-0.5 mt-0.5 px-1.5 py-0.5 rounded-full ${
+                            allDone ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400"
+                                    : "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
                           }`}>
-                            <SquareKanban size={9} className={allDone ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-500"} />
-                            <p className={`text-[10px] font-bold leading-tight ${
-                              allDone ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-400"
-                            }`}>
-                              {doneCt}/{tasksOnDay.length}
-                            </p>
+                            <SquareKanban size={8} />
+                            <span className="text-[9px] font-bold">{doneCt}/{tasksOnDay.length}</span>
                           </div>
                         );
                       })()}
@@ -783,23 +809,21 @@ showToast("error", "Could not save acknowledgment. Try again.");
                         const mmdd = dateStr.slice(5);
                         const bdays = birthdayMap[mmdd] ?? [];
                         if (!bdays.length) return null;
-                        const shown = bdays.slice(0, 3);
+                        const shown = bdays.slice(0, 2);
                         const extra = bdays.length - shown.length;
                         const bdc = ["bg-pink-500","bg-rose-500","bg-fuchsia-500","bg-violet-500"];
                         return (
-                          <div className="flex items-center gap-0.5 mt-0.5 flex-wrap">
+                          <div className="flex items-center gap-0.5 mt-0.5">
                             {shown.map((bm, mi) => (
                               <div key={bm.id} title={`🎂 ${bm.name}'s Birthday`} className="relative shrink-0">
                                 {bm.photo
-                                  ? <img src={bm.photo} alt={bm.name} className="w-5 h-5 rounded-full object-cover ring-1 ring-pink-300 dark:ring-pink-700" />
-                                  : <div className={`w-5 h-5 rounded-full ${bdc[mi % bdc.length]} flex items-center justify-center text-white text-[8px] font-bold ring-1 ring-pink-300 dark:ring-pink-700`}>{bm.name[0].toUpperCase()}</div>
+                                  ? <img src={bm.photo} alt={bm.name} className="w-4 h-4 rounded-full object-cover ring-1 ring-pink-300 dark:ring-pink-700" />
+                                  : <div className={`w-4 h-4 rounded-full ${bdc[mi % bdc.length]} flex items-center justify-center text-white text-[7px] font-bold`}>{bm.name[0].toUpperCase()}</div>
                                 }
-                                <span className="absolute -bottom-0.5 -right-0.5 text-[7px] leading-none">🎂</span>
+                                <span className="absolute -bottom-0.5 -right-0.5 text-[6px] leading-none">🎂</span>
                               </div>
                             ))}
-                            {extra > 0 && (
-                              <span className="text-[9px] font-bold text-pink-500 dark:text-pink-400">+{extra}</span>
-                            )}
+                            {extra > 0 && <span className="text-[8px] font-bold text-pink-500">+{extra}</span>}
                           </div>
                         );
                       })()}
@@ -833,44 +857,41 @@ showToast("error", "Could not save acknowledgment. Try again.");
 
               if (items.length === 0) {
                 return (
-                  <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 text-center py-16 text-gray-400">
-                    <Calendar size={40} className="mx-auto mb-3 opacity-40" />
-                    <p className="font-semibold">No events or birthdays this month</p>
-                    <p className="text-sm mt-1">Click a date on the calendar to add one.</p>
+                  <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 text-center py-16">
+                    <Calendar size={36} className="mx-auto mb-3 text-gray-300 dark:text-gray-600" />
+                    <p className="font-semibold text-gray-500 dark:text-gray-400">No events or birthdays this month</p>
+                    <p className="text-sm mt-1 text-gray-400 dark:text-gray-500">Switch to Month view and click a date to add one.</p>
                   </div>
                 );
               }
 
               return (
-                <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                  <div className={`grid gap-px bg-gray-100 dark:bg-gray-700 ${selectedScheduleDate ? "grid-cols-1 md:grid-cols-1 lg:grid-cols-2" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"}`}>
-                    {items.map((item, idx) => {
+                <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm">
+                  <div className="divide-y divide-gray-100 dark:divide-gray-700/60">
+                    {items.map((item) => {
                       const d = new Date(item.date + "T00:00:00");
                       const isPast = item.date < todayStr;
 
                       if (item.kind === "bday") {
-                        // ── Birthday row ──────────────────────────────────────
                         return (
-                          <div key={`bday-${item.date}`} className="relative flex items-center gap-4 p-4 bg-white dark:bg-gray-800 border-l-4 border-pink-400 dark:border-pink-600">
-                            {/* Date badge — pink theme */}
-                            <div className={`shrink-0 rounded-xl px-3 py-2 text-center min-w-[52px] ${isPast ? "bg-gray-100 dark:bg-gray-700" : "bg-pink-50 dark:bg-pink-900/30"}`}>
-                              <div className={`text-xs font-semibold uppercase ${isPast ? "text-gray-400" : "text-pink-500"}`}>{d.toLocaleDateString("en", { month: "short" })}</div>
-                              <div className={`text-xl font-bold leading-none ${isPast ? "text-gray-400 dark:text-gray-500" : "text-pink-700 dark:text-pink-300"}`}>{d.getDate()}</div>
-                              <div className={`text-[10px] ${isPast ? "text-gray-400" : "text-pink-400"}`}>{d.toLocaleDateString("en", { weekday: "short" })}</div>
+                          <div key={`bday-${item.date}`} className="relative flex items-center gap-3 px-4 py-3 bg-white dark:bg-gray-800 border-l-4 border-pink-400 dark:border-pink-600">
+                            <div className={`shrink-0 rounded-xl px-2.5 py-1.5 text-center min-w-[48px] ${
+                              isPast ? "bg-gray-100 dark:bg-gray-700/60" : "bg-pink-50 dark:bg-pink-900/20"
+                            }`}>
+                              <div className={`text-[9px] font-bold uppercase tracking-wide ${isPast ? "text-gray-400" : "text-pink-500"}`}>{d.toLocaleDateString("en", { month: "short" })}</div>
+                              <div className={`text-lg font-extrabold leading-tight ${isPast ? "text-gray-400 dark:text-gray-500" : "text-pink-700 dark:text-pink-300"}`}>{d.getDate()}</div>
+                              <div className={`text-[9px] font-medium ${isPast ? "text-gray-400" : "text-pink-400"}`}>{d.toLocaleDateString("en", { weekday: "short" })}</div>
                             </div>
-                            {/* Celebrant info */}
                             <div className="flex-1 min-w-0">
-                              <p className="font-semibold text-pink-600 dark:text-pink-400 text-sm flex items-center gap-1.5">
-                                🎂 Birthday Celebration
-                              </p>
-                              <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                              <p className="font-semibold text-pink-600 dark:text-pink-400 text-xs mb-1.5">🎂 Birthday</p>
+                              <div className="flex items-center gap-1.5 flex-wrap">
                                 {item.members.map(bm => (
-                                  <div key={bm.id} className="flex items-center gap-1 bg-pink-50 dark:bg-pink-900/20 rounded-full pl-0.5 pr-2 py-0.5">
+                                  <div key={bm.id} className="flex items-center gap-1 bg-pink-50 dark:bg-pink-900/20 border border-pink-100 dark:border-pink-800/30 rounded-full pl-0.5 pr-2 py-0.5">
                                     {bm.photo
-                                      ? <img src={bm.photo} alt={bm.name} className="w-5 h-5 rounded-full object-cover ring-1 ring-pink-300" />
-                                      : <div className="w-5 h-5 rounded-full bg-pink-500 flex items-center justify-center text-white text-[9px] font-bold">{bm.name[0]}</div>
+                                      ? <img src={bm.photo} alt={bm.name} className="w-4 h-4 rounded-full object-cover" />
+                                      : <div className="w-4 h-4 rounded-full bg-pink-500 flex items-center justify-center text-white text-[8px] font-bold">{bm.name[0]}</div>
                                     }
-                                    <span className="text-xs font-medium text-pink-700 dark:text-pink-300">{bm.name.split(" ")[0]}</span>
+                                    <span className="text-[11px] font-medium text-pink-700 dark:text-pink-300">{bm.name.split(" ")[0]}</span>
                                   </div>
                                 ))}
                               </div>
@@ -879,24 +900,36 @@ showToast("error", "Could not save acknowledgment. Try again.");
                         );
                       }
 
-                      // ── Schedule event row ────────────────────────────────
+                      // ── Schedule event row
                       const s = item.data;
                       const evName = (s as any).eventName || (s.serviceType === "sunday" ? "Sunday Service" : "Midweek Service");
+                      const isSundaySvc = evName.toLowerCase() === "sunday service";
+                      const isMidweekSvc = evName.toLowerCase() === "midweek service";
+                      const accentBorder = isSundaySvc ? "border-indigo-500" : isMidweekSvc ? "border-violet-500" : selectedEventId === s.id ? "border-indigo-400" : "border-transparent";
+                      const dateBadgeBg = isPast ? "bg-gray-100 dark:bg-gray-700/40" : isSundaySvc ? "bg-indigo-50 dark:bg-indigo-900/20" : isMidweekSvc ? "bg-violet-50 dark:bg-violet-900/20" : "bg-gray-50 dark:bg-gray-700/30";
+                      const dateNumClr = isPast ? "text-gray-400 dark:text-gray-500" : isSundaySvc ? "text-indigo-700 dark:text-indigo-300" : isMidweekSvc ? "text-violet-700 dark:text-violet-300" : "text-gray-700 dark:text-gray-200";
+                      const dateLblClr = isPast ? "text-gray-400" : isSundaySvc ? "text-indigo-400" : isMidweekSvc ? "text-violet-400" : "text-gray-400";
+                      const wlClr = isMidweekSvc ? "text-violet-500 dark:text-violet-400" : "text-indigo-500 dark:text-indigo-400";
                       return (
-                        <div key={s.id} className={`relative flex items-center gap-4 p-4 cursor-pointer group transition-all duration-150 ${selectedEventId === s.id ? "bg-indigo-50 dark:bg-indigo-900/30 border-l-4 border-indigo-500" : "bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/40 border-l-4 border-transparent hover:shadow-sm"}`} onClick={() => openEventById(s.id, s.date)}>
-                          {/* Date badge */}
-                          <div className={`shrink-0 rounded-xl px-3 py-2.5 text-center min-w-[54px] ${isPast ? "bg-gray-100 dark:bg-gray-700/60" : "bg-indigo-50 dark:bg-indigo-900/30"}`}>
-                            <div className={`text-[10px] font-bold uppercase tracking-wider ${isPast ? "text-gray-400" : "text-indigo-500"}`}>{d.toLocaleDateString("en", { month: "short" })}</div>
-                            <div className={`text-xl font-extrabold leading-none my-0.5 ${isPast ? "text-gray-400 dark:text-gray-500" : "text-indigo-700 dark:text-indigo-300"}`}>{d.getDate()}</div>
-                            <div className={`text-[10px] font-medium ${isPast ? "text-gray-400" : "text-indigo-400"}`}>{d.toLocaleDateString("en", { weekday: "short" })}</div>
+                        <div
+                          key={s.id}
+                          className={`relative flex items-center gap-3 px-4 py-3 cursor-pointer group transition-all duration-150 border-l-4 ${
+                            selectedEventId === s.id
+                              ? `bg-indigo-50/80 dark:bg-indigo-900/20 ${accentBorder}`
+                              : `bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/30 ${accentBorder}`
+                          }`}
+                          onClick={() => openEventById(s.id, s.date)}
+                        >
+                          <div className={`shrink-0 rounded-xl px-2.5 py-1.5 text-center min-w-[48px] ${dateBadgeBg}`}>
+                            <div className={`text-[9px] font-bold uppercase tracking-wide ${dateLblClr}`}>{d.toLocaleDateString("en", { month: "short" })}</div>
+                            <div className={`text-lg font-extrabold leading-tight ${dateNumClr}`}>{d.getDate()}</div>
+                            <div className={`text-[9px] font-medium ${dateLblClr}`}>{d.toLocaleDateString("en", { weekday: "short" })}</div>
                           </div>
-                          {/* Event info */}
-                          <div className="flex-1 min-w-0 pr-7">
+                          <div className="flex-1 min-w-0">
                             <p className="font-bold text-gray-900 dark:text-white text-sm leading-snug">{eventEmoji(evName)} {evName}</p>
-                            {s.worshipLeader && <p className="text-xs text-indigo-500 dark:text-indigo-400 font-semibold mt-0.5">{s.worshipLeader.name}</p>}
-                            {s.notes && <p className="text-xs text-gray-400 truncate mt-0.5">{s.notes}</p>}
+                            {s.worshipLeader && <p className={`text-xs font-semibold mt-0.5 ${wlClr}`}>{s.worshipLeader.name}</p>}
+                            {s.notes && <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate mt-0.5">{s.notes}</p>}
                           </div>
-                          {/* Copy button */}
                           <button
                             type="button"
                             title="Copy event details"
@@ -1221,8 +1254,8 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
               {schedPanelMode === "view" && editingExisting ? (
                 /* ── VIEW MODE ── */
                 <>
-                <div className="space-y-4">
-                  {/* Created by — always shown at top */}
+                <div className="space-y-3">
+                  {/* Created by */}
                   {editingExisting.created_by_name && (() => {
                     const name = editingExisting.created_by_name!;
                     const photo = allMembers.find(m => m.name?.toLowerCase().startsWith(name.split(" ")[0].toLowerCase()))?.photo || editingExisting.created_by_photo || "";
@@ -1231,104 +1264,131 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                     const parts = name.trim().split(/\s+/);
                     const fmtName = parts.length === 1 ? parts[0] : `${parts[0]} ${parts[parts.length - 1][0]}.`;
                     return (
-                      <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-50 dark:bg-gray-700/40 border border-gray-100 dark:border-gray-700">
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700">
                         {photo
-                          ? <img src={photo} className="w-6 h-6 rounded-full object-cover shrink-0" alt={name} />
-                          : <div className={`w-6 h-6 rounded-full ${bg} flex items-center justify-center text-white text-[9px] font-bold shrink-0`}>{name[0].toUpperCase()}</div>
+                          ? <img src={photo} className="w-5 h-5 rounded-full object-cover shrink-0" alt={name} />
+                          : <div className={`w-5 h-5 rounded-full ${bg} flex items-center justify-center text-white text-[9px] font-bold shrink-0`}>{name[0].toUpperCase()}</div>
                         }
-                        <span className="text-xs text-gray-500 dark:text-gray-400">Created by <span className="font-semibold text-gray-700 dark:text-gray-200">{fmtName}</span></span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">Posted by <span className="font-semibold text-gray-700 dark:text-gray-200">{fmtName}</span></span>
                       </div>
                     );
                   })()}
+
                   {isServiceEvent && (() => {
-                    // Helper: get live photo from allMembers by memberId
                     const livePhoto = (memberId: string) => allMembers.find(m => m.id === memberId)?.photo || "";
-                    const Avatar = ({ m, color }: { m: ScheduleMember; color: string }) => {
-                      const photo = livePhoto(m.memberId);
-                      return photo
-                        ? <img src={photo} className="w-9 h-9 rounded-full object-cover shrink-0 ring-2 ring-white dark:ring-gray-800" alt={m.name} />
-                        : <div className="w-9 h-9 rounded-full ${color} flex items-center justify-center text-white text-sm font-bold shrink-0">{m.name[0]}</div>;
+                    const MemberRow = ({ m, roleLabel, roleColor }: { m: ScheduleMember; roleLabel: string; roleColor: string }) => {
+                      const photo = livePhoto(m.memberId) || m.photo || "";
+                      return (
+                        <div className="flex items-center gap-2.5">
+                          {photo
+                            ? <img src={photo} className="w-8 h-8 rounded-full object-cover shrink-0 ring-2 ring-white dark:ring-gray-700" alt={m.name} />
+                            : <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${roleColor} flex items-center justify-center text-white text-xs font-bold shrink-0`}>{m.name[0]}</div>
+                          }
+                          <div className="min-w-0">
+                            <p className="font-semibold text-sm text-gray-900 dark:text-white truncate">{m.name}</p>
+                            <p className="text-[10px] text-gray-400 dark:text-gray-500">{roleLabel}</p>
+                          </div>
+                        </div>
+                      );
                     };
                     return (
                       <>
+                        {/* Worship Leader card */}
                         {editSchedWorshipLeader && (
-                          <div>
-                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Worship Leader</p>
-                            <div className="flex items-center gap-3">
-                              <Avatar m={editSchedWorshipLeader} color="bg-indigo-500" />
-                              <div>
-                                <p className="font-semibold text-sm text-gray-900 dark:text-white">{editSchedWorshipLeader.name}</p>
-                                <p className="text-[11px] text-indigo-400">Worship Leader</p>
-                              </div>
-                            </div>
+                          <div className="rounded-xl border border-indigo-100 dark:border-indigo-900/40 bg-indigo-50/60 dark:bg-indigo-900/10 p-3">
+                            <p className="text-[10px] font-bold text-indigo-500 dark:text-indigo-400 uppercase tracking-widest mb-2">🎤 Worship Leader</p>
+                            <MemberRow m={editSchedWorshipLeader} roleLabel="Worship Leader" roleColor="from-indigo-400 to-violet-500" />
                           </div>
                         )}
+                        {/* Backup Singers card */}
                         {editSchedBackupSingers.length > 0 && (
-                          <div>
-                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Backup Singers</p>
-                            <div className="flex flex-col gap-2">
+                          <div className="rounded-xl border border-pink-100 dark:border-pink-900/40 bg-pink-50/60 dark:bg-pink-900/10 p-3">
+                            <p className="text-[10px] font-bold text-pink-500 dark:text-pink-400 uppercase tracking-widest mb-2">🎙️ Backup Singers</p>
+                            <div className="space-y-2">
                               {editSchedBackupSingers.map((m, i) => (
-                                <div key={i} className="flex items-center gap-3">
-                                  <Avatar m={m} color="bg-pink-500" />
-                                  <div>
-                                    <p className="font-semibold text-sm text-gray-900 dark:text-white">{m.name}</p>
-                                    <p className="text-[11px] text-pink-400">Backup Singer</p>
-                                  </div>
-                                </div>
+                                <div key={i}><MemberRow m={m} roleLabel="Backup Singer" roleColor="from-pink-400 to-rose-500" /></div>
                               ))}
                             </div>
                           </div>
                         )}
+                        {/* Musicians card */}
                         {editSchedMusicians.length > 0 && (
-                          <div>
-                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Musicians</p>
-                            <div className="flex flex-col gap-2">
+                          <div className="rounded-xl border border-teal-100 dark:border-teal-900/40 bg-teal-50/60 dark:bg-teal-900/10 p-3">
+                            <p className="text-[10px] font-bold text-teal-600 dark:text-teal-400 uppercase tracking-widest mb-2">🎸 Musicians</p>
+                            <div className="space-y-2">
                               {editSchedMusicians.map((m, i) => (
-                                <div key={i} className="flex items-center gap-3">
-                                  <Avatar m={m} color="bg-indigo-600" />
-                                  <div>
-                                    <p className="font-semibold text-sm text-gray-900 dark:text-white">{m.name}</p>
-                                    <p className="text-[11px] text-teal-400">{m.role}</p>
-                                  </div>
-                                </div>
+                                <div key={i}><MemberRow m={m} roleLabel={m.role || "Musician"} roleColor="from-teal-400 to-indigo-600" /></div>
                               ))}
                             </div>
                           </div>
                         )}
-                        {(editSchedSongLineup.joyful || editSchedSongLineup.solemn) && (
-                          <div>
-                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Song Line-Up</p>
-                            {editSchedSongLineup.joyful && (() => { const s = allSongs.find(sg => sg.id === editSchedSongLineup.joyful); return s ? <p className="text-sm mb-1"><Sun size={12} className="inline-block mr-1" /> <span className="font-semibold text-amber-500 uppercase text-xs">Joyful</span>{" "}{s.video_url ? <button onClick={() => onOpenVideo?.(s.video_url!)} className="text-gray-900 dark:text-white hover:text-amber-500 dark:hover:text-amber-400 underline underline-offset-2 decoration-amber-400/60 transition-colors">{toSafeTitle(s.title)} <span className="inline-block text-[10px] text-amber-400 align-middle">▶</span></button> : <span className="text-gray-900 dark:text-white">{toSafeTitle(s.title)}</span>}</p> : null; })()}
-                            {editSchedSongLineup.solemn && (() => { const s = allSongs.find(sg => sg.id === editSchedSongLineup.solemn); return s ? <p className="text-sm"><Music size={12} className="inline-block mr-1" /> <span className="font-semibold text-indigo-400 uppercase text-xs">Solemn</span>{" "}{s.video_url ? <button onClick={() => onOpenVideo?.(s.video_url!)} className="text-gray-900 dark:text-white hover:text-indigo-400 dark:hover:text-indigo-300 underline underline-offset-2 decoration-indigo-400/60 transition-colors">{toSafeTitle(s.title)} <span className="inline-block text-[10px] text-indigo-400 align-middle">▶</span></button> : <span className="text-gray-900 dark:text-white">{toSafeTitle(s.title)}</span>}</p> : null; })()}
-                          </div>
-                        )}
+                        {/* Song Lineup card */}
+                        {(editSchedSongLineup.joyful || editSchedSongLineup.solemn) && (() => {
+                          const jSong = allSongs.find(sg => sg.id === editSchedSongLineup.joyful);
+                          const sSong = allSongs.find(sg => sg.id === editSchedSongLineup.solemn);
+                          if (!jSong && !sSong) return null;
+                          return (
+                            <div className="rounded-xl border border-amber-100 dark:border-amber-900/40 bg-amber-50/40 dark:bg-amber-900/10 p-3 space-y-2">
+                              <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-widest">🎵 Song Line-Up</p>
+                              {jSong && (
+                                <div className="flex items-start gap-2">
+                                  <span className="shrink-0 mt-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-200 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300 uppercase">Joyful</span>
+                                  <div className="flex-1 min-w-0">
+                                    {jSong.video_url
+                                      ? <button onClick={() => onOpenVideo?.(jSong.video_url!)} className="text-sm font-semibold text-gray-900 dark:text-white hover:text-amber-600 dark:hover:text-amber-400 transition-colors text-left">{toSafeTitle(jSong.title)} <span className="text-amber-500 text-xs">▶</span></button>
+                                      : <p className="text-sm font-semibold text-gray-900 dark:text-white">{toSafeTitle(jSong.title)}</p>
+                                    }
+                                    {jSong.artist && <p className="text-[10px] text-gray-400 mt-0.5">{jSong.artist}</p>}
+                                  </div>
+                                </div>
+                              )}
+                              {sSong && (
+                                <div className="flex items-start gap-2">
+                                  <span className="shrink-0 mt-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 uppercase">Solemn</span>
+                                  <div className="flex-1 min-w-0">
+                                    {sSong.video_url
+                                      ? <button onClick={() => onOpenVideo?.(sSong.video_url!)} className="text-sm font-semibold text-gray-900 dark:text-white hover:text-indigo-500 dark:hover:text-indigo-400 transition-colors text-left">{toSafeTitle(sSong.title)} <span className="text-indigo-400 text-xs">▶</span></button>
+                                      : <p className="text-sm font-semibold text-gray-900 dark:text-white">{toSafeTitle(sSong.title)}</p>
+                                    }
+                                    {sSong.artist && <p className="text-[10px] text-gray-400 mt-0.5">{sSong.artist}</p>}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </>
                     );
                   })()}
 
+                  {/* Notes */}
                   {editSchedNotes && (
-                    <div className="rounded-2xl border border-gray-100 dark:border-gray-700/60 bg-gray-50 dark:bg-gray-900/40 p-3.5">
-                      <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2">Notes</p>
+                    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 p-3">
+                      <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1.5">📝 Notes</p>
                       <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">{editSchedNotes}</p>
                     </div>
                   )}
+
+                  {/* Lead facilitators — non-service events */}
                   {editSchedAssignments.length > 0 && !isServiceEvent && (
-                    <div className="space-y-3">
-                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1.5"><Users size={12} /> Lead Facilitators</p>
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-1.5"><Users size={10} /> Lead Facilitators</p>
                       {editSchedAssignments.map((asgn, gi) => (
-                        <div key={gi} className="bg-gray-50 dark:bg-gray-700/40 rounded-xl p-3 border border-gray-100 dark:border-gray-700">
+                        <div key={gi} className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 p-3">
                           <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-2">{asgn.role}</p>
-                          <div className="flex flex-col gap-1.5">
-                            {asgn.members.map((m, mi) => (
-                              <div key={mi} className="flex items-center gap-2">
-                                {(() => {
-                                  const p = allMembers.find(mb => mb.id === m.memberId)?.photo || m.photo || ""; return p
-                                    ? <img src={p} className="w-8 h-8 rounded-full object-cover shrink-0 ring-2 ring-white dark:ring-gray-800" alt={m.name} />
-                                    : <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">{m.name[0]}</div>;
-                                })()}
-                                <p className="text-sm text-gray-900 dark:text-white">{m.name}</p>
-                              </div>
-                            ))}
+                          <div className="space-y-1.5">
+                            {asgn.members.map((m, mi) => {
+                              const p = allMembers.find(mb => mb.id === m.memberId)?.photo || m.photo || "";
+                              return (
+                                <div key={mi} className="flex items-center gap-2">
+                                  {p
+                                    ? <img src={p} className="w-7 h-7 rounded-full object-cover shrink-0" alt={m.name} />
+                                    : <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">{m.name[0]}</div>
+                                  }
+                                  <p className="text-sm text-gray-900 dark:text-white">{m.name}</p>
+                                </div>
+                              );
+                            })}
                             {asgn.members.length === 0 && <p className="text-xs text-gray-400 italic">No members assigned</p>}
                           </div>
                         </div>

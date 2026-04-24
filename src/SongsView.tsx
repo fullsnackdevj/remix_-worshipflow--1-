@@ -136,7 +136,7 @@ function AddToPlaylistBtn({ song, showToast }: { song: Song; showToast: (type: s
       style={dropStyle}
       onMouseDown={e => e.stopPropagation()}
       onClick={e => e.stopPropagation()}
-      className="bg-[#1a1f2e] border border-gray-700/80 rounded-2xl shadow-2xl overflow-hidden"
+      className="bg-white dark:bg-[#1a1f2e] border border-gray-200 dark:border-gray-700/80 rounded-2xl shadow-2xl overflow-hidden"
     >
       <div className="p-2">
         <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 px-3 py-2 select-none">
@@ -218,13 +218,13 @@ function AddToPlaylistBtn({ song, showToast }: { song: Song; showToast: (type: s
         onMouseDown={e => e.stopPropagation()}
         onClick={openDropdown}
         title="Add to Playlist"
-        className={`shrink-0 p-1 rounded-lg transition-colors relative group/pltooltip ${
+        className={`shrink-0 w-11 h-11 flex items-center justify-center rounded-xl transition-colors relative group/pltooltip ${
           inPlaylistIds.size > 0
-            ? "text-indigo-400 hover:bg-indigo-900/30"
+            ? "text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/30"
             : "hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-indigo-500"
         }`}
       >
-        <ListMusic size={15} />
+        <ListMusic size={20} />
         {inPlaylistIds.size > 0 && (
           <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-indigo-500 border border-white dark:border-gray-800" />
         )}
@@ -378,13 +378,13 @@ export default function SongsView({
       }
       if (SECTION_RE.test(trimmed)) {
         elements.push(
-          <p key={key++} className="text-[11px] font-bold uppercase tracking-widest text-indigo-400 dark:text-indigo-400 mt-1 mb-0.5 select-none">
+          <p key={key++} className="text-xs font-bold uppercase tracking-widest text-indigo-400 dark:text-indigo-400 mt-1 mb-0.5 select-none">
             {trimmed.replace(/:$/, '')}
           </p>
         );
       } else {
         elements.push(
-          <p key={key++} className="text-sm text-gray-700 dark:text-gray-200 leading-7">
+          <p key={key++} className="text-lg sm:text-xl text-gray-700 dark:text-gray-200 leading-relaxed">
             {raw}
           </p>
         );
@@ -1068,7 +1068,7 @@ showToast("error", "Failed to extract text from image. Please try again.");
                   type="text"
                   value={editTitle}
                   onChange={(e) => { setEditTitle(e.target.value); if (formErrors.title) setFormErrors(p => ({ ...p, title: undefined })); }}
-                  className={`w-full px-4 py-2 border ${formErrors.title ? "border-red-400 focus:border-red-400 focus:ring-red-200" : "border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-indigo-200"} bg-white dark:bg-gray-700 rounded-xl focus:ring-2 outline-none`}
+                  className={`w-full px-4 py-3 border text-base ${formErrors.title ? "border-red-400 focus:border-red-400 focus:ring-red-200" : "border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-indigo-200"} bg-white dark:bg-gray-700 rounded-xl focus:ring-2 outline-none`}
                   placeholder="Song Title"
                 />
                 {formErrors.title && <p className="mt-1 text-xs text-red-500">{formErrors.title}</p>}
@@ -1082,7 +1082,7 @@ showToast("error", "Failed to extract text from image. Please try again.");
                   type="text"
                   value={editArtist}
                   onChange={(e) => { setEditArtist(e.target.value); if (formErrors.artist) setFormErrors(p => ({ ...p, artist: undefined })); }}
-                  className={`w-full px-4 py-2 border ${formErrors.artist ? "border-red-400 focus:border-red-400 focus:ring-red-200" : "border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-indigo-200"} bg-white dark:bg-gray-700 rounded-xl focus:ring-2 outline-none`}
+                  className={`w-full px-4 py-3 border text-base ${formErrors.artist ? "border-red-400 focus:border-red-400 focus:ring-red-200" : "border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-indigo-200"} bg-white dark:bg-gray-700 rounded-xl focus:ring-2 outline-none`}
                   placeholder="Artist Name"
                 />
                 {formErrors.artist && <p className="mt-1 text-xs text-red-500">{formErrors.artist}</p>}
@@ -1095,7 +1095,7 @@ showToast("error", "Failed to extract text from image. Please try again.");
                 type="text"
                 value={editVideoUrl}
                 onChange={(e) => setEditVideoUrl(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none"
+                className="w-full px-4 py-3 text-base border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none"
                 placeholder="https://www.youtube.com/watch?v=..."
               />
             </div>
@@ -1287,13 +1287,13 @@ showToast("error", "Failed to extract text from image. Please try again.");
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-700">
               <button
                 onClick={() => setIsEditing(false)}
-                className="px-6 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 font-medium transition-colors"
+                className="px-6 py-3 text-base text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 font-medium transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveSong}
-                className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-medium transition-colors"
+                className="flex items-center gap-2 px-6 py-3 text-base bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-medium transition-colors"
               >
                 <Save size={18} />
                 Save Song
@@ -1469,24 +1469,24 @@ showToast("error", "Failed to extract text from image. Please try again.");
           <div className="lg:hidden flex bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-1 gap-1">
             <button
               onClick={() => setDetailTab("lyrics")}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-base font-semibold transition-all ${
                 detailTab === "lyrics"
                   ? "bg-indigo-600 text-white shadow-sm"
                   : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
               }`}
             >
-              <BookOpen size={15} />
+              <BookOpen size={18} />
               Lyrics
             </button>
             <button
               onClick={() => setDetailTab("chords")}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-base font-semibold transition-all ${
                 detailTab === "chords"
                   ? "bg-purple-600 text-white shadow-sm"
                   : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
               }`}
             >
-              <Guitar size={15} />
+              <Guitar size={18} />
               Chords
             </button>
           </div>
@@ -1576,7 +1576,7 @@ showToast("error", "Failed to extract text from image. Please try again.");
               </div>
               <div className="p-4 sm:p-6 flex-1 overflow-auto">
                 {selectedSong.chords ? (
-                  <pre className="whitespace-pre-wrap font-mono text-sm text-gray-700 dark:text-gray-200 leading-7">
+                  <pre className="whitespace-pre-wrap font-mono text-lg sm:text-xl text-gray-700 dark:text-gray-200 leading-relaxed">
                     {transposeChords(selectedSong.chords, transposeSteps)}
                   </pre>
                 ) : (
@@ -1616,7 +1616,7 @@ showToast("error", "Failed to extract text from image. Please try again.");
                     placeholder="Search by title, artist, or tags..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-8 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900 transition-all outline-none text-sm dark:text-white"
+                    className="w-full h-12 pl-10 pr-8 text-base bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900 transition-all outline-none dark:text-white"
                   />
                   {/* Clear button */}
                   {searchQuery && (
@@ -1637,7 +1637,7 @@ showToast("error", "Failed to extract text from image. Please try again.");
                       <button
                         onClick={handleBulkDelete}
                         disabled={selectedSongIds.length === 0}
-                        className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors font-medium shadow-sm text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="h-12 flex items-center gap-2 px-3 sm:px-4 text-base bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors font-medium shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Trash2 size={18} />
                         <span className="hidden sm:inline">Delete ({selectedSongIds.length})</span>
@@ -1645,7 +1645,7 @@ showToast("error", "Failed to extract text from image. Please try again.");
                       </button>
                       <button
                         onClick={() => { setIsSelectionMode(false); setSelectedSongIds([]); }}
-                        className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-medium text-sm"
+                        className="h-12 flex items-center gap-2 px-3 sm:px-4 text-base bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-medium"
                       >
                         <X size={18} />
                         <span className="hidden sm:inline">Cancel</span>
@@ -1657,7 +1657,7 @@ showToast("error", "Failed to extract text from image. Please try again.");
                       {canSelectSongs && (
                         <button
                           onClick={() => setIsSelectionMode(true)}
-                          className="p-2 text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 rounded-xl transition-colors relative group"
+                          className="w-12 h-12 flex items-center justify-center text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 rounded-xl transition-colors relative group"
                           title="Select Songs"
                         >
                           <CheckSquare size={20} />
@@ -1669,7 +1669,7 @@ showToast("error", "Failed to extract text from image. Please try again.");
                       {canAddSong && (
                         <button
                           onClick={() => openEditor()}
-                          className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium shadow-sm text-sm"
+                          className="h-12 flex items-center gap-2 px-3 sm:px-4 text-base bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium shadow-sm"
                         >
                           <Plus size={18} />
                           <span className="hidden sm:inline">Add Song</span>
@@ -1687,7 +1687,7 @@ showToast("error", "Failed to extract text from image. Please try again.");
                   <div className="relative flex-shrink-0" ref={filterDropdownRef}>
                     <button
                       onClick={() => setIsFilterOpen(prev => !prev)}
-                      className={`h-9 flex items-center gap-1.5 px-3 rounded-xl text-sm font-medium border transition-all ${selectedTagIds.length > 0
+                      className={`h-10 flex items-center gap-1.5 px-3 rounded-xl text-base font-medium border transition-all ${selectedTagIds.length > 0
                         ? "bg-indigo-600 text-white border-transparent shadow-sm"
                         : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-indigo-300 hover:text-indigo-600 dark:hover:text-indigo-400"
                         }`}
@@ -1763,10 +1763,10 @@ showToast("error", "Failed to extract text from image. Please try again.");
                     )}
                   </div>
                   {/* Total Songs Count */}
-                  <div className="h-9 flex items-center text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-3 rounded-xl whitespace-nowrap flex-shrink-0">
+                  <div className="h-10 flex items-center text-base font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-3 rounded-xl whitespace-nowrap flex-shrink-0">
                     {debouncedQuery || selectedTagIds.length > 0
-                      ? <>{filteredSongs.length}<span className="hidden sm:inline"> of {allSongs.length}</span>{" "}<span className="hidden sm:inline">{allSongs.length === 1 ? 'Song' : 'Songs'}</span></>
-                      : <>{allSongs.length}{" "}<span className="hidden sm:inline">{allSongs.length === 1 ? 'Song' : 'Songs'} Total</span><span className="sm:hidden">Songs</span></>
+                      ? <><span className="hidden sm:inline">{filteredSongs.length} of {allSongs.length} {allSongs.length === 1 ? 'Song' : 'Songs'}</span><span className="sm:hidden">{filteredSongs.length} Songs</span></>
+                      : <><span className="hidden sm:inline">{allSongs.length} {allSongs.length === 1 ? 'Song' : 'Songs'} Total</span><span className="sm:hidden">{allSongs.length} Songs</span></>
                     }
                   </div>
                   {/* Grid / List toggle */}
@@ -1794,20 +1794,20 @@ showToast("error", "Failed to extract text from image. Please try again.");
                   </div>
                 </div>
 
-                {/* Play Library — pulsing icon, right side of filter row */}
+                {/* Play Library — pill button matching Dashboard Lineup style */}
                 {songsWithVideo.length > 0 && !libraryPlayerOpen && !isLineupOpen && (
                   <div className="relative group flex-shrink-0">
-                    {/* Pulse rings */}
-                    <span className="absolute inset-0 rounded-full bg-emerald-500/30 animate-ping" />
+                    <span className="absolute inset-0 rounded-xl bg-emerald-500/30 animate-ping" />
                     <button
                       onClick={() => openLibraryPlayer()}
-                      className="relative w-9 h-9 flex items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-lg hover:scale-110 active:scale-95 transition-transform"
+                      className="relative flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold bg-emerald-500 text-white shadow-md hover:shadow-lg hover:scale-105 active:scale-95 transition-all"
                     >
-                      <Play size={15} className="fill-white ml-0.5" />
+                      <Play size={15} className="fill-white" />
+                      <span>Play Library</span>
                     </button>
                     {/* Tooltip */}
                     <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity shadow-xl">
-                      Play Library ({songsWithVideo.length} songs)
+                      {songsWithVideo.length} songs with video
                       <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
                     </div>
                   </div>
@@ -1873,63 +1873,66 @@ showToast("error", "Failed to extract text from image. Please try again.");
                 <div
                   key={song.id}
                   onClick={() => isSelectionMode ? toggleSongSelection(song.id) : setSelectedSong(song)}
-                  className={`bg-white dark:bg-gray-800 rounded-2xl p-5 border transition-all duration-150 cursor-pointer group flex flex-col relative
-                    hover:-translate-y-0.5
+                  className={`bg-white dark:bg-gray-800 rounded-2xl border-l-[3px] border transition-all duration-200 cursor-pointer group flex flex-col relative
+                    hover:-translate-y-0.5 hover:shadow-lg
                     ${selectedSongIds.includes(song.id)
-                      ? "border-indigo-500 ring-2 ring-indigo-200 dark:ring-indigo-900 shadow-md"
-                      : "border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-lg hover:border-indigo-300 dark:hover:border-indigo-600/70"
+                      ? "border-l-indigo-500 border-indigo-300 dark:border-indigo-700 ring-2 ring-indigo-200 dark:ring-indigo-900 shadow-md"
+                      : "border-l-indigo-400/60 dark:border-l-indigo-500/50 border-gray-200 dark:border-gray-700 shadow-sm hover:border-l-indigo-500 hover:border-indigo-200 dark:hover:border-indigo-600/60"
                     }`}
                 >
-                  {/* Selection checkbox */}
-                  {isSelectionMode && (
-                    <div className="absolute top-4 right-4 z-10">
-                      {selectedSongIds.includes(song.id) ? (
-                        <div className="bg-indigo-600 text-white p-1 rounded-md"><Check size={16} /></div>
-                      ) : (
-                        <div className="bg-white dark:bg-gray-700 border-2 border-gray-200 dark:border-gray-600 p-1 rounded-md w-6 h-6" />
-                      )}
+                  {/* Main content area */}
+                  <div className="p-5 flex flex-col flex-1">
+
+                    {/* Top row: music chip + title/artist + actions */}
+                    <div className="flex items-start gap-3 mb-4">
+
+                      {/* Music icon chip */}
+                      <div className="w-10 h-10 shrink-0 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center mt-0.5 group-hover:bg-indigo-100 dark:group-hover:bg-indigo-500/20 transition-colors">
+                        <Music size={18} className="text-indigo-500 dark:text-indigo-400" />
+                      </div>
+
+                      {/* Title + artist */}
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-base font-bold text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors line-clamp-2 leading-snug">
+                          {toSafeTitle(song.title)}
+                        </h3>
+                        {song.artist && (
+                          <p className="text-sm text-indigo-500 dark:text-indigo-400 font-medium mt-0.5 truncate">{song.artist}</p>
+                        )}
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="flex items-center gap-0.5 shrink-0 -mt-1 -mr-1" onClick={e => e.stopPropagation()}>
+                        {!isSelectionMode && <AddToPlaylistBtn song={song} showToast={showToast} />}
+                        {!isSelectionMode && song.video_url && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); onOpenVideo?.(song.video_url!); }}
+                            title="Watch Video"
+                            className="shrink-0 w-11 h-11 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors relative group/tooltip"
+                          >
+                            <CustomYoutubeIcon size={26} />
+                            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover/tooltip:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">Watch Video</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  )}
 
-                  {/* Title row */}
-                  <div className="flex items-start justify-between gap-2 mb-1">
-                    <h3 className="text-base font-bold text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors line-clamp-2 leading-snug">
-                      {toSafeTitle(song.title)}
-                    </h3>
-                    <div className="flex items-center gap-0.5 shrink-0" onClick={e => e.stopPropagation()}>
-                      {!isSelectionMode && <AddToPlaylistBtn song={song} showToast={showToast} />}
-                      {!isSelectionMode && song.video_url && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); onOpenVideo?.(song.video_url!); }}
-                          title="Watch Video"
-                          className="shrink-0 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors relative group/tooltip"
-                        >
-                          <CustomYoutubeIcon size={20} />
-                          <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover/tooltip:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">Watch Video</span>
-                        </button>
-                      )}
+                    {/* Footer: tags + date separated by subtle divider */}
+                    <div className="mt-auto pt-3 border-t border-gray-100 dark:border-gray-700/60 flex items-center justify-between gap-2">
+                      <div className="flex flex-wrap gap-1.5">
+                        {Array.isArray(song.tags) && song.tags.slice(0, 3).map((tag) => (
+                          <span key={tag.id} className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold ${tag.color}`}>{tag.name}</span>
+                        ))}
+                        {Array.isArray(song.tags) && song.tags.length > 3 && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">+{song.tags.length - 3}</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 font-medium shrink-0">
+                        {song.created_at ? new Date(song.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ""}
+                      </p>
                     </div>
+
                   </div>
-
-                  {/* Artist */}
-                  {song.artist && (
-                    <p className="text-xs text-indigo-500 dark:text-indigo-400 font-semibold mb-3 truncate">{song.artist}</p>
-                  )}
-
-                  {/* Tags */}
-                  <div className="flex flex-wrap gap-1.5 mt-auto">
-                    {Array.isArray(song.tags) && song.tags.slice(0, 3).map((tag) => (
-                      <span key={tag.id} className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${tag.color}`}>{tag.name}</span>
-                    ))}
-                    {Array.isArray(song.tags) && song.tags.length > 3 && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">+{song.tags.length - 3}</span>
-                    )}
-                  </div>
-
-                  {/* Date footer */}
-                  <p className="text-[10px] text-gray-400 dark:text-gray-600 mt-3 font-medium">
-                    {song.created_at ? new Date(song.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ""}
-                  </p>
                 </div>
               ))}
               {!isLoadingSongs && (!Array.isArray(filteredSongs) || filteredSongs.length === 0) && (

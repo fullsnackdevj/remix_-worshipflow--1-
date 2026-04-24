@@ -3880,6 +3880,32 @@ Rules:
             const doc = await firestore.collection("sharedPlaylists").doc(slug).get();
             if (!doc.exists) return json(404, { error: "Playlist not found" });
             const data = doc.data() as Record<string, any>;
+            const storedSongs: any[] = data.songs ?? [];
+
+            // Live-enrich songs with current video_url from the songs collection.
+            // This ensures playback works even if the playlist was published before
+            // YouTube URLs were added to the songs in Song Management.
+            if (storedSongs.length > 0) {
+                const songIds = storedSongs.map((s: any) => s.id).filter(Boolean);
+                const chunks: string[][] = [];
+                for (let i = 0; i < songIds.length; i += 30) chunks.push(songIds.slice(i, i + 30));
+
+                const liveMap: Record<string, string> = {};
+                await Promise.all(chunks.map(async (chunk: string[]) => {
+                    const snap = await firestore!.collection("songs")
+                        .where(admin.firestore.FieldPath.documentId(), "in", chunk).get();
+                    snap.docs.forEach((d: any) => {
+                        const v = (d.data() as any).video_url ?? "";
+                        if (v) liveMap[d.id] = v;
+                    });
+                }));
+
+                data.songs = storedSongs.map((s: any) => ({
+                    ...s,
+                    youtubeUrl: liveMap[s.id] ?? s.youtubeUrl ?? "",
+                }));
+            }
+
             return json(200, data, {
                 "Cache-Control": "public, max-age=30, stale-while-revalidate=60",
                 "Access-Control-Allow-Origin": "*",
@@ -3924,7 +3950,7 @@ Rules:
         if (!firestore) return json(500, { error: "DB unavailable" });
         const { slug, playlist: pl, songs, unpublish } = body as {
             slug: string;
-            playlist: { name: string; emoji: string; description?: string };
+            playlist: { name: string; emoji: string; description?: string; bannerUrl?: string; accentColor?: string };
             songs: Array<{ id: string; title: string; artist?: string; youtubeUrl?: string; lyrics?: string; chords?: string }>;
             unpublish?: boolean;
         };
@@ -3938,6 +3964,8 @@ Rules:
                 name:        pl.name,
                 emoji:       pl.emoji ?? "🎵",
                 description: pl.description ?? "",
+                bannerUrl:   pl.bannerUrl ?? "",
+                accentColor: pl.accentColor || null,
                 songs:       (songs ?? []).map(s => ({
                     id: s.id, title: s.title, artist: s.artist ?? "",
                     youtubeUrl: s.youtubeUrl ?? "", lyrics: s.lyrics ?? "", chords: s.chords ?? "",

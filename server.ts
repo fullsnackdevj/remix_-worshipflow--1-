@@ -3229,8 +3229,37 @@ app.get("/api/public-playlist/:slug", async (req, res) => {
   try {
     const doc = await firestore.collection("sharedPlaylists").doc(slug).get();
     if (!doc.exists) return res.status(404).json({ error: "Playlist not found" });
+
+    const data = doc.data() as any;
+    const storedSongs: any[] = data.songs ?? [];
+
+    // ── Live-enrich songs with current video_url from the songs collection ──
+    // This ensures playback works even if the playlist was published before
+    // YouTube URLs were added to the songs in Song Management.
+    if (storedSongs.length > 0) {
+      const songIds = storedSongs.map((s: any) => s.id).filter(Boolean);
+      // Firestore IN query supports up to 30 items; batch if needed
+      const chunks: string[][] = [];
+      for (let i = 0; i < songIds.length; i += 30) chunks.push(songIds.slice(i, i + 30));
+
+      const liveMap: Record<string, string> = {};
+      await Promise.all(chunks.map(async chunk => {
+        const snap = await firestore!.collection("songs").where(admin.firestore.FieldPath.documentId(), "in", chunk).get();
+        snap.docs.forEach(d => {
+          const v = (d.data() as any).video_url ?? "";
+          if (v) liveMap[d.id] = v;
+        });
+      }));
+
+      data.songs = storedSongs.map((s: any) => ({
+        ...s,
+        // Prefer live value; fall back to stored value
+        youtubeUrl: liveMap[s.id] ?? s.youtubeUrl ?? "",
+      }));
+    }
+
     res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
-    res.json(doc.data());
+    res.json(data);
   } catch (e: any) {
     console.error("[public-playlist GET]", e?.message);
     res.status(500).json({ error: "Failed to load playlist" });
@@ -3243,7 +3272,7 @@ app.post("/api/public-playlist/publish", async (req, res) => {
   if (!firestore) return res.status(503).json({ error: "DB unavailable" });
   const { slug, playlist: pl, songs, unpublish } = req.body as {
     slug: string;
-    playlist: { name: string; emoji: string; description?: string };
+    playlist: { name: string; emoji: string; description?: string; bannerUrl?: string; accentColor?: string };
     songs: Array<{ id: string; title: string; artist?: string; youtubeUrl?: string; lyrics?: string; chords?: string }>;
     unpublish?: boolean;
   };
@@ -3260,6 +3289,8 @@ app.post("/api/public-playlist/publish", async (req, res) => {
       name:        pl.name,
       emoji:       pl.emoji ?? "🎵",
       description: pl.description ?? "",
+      bannerUrl:   pl.bannerUrl ?? "",
+      accentColor: pl.accentColor || null,
       songs:       (songs ?? []).map(s => ({
         id: s.id, title: s.title, artist: s.artist ?? "",
         youtubeUrl: s.youtubeUrl ?? "", lyrics: s.lyrics ?? "", chords: s.chords ?? "",
