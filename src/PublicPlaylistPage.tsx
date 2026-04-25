@@ -248,20 +248,30 @@ export default function PublicPlaylistPage({ slug }: { slug: string }) {
 
   // ── Play a specific index ─────────────────────────────────────────────────
   const playAt = useCallback((idx: number) => {
-    // Use ref first (fast path). Fall back to playlist state on the very first
-    // call before the useEffect has had a chance to sync the ref.
     const pl = playlistRef.current ?? playlist;
     if (!pl || idx < 0 || idx >= pl.songs.length) return;
     setProgress(0); setDuration(0);
     setCurrentIdx(idx);
     const vid = extractYtId(pl.songs[idx].youtubeUrl ?? "");
-    if (vid) {
-      buildPlayer(vid, true);
-      setIsPlaying(true);
-    } else {
-      setIsPlaying(false);
+    if (!vid) { setIsPlaying(false); return; }
+
+    // ── MOBILE FIX: Reuse the existing player via loadVideoById ────────────
+    // Destroying + recreating the YT iframe loses the user-gesture context on
+    // mobile browsers, causing silent autoplay blocks after the first song.
+    // loadVideoById() keeps the same player alive and switches videos instantly.
+    if (playerRef.current && ytReadyRef.current) {
+      try {
+        stopTicker();
+        playerRef.current.loadVideoById(vid);
+        setIsPlaying(true);
+        return;
+      } catch { /* fall through to buildPlayer if loadVideoById fails */ }
     }
-  }, [buildPlayer, playlist]);
+
+    // First load — no player yet, build one
+    buildPlayer(vid, true);
+    setIsPlaying(true);
+  }, [buildPlayer, stopTicker, playlist]);
 
   // ── When currentIdx changes due to auto-advance (ended), load new song ──
   // playAt() handles its own buildPlayer call; this effect only handles
