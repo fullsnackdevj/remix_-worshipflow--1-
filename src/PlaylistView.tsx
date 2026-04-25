@@ -948,7 +948,7 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
         )}
 
         {/* ── CENTER: Track list (hidden on mobile when list panel is showing) ─────── */}
-        <div className={`flex-col flex-1 min-w-0 overflow-hidden border-r border-gray-200 dark:border-gray-800/50 ${
+        <div className={`flex-col flex-1 min-w-0 overflow-hidden ${activePlaylist ? "border-r border-gray-200 dark:border-gray-800/50" : ""} ${
           mobileShowList ? "hidden lg:flex" : "flex"
         }`}>
 
@@ -1028,6 +1028,14 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
                   className="lg:hidden flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gray-200 dark:bg-gray-800/80 hover:bg-gray-300 dark:hover:bg-gray-700/80 text-sm text-gray-900 dark:text-white font-semibold transition-all mb-4 active:scale-95 self-start"
                 >
                   <ChevronLeft size={18} />
+                  All Playlists
+                </button>
+                {/* Desktop back button — returns to the playlist grid/list */}
+                <button
+                  onClick={() => { setActiveId(null); setEditingId(null); setMenuId(null); }}
+                  className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-gray-100 dark:bg-gray-800/70 hover:bg-gray-200 dark:hover:bg-gray-700/80 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-medium transition-all mb-3 active:scale-95 self-start"
+                >
+                  <ChevronLeft size={15} />
                   All Playlists
                 </button>
                 <div className="flex items-center gap-4">
@@ -1600,7 +1608,8 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
           </>
         )} 
 
-        {/* ── RIGHT: Video + Lyrics/Chords ───────────────────────────────── */}
+        {/* ── RIGHT: Video + Lyrics/Chords — only when a playlist is active ── */}
+        {activePlaylist && (
         <div className="hidden lg:flex flex-col w-[340px] xl:w-[400px] shrink-0 overflow-hidden border-l border-gray-200 dark:border-gray-800/50 bg-gray-50 dark:bg-[#0a0c10]">
 
           {/* Video — fixed aspect ratio */}
@@ -1664,6 +1673,7 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
             </div>
           </div>
         </div>
+        )}
       </div>
 
       {/* ════════════════════════════════════════════════════════════════════
