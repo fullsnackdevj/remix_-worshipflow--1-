@@ -121,23 +121,32 @@ interface ConfirmDialogProps {
 function ConfirmDialog({ open, title, message, confirmLabel = "Confirm", cancelLabel = "Cancel", danger, onConfirm, onCancel }: ConfirmDialogProps) {
     if (!open) return null;
     return (
-        <div className="fixed inset-0 z-[9000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-sm w-full p-6 border border-gray-200 dark:border-gray-700">
-                <h2 className="text-base font-bold text-gray-900 dark:text-white mb-1">{title}</h2>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">{message}</p>
+        <div className="fixed inset-0 z-[9000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <div className="rounded-2xl shadow-2xl max-w-sm w-full p-6"
+                style={{ background: "#13151f", border: "1px solid rgba(255,255,255,0.09)" }}>
+                <h2 className="text-base font-bold text-white mb-1">{title}</h2>
+                <p className="text-sm mb-5" style={{ color: "rgba(255,255,255,0.5)" }}>{message}</p>
                 <div className="flex gap-3 justify-end">
                     <button
                         onClick={onCancel}
-                        className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                        className="px-4 py-2 rounded-xl text-sm font-semibold transition-all"
+                        style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.55)", border: "1px solid rgba(255,255,255,0.09)" }}
+                        onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.1)")}
+                        onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.06)")}
                     >
                         {cancelLabel}
                     </button>
                     <button
                         onClick={onConfirm}
-                        className={`px-4 py-2 rounded-xl text-sm font-semibold text-white transition-colors ${danger
-                            ? "bg-red-500 hover:bg-red-600"
-                            : "bg-indigo-600 hover:bg-indigo-700"
-                        }`}
+                        className="px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90"
+                        style={{
+                            background: danger
+                                ? "linear-gradient(135deg,#ef4444,#dc2626)"
+                                : "linear-gradient(135deg,#6366f1,#8b5cf6)",
+                            boxShadow: danger
+                                ? "0 4px 12px rgba(239,68,68,0.3)"
+                                : "0 4px 12px rgba(99,102,241,0.35)"
+                        }}
                     >
                         {confirmLabel}
                     </button>
@@ -197,13 +206,20 @@ export default function RehearsalView({
     const zoomControls = (
         <div className="flex items-center gap-1">
             <button onClick={zoomOut} disabled={fontSizeIdx === 0} title="Decrease text size"
-                className="w-9 h-9 md:w-7 md:h-7 flex items-center justify-center rounded-xl md:rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 disabled:opacity-20 disabled:cursor-not-allowed transition-all active:scale-95">
+                className="w-9 h-9 md:w-7 md:h-7 flex items-center justify-center rounded-xl md:rounded-lg disabled:opacity-20 disabled:cursor-not-allowed transition-all active:scale-95"
+                style={{ color: "rgba(255,255,255,0.4)" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "rgba(99,102,241,0.9)")}
+                onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.4)")}>
                 <ZoomOut size={18} className="md:hidden" />
                 <ZoomOut size={14} className="hidden md:block" />
             </button>
-            <span className="min-w-[36px] md:min-w-[28px] text-center text-xs md:text-[10px] font-bold text-gray-400 tabular-nums select-none">{fontSize}px</span>
+            <span className="min-w-[36px] md:min-w-[28px] text-center text-xs md:text-[10px] font-bold tabular-nums select-none"
+                style={{ color: "rgba(255,255,255,0.35)" }}>{fontSize}px</span>
             <button onClick={zoomIn} disabled={fontSizeIdx === FONT_SIZES.length - 1} title="Increase text size"
-                className="w-9 h-9 md:w-7 md:h-7 flex items-center justify-center rounded-xl md:rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 disabled:opacity-20 disabled:cursor-not-allowed transition-all active:scale-95">
+                className="w-9 h-9 md:w-7 md:h-7 flex items-center justify-center rounded-xl md:rounded-lg disabled:opacity-20 disabled:cursor-not-allowed transition-all active:scale-95"
+                style={{ color: "rgba(255,255,255,0.4)" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "rgba(99,102,241,0.9)")}
+                onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.4)")}>
                 <ZoomIn size={18} className="md:hidden" />
                 <ZoomIn size={14} className="hidden md:block" />
             </button>
@@ -396,69 +412,46 @@ export default function RehearsalView({
     const editToolbar = (col: "lyrics" | "chords") => {
         const edit = col === "lyrics" ? lyricsEdit : chordsEdit;
         const isSaving = col === "lyrics" ? isSavingLyrics : isSavingChords;
-        const accent = col === "lyrics" ? "text-rose-500" : "text-indigo-500";
         const label = col === "lyrics" ? "Lyrics" : "Chords";
+        const accentColor = col === "lyrics" ? "rgba(244,63,94,0.9)" : "rgba(168,85,247,0.9)";
+
+        const iconBtn = (icon: React.ReactNode, onClick: () => void, disabled: boolean, title: string, danger = false) => (
+            <button
+                onClick={onClick}
+                disabled={disabled}
+                title={title}
+                className="w-10 h-10 md:w-7 md:h-7 flex items-center justify-center rounded-xl md:rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95"
+                style={{ color: danger ? "rgba(239,68,68,0.7)" : "rgba(255,255,255,0.4)" }}
+                onMouseEnter={e => { if (!disabled) e.currentTarget.style.color = danger ? "rgba(239,68,68,1)" : accentColor; }}
+                onMouseLeave={e => { e.currentTarget.style.color = danger ? "rgba(239,68,68,0.7)" : "rgba(255,255,255,0.4)"; }}
+            >
+                {icon}
+            </button>
+        );
 
         return (
             <div className="flex items-center gap-1">
-                {/* Undo */}
-                <button
-                    onClick={edit.undo}
-                    disabled={!edit.canUndo}
-                    title="Undo"
-                    className="w-10 h-10 md:w-7 md:h-7 flex items-center justify-center rounded-xl md:rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95"
-                >
-                    <Undo2 size={18} className="md:hidden" />
-                    <Undo2 size={13} className="hidden md:block" />
-                </button>
-                {/* Redo */}
-                <button
-                    onClick={edit.redo}
-                    disabled={!edit.canRedo}
-                    title="Redo"
-                    className="w-10 h-10 md:w-7 md:h-7 flex items-center justify-center rounded-xl md:rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95"
-                >
-                    <Redo2 size={18} className="md:hidden" />
-                    <Redo2 size={13} className="hidden md:block" />
-                </button>
-
-                {/* Divider */}
-                <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-1" />
-
-                {/* Screenshot / OCR */}
-                <button
-                    onClick={() => { ocrColRef.current = col; ocrFileRef.current?.click(); }}
-                    disabled={isOcrLoading}
-                    title="Upload a screenshot — AI will extract the text"
-                    className="w-10 h-10 md:w-7 md:h-7 flex items-center justify-center rounded-xl md:rounded-lg text-violet-400 hover:text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-900/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-95"
-                >
-                    {isOcrLoading ? <Loader2 size={18} className="animate-spin md:hidden" /> : <ImagePlus size={18} className="md:hidden" />}
-                    {isOcrLoading ? <Loader2 size={13} className="animate-spin hidden md:block" /> : <ImagePlus size={13} className="hidden md:block" />}
-                </button>
-
-                {/* Divider */}
-                <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-1" />
-
-                {/* Save */}
-                <button
-                    onClick={() => requestSave(col)}
-                    disabled={!edit.isDirty || isSaving}
-                    title={`Save ${label}`}
-                    className="w-10 h-10 md:w-7 md:h-7 flex items-center justify-center rounded-xl md:rounded-lg text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95"
-                >
-                    {isSaving ? <Loader2 size={18} className="animate-spin md:hidden" /> : <Check size={18} className="md:hidden" />}
-                    {isSaving ? <Loader2 size={13} className="animate-spin hidden md:block" /> : <Check size={13} className="hidden md:block" />}
-                </button>
-
-                {/* Cancel edit */}
-                <button
-                    onClick={() => requestExitEdit(col)}
-                    title="Cancel editing"
-                    className="w-10 h-10 md:w-7 md:h-7 flex items-center justify-center rounded-xl md:rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all active:scale-95"
-                >
-                    <X size={18} className="md:hidden" />
-                    <X size={13} className="hidden md:block" />
-                </button>
+                {iconBtn(<><Undo2 size={18} className="md:hidden" /><Undo2 size={13} className="hidden md:block" /></>, edit.undo, !edit.canUndo, "Undo")}
+                {iconBtn(<><Redo2 size={18} className="md:hidden" /><Redo2 size={13} className="hidden md:block" /></>, edit.redo, !edit.canRedo, "Redo")}
+                <div className="w-px h-5 mx-1" style={{ background: "rgba(255,255,255,0.09)" }} />
+                {iconBtn(
+                    isOcrLoading
+                        ? <><Loader2 size={18} className="animate-spin md:hidden" /><Loader2 size={13} className="animate-spin hidden md:block" /></>
+                        : <><ImagePlus size={18} className="md:hidden" /><ImagePlus size={13} className="hidden md:block" /></>,
+                    () => { ocrColRef.current = col; ocrFileRef.current?.click(); },
+                    isOcrLoading,
+                    "Upload a screenshot — AI will extract the text"
+                )}
+                <div className="w-px h-5 mx-1" style={{ background: "rgba(255,255,255,0.09)" }} />
+                {iconBtn(
+                    isSaving
+                        ? <><Loader2 size={18} className="animate-spin md:hidden" /><Loader2 size={13} className="animate-spin hidden md:block" /></>
+                        : <><Check size={18} className="md:hidden" /><Check size={13} className="hidden md:block" /></>,
+                    () => requestSave(col),
+                    !edit.isDirty || isSaving,
+                    `Save ${label}`
+                )}
+                {iconBtn(<><X size={18} className="md:hidden" /><X size={13} className="hidden md:block" /></>, () => requestExitEdit(col), false, "Cancel editing", true)}
             </div>
         );
     };
@@ -472,7 +465,10 @@ export default function RehearsalView({
             <button
                 onClick={edit.startEdit}
                 title={`Edit ${col}`}
-                className="w-10 h-10 md:w-7 md:h-7 flex items-center justify-center rounded-xl md:rounded-lg text-gray-300 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all active:scale-95"
+                className="w-10 h-10 md:w-7 md:h-7 flex items-center justify-center rounded-xl md:rounded-lg transition-all active:scale-95"
+                style={{ color: "rgba(255,255,255,0.3)" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "rgba(99,102,241,0.9)")}
+                onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.3)")}
             >
                 <Pencil size={18} className="md:hidden" />
                 <Pencil size={13} className="hidden md:block" />
@@ -484,19 +480,33 @@ export default function RehearsalView({
     const transposeControls = (
         <div className="flex items-center gap-1">
             <button onClick={() => adjustTranspose(-1)}
-                className="w-10 h-10 md:w-7 md:h-7 flex items-center justify-center rounded-xl md:rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all active:scale-95"
+                className="w-10 h-10 md:w-7 md:h-7 flex items-center justify-center rounded-xl md:rounded-lg transition-all active:scale-95"
+                style={{ color: "rgba(168,85,247,0.8)" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "rgba(192,132,252,1)")}
+                onMouseLeave={e => (e.currentTarget.style.color = "rgba(168,85,247,0.8)")}
                 title="Transpose down">
                 <Minus size={18} className="md:hidden" />
                 <Minus size={14} className="hidden md:block" />
             </button>
             <button
                 onClick={resetTranspose}
-                className={`min-w-[36px] text-center text-xs font-bold rounded-lg px-1.5 py-1 transition-all ${currentTranspose === 0 ? "text-gray-400" : "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30"}`}
+                className="min-w-[36px] text-center text-xs font-bold rounded-lg px-1.5 py-1 transition-all"
+                style={currentTranspose === 0 ? {
+                    color: "rgba(255,255,255,0.3)"
+                } : {
+                    color: "rgba(192,132,252,0.95)",
+                    background: "rgba(168,85,247,0.18)",
+                }}
                 title="Reset transpose"
             >
                 {currentTranspose > 0 ? `+${currentTranspose}` : currentTranspose === 0 ? "0" : currentTranspose}
             </button>
-            <button onClick={() => adjustTranspose(1)} className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all" title="Transpose up">
+            <button onClick={() => adjustTranspose(1)}
+                className="p-1.5 rounded-lg transition-all"
+                style={{ color: "rgba(168,85,247,0.8)" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "rgba(192,132,252,1)")}
+                onMouseLeave={e => (e.currentTarget.style.color = "rgba(168,85,247,0.8)")}
+                title="Transpose up">
                 <Plus size={14} />
             </button>
         </div>
@@ -528,8 +538,9 @@ export default function RehearsalView({
 
     // ── Event picker (only when multiple events have lineups) ─────────────────
     const eventPickerBar = upcomingEvents.length > 1 ? (
-        <div className="shrink-0 flex items-center gap-1.5 px-3 py-2 bg-gray-50 dark:bg-gray-900/80 border-b border-gray-200 dark:border-gray-800 overflow-x-auto no-scrollbar">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400 shrink-0 mr-1">Event:</span>
+        <div className="shrink-0 flex items-center gap-1.5 px-3 py-2 overflow-x-auto no-scrollbar"
+            style={{ background: "#0e1018", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+            <span className="text-[10px] font-bold uppercase tracking-widest shrink-0 mr-1" style={{ color: "rgba(255,255,255,0.3)" }}>Event:</span>
             {upcomingEvents.map((ev, idx) => {
                 const evName = (ev as any).eventName || (ev.serviceType === "sunday" ? "Sunday Service" : "Midweek Service");
                 const dateLabel = new Date(ev.date + "T00:00:00").toLocaleDateString("en", { month: "short", day: "numeric" });
@@ -539,17 +550,21 @@ export default function RehearsalView({
                     <button
                         key={ev.id ?? idx}
                         onClick={() => { setSelectedEventIdx(idx); setActiveSong(ev.songLineup?.joyful ? "joyful" : "solemn"); }}
-                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all shrink-0 ${
-                            isActive
-                                ? "bg-indigo-600 text-white shadow-sm"
-                                : "bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 hover:border-indigo-400 hover:text-indigo-500"
-                        }`}
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all shrink-0"
+                        style={isActive ? {
+                            background: "linear-gradient(135deg,#6366f1,#8b5cf6)",
+                            color: "#fff",
+                        } : {
+                            background: "rgba(255,255,255,0.05)",
+                            color: "rgba(255,255,255,0.45)",
+                            border: "1px solid rgba(255,255,255,0.08)",
+                        }}
                     >
                         <span>{evName}</span>
-                        <span className={`text-[10px] px-1 py-0.5 rounded-full font-bold ${
-                            isActive ? "bg-white/20 text-white" : "bg-gray-100 dark:bg-gray-700 text-gray-500"
-                        }`}>{songCount}</span>
-                        <span className={`text-[10px] opacity-70`}>{dateLabel}</span>
+                        <span className="text-[10px] px-1 py-0.5 rounded-full font-bold"
+                            style={{ background: isActive ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.08)", color: isActive ? "#fff" : "rgba(255,255,255,0.4)" }}
+                        >{songCount}</span>
+                        <span className="text-[10px] opacity-70">{dateLabel}</span>
                     </button>
                 );
             })}
@@ -558,9 +573,14 @@ export default function RehearsalView({
 
     // ── Song navigator header ─────────────────────────────────────────────────
     const songNavBar = (
-        <div className="shrink-0 flex items-center gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+        <div className="shrink-0 flex items-center gap-2 px-4 py-3"
+            style={{ background: "#13151f", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
             <button onClick={goPrev} disabled={!canPrev}
-                className="p-2 rounded-xl text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 disabled:opacity-20 disabled:cursor-not-allowed transition-all" title="Previous song">
+                className="p-2 rounded-xl transition-all disabled:opacity-20 disabled:cursor-not-allowed active:scale-95"
+                style={{ color: "rgba(255,255,255,0.4)" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "rgba(99,102,241,0.9)")}
+                onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.4)")}
+                title="Previous song">
                 <ChevronLeft size={20} />
             </button>
 
@@ -572,12 +592,13 @@ export default function RehearsalView({
                         <button
                             key={key}
                             onClick={() => setActiveSong(key)}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold transition-all truncate max-w-[180px] ${isActive
-                                ? key === "joyful"
-                                    ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400"
-                                    : "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-400"
-                                : "text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
-                            }`}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold transition-all truncate max-w-[180px]"
+                            style={isActive ? {
+                                background: key === "joyful" ? "rgba(16,185,129,0.18)" : "rgba(99,102,241,0.18)",
+                                color: key === "joyful" ? "rgba(52,211,153,0.95)" : "rgba(129,140,248,0.95)",
+                            } : {
+                                color: "rgba(255,255,255,0.35)",
+                            }}
                         >
                             <span className={`text-xs font-bold uppercase tracking-wider opacity-70 ${isActive ? "" : "hidden sm:inline"}`}>
                                 {key === "joyful" ? "🙌" : "🕊️"}
@@ -589,7 +610,11 @@ export default function RehearsalView({
             </div>
 
             <button onClick={goNext} disabled={!canNext}
-                className="p-2 rounded-xl text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 disabled:opacity-20 disabled:cursor-not-allowed transition-all" title="Next song">
+                className="p-2 rounded-xl transition-all disabled:opacity-20 disabled:cursor-not-allowed active:scale-95"
+                style={{ color: "rgba(255,255,255,0.4)" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "rgba(99,102,241,0.9)")}
+                onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.4)")}
+                title="Next song">
                 <ChevronRight size={20} />
             </button>
 
@@ -601,9 +626,16 @@ export default function RehearsalView({
                         disabled={isLineupOpen || isLibraryOpen}
                         className={`relative w-9 h-9 flex items-center justify-center rounded-full transition-transform ${
                             isLineupOpen || isLibraryOpen
-                                ? "bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed"
-                                : "bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg hover:scale-110 active:scale-95"
+                                ? "cursor-not-allowed"
+                                : "shadow-lg hover:scale-110 active:scale-95"
                         }`}
+                        style={isLineupOpen || isLibraryOpen ? {
+                            background: "rgba(255,255,255,0.08)",
+                            color: "rgba(255,255,255,0.3)",
+                        } : {
+                            background: "linear-gradient(135deg,#6366f1,#8b5cf6)",
+                            color: "#fff",
+                        }}
                     >
                         <Headphones size={15} />
                     </button>
@@ -619,7 +651,6 @@ export default function RehearsalView({
     // ── Column content renderer (read or edit) ────────────────────────────────
     const columnContent = (col: "lyrics" | "chords") => {
         const edit = col === "lyrics" ? lyricsEdit : chordsEdit;
-        // For chords we show transposed version when reading, raw when editing
         const readValue = col === "lyrics" ? (currentSong?.lyrics ?? "") : transposedChords;
         const noContentMsg = col === "lyrics" ? "No lyrics available." : "No chords available.";
 
@@ -627,8 +658,8 @@ export default function RehearsalView({
             return (
                 <textarea
                     autoFocus
-                    className="w-full min-h-[60vh] font-mono leading-[1.75] text-gray-800 dark:text-gray-200 bg-transparent resize-none px-5 py-4 outline-none focus:bg-indigo-50/30 dark:focus:bg-indigo-900/10 transition-colors"
-                    style={{ fontSize }}
+                    className="w-full min-h-[60vh] font-mono leading-[1.75] resize-none px-5 py-4 outline-none transition-colors"
+                    style={{ fontSize, background: "rgba(255,255,255,0.02)", color: "rgba(255,255,255,0.85)", caretColor: col === "lyrics" ? "#f43f5e" : "#6366f1" }}
                     value={edit.draft}
                     onChange={e => edit.onChange(e.target.value)}
                     spellCheck={false}
@@ -640,8 +671,8 @@ export default function RehearsalView({
         if (readValue?.trim()) {
             return (
                 <pre
-                    className="font-mono leading-[1.75] text-gray-800 dark:text-gray-200 px-5 py-4 whitespace-pre-wrap break-words overflow-x-hidden w-full transition-[font-size] duration-150"
-                    style={{ fontSize }}
+                    className="font-mono leading-[1.75] px-5 py-4 whitespace-pre-wrap break-words overflow-x-hidden w-full transition-[font-size] duration-150"
+                    style={{ fontSize, color: "rgba(255,255,255,0.82)" }}
                 >
                     {readValue}
                 </pre>
@@ -649,7 +680,7 @@ export default function RehearsalView({
         }
 
         return (
-            <div className="flex flex-col items-center justify-center py-16 gap-2 text-gray-400">
+            <div className="flex flex-col items-center justify-center py-16 gap-2" style={{ color: "rgba(255,255,255,0.25)" }}>
                 <Music size={28} className="opacity-30" />
                 <p className="text-sm">{noContentMsg}</p>
             </div>
@@ -664,12 +695,12 @@ export default function RehearsalView({
             onTouchEnd={onTouchEnd}
         >
             {/* Single shared header row */}
-            <div className="flex items-center shrink-0 border-b border-gray-200 dark:border-gray-800">
+            <div className="flex items-center shrink-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
                 {/* Lyrics header */}
-                <div className="flex-1 flex items-center justify-between px-4 py-2">
+                <div className="flex-1 flex items-center justify-between px-4 py-2.5">
                     <div className="flex items-center gap-2">
-                        <span className="text-[11px] font-bold uppercase tracking-widest text-rose-500">Lyrics</span>
-                        {/* Zoom controls — shown in Lyrics header on desktop */}
+                        <div className="w-1.5 h-1.5 rounded-full" style={{ background: "rgba(244,63,94,0.9)", boxShadow: "0 0 6px rgba(244,63,94,0.6)" }} />
+                        <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "rgba(244,63,94,0.9)" }}>Lyrics</span>
                         {!lyricsEdit.isEditing && !chordsEdit.isEditing && zoomControls}
                     </div>
                     <div className="flex items-center gap-1">
@@ -677,10 +708,13 @@ export default function RehearsalView({
                     </div>
                 </div>
                 {/* Vertical divider */}
-                <div className="w-px self-stretch bg-gray-200 dark:bg-gray-800 shrink-0" />
+                <div className="w-px self-stretch shrink-0" style={{ background: "rgba(255,255,255,0.07)" }} />
                 {/* Chords header */}
-                <div className="flex-1 flex items-center justify-between px-4 py-2">
-                    <span className="text-[11px] font-bold uppercase tracking-widest text-indigo-500">Chords</span>
+                <div className="flex-1 flex items-center justify-between px-4 py-2.5">
+                    <div className="flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full" style={{ background: "rgba(99,102,241,0.9)", boxShadow: "0 0 6px rgba(99,102,241,0.6)" }} />
+                        <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "rgba(99,102,241,0.9)" }}>Chords</span>
+                    </div>
                     <div className="flex items-center gap-1">
                         {chordsEdit.isEditing ? editToolbar("chords") : (
                             <div className="flex items-center gap-1">
@@ -698,7 +732,7 @@ export default function RehearsalView({
                     {columnContent("lyrics")}
                 </div>
                 {/* Vertical divider */}
-                <div className="w-px bg-gray-200 dark:bg-gray-800 shrink-0" />
+                <div className="w-px shrink-0" style={{ background: "rgba(255,255,255,0.07)" }} />
                 <div className={`flex-1 flex flex-col ${chordsEdit.isEditing ? "overflow-hidden" : "overflow-y-auto"}`}>
                     {columnContent("chords")}
                 </div>
@@ -714,26 +748,21 @@ export default function RehearsalView({
             onTouchEnd={onTouchEnd}
         >
             {/* ── Tab bar ── */}
-            <div className="shrink-0 flex items-center gap-2 px-3 py-2 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
-                {/* Lyrics / Chords pill switcher */}
-                <div className="flex flex-1 bg-gray-100 dark:bg-gray-800 rounded-2xl p-1 gap-1">
+            <div className="shrink-0 flex items-center gap-2 px-3 py-2" style={{ background: "#13151f", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                <div className="flex flex-1 rounded-2xl p-1 gap-1" style={{ background: "rgba(255,255,255,0.04)" }}>
                     <button
                         onClick={() => setMobileTab("lyrics")}
-                        className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all active:scale-95 ${
-                            mobileTab === "lyrics"
-                                ? "bg-indigo-600 text-white shadow-sm"
-                                : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
-                        }`}>
+                        className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all active:scale-95`}
+                        style={mobileTab === "lyrics" ? { background: "linear-gradient(135deg,#6366f1,#8b5cf6)", color: "#fff" } : { color: "rgba(255,255,255,0.4)" }}
+                    >
                         <BookOpen size={16} />
                         Lyrics
                     </button>
                     <button
                         onClick={() => setMobileTab("chords")}
-                        className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all active:scale-95 ${
-                            mobileTab === "chords"
-                                ? "bg-purple-600 text-white shadow-sm"
-                                : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
-                        }`}>
+                        className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all active:scale-95`}
+                        style={mobileTab === "chords" ? { background: "linear-gradient(135deg,#7c3aed,#a855f7)", color: "#fff" } : { color: "rgba(255,255,255,0.4)" }}
+                    >
                         <Guitar size={16} />
                         Chords
                     </button>
@@ -741,14 +770,15 @@ export default function RehearsalView({
             </div>
 
             {/* ── Panel header with controls ── */}
-            <div className="shrink-0 flex items-center justify-between px-4 py-2 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+            <div className="shrink-0 flex items-center justify-between px-4 py-2" style={{ background: "#13151f", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                 <div className="flex items-center gap-2">
-                    <span className={`text-[11px] font-bold uppercase tracking-widest ${
-                        mobileTab === "lyrics" ? "text-rose-500" : "text-indigo-500"
-                    }`}>
+                    <div className="w-1.5 h-1.5 rounded-full"
+                        style={{ background: mobileTab === "lyrics" ? "rgba(244,63,94,0.9)" : "rgba(99,102,241,0.9)",
+                                 boxShadow: mobileTab === "lyrics" ? "0 0 6px rgba(244,63,94,0.5)" : "0 0 6px rgba(99,102,241,0.5)" }} />
+                    <span className="text-[11px] font-bold uppercase tracking-widest"
+                        style={{ color: mobileTab === "lyrics" ? "rgba(251,113,133,0.9)" : "rgba(129,140,248,0.9)" }}>
                         {mobileTab === "lyrics" ? "Lyrics" : "Chords"}
                     </span>
-                    {/* Zoom controls in panel header */}
                     {!(mobileTab === "lyrics" ? lyricsEdit : chordsEdit).isEditing && zoomControls}
                 </div>
                 <div className="flex items-center gap-1">
@@ -758,12 +788,13 @@ export default function RehearsalView({
                             <>
                                 {mobileTab === "chords" && transposeControls}
                                 {pencilBtn(mobileTab)}
-                                {/* Fullscreen expand button */}
                                 <button
                                     onClick={() => setMobileFullscreen(true)}
                                     title="Full screen"
-                                    className="w-10 h-10 flex items-center justify-center rounded-xl text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all active:scale-95"
-                                >
+                                    className="w-10 h-10 flex items-center justify-center rounded-xl transition-all active:scale-95"
+                                    style={{ color: "rgba(255,255,255,0.35)" }}
+                                    onMouseEnter={e => (e.currentTarget.style.color = "rgba(99,102,241,0.9)")}
+                                    onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.35)")}>
                                     <Maximize2 size={18} />
                                 </button>
                             </>
@@ -892,9 +923,9 @@ export default function RehearsalView({
 
     return (
         <div className="flex flex-col h-full overflow-hidden -m-4 sm:-m-6">
-            {/* Event label */}
-            <div className="shrink-0 px-4 py-2 bg-indigo-600 dark:bg-indigo-700 text-white">
-                <p className="text-xs font-semibold opacity-80 uppercase tracking-wider">
+            {/* Event label banner */}
+            <div className="shrink-0 px-4 py-2.5" style={{ background: "linear-gradient(90deg,#6366f1,#7c3aed)", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+                <p className="text-xs font-semibold uppercase tracking-wider text-white/80">
                     🎵 {(event as any).eventName ?? "Worship Service"} &middot;{" "}
                     {new Date(event.date + "T00:00:00").toLocaleDateString("en", { weekday: "short", month: "short", day: "numeric" })}
                     {upcomingEvents.length > 1 && (
@@ -903,7 +934,7 @@ export default function RehearsalView({
                 </p>
             </div>
 
-            {/* Event picker — shown when multiple events have song lineups */}
+            {/* Event picker */}
             {eventPickerBar}
 
             {/* Song navigator */}
@@ -911,13 +942,13 @@ export default function RehearsalView({
 
             {/* Artist + key info */}
             {currentSong && (
-                <div className="shrink-0 px-4 py-2 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                        <span className="font-semibold text-gray-700 dark:text-gray-200">{currentSong.title}</span>
+                <div className="shrink-0 px-4 py-2" style={{ background: "#0e1018", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                    <p className="text-xs" style={{ color: "rgba(255,255,255,0.45)" }}>
+                        <span className="font-semibold" style={{ color: "rgba(255,255,255,0.85)" }}>{currentSong.title}</span>
                         {currentSong.artist && <span> · {currentSong.artist}</span>}
                         {(currentSong.updated_by_name) && (
-                            <span className="ml-2 text-gray-400">
-                                · last edited by <span className="text-indigo-400 font-medium">{currentSong.updated_by_name}</span>
+                            <span className="ml-2" style={{ color: "rgba(255,255,255,0.35)" }}>
+                                · last edited by <span style={{ color: "rgba(129,140,248,0.85)" }} className="font-medium">{currentSong.updated_by_name}</span>
                             </span>
                         )}
                     </p>

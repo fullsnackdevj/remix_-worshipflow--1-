@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Play, Pause, SkipBack, SkipForward, Shuffle, Music,
   BookOpen, Guitar, X, ExternalLink, Check, Repeat, Info,
@@ -277,6 +277,57 @@ export default function PublicPlaylistPage({ slug }: { slug: string }) {
   }, [currentIdx]);
 
   useEffect(() => () => stopTicker(), [stopTicker]);
+
+  // ── Media Session API — lock screen / notification controls ───────────────
+  // Works on Android Chrome 57+ and iOS Safari 15+.
+  // Note: background audio *continuation* depends on the OS/browser; iOS may
+  // still suspend the tab when locked, but the controls will appear when
+  // returning to the browser. Android Chrome generally keeps the tab alive.
+  useEffect(() => {
+    if (!('mediaSession' in navigator)) return;
+    const song = playlist?.songs[currentIdx];
+    if (!song) return;
+
+    const ytId = extractYtId(song.youtubeUrl ?? '');
+    const artwork = ytId
+      ? [
+          { src: `https://img.youtube.com/vi/${ytId}/mqdefault.jpg`, sizes: '320x180', type: 'image/jpeg' },
+          { src: `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`, sizes: '480x360', type: 'image/jpeg' },
+        ]
+      : [];
+
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: song.title ?? 'Unknown',
+      artist: song.artist ?? '',
+      album: playlist?.name ?? '',
+      artwork,
+    });
+
+    // Action handlers wire up OS buttons → YouTube player
+    navigator.mediaSession.setActionHandler('play', () => {
+      playerRef.current?.playVideo?.();
+      setIsPlaying(true);
+    });
+    navigator.mediaSession.setActionHandler('pause', () => {
+      playerRef.current?.pauseVideo?.();
+      setIsPlaying(false);
+    });
+    navigator.mediaSession.setActionHandler('previoustrack', () => {
+      const pl = playlistRef.current;
+      if (!pl) return;
+      const prev = currentIdxRef.current > 0 ? currentIdxRef.current - 1 : pl.songs.length - 1;
+      playAt(prev);
+    });
+    navigator.mediaSession.setActionHandler('nexttrack', () => {
+      const pl = playlistRef.current;
+      if (!pl) return;
+      const next = currentIdxRef.current < pl.songs.length - 1 ? currentIdxRef.current + 1 : 0;
+      playAt(next);
+    });
+
+    // Sync playback state badge
+    navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+  }, [playlist, currentIdx, isPlaying, playAt]);
 
   // ── Controls ───────────────────────────────────────────────────────────────
   const togglePlay = () => {

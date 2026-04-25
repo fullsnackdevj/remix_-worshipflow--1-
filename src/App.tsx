@@ -402,7 +402,7 @@ export default function App() {
   // 📱 Auto-open mobile sidebar when there are unseen new modules
   // Only on mobile (< 1024px). Stops once all modules are seen.
   useEffect(() => {
-    const hasUnseen = unseenPlanner || unseenFreedomWall || unseenPreaching || unseenDesignRequests || unseenEvents || unseenBible;
+    const hasUnseen = unseenPlanner || unseenFreedomWall || unseenPreaching || unseenDesignRequests || unseenEvents || unseenBible || unseenPlaylist;
     if (hasUnseen && window.innerWidth < 1024) {
       // Small delay so the app finishes the initial render before sliding the drawer open
       const t = setTimeout(() => setIsMobileMenuOpen(true), 400);
@@ -1236,8 +1236,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Song Management</span>}
           </div>
 
-          {/* ── Playlist — Admin only ── */}
-          {isRoleAdmin && (
+          {/* ── Playlist — All users ── */}
           <div className="relative group/tip">
             <button
               onClick={() => { setCurrentView("playlist"); setIsMobileMenuOpen(false); markPlaylistSeen(); }}
@@ -1271,7 +1270,6 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
             </button>
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Playlist</span>}
           </div>
-          )}
 
           {/* Team Members */}
           <div className="relative group/tip">
@@ -1568,7 +1566,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                 }
               }}
               className={[
-                currentView === "songs" || currentView === "members" || currentView === "schedule" || currentView === "freedom-wall" || currentView === "preaching" || currentView === "bible"
+                currentView === "songs" || currentView === "members" || currentView === "schedule" || currentView === "freedom-wall" || currentView === "preaching" || currentView === "bible" || currentView === "playlist"
                   ? "lg:hidden"   // desktop sidebar-accessible views — mobile only
                   : "",           // detached views — always visible
                 "flex items-center gap-1 py-1.5 pl-1 pr-3 rounded-xl font-semibold",

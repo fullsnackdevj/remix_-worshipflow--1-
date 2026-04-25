@@ -9,6 +9,9 @@ export interface Playlist {
   updatedAt: string;
   emoji?: string;
   publishedSlug?: string; // set when the playlist has an active public link
+  bannerUrl?: string;     // cover art / banner shown in internal + public view
+  accentColor?: string;   // theme accent color
+  description?: string;   // optional description
 }
 
 const STORAGE_KEY = "wf_playlists_v1";

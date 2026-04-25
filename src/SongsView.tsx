@@ -8,7 +8,7 @@ import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, ChevronLeft
   ChevronDown, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users,
   Calendar, Phone, UserPlus, Camera, LayoutGrid, List, BookOpen, Mic2, Copy, Pencil,
   Shield, Mail, Guitar, Sliders, Palette, Lock, AlertTriangle, CheckCircle, BookMarked,
-  HandMetal, Headphones, HelpCircle, Undo2, Redo2, Play, ListMusic, BookmarkPlus } from "lucide-react";
+  HandMetal, Headphones, HelpCircle, Undo2, Redo2, Play, ListMusic, BookmarkPlus, BarChart2 } from "lucide-react";
 import SongsLibraryPlayer, { LibraryTrack } from "./SongsLibraryPlayer";
 import { loadPlaylists, addSongToPlaylist, Playlist } from "./PlaylistView";
 
@@ -30,7 +30,7 @@ const CustomVideoBtnIcon = ({ size = 20, className = "" }: { size?: number, clas
 // ── Add-to-Playlist popover ───────────────────────────────────────────────────
 // Uses createPortal so the dropdown renders at <body> level — never clipped or
 // hidden behind other cards. Position is calculated SYNCHRONOUSLY on click.
-function AddToPlaylistBtn({ song, showToast }: { song: Song; showToast: (type: string, msg: string) => void }) {
+function AddToPlaylistBtn({ song, showToast, variant }: { song: Song; showToast: (type: string, msg: string) => void; variant?: "detail" }) {
   const [open, setOpen]       = useState(false);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [creating, setCreating]   = useState(false);
@@ -49,32 +49,49 @@ function AddToPlaylistBtn({ song, showToast }: { song: Song; showToast: (type: s
     e.preventDefault();
     if (open) { setOpen(false); return; }
 
-    // Read fresh playlist list
     setPlaylists(loadPlaylists());
     setCreating(false);
     setNewName("");
 
-    // Compute position RIGHT NOW from the button's bounding rect
     if (btnRef.current) {
       const rect = btnRef.current.getBoundingClientRect();
-      const top  = rect.bottom + 6;                          // 6px gap below button
-      // Align right edge of dropdown with right edge of button;
-      // clamp so it never goes off the left or right of viewport
       let left = rect.right - DROPDOWN_W;
       if (left < 8) left = 8;
       if (left + DROPDOWN_W > window.innerWidth - 8) left = window.innerWidth - DROPDOWN_W - 8;
-
-      setDropStyle({
-        position: "fixed",
-        top,
-        left,
-        width: DROPDOWN_W,
-        zIndex: 99999,
-      });
+      // Initial estimate — refined after render via ResizeObserver
+      setDropStyle({ position: "fixed", top: rect.bottom + 6, left, width: DROPDOWN_W, zIndex: 99999 });
     }
 
     setOpen(true);
   };
+
+  // Reposition once the dropdown has rendered and we know its real height
+  useEffect(() => {
+    if (!open || !dropRef.current || !btnRef.current) return;
+    const reposition = () => {
+      if (!dropRef.current || !btnRef.current) return;
+      const btnRect    = btnRef.current.getBoundingClientRect();
+      const dropH      = dropRef.current.offsetHeight;
+      const spaceAbove = btnRect.top;
+      const spaceBelow = window.innerHeight - btnRect.bottom;
+      let top: number;
+      if (spaceAbove >= dropH + 8) {
+        top = btnRect.top - dropH - 6;  // prefer above
+      } else if (spaceBelow >= dropH + 8) {
+        top = btnRect.bottom + 6;       // fall back below
+      } else {
+        top = Math.max(8, btnRect.top - dropH - 6);
+      }
+      let left = btnRect.right - DROPDOWN_W;
+      if (left < 8) left = 8;
+      if (left + DROPDOWN_W > window.innerWidth - 8) left = window.innerWidth - DROPDOWN_W - 8;
+      setDropStyle({ position: "fixed", top, left, width: DROPDOWN_W, zIndex: 99999 });
+    };
+    const ro = new ResizeObserver(reposition);
+    ro.observe(dropRef.current);
+    reposition();
+    return () => ro.disconnect();
+  }, [open]);
 
   // Close on outside click
   useEffect(() => {
@@ -211,6 +228,25 @@ function AddToPlaylistBtn({ song, showToast }: { song: Song; showToast: (type: s
   ) : null;
 
   // ── Render ───────────────────────────────────────────────────────────────
+  if (variant === "detail") {
+    return (
+      <>
+        <button
+          ref={btnRef}
+          onMouseDown={e => e.stopPropagation()}
+          onClick={openDropdown}
+          title="Add to Playlist"
+          className="flex items-center justify-center gap-2 py-3.5 text-sm font-semibold transition-all hover:bg-white/[0.04] active:bg-white/[0.07] w-full"
+          style={{ color: inPlaylistIds.size > 0 ? "rgba(99,102,241,0.85)" : "rgba(255,255,255,0.55)" }}
+        >
+          <Plus size={15} />
+          {inPlaylistIds.size > 0 ? `IN ${inPlaylistIds.size} PLAYLIST${inPlaylistIds.size > 1 ? "S" : ""}` : "ADD TO PLAYLIST"}
+        </button>
+        {dropdown}
+      </>
+    );
+  }
+
   return (
     <>
       <button
@@ -228,10 +264,154 @@ function AddToPlaylistBtn({ song, showToast }: { song: Song; showToast: (type: s
         {inPlaylistIds.size > 0 && (
           <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-indigo-500 border border-white dark:border-gray-800" />
         )}
-        {/* Tooltip */}
         <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 bg-gray-900 text-white text-[10px] rounded-lg opacity-0 group-hover/pltooltip:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10 shadow-lg">
           {inPlaylistIds.size > 0 ? `In ${inPlaylistIds.size} playlist${inPlaylistIds.size > 1 ? "s" : ""}` : "Add to Playlist"}
         </span>
+      </button>
+      {dropdown}
+    </>
+  );
+}
+
+// ── Full-width Add to Playlist bar button (for grid card footer) ──────────────
+function AddToPlaylistBarBtn({ song, showToast }: { song: Song; showToast: (type: string, msg: string) => void }) {
+  const [open, setOpen]       = useState(false);
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [creating, setCreating]   = useState(false);
+  const [newName, setNewName]     = useState("");
+  const [dropStyle, setDropStyle] = useState<React.CSSProperties>({});
+  const btnRef  = useRef<HTMLButtonElement>(null);
+  const dropRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const DROPDOWN_W = 240;
+
+  const openDropdown = (e: React.MouseEvent) => {
+    e.stopPropagation(); e.preventDefault();
+    if (open) { setOpen(false); return; }
+    setPlaylists(loadPlaylists()); setCreating(false); setNewName("");
+    if (btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      let left = rect.right - DROPDOWN_W;
+      if (left < 8) left = 8;
+      if (left + DROPDOWN_W > window.innerWidth - 8) left = window.innerWidth - DROPDOWN_W - 8;
+      // Start by placing above; will be refined by ResizeObserver after render
+      setDropStyle({ position: "fixed", top: rect.top - 8 - 200, left, width: DROPDOWN_W, zIndex: 99999 });
+    }
+    setOpen(true);
+  };
+
+  // Reposition once the dropdown has rendered and we know its real height
+  useEffect(() => {
+    if (!open || !dropRef.current || !btnRef.current) return;
+    const reposition = () => {
+      if (!dropRef.current || !btnRef.current) return;
+      const btnRect  = btnRef.current.getBoundingClientRect();
+      const dropH    = dropRef.current.offsetHeight;
+      const spaceAbove = btnRect.top;
+      const spaceBelow = window.innerHeight - btnRect.bottom;
+      let top: number;
+      if (spaceAbove >= dropH + 8) {
+        top = btnRect.top - dropH - 6; // above button
+      } else if (spaceBelow >= dropH + 8) {
+        top = btnRect.bottom + 6;      // below button
+      } else {
+        top = Math.max(8, btnRect.top - dropH - 6); // best fit
+      }
+      let left = btnRect.right - DROPDOWN_W;
+      if (left < 8) left = 8;
+      if (left + DROPDOWN_W > window.innerWidth - 8) left = window.innerWidth - DROPDOWN_W - 8;
+      setDropStyle({ position: "fixed", top, left, width: DROPDOWN_W, zIndex: 99999 });
+    };
+    const ro = new ResizeObserver(reposition);
+    ro.observe(dropRef.current);
+    reposition();
+    return () => ro.disconnect();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (btnRef.current?.contains(t) || dropRef.current?.contains(t)) return;
+      setOpen(false);
+    };
+    document.addEventListener("mousedown", h, true);
+    return () => document.removeEventListener("mousedown", h, true);
+  }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const h = () => setOpen(false);
+    window.addEventListener("scroll", h, true);
+    return () => window.removeEventListener("scroll", h, true);
+  }, [open]);
+  useEffect(() => { if (creating) setTimeout(() => inputRef.current?.focus(), 40); }, [creating]);
+
+  const handleAdd = (playlistId: string, playlistName: string) => {
+    const result = addSongToPlaylist(playlistId, song.id);
+    if (result === "added")   showToast("success", `Added to "${playlistName}"`);
+    else if (result === "already") showToast("error", `Already in "${playlistName}"`);
+    setOpen(false);
+  };
+  const handleCreateAndAdd = () => {
+    const name = newName.trim(); if (!name) return;
+    const existing = loadPlaylists();
+    const newPl: Playlist = { id: `pl_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, name, emoji: "🎵", songIds: [song.id], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    try { localStorage.setItem("wf_playlists_v1", JSON.stringify([...existing, newPl])); } catch { }
+    showToast("success", `Created "${name}" and added song!`);
+    setPlaylists([...existing, newPl]); setOpen(false);
+  };
+  const inPlaylistIds = new Set(playlists.filter(p => p.songIds.includes(song.id)).map(p => p.id));
+
+  const dropdown = open ? createPortal(
+    <div ref={dropRef} style={dropStyle} onMouseDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}
+      className="bg-white dark:bg-[#1a1f2e] border border-gray-200 dark:border-gray-700/80 rounded-2xl shadow-2xl overflow-hidden">
+      <div className="p-2">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 px-3 py-2 select-none">Add to Playlist</p>
+        {playlists.length === 0 && !creating && <p className="text-xs text-gray-600 px-3 pb-2">No playlists yet.</p>}
+        <div className="max-h-52 overflow-y-auto">
+          {playlists.map(pl => (
+            <button key={pl.id} onMouseDown={e => e.stopPropagation()} onClick={() => handleAdd(pl.id, pl.name)}
+              disabled={inPlaylistIds.has(pl.id)}
+              className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm transition-colors text-left ${
+                inPlaylistIds.has(pl.id) ? "text-indigo-400 bg-indigo-900/20 cursor-default" : "text-gray-300 hover:bg-gray-800 hover:text-white"
+              }`}>
+              <span className="text-base shrink-0">{pl.emoji ?? "🎵"}</span>
+              <span className="flex-1 truncate">{pl.name}</span>
+              {inPlaylistIds.has(pl.id) && <Check size={12} className="shrink-0 text-indigo-400" />}
+              <span className="text-[10px] text-gray-600 shrink-0">{pl.songIds.length}</span>
+            </button>
+          ))}
+        </div>
+        <div className="border-t border-gray-800 mt-1 pt-1">
+          {creating ? (
+            <div className="flex items-center gap-1 px-1 py-1">
+              <input ref={inputRef} type="text" value={newName} onChange={e => setNewName(e.target.value)}
+                onKeyDown={e => { e.stopPropagation(); if (e.key==="Enter") handleCreateAndAdd(); if (e.key==="Escape") setCreating(false); }}
+                placeholder="Playlist name..." maxLength={60}
+                className="flex-1 px-2.5 py-1.5 bg-gray-800 border border-gray-600 rounded-lg text-xs text-white placeholder-gray-500 outline-none focus:border-indigo-500" />
+              <button onMouseDown={e=>e.stopPropagation()} onClick={handleCreateAndAdd} className="p-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 shrink-0"><Check size={12} /></button>
+              <button onMouseDown={e=>e.stopPropagation()} onClick={() => setCreating(false)} className="p-1.5 rounded-lg hover:bg-gray-800 text-gray-400 shrink-0"><X size={12} /></button>
+            </div>
+          ) : (
+            <button onMouseDown={e=>e.stopPropagation()} onClick={() => setCreating(true)}
+              className="flex items-center gap-2 w-full px-3 py-2.5 rounded-xl text-xs text-indigo-400 hover:bg-indigo-900/20 transition-colors">
+              <Plus size={13} /> New Playlist
+            </button>
+          )}
+        </div>
+      </div>
+    </div>, document.body
+  ) : null;
+
+  return (
+    <>
+      <button ref={btnRef} onMouseDown={e => e.stopPropagation()} onClick={openDropdown}
+        className={`flex-1 flex items-center justify-center gap-2 py-3.5 text-[11px] font-bold tracking-widest uppercase transition-colors ${
+          inPlaylistIds.size > 0 ? "text-indigo-400 hover:text-indigo-300" : "text-gray-400 hover:text-white"
+        } hover:bg-white/[0.04]`}>
+        <Plus size={14} />
+        Add to Playlist
+        {inPlaylistIds.size > 0 && <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />}
       </button>
       {dropdown}
     </>
@@ -354,6 +534,8 @@ export default function SongsView({
   const [formErrors, setFormErrors] = useState<{ title?: string; artist?: string }>({});
   // Mobile detail tab: "lyrics" (default) or "chords"
   const [detailTab, setDetailTab] = useState<"lyrics" | "chords">("lyrics");
+  // Edit form content tab
+  const [editContentTab, setEditContentTab] = useState<"lyrics" | "chords">("lyrics");
 
   // ── Lyrics section-label renderer ────────────────────────────────────────
   // Parses raw lyrics text and renders section labels (VERSE, CHORUS, BRIDGE,
@@ -378,13 +560,15 @@ export default function SongsView({
       }
       if (SECTION_RE.test(trimmed)) {
         elements.push(
-          <p key={key++} className="text-xs font-bold uppercase tracking-widest text-indigo-400 dark:text-indigo-400 mt-1 mb-0.5 select-none">
+          <p key={key++} className="text-xs font-bold uppercase tracking-widest mt-1 mb-0.5 select-none"
+            style={{ color: "rgba(129,140,248,0.9)" }}>
             {trimmed.replace(/:$/, '')}
           </p>
         );
       } else {
         elements.push(
-          <p key={key++} className="text-lg sm:text-xl text-gray-700 dark:text-gray-200 leading-relaxed">
+          <p key={key++} className="text-lg sm:text-xl leading-relaxed"
+            style={{ color: "rgba(255,255,255,0.82)" }}>
             {raw}
           </p>
         );
@@ -1046,256 +1230,274 @@ showToast("error", "Failed to extract text from image. Please try again.");
          SONG MANAGEMENT VIEW
     ══════════════════════════════════════════════════════════════ */}
       {isEditing ? (
-        <div className="max-w-4xl mx-auto bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold">{selectedSong ? "Edit Song" : "New Song"}</h2>
+        <div className="max-w-4xl mx-auto rounded-2xl overflow-hidden" style={{ background: "#13151f", border: "1px solid rgba(255,255,255,0.07)" }}>
+          {/* Form Header */}
+          <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                style={{ background: "rgba(99,102,241,0.18)", boxShadow: "0 0 0 1px rgba(99,102,241,0.25)" }}>
+                <Edit size={16} className="text-indigo-400" />
+              </div>
+              <h2 className="text-lg font-bold text-white">{selectedSong ? "Edit Song" : "New Song"}</h2>
+            </div>
             <button
               onClick={() => setIsEditing(false)}
-              className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+              className="w-8 h-8 flex items-center justify-center rounded-xl transition-all"
+              style={{ color: "rgba(156,163,175,0.6)" }}
+              onMouseEnter={e => (e.currentTarget.style.color = "rgba(255,255,255,0.8)")}
+              onMouseLeave={e => (e.currentTarget.style.color = "rgba(156,163,175,0.6)")}
             >
-              <X size={24} />
+              <X size={18} />
             </button>
           </div>
 
-          <div className="space-y-6">
+          <div className="p-4 sm:p-5 space-y-5">
+            {/* Title + Artist row */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Title <span className="text-red-500">*</span>
+                <label className="block text-[11px] font-bold uppercase tracking-widest mb-1.5" style={{ color: "rgba(255,255,255,0.4)" }}>
+                  Title <span style={{ color: "rgba(239,68,68,0.8)" }}>*</span>
                 </label>
                 <input
                   ref={songTitleRef}
                   type="text"
                   value={editTitle}
                   onChange={(e) => { setEditTitle(e.target.value); if (formErrors.title) setFormErrors(p => ({ ...p, title: undefined })); }}
-                  className={`w-full px-4 py-3 border text-base ${formErrors.title ? "border-red-400 focus:border-red-400 focus:ring-red-200" : "border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-indigo-200"} bg-white dark:bg-gray-700 rounded-xl focus:ring-2 outline-none`}
+                  className="w-full px-4 py-3 text-base text-white rounded-xl outline-none transition-all"
+                  style={{
+                    background: "rgba(255,255,255,0.05)",
+                    border: formErrors.title ? "1px solid rgba(239,68,68,0.7)" : "1px solid rgba(255,255,255,0.09)",
+                    caretColor: "#6366f1"
+                  }}
                   placeholder="Song Title"
                 />
-                {formErrors.title && <p className="mt-1 text-xs text-red-500">{formErrors.title}</p>}
+                {formErrors.title && <p className="mt-1 text-xs" style={{ color: "rgba(239,68,68,0.85)" }}>{formErrors.title}</p>}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Artist <span className="text-red-500">*</span>
+                <label className="block text-[11px] font-bold uppercase tracking-widest mb-1.5" style={{ color: "rgba(255,255,255,0.4)" }}>
+                  Artist <span style={{ color: "rgba(239,68,68,0.8)" }}>*</span>
                 </label>
                 <input
                   ref={songArtistRef}
                   type="text"
                   value={editArtist}
                   onChange={(e) => { setEditArtist(e.target.value); if (formErrors.artist) setFormErrors(p => ({ ...p, artist: undefined })); }}
-                  className={`w-full px-4 py-3 border text-base ${formErrors.artist ? "border-red-400 focus:border-red-400 focus:ring-red-200" : "border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-indigo-200"} bg-white dark:bg-gray-700 rounded-xl focus:ring-2 outline-none`}
+                  className="w-full px-4 py-3 text-base text-white rounded-xl outline-none transition-all"
+                  style={{
+                    background: "rgba(255,255,255,0.05)",
+                    border: formErrors.artist ? "1px solid rgba(239,68,68,0.7)" : "1px solid rgba(255,255,255,0.09)",
+                    caretColor: "#6366f1"
+                  }}
                   placeholder="Artist Name"
                 />
-                {formErrors.artist && <p className="mt-1 text-xs text-red-500">{formErrors.artist}</p>}
+                {formErrors.artist && <p className="mt-1 text-xs" style={{ color: "rgba(239,68,68,0.85)" }}>{formErrors.artist}</p>}
               </div>
             </div>
 
+            {/* Video URL */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Video Link (YouTube/Reference)</label>
+              <label className="block text-[11px] font-bold uppercase tracking-widest mb-1.5" style={{ color: "rgba(255,255,255,0.4)" }}>
+                Video Link (YouTube / Reference)
+              </label>
               <input
                 type="text"
                 value={editVideoUrl}
                 onChange={(e) => setEditVideoUrl(e.target.value)}
-                className="w-full px-4 py-3 text-base border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none"
+                className="w-full px-4 py-3 text-base text-white rounded-xl outline-none transition-all"
+                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.09)", caretColor: "#6366f1" }}
                 placeholder="https://www.youtube.com/watch?v=..."
               />
             </div>
 
+            {/* Tags — dropdown */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Tags <span className="text-red-500">*</span>
+              <label className="block text-[11px] font-bold uppercase tracking-widest mb-1.5" style={{ color: "rgba(255,255,255,0.4)" }}>
+                Mood / Language <span style={{ color: "rgba(239,68,68,0.8)" }}>*</span>
               </label>
-              <div className={`flex flex-wrap gap-2 p-2 rounded-xl ${formErrors.tags ? "border border-red-400" : ""}`}>
-                {tags.map((tag) => {
-                  const isSelected = editTags.includes(tag.id);
-                  const isDisabled = editTags.length > 0 && !isSelected;
-                  return (
-                    <button
-                      key={tag.id}
-                      type="button"
-                      disabled={isDisabled}
-                      onClick={() => { toggleTagSelection(tag.id); if (formErrors.tags) setFormErrors(p => ({ ...p, tags: undefined })); }}
-                      className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium transition-colors border ${isSelected
-                        ? `${tag.color} border-transparent ring-2 ring-offset-1 ring-indigo-400`
-                        : isDisabled
-                          ? "bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-400 border-gray-300 dark:border-gray-500 opacity-65 cursor-not-allowed"
-                          : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
-                        }`}
-                    >
-                      <TagIcon size={14} />
+              <div className="relative">
+                <select
+                  value={editTags[0] ?? ""}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setEditTags(val ? [val] : []);
+                    if (formErrors.tags) setFormErrors(p => ({ ...p, tags: undefined }));
+                  }}
+                  className="w-full appearance-none px-4 py-3 pr-10 text-base rounded-xl outline-none transition-all"
+                  style={{
+                    background: "rgba(255,255,255,0.05)",
+                    border: formErrors.tags ? "1px solid rgba(239,68,68,0.7)" : "1px solid rgba(255,255,255,0.09)",
+                    color: editTags[0] ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.35)",
+                    caretColor: "#6366f1",
+                  }}
+                >
+                  <option value="" style={{ background: "#13151f", color: "rgba(255,255,255,0.4)" }}>Select mood / language…</option>
+                  {tags.map(tag => (
+                    <option key={tag.id} value={tag.id} style={{ background: "#13151f", color: "rgba(255,255,255,0.9)" }}>
                       {tag.name}
-                    </button>
-                  );
-                })}
+                    </option>
+                  ))}
+                </select>
+                {/* chevron icon */}
+                <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" style={{ color: "rgba(255,255,255,0.35)" }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </div>
               </div>
-              {formErrors.tags && <p className="mt-1 text-xs text-red-500">{formErrors.tags}</p>}
+              {formErrors.tags && <p className="mt-1 text-xs" style={{ color: "rgba(239,68,68,0.85)" }}>{formErrors.tags}</p>}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-              {/* ── Lyrics Column ── */}
-              <div className="flex flex-col">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Lyrics <span className="text-red-500">*</span>
-                </label>
-
-                {/* Upload Zone — Lyrics */}
+            {/* ── Lyrics / Chords Tabbed Editor ── */}
+            <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)" }}>
+              {/* Tab bar */}
+              <div className="flex items-center gap-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
                 <button
                   type="button"
-                  onClick={() => lyricsInputRef.current?.click()}
-                  disabled={!!isOcrLoading}
-                  className="w-full mb-3 group relative flex flex-col items-center justify-center gap-2 px-4 py-5 rounded-xl border-2 border-dashed border-indigo-300 dark:border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/20 hover:border-indigo-500 dark:hover:border-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
+                  onClick={() => setEditContentTab("lyrics")}
+                  className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-bold tracking-wide transition-all"
+                  style={editContentTab === "lyrics"
+                    ? { background: "rgba(99,102,241,0.15)", color: "rgba(165,180,252,0.95)", borderBottom: "2px solid rgba(99,102,241,0.8)" }
+                    : { color: "rgba(255,255,255,0.35)", borderBottom: "2px solid transparent" }}
                 >
-                  {isOcrLoading === "lyrics" ? (
+                  <BookOpen size={14} />
+                  LYRICS {formErrors.lyrics && <span style={{ color: "rgba(239,68,68,0.85)" }}>*</span>}
+                </button>
+                <div className="w-px self-stretch" style={{ background: "rgba(255,255,255,0.06)" }} />
+                <button
+                  type="button"
+                  onClick={() => setEditContentTab("chords")}
+                  className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-bold tracking-wide transition-all"
+                  style={editContentTab === "chords"
+                    ? { background: "rgba(168,85,247,0.13)", color: "rgba(216,180,254,0.95)", borderBottom: "2px solid rgba(168,85,247,0.8)" }
+                    : { color: "rgba(255,255,255,0.35)", borderBottom: "2px solid transparent" }}
+                >
+                  <Guitar size={14} />
+                  CHORDS
+                </button>
+              </div>
+
+              {/* Panel content */}
+              <div className="p-4 space-y-3">
+                {/* Upload zone */}
+                <button
+                  type="button"
+                  onClick={() => editContentTab === "lyrics" ? lyricsInputRef.current?.click() : chordsInputRef.current?.click()}
+                  disabled={!!isOcrLoading}
+                  className="w-full group relative flex items-center justify-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={editContentTab === "lyrics"
+                    ? { border: "1.5px dashed rgba(99,102,241,0.35)", background: "rgba(99,102,241,0.05)" }
+                    : { border: "1.5px dashed rgba(168,85,247,0.35)", background: "rgba(168,85,247,0.05)" }}
+                  onMouseEnter={e => { if (!isOcrLoading) e.currentTarget.style.borderColor = editContentTab === "lyrics" ? "rgba(99,102,241,0.65)" : "rgba(168,85,247,0.65)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = editContentTab === "lyrics" ? "rgba(99,102,241,0.35)" : "rgba(168,85,247,0.35)"; }}
+                >
+                  {isOcrLoading ? (
                     <>
-                      <Loader2 size={28} className="text-indigo-500 animate-spin" />
-                      <p className="text-sm font-medium text-indigo-600 dark:text-indigo-400">Extracting text from image...</p>
+                      <Loader2 size={18} className="animate-spin" style={{ color: editContentTab === "lyrics" ? "rgba(129,140,248,0.9)" : "rgba(192,132,252,0.9)" }} />
+                      <span className="text-sm font-medium" style={{ color: editContentTab === "lyrics" ? "rgba(129,140,248,0.9)" : "rgba(192,132,252,0.9)" }}>Extracting text…</span>
                     </>
                   ) : (
                     <>
-                      <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center group-hover:scale-110 transition-transform duration-200">
-                        <ImagePlus size={20} className="text-indigo-600 dark:text-indigo-400" />
-                      </div>
-                      <div className="text-center">
-                        <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">Drop an image or click to upload</p>
-                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Supports PNG, JPG, WEBP — AI will extract lyrics</p>
-                      </div>
-                      <span className="px-3 py-1 text-xs font-medium bg-indigo-600 text-white rounded-full group-hover:bg-indigo-700 transition-colors">
+                      <ImagePlus size={18} style={{ color: editContentTab === "lyrics" ? "rgba(129,140,248,0.8)" : "rgba(192,132,252,0.8)" }} />
+                      <span className="text-sm font-semibold text-white">Drop an image or click to upload</span>
+                      <span className="ml-auto px-3 py-1 text-xs font-semibold rounded-full" style={editContentTab === "lyrics"
+                        ? { background: "rgba(99,102,241,0.22)", color: "rgba(165,180,252,0.95)" }
+                        : { background: "rgba(168,85,247,0.22)", color: "rgba(216,180,254,0.95)" }}>
                         Upload Screenshot
                       </span>
                     </>
                   )}
                 </button>
-                <input
-                  type="file"
-                  ref={lyricsInputRef}
-                  onChange={(e) => handleImageUpload(e, "lyrics")}
-                  className="hidden"
-                  accept="image/*"
-                />
+                <input type="file" ref={lyricsInputRef} onChange={e => handleImageUpload(e, "lyrics")} className="hidden" accept="image/*" />
+                <input type="file" ref={chordsInputRef} onChange={e => handleImageUpload(e, "chords")} className="hidden" accept="image/*" />
 
-                {/* Undo/Redo icon buttons — Lyrics (touch-friendly) */}
-                <div className="flex items-center gap-1 mb-1.5">
-                  <button type="button" onClick={undoLyrics} disabled={!lyricsCanUndo}
-                    aria-label="Undo" title="Undo (Ctrl+Z)"
-                    className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 active:scale-90 disabled:opacity-25 disabled:cursor-not-allowed transition-all">
-                    <Undo2 size={16} />
+                {/* Undo / Redo toolbar */}
+                <div className="flex items-center gap-1">
+                  <button type="button"
+                    onClick={editContentTab === "lyrics" ? undoLyrics : undoChords}
+                    disabled={editContentTab === "lyrics" ? !lyricsCanUndo : !chordsCanUndo}
+                    title="Undo (Ctrl+Z)"
+                    className="w-8 h-8 flex items-center justify-center rounded-xl active:scale-90 disabled:opacity-25 disabled:cursor-not-allowed transition-all"
+                    style={{ color: "rgba(255,255,255,0.4)" }}
+                    onMouseEnter={e => (e.currentTarget.style.color = editContentTab === "lyrics" ? "rgba(99,102,241,0.9)" : "rgba(168,85,247,0.9)")}
+                    onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.4)")}>
+                    <Undo2 size={15} />
                   </button>
-                  <button type="button" onClick={redoLyrics} disabled={!lyricsCanRedo}
-                    aria-label="Redo" title="Redo (Ctrl+Y)"
-                    className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 active:scale-90 disabled:opacity-25 disabled:cursor-not-allowed transition-all">
-                    <Redo2 size={16} />
+                  <button type="button"
+                    onClick={editContentTab === "lyrics" ? redoLyrics : redoChords}
+                    disabled={editContentTab === "lyrics" ? !lyricsCanRedo : !chordsCanRedo}
+                    title="Redo (Ctrl+Y)"
+                    className="w-8 h-8 flex items-center justify-center rounded-xl active:scale-90 disabled:opacity-25 disabled:cursor-not-allowed transition-all"
+                    style={{ color: "rgba(255,255,255,0.4)" }}
+                    onMouseEnter={e => (e.currentTarget.style.color = editContentTab === "lyrics" ? "rgba(99,102,241,0.9)" : "rgba(168,85,247,0.9)")}
+                    onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.4)")}>
+                    <Redo2 size={15} />
                   </button>
+                  <span className="ml-auto text-[10px] font-medium" style={{ color: "rgba(255,255,255,0.2)" }}>
+                    {editContentTab === "lyrics" ? `${editLyrics.length} chars` : `${editChords.length} chars`}
+                  </span>
                 </div>
 
-                {/* Seamless textarea box */}
-                <div ref={songLyricsWrapRef} className={`rounded-xl overflow-hidden border ${formErrors.lyrics ? "border-red-400" : "border-gray-300 dark:border-gray-600"}`}>
-                  <AutoTextarea
-                    value={editLyrics}
-                    onChange={(e) => {
-                      setEditLyrics(e.target.value);
-                      pushLyricsHistory(e.target.value);
-                      if (formErrors.lyrics) setFormErrors(p => ({ ...p, lyrics: undefined }));
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.ctrlKey || e.metaKey) {
-                        if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undoLyrics(); }
-                        if (e.key === "y" || (e.key === "z" && e.shiftKey)) { e.preventDefault(); redoLyrics(); }
-                      }
-                    }}
-                    minRows={10}
-                    className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 outline-none font-sans focus:ring-2 focus:ring-inset focus:ring-indigo-300 dark:focus:ring-indigo-700"
-                    placeholder="Paste lyrics here..."
-                  />
-                </div>
-                {formErrors.lyrics && <p className="mt-1 text-xs text-red-500">{formErrors.lyrics}</p>}
-              </div>
-
-              {/* ── Chords Column ── */}
-              <div className="flex flex-col">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Chords</label>
-
-                {/* Upload Zone — Chords */}
-                <button
-                  type="button"
-                  onClick={() => chordsInputRef.current?.click()}
-                  disabled={!!isOcrLoading}
-                  className="w-full mb-3 group relative flex flex-col items-center justify-center gap-2 px-4 py-5 rounded-xl border-2 border-dashed border-purple-300 dark:border-purple-700 bg-purple-50/50 dark:bg-purple-950/20 hover:border-purple-500 dark:hover:border-purple-500 hover:bg-purple-50 dark:hover:bg-purple-950/40 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  {isOcrLoading === "chords" ? (
-                    <>
-                      <Loader2 size={28} className="text-purple-500 animate-spin" />
-                      <p className="text-sm font-medium text-purple-600 dark:text-purple-400">Extracting chords from image...</p>
-                    </>
-                  ) : (
-                    <>
-                      <div className="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/50 flex items-center justify-center group-hover:scale-110 transition-transform duration-200">
-                        <ImagePlus size={20} className="text-purple-600 dark:text-purple-400" />
-                      </div>
-                      <div className="text-center">
-                        <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">Drop an image or click to upload</p>
-                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Supports PNG, JPG, WEBP — AI will extract chords</p>
-                      </div>
-                      <span className="px-3 py-1 text-xs font-medium bg-purple-600 text-white rounded-full group-hover:bg-purple-700 transition-colors">
-                        Upload Screenshot
-                      </span>
-                    </>
-                  )}
-                </button>
-                <input
-                  type="file"
-                  ref={chordsInputRef}
-                  onChange={(e) => handleImageUpload(e, "chords")}
-                  className="hidden"
-                  accept="image/*"
-                />
-
-                {/* Undo/Redo icon buttons — Chords (touch-friendly) */}
-                <div className="flex items-center gap-1 mb-1.5">
-                  <button type="button" onClick={undoChords} disabled={!chordsCanUndo}
-                    aria-label="Undo" title="Undo (Ctrl+Z)"
-                    className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 active:scale-90 disabled:opacity-25 disabled:cursor-not-allowed transition-all">
-                    <Undo2 size={16} />
-                  </button>
-                  <button type="button" onClick={redoChords} disabled={!chordsCanRedo}
-                    aria-label="Redo" title="Redo (Ctrl+Y)"
-                    className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 active:scale-90 disabled:opacity-25 disabled:cursor-not-allowed transition-all">
-                    <Redo2 size={16} />
-                  </button>
-                </div>
-
-                {/* Seamless textarea box */}
-                <div className="rounded-xl overflow-hidden border border-gray-300 dark:border-gray-600">
-                  <AutoTextarea
-                    value={editChords}
-                    onChange={(e) => {
-                      setEditChords(e.target.value);
-                      pushChordsHistory(e.target.value);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.ctrlKey || e.metaKey) {
-                        if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undoChords(); }
-                        if (e.key === "y" || (e.key === "z" && e.shiftKey)) { e.preventDefault(); redoChords(); }
-                      }
-                    }}
-                    minRows={10}
-                    className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 outline-none font-sans text-sm focus:ring-2 focus:ring-inset focus:ring-purple-300 dark:focus:ring-purple-700"
-                    placeholder="Paste chords here..."
-                  />
-                </div>
+                {/* Textarea — switches per tab */}
+                {editContentTab === "lyrics" ? (
+                  <div className="rounded-xl overflow-hidden"
+                    style={{ border: formErrors.lyrics ? "1px solid rgba(239,68,68,0.7)" : "1px solid rgba(99,102,241,0.15)" }}>
+                    <AutoTextarea
+                      value={editLyrics}
+                      onChange={e => { setEditLyrics(e.target.value); pushLyricsHistory(e.target.value); if (formErrors.lyrics) setFormErrors(p => ({ ...p, lyrics: undefined })); }}
+                      onKeyDown={e => {
+                        if (e.ctrlKey || e.metaKey) {
+                          if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undoLyrics(); }
+                          if (e.key === "y" || (e.key === "z" && e.shiftKey)) { e.preventDefault(); redoLyrics(); }
+                        }
+                      }}
+                      minRows={12}
+                      className="w-full px-4 py-3 outline-none font-mono text-sm"
+                      style={{ background: "rgba(255,255,255,0.03)", color: "rgba(255,255,255,0.85)", caretColor: "#6366f1" }}
+                      placeholder="Paste lyrics here…"
+                    />
+                  </div>
+                ) : (
+                  <div className="rounded-xl overflow-hidden" style={{ border: "1px solid rgba(168,85,247,0.15)" }}>
+                    <AutoTextarea
+                      value={editChords}
+                      onChange={e => { setEditChords(e.target.value); pushChordsHistory(e.target.value); }}
+                      onKeyDown={e => {
+                        if (e.ctrlKey || e.metaKey) {
+                          if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undoChords(); }
+                          if (e.key === "y" || (e.key === "z" && e.shiftKey)) { e.preventDefault(); redoChords(); }
+                        }
+                      }}
+                      minRows={12}
+                      className="w-full px-4 py-3 outline-none font-mono text-sm"
+                      style={{ background: "rgba(255,255,255,0.03)", color: "rgba(255,255,255,0.85)", caretColor: "#a855f7" }}
+                      placeholder="Paste chords here…"
+                    />
+                  </div>
+                )}
+                {formErrors.lyrics && editContentTab === "lyrics" && (
+                  <p className="text-xs" style={{ color: "rgba(239,68,68,0.85)" }}>{formErrors.lyrics}</p>
+                )}
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-700">
+            {/* Footer action row */}
+            <div className="grid grid-cols-2 gap-3 pt-2" style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "16px" }}>
               <button
                 onClick={() => setIsEditing(false)}
-                className="px-6 py-3 text-base text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 font-medium transition-colors"
+                className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold transition-all"
+                style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.55)", border: "1px solid rgba(255,255,255,0.09)" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.1)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.06)")}
               >
+                <X size={15} />
                 Cancel
               </button>
               <button
                 onClick={handleSaveSong}
-                className="flex items-center gap-2 px-6 py-3 text-base bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-medium transition-colors"
+                className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-[0.98]"
+                style={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6)", boxShadow: "0 4px 14px rgba(99,102,241,0.35)" }}
               >
-                <Save size={18} />
+                <Save size={15} />
                 Save Song
               </button>
             </div>
@@ -1304,114 +1506,145 @@ showToast("error", "Failed to extract text from image. Please try again.");
       ) : selectedSong ? (
         <div className="max-w-5xl mx-auto space-y-4">
 
+          {/* Mobile: Back to Songs — hidden on sm+ */}
+          <button
+            onClick={() => setSelectedSong(null)}
+            className="sm:hidden flex items-center gap-1.5 text-sm font-semibold text-indigo-400 hover:text-indigo-300 transition-colors mb-4 -mt-1"
+          >
+            <ChevronLeft size={18} />
+            <span>Back to Songs</span>
+          </button>
+
           {/* ── Header Card ─────────────────────────────────────────────────── */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-4 sm:p-6 lg:p-8">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1 min-w-0">
-                {/* Tags */}
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {selectedSong.tags.map((tag) => (
-                    <span key={tag.id} className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${tag.color}`}>
-                      {tag.name}
-                    </span>
-                  ))}
-                </div>
-                {/* Title */}
-                <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-gray-900 dark:text-white mb-1 leading-tight tracking-tight">
-                  {selectedSong.title}
-                </h2>
-                {/* Artist + position counter */}
-                {selectedSong.artist ? (
-                  <div className="flex items-center gap-2">
-                    <p className="text-indigo-500 dark:text-indigo-400 font-semibold text-base sm:text-lg">
-                      {selectedSong.artist}
-                    </p>
+          <div className="rounded-2xl overflow-hidden" style={{ background: "#13151f", border: "1px solid rgba(255,255,255,0.07)" }}>
+
+            {/* Top section: title + artist + nav + play button */}
+            <div className="p-4 sm:p-5">
+              <div className="flex items-start justify-between gap-3 mb-5">
+                {/* Left: icon chip + title/artist + nav counter */}
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 mt-0.5"
+                    style={{ background: "rgba(99,102,241,0.18)", boxShadow: "0 0 0 1px rgba(99,102,241,0.25)" }}>
+                    <Music size={20} className="text-indigo-400" />
+                  </div>
+                  <div className="min-w-0">
+                    {/* Title */}
+                    <h2 className="text-2xl sm:text-3xl font-extrabold text-white leading-tight tracking-tight mb-0.5 line-clamp-2">
+                      {selectedSong.title}
+                    </h2>
+                    {/* Artist */}
+                    {selectedSong.artist && (
+                      <p className="text-base font-medium mb-2" style={{ color: "rgba(156,163,175,0.8)" }}>
+                        {selectedSong.artist}
+                      </p>
+                    )}
+                    {/* Nav counter */}
                     {filteredSongs.length > 1 && (
-                      <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-md"
-                        style={{ background: "rgba(99,102,241,0.1)", color: "rgba(99,102,241,0.7)" }}>
-                        {currentSongIndex + 1} / {filteredSongs.length}
-                      </span>
+                      <div className="flex items-center gap-1 mt-1.5">
+                        <button
+                          onClick={() => navigateSong("prev")}
+                          disabled={!hasPrev}
+                          title={hasPrev ? `← ${filteredSongs[currentSongIndex - 1]?.title}` : "No previous song"}
+                          className="w-6 h-6 flex items-center justify-center rounded-lg transition-all disabled:opacity-20 disabled:cursor-not-allowed"
+                          style={{ color: "rgba(99,102,241,0.8)", background: hasPrev ? "rgba(99,102,241,0.1)" : "transparent" }}
+                        >
+                          <ChevronLeft size={14} />
+                        </button>
+                        <span className="text-[11px] font-semibold tabular-nums"
+                          style={{ color: "rgba(255,255,255,0.35)" }}>
+                          {currentSongIndex + 1} / {filteredSongs.length}
+                        </span>
+                        <button
+                          onClick={() => navigateSong("next")}
+                          disabled={!hasNext}
+                          title={hasNext ? `${filteredSongs[currentSongIndex + 1]?.title} →` : "No next song"}
+                          className="w-6 h-6 flex items-center justify-center rounded-lg transition-all disabled:opacity-20 disabled:cursor-not-allowed"
+                          style={{ color: "rgba(99,102,241,0.8)", background: hasNext ? "rgba(99,102,241,0.1)" : "transparent" }}
+                        >
+                          <ChevronRight size={14} />
+                        </button>
+                      </div>
                     )}
                   </div>
-                ) : filteredSongs.length > 1 ? (
-                  <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-md"
-                    style={{ background: "rgba(99,102,241,0.1)", color: "rgba(99,102,241,0.7)" }}>
-                    {currentSongIndex + 1} / {filteredSongs.length}
-                  </span>
-                ) : null}
+                </div>
+
+                {/* Right: play button or action strip */}
+                <div className="flex items-center gap-2 shrink-0">
+                  {/* Desktop-only actions */}
+                  <div className="hidden sm:flex items-center gap-1">
+                    <button
+                      onClick={() => handlePrint(selectedSong)}
+                      title="Print"
+                      className="w-8 h-8 flex items-center justify-center rounded-xl transition-all"
+                      style={{ color: "rgba(156,163,175,0.6)" }}
+                      onMouseEnter={e => (e.currentTarget.style.color = "rgba(99,102,241,0.9)")}
+                      onMouseLeave={e => (e.currentTarget.style.color = "rgba(156,163,175,0.6)")}
+                    >
+                      <Printer size={16} />
+                    </button>
+                    {canDeleteSong && (
+                      <button
+                        onClick={() => handleDeleteSong(selectedSong.id)}
+                        title="Delete"
+                        className="w-8 h-8 flex items-center justify-center rounded-xl transition-all"
+                        style={{ color: "rgba(156,163,175,0.6)" }}
+                        onMouseEnter={e => (e.currentTarget.style.color = "rgba(239,68,68,0.9)")}
+                        onMouseLeave={e => (e.currentTarget.style.color = "rgba(156,163,175,0.6)")}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setSelectedSong(null)}
+                      title="Close"
+                      className="w-8 h-8 flex items-center justify-center rounded-xl transition-all"
+                      style={{ color: "rgba(156,163,175,0.6)" }}
+                      onMouseEnter={e => (e.currentTarget.style.color = "rgba(255,255,255,0.8)")}
+                      onMouseLeave={e => (e.currentTarget.style.color = "rgba(156,163,175,0.6)")}
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                </div>
               </div>
 
-              {/* Action Buttons — integrated prev/next + print/edit/delete/close */}
-              <div className="flex items-center gap-0.5 sm:gap-1 shrink-0 pt-1">
-                {/* ← Prev */}
-                {filteredSongs.length > 1 && (
-                  <button
-                    onClick={() => navigateSong("prev")}
-                    disabled={!hasPrev}
-                    title={hasPrev ? `← ${filteredSongs[currentSongIndex - 1]?.title}` : "No previous song"}
-                    className="w-9 h-9 flex items-center justify-center rounded-xl transition-all disabled:opacity-20 disabled:cursor-not-allowed"
-                    style={{
-                      color: hasPrev ? "rgba(99,102,241,0.9)" : "rgba(156,163,175,0.5)",
-                      background: hasPrev ? "rgba(99,102,241,0.08)" : "transparent",
-                    }}>
-                    <ChevronLeft size={18} />
-                  </button>
-                )}
-                {/* → Next */}
-                {filteredSongs.length > 1 && (
-                  <button
-                    onClick={() => navigateSong("next")}
-                    disabled={!hasNext}
-                    title={hasNext ? `${filteredSongs[currentSongIndex + 1]?.title} →` : "No next song"}
-                    className="w-9 h-9 flex items-center justify-center rounded-xl transition-all disabled:opacity-20 disabled:cursor-not-allowed mr-1"
-                    style={{
-                      color: hasNext ? "rgba(99,102,241,0.9)" : "rgba(156,163,175,0.5)",
-                      background: hasNext ? "rgba(99,102,241,0.08)" : "transparent",
-                    }}>
-                    <ChevronRight size={18} />
-                  </button>
-                )}
-                {/* Print — desktop only */}
-                <button
-                  onClick={() => handlePrint(selectedSong)}
-                  title="Print"
-                  className="hidden sm:flex w-9 h-9 items-center justify-center rounded-xl text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-all"
-                >
-                  <Printer size={18} />
-                </button>
-                {/* Edit */}
-                {canEditSong && (
-                  <button
-                    onClick={() => openEditor(selectedSong)}
-                    title="Edit song"
-                    className="w-9 h-9 flex items-center justify-center rounded-xl text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-all"
-                  >
-                    <Edit size={18} />
-                  </button>
-                )}
-                {/* Delete */}
-                {canDeleteSong && (
-                  <button
-                    onClick={() => handleDeleteSong(selectedSong.id)}
-                    title="Delete song"
-                    className="w-9 h-9 flex items-center justify-center rounded-xl text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                )}
-                {/* Close */}
-                <button
-                  onClick={() => setSelectedSong(null)}
-                  title="Close"
-                  className="w-9 h-9 flex items-center justify-center rounded-xl text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all"
-                >
-                  <X size={18} />
-                </button>
+              {/* Info chips row */}
+              <div className="grid grid-cols-2 gap-2.5">
+                {/* Mood / Language */}
+                <div className="rounded-xl px-3 py-2.5" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                  <p className="text-[9px] font-bold uppercase tracking-widest mb-1" style={{ color: "rgba(255,255,255,0.35)" }}>
+                    MOOD / LANGUAGE
+                  </p>
+                  {selectedSong.tags.length > 0 ? (
+                    <p className="text-sm font-bold" style={{ color: "rgba(251,191,36,0.95)" }}>
+                      {selectedSong.tags.map(t => t.name).join(", ")}
+                    </p>
+                  ) : (
+                    <p className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.3)" }}>—</p>
+                  )}
+                </div>
+                {/* Created */}
+                <div className="rounded-xl px-3 py-2.5 flex items-start justify-between" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                  <div>
+                    <p className="text-[9px] font-bold uppercase tracking-widest mb-1" style={{ color: "rgba(255,255,255,0.35)" }}>
+                      CREATED
+                    </p>
+                    <p className="text-sm font-bold uppercase text-white">
+                      {selectedSong.created_at
+                        ? new Date(selectedSong.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                        : "—"}
+                    </p>
+                  </div>
+                  <svg width="28" height="22" viewBox="0 0 28 22" fill="none" style={{ opacity: 0.3 }}>
+                    <rect x="0" y="10" width="5" height="12" rx="1.5" fill="#6366f1" />
+                    <rect x="7.5" y="5" width="5" height="17" rx="1.5" fill="#6366f1" />
+                    <rect x="15" y="0" width="5" height="22" rx="1.5" fill="#6366f1" />
+                    <rect x="22.5" y="8" width="5" height="14" rx="1.5" fill="#6366f1" />
+                  </svg>
+                </div>
               </div>
-            </div>
 
-            {/* Divider + Meta */}
-            <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-700 space-y-1.5">
+              {/* Added/Updated meta row */}
               {(() => {
                 const fmtDate = (iso: string) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
                 const fmtName = (full: string) => {
@@ -1425,68 +1658,76 @@ showToast("error", "Failed to extract text from image. Please try again.");
                   const colors = ["bg-indigo-500","bg-violet-500","bg-pink-500","bg-emerald-500","bg-amber-500","bg-sky-500"];
                   const bg = colors[(name?.charCodeAt(0) || 0) % colors.length];
                   return src
-                    ? <img src={src} alt={name} className="w-5 h-5 rounded-full object-cover ring-1 ring-white dark:ring-gray-700 shrink-0" />
-                    : <div className={`w-5 h-5 rounded-full ${bg} flex items-center justify-center text-white text-[9px] font-bold shrink-0`}>{(name || "?")[0].toUpperCase()}</div>;
+                    ? <img src={src} alt={name} className="w-4 h-4 rounded-full object-cover ring-1 shrink-0" style={{ ringColor: "rgba(255,255,255,0.15)" }} />
+                    : <div className={`w-4 h-4 rounded-full ${bg} flex items-center justify-center text-white text-[8px] font-bold shrink-0`}>{(name || "?")[0].toUpperCase()}</div>;
                 };
                 return (
-                  <>
-                    <div className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500">
-                      <span className="font-semibold text-gray-500 dark:text-gray-400 shrink-0">Added:</span>
+                  <div className="flex flex-col gap-0.5 mt-3 px-0.5">
+                    <div className="flex items-center gap-1.5 text-[11px]" style={{ color: "rgba(255,255,255,0.3)" }}>
+                      <span className="font-semibold" style={{ color: "rgba(255,255,255,0.4)" }}>Added:</span>
                       <span>{selectedSong.created_at ? fmtDate(selectedSong.created_at) : "Unknown"}</span>
                       {selectedSong.created_by_name && (
-                        <><span className="text-gray-300 dark:text-gray-600">·</span>
-                        <Avatar name={selectedSong.created_by_name} photo={selectedSong.created_by_photo} />
-                        <span className="font-medium text-gray-500 dark:text-gray-400">{fmtName(selectedSong.created_by_name)}</span></>
+                        <><span>·</span><Avatar name={selectedSong.created_by_name} photo={selectedSong.created_by_photo} /><span className="font-medium" style={{ color: "rgba(255,255,255,0.4)" }}>{fmtName(selectedSong.created_by_name)}</span></>
                       )}
                     </div>
-                    <div className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500">
-                      <span className="font-semibold text-gray-500 dark:text-gray-400 shrink-0">Updated:</span>
+                    <div className="flex items-center gap-1.5 text-[11px]" style={{ color: "rgba(255,255,255,0.3)" }}>
+                      <span className="font-semibold" style={{ color: "rgba(255,255,255,0.4)" }}>Updated:</span>
                       <span>{selectedSong.updated_at ? fmtDate(selectedSong.updated_at) : "Never"}</span>
                       {selectedSong.updated_by_name && (
-                        <><span className="text-gray-300 dark:text-gray-600">·</span>
-                        <Avatar name={selectedSong.updated_by_name} photo={selectedSong.updated_by_photo} />
-                        <span className="font-medium text-gray-500 dark:text-gray-400">{fmtName(selectedSong.updated_by_name)}</span></>
+                        <><span>·</span><Avatar name={selectedSong.updated_by_name} photo={selectedSong.updated_by_photo} /><span className="font-medium" style={{ color: "rgba(255,255,255,0.4)" }}>{fmtName(selectedSong.updated_by_name)}</span></>
                       )}
                     </div>
-                  </>
+                  </div>
                 );
               })()}
-              {selectedSong.video_url && (
+            </div>
+
+            {/* Divider */}
+            <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }} />
+
+            {/* Bottom action row */}
+            <div className="flex">
+              {canEditSong ? (
                 <button
-                  onClick={() => onOpenVideo?.(selectedSong.video_url!)}
-                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 transition-colors pt-1"
+                  onClick={() => openEditor(selectedSong)}
+                  className="flex-1 flex items-center justify-center gap-2 py-3.5 text-sm font-semibold transition-all hover:bg-white/[0.04] active:bg-white/[0.07]"
+                  style={{ color: "rgba(255,255,255,0.55)" }}
+                  onMouseEnter={e => (e.currentTarget.style.color = "rgba(255,255,255,0.9)")}
+                  onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.55)")}
                 >
-                  Watch Reference Video
-                  <ExternalLink size={14} />
+                  <Edit size={15} />
+                  EDIT SONG
                 </button>
+              ) : (
+                <div className="flex-1 flex items-center justify-center gap-2 py-3.5 text-sm font-semibold opacity-25"
+                  style={{ color: "rgba(255,255,255,0.3)" }}>
+                  <Edit size={15} />
+                  EDIT SONG
+                </div>
               )}
             </div>
           </div>
 
-          {/* ── Mobile Tab Bar (Lyrics / Chords) ──────────────────────────────
-               Visible only on < lg screens. On lg+ the two panels are side-by-side.
-          ────────────────────────────────────────────────────────────────────── */}
-          <div className="lg:hidden flex bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-1 gap-1">
+          {/* ── Mobile Tab Bar (Lyrics / Chords) */}
+          <div className="lg:hidden flex rounded-2xl p-1 gap-1" style={{ background: "#13151f", border: "1px solid rgba(255,255,255,0.07)" }}>
             <button
               onClick={() => setDetailTab("lyrics")}
-              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-base font-semibold transition-all ${
-                detailTab === "lyrics"
-                  ? "bg-indigo-600 text-white shadow-sm"
-                  : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold transition-all ${
+                detailTab === "lyrics" ? "text-white shadow-sm" : "hover:bg-white/[0.04]"
               }`}
+              style={detailTab === "lyrics" ? { background: "linear-gradient(135deg, #6366f1, #8b5cf6)" } : { color: "rgba(255,255,255,0.45)" }}
             >
-              <BookOpen size={18} />
+              <BookOpen size={16} />
               Lyrics
             </button>
             <button
               onClick={() => setDetailTab("chords")}
-              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-base font-semibold transition-all ${
-                detailTab === "chords"
-                  ? "bg-purple-600 text-white shadow-sm"
-                  : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold transition-all ${
+                detailTab === "chords" ? "text-white shadow-sm" : "hover:bg-white/[0.04]"
               }`}
+              style={detailTab === "chords" ? { background: "linear-gradient(135deg, #7c3aed, #a855f7)" } : { color: "rgba(255,255,255,0.45)" }}
             >
-              <Guitar size={18} />
+              <Guitar size={16} />
               Chords
             </button>
           </div>
@@ -1495,11 +1736,13 @@ showToast("error", "Failed to extract text from image. Please try again.");
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
 
             {/* ── LYRICS PANEL ── */}
-            <div className={`bg-white dark:bg-[#1E2938] rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col ${detailTab === "chords" ? "hidden lg:flex" : "flex"}`}>
-              <div className="flex items-center justify-between gap-2 px-4 sm:px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+            <div className={`rounded-2xl overflow-hidden flex flex-col ${detailTab === "chords" ? "hidden lg:flex" : "flex"}`}
+              style={{ background: "#13151f", border: "1px solid rgba(255,255,255,0.07)" }}>
+              {/* Header */}
+              <div className="flex items-center justify-between gap-2 px-4 sm:px-5 py-3.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-indigo-500" />
-                  <h3 className="font-bold text-gray-900 dark:text-white tracking-wide text-sm uppercase">Lyrics</h3>
+                  <div className="w-2 h-2 rounded-full bg-indigo-400" style={{ boxShadow: "0 0 6px rgba(99,102,241,0.7)" }} />
+                  <h3 className="font-bold tracking-widest text-[11px] uppercase" style={{ color: "rgba(255,255,255,0.6)" }}>LYRICS</h3>
                 </div>
                 {selectedSong.lyrics && (
                   <button
@@ -1509,27 +1752,32 @@ showToast("error", "Failed to extract text from image. Please try again.");
                       setTimeout(() => setCopiedField(null), 1500);
                     }}
                     title="Copy lyrics"
-                    className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-500 dark:hover:text-indigo-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    className="p-1.5 rounded-lg transition-colors"
+                    style={{ color: "rgba(255,255,255,0.3)" }}
+                    onMouseEnter={e => (e.currentTarget.style.color = "rgba(99,102,241,0.9)")}
+                    onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.3)")}
                   >
-                    {copiedField === "lyrics" ? <Check size={15} className="text-emerald-500" /> : <Copy size={15} />}
+                    {copiedField === "lyrics" ? <Check size={15} className="text-emerald-400" /> : <Copy size={15} />}
                   </button>
                 )}
               </div>
-              <div className="p-4 sm:p-6 flex-1 overflow-auto">
+              {/* Content */}
+              <div className="p-4 sm:p-5 flex-1 overflow-auto">
                 {selectedSong.lyrics
                   ? renderLyrics(selectedSong.lyrics)
-                  : <p className="text-sm text-gray-400 dark:text-gray-600 italic">No lyrics added.</p>
+                  : <p className="text-sm italic" style={{ color: "rgba(255,255,255,0.25)" }}>No lyrics added.</p>
                 }
               </div>
             </div>
 
             {/* ── CHORDS PANEL ── */}
-            <div className={`bg-white dark:bg-[#1E2938] rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col ${detailTab === "lyrics" ? "hidden lg:flex" : "flex"}`}>
+            <div className={`rounded-2xl overflow-hidden flex flex-col ${detailTab === "lyrics" ? "hidden lg:flex" : "flex"}`}
+              style={{ background: "#13151f", border: "1px solid rgba(255,255,255,0.07)" }}>
               {/* Chords header with transposer */}
-              <div className="flex items-center justify-between gap-2 px-4 sm:px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+              <div className="flex items-center justify-between gap-2 px-4 sm:px-5 py-3.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-purple-500" />
-                  <h3 className="font-bold text-gray-900 dark:text-white tracking-wide text-sm uppercase">Chords</h3>
+                  <div className="w-2 h-2 rounded-full bg-purple-400" style={{ boxShadow: "0 0 6px rgba(168,85,247,0.7)" }} />
+                  <h3 className="font-bold tracking-widest text-[11px] uppercase" style={{ color: "rgba(255,255,255,0.6)" }}>CHORDS</h3>
                 </div>
                 {selectedSong.chords && (
                   <div className="flex items-center gap-1">
@@ -1537,16 +1785,20 @@ showToast("error", "Failed to extract text from image. Please try again.");
                     <button
                       onClick={() => setTransposeSteps(s => s - 1)}
                       title="Transpose down"
-                      className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 hover:bg-purple-100 dark:hover:bg-purple-900/40 hover:text-purple-600 dark:hover:text-purple-400 font-bold text-base transition-colors"
+                      className="w-7 h-7 flex items-center justify-center rounded-lg font-bold text-base transition-all"
+                      style={{ color: "rgba(168,85,247,0.8)", background: "rgba(168,85,247,0.08)" }}
+                      onMouseEnter={e => (e.currentTarget.style.background = "rgba(168,85,247,0.18)")}
+                      onMouseLeave={e => (e.currentTarget.style.background = "rgba(168,85,247,0.08)")}
                     >−</button>
-                    {/* Key badge — click to reset */}
+                    {/* Key badge */}
                     <button
                       onClick={() => setTransposeSteps(0)}
                       title="Reset to original key"
-                      className={`px-2 py-0.5 rounded-md text-xs font-semibold min-w-[52px] text-center transition-colors ${transposeSteps === 0
-                        ? "bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
-                        : "bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300"
-                      }`}
+                      className="px-2.5 py-0.5 rounded-lg text-xs font-semibold min-w-[56px] text-center transition-all"
+                      style={{
+                        background: transposeSteps === 0 ? "rgba(255,255,255,0.06)" : "rgba(168,85,247,0.18)",
+                        color: transposeSteps === 0 ? "rgba(255,255,255,0.4)" : "rgba(216,180,254,0.9)"
+                      }}
                     >
                       {transposeSteps === 0 ? "Original" : transposeSteps > 0 ? `+${transposeSteps}` : `${transposeSteps}`}
                     </button>
@@ -1554,10 +1806,13 @@ showToast("error", "Failed to extract text from image. Please try again.");
                     <button
                       onClick={() => setTransposeSteps(s => s + 1)}
                       title="Transpose up"
-                      className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 hover:bg-purple-100 dark:hover:bg-purple-900/40 hover:text-purple-600 dark:hover:text-purple-400 font-bold text-base transition-colors"
+                      className="w-7 h-7 flex items-center justify-center rounded-lg font-bold text-base transition-all"
+                      style={{ color: "rgba(168,85,247,0.8)", background: "rgba(168,85,247,0.08)" }}
+                      onMouseEnter={e => (e.currentTarget.style.background = "rgba(168,85,247,0.18)")}
+                      onMouseLeave={e => (e.currentTarget.style.background = "rgba(168,85,247,0.08)")}
                     >+</button>
                     {/* Divider */}
-                    <div className="w-px h-4 bg-gray-200 dark:bg-gray-600 mx-1" />
+                    <div className="w-px h-4 mx-1" style={{ background: "rgba(255,255,255,0.1)" }} />
                     {/* Copy transposed */}
                     <button
                       onClick={() => {
@@ -1567,25 +1822,30 @@ showToast("error", "Failed to extract text from image. Please try again.");
                         setTimeout(() => setCopiedField(null), 1500);
                       }}
                       title="Copy chords"
-                      className="p-1.5 rounded-lg text-gray-400 hover:text-purple-500 dark:hover:text-purple-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                      className="p-1.5 rounded-lg transition-colors"
+                      style={{ color: "rgba(255,255,255,0.3)" }}
+                      onMouseEnter={e => (e.currentTarget.style.color = "rgba(168,85,247,0.9)")}
+                      onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.3)")}
                     >
-                      {copiedField === "chords" ? <Check size={15} className="text-emerald-500" /> : <Copy size={15} />}
+                      {copiedField === "chords" ? <Check size={15} className="text-emerald-400" /> : <Copy size={15} />}
                     </button>
                   </div>
                 )}
               </div>
-              <div className="p-4 sm:p-6 flex-1 overflow-auto">
+              {/* Content */}
+              <div className="p-4 sm:p-5 flex-1 overflow-auto">
                 {selectedSong.chords ? (
-                  <pre className="whitespace-pre-wrap font-mono text-lg sm:text-xl text-gray-700 dark:text-gray-200 leading-relaxed">
+                  <pre className="whitespace-pre-wrap font-mono text-base sm:text-lg leading-relaxed" style={{ color: "rgba(255,255,255,0.85)" }}>
                     {transposeChords(selectedSong.chords, transposeSteps)}
                   </pre>
                 ) : (
-                  <div className="h-full flex flex-col items-center justify-center text-center py-12 text-gray-400 dark:text-gray-600">
-                    <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center mb-3">
-                      <Music size={22} className="text-gray-400 dark:text-gray-500" />
+                  <div className="h-full flex flex-col items-center justify-center text-center py-12">
+                    <div className="w-12 h-12 rounded-full flex items-center justify-center mb-3"
+                      style={{ background: "rgba(168,85,247,0.1)" }}>
+                      <Music size={22} style={{ color: "rgba(168,85,247,0.5)" }} />
                     </div>
-                    <p className="text-sm font-medium">No chords added</p>
-                    <p className="text-xs mt-1 text-gray-300 dark:text-gray-600">Edit the song to add chord notations</p>
+                    <p className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.35)" }}>No chords added</p>
+                    <p className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.2)" }}>Edit the song to add chord notations</p>
                   </div>
                 )}
               </div>
@@ -1600,8 +1860,8 @@ showToast("error", "Failed to extract text from image. Please try again.");
           {!isEditing && !selectedSong && (
             <div className="flex flex-col gap-3">
               {/* Row 1: Search + Actions */}
-              <div className="flex items-center gap-3">
-                <div className="relative flex-1">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                <div className="relative flex-1 min-w-0" style={{ flexBasis: "200px" }}>
                   {/* Left icon: spinner while loading, search otherwise */}
                   {isLoadingSongs ? (
                     <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-indigo-400 animate-spin" width={18} height={18} viewBox="0 0 24 24" fill="none">
@@ -1616,7 +1876,7 @@ showToast("error", "Failed to extract text from image. Please try again.");
                     placeholder="Search by title, artist, or tags..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full h-12 pl-10 pr-8 text-base bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900 transition-all outline-none dark:text-white"
+                    className="w-full h-10 pl-10 pr-8 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900 transition-all outline-none dark:text-white"
                   />
                   {/* Clear button */}
                   {searchQuery && (
@@ -1637,7 +1897,7 @@ showToast("error", "Failed to extract text from image. Please try again.");
                       <button
                         onClick={handleBulkDelete}
                         disabled={selectedSongIds.length === 0}
-                        className="h-12 flex items-center gap-2 px-3 sm:px-4 text-base bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors font-medium shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="h-10 flex items-center gap-2 px-3 sm:px-4 text-sm bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors font-medium shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Trash2 size={18} />
                         <span className="hidden sm:inline">Delete ({selectedSongIds.length})</span>
@@ -1645,7 +1905,7 @@ showToast("error", "Failed to extract text from image. Please try again.");
                       </button>
                       <button
                         onClick={() => { setIsSelectionMode(false); setSelectedSongIds([]); }}
-                        className="h-12 flex items-center gap-2 px-3 sm:px-4 text-base bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-medium"
+                        className="h-10 flex items-center gap-2 px-3 sm:px-4 text-sm bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-medium"
                       >
                         <X size={18} />
                         <span className="hidden sm:inline">Cancel</span>
@@ -1653,11 +1913,10 @@ showToast("error", "Failed to extract text from image. Please try again.");
                     </>
                   ) : (
                     <>
-
                       {canSelectSongs && (
                         <button
                           onClick={() => setIsSelectionMode(true)}
-                          className="w-12 h-12 flex items-center justify-center text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 rounded-xl transition-colors relative group"
+                          className="w-10 h-10 flex items-center justify-center text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 rounded-xl transition-colors relative group"
                           title="Select Songs"
                         >
                           <CheckSquare size={20} />
@@ -1669,9 +1928,9 @@ showToast("error", "Failed to extract text from image. Please try again.");
                       {canAddSong && (
                         <button
                           onClick={() => openEditor()}
-                          className="h-12 flex items-center gap-2 px-3 sm:px-4 text-base bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium shadow-sm"
+                          className="h-10 w-10 sm:w-36 flex items-center justify-center gap-2 text-sm bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium shadow-sm flex-shrink-0"
                         >
-                          <Plus size={18} />
+                          <Plus size={16} />
                           <span className="hidden sm:inline">Add Song</span>
                         </button>
                       )}
@@ -1680,10 +1939,10 @@ showToast("error", "Failed to extract text from image. Please try again.");
                 </div>
               </div>
 
-              {/* Row 2: Filter + Count + Toggle on left | Play Library on right */}
-              <div className="flex items-center gap-2 py-3">
+              {/* Row 2: Filter + Count + Toggle on left | Play Library on right (sm+) */}
+              <div className="flex items-center gap-2">
                 {/* Left group: Filter + Count + Toggle */}
-                <div className="flex items-center gap-2 flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
                   <div className="relative flex-shrink-0" ref={filterDropdownRef}>
                     <button
                       onClick={() => setIsFilterOpen(prev => !prev)}
@@ -1769,12 +2028,12 @@ showToast("error", "Failed to extract text from image. Please try again.");
                       : <><span className="hidden sm:inline">{allSongs.length} {allSongs.length === 1 ? 'Song' : 'Songs'} Total</span><span className="sm:hidden">{allSongs.length} Songs</span></>
                     }
                   </div>
-                  {/* Grid / List toggle */}
-                  <div className="hidden sm:flex h-9 items-center bg-gray-100 dark:bg-gray-800 rounded-xl p-0.5 gap-0.5 flex-shrink-0">
+                  {/* Grid / List toggle — visible on all screens */}
+                  <div className="flex h-10 items-center bg-gray-100 dark:bg-gray-800 rounded-xl p-0.5 gap-0.5 flex-shrink-0">
                     <button
                       onClick={() => toggleSongView("grid")}
                       title="Grid view"
-                      className={`p-1.5 rounded-lg transition-all ${songView === "grid"
+                      className={`h-full px-2.5 rounded-lg transition-all flex items-center justify-center ${songView === "grid"
                         ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm"
                         : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                         }`}
@@ -1784,7 +2043,7 @@ showToast("error", "Failed to extract text from image. Please try again.");
                     <button
                       onClick={() => toggleSongView("list")}
                       title="List view"
-                      className={`hidden sm:flex p-1.5 rounded-lg transition-all ${songView === "list"
+                      className={`flex h-full px-2.5 rounded-lg transition-all items-center justify-center ${songView === "list"
                         ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm"
                         : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                         }`}
@@ -1794,16 +2053,15 @@ showToast("error", "Failed to extract text from image. Please try again.");
                   </div>
                 </div>
 
-                {/* Play Library — pill button matching Dashboard Lineup style */}
+                {/* Play Library — all screen sizes */}
                 {songsWithVideo.length > 0 && !libraryPlayerOpen && !isLineupOpen && (
                   <div className="relative group flex-shrink-0">
-                    <span className="absolute inset-0 rounded-xl bg-emerald-500/30 animate-ping" />
                     <button
                       onClick={() => openLibraryPlayer()}
-                      className="relative flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold bg-emerald-500 text-white shadow-md hover:shadow-lg hover:scale-105 active:scale-95 transition-all"
+                      className="relative w-10 sm:w-36 flex items-center justify-center gap-1.5 h-10 rounded-xl text-sm font-semibold bg-emerald-500 text-white shadow-md hover:shadow-lg hover:scale-105 active:scale-95 transition-all"
                     >
                       <Play size={15} className="fill-white" />
-                      <span>Play Library</span>
+                      <span className="hidden sm:inline">Play Library</span>
                     </button>
                     {/* Tooltip */}
                     <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity shadow-xl">
@@ -1841,9 +2099,8 @@ showToast("error", "Failed to extract text from image. Please try again.");
                     </div>
                   </div>
                 )}
-
-
               </div>
+
 
             </div>
           )}
@@ -1873,66 +2130,95 @@ showToast("error", "Failed to extract text from image. Please try again.");
                 <div
                   key={song.id}
                   onClick={() => isSelectionMode ? toggleSongSelection(song.id) : setSelectedSong(song)}
-                  className={`bg-white dark:bg-gray-800 rounded-2xl border-l-[3px] border transition-all duration-200 cursor-pointer group flex flex-col relative
-                    hover:-translate-y-0.5 hover:shadow-lg
+                  className={`relative rounded-2xl border transition-all duration-200 cursor-pointer group flex flex-col overflow-hidden
+                    hover:-translate-y-1 hover:shadow-2xl hover:shadow-indigo-500/10
                     ${selectedSongIds.includes(song.id)
-                      ? "border-l-indigo-500 border-indigo-300 dark:border-indigo-700 ring-2 ring-indigo-200 dark:ring-indigo-900 shadow-md"
-                      : "border-l-indigo-400/60 dark:border-l-indigo-500/50 border-gray-200 dark:border-gray-700 shadow-sm hover:border-l-indigo-500 hover:border-indigo-200 dark:hover:border-indigo-600/60"
+                      ? "bg-indigo-950/70 border-indigo-600/50 ring-2 ring-indigo-500/30"
+                      : "bg-[#13151f] dark:bg-[#13151f] border-white/[0.08] shadow-md"
                     }`}
                 >
-                  {/* Main content area */}
-                  <div className="p-5 flex flex-col flex-1">
+                  {/* ── Card Body ── */}
+                  <div className="p-4 flex flex-col flex-1">
 
-                    {/* Top row: music chip + title/artist + actions */}
-                    <div className="flex items-start gap-3 mb-4">
-
-                      {/* Music icon chip */}
-                      <div className="w-10 h-10 shrink-0 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center mt-0.5 group-hover:bg-indigo-100 dark:group-hover:bg-indigo-500/20 transition-colors">
-                        <Music size={18} className="text-indigo-500 dark:text-indigo-400" />
-                      </div>
-
-                      {/* Title + artist */}
-                      <div className="flex-1 min-w-0">
-                        <h3 className="text-base font-bold text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors line-clamp-2 leading-snug">
-                          {toSafeTitle(song.title)}
-                        </h3>
-                        {song.artist && (
-                          <p className="text-sm text-indigo-500 dark:text-indigo-400 font-medium mt-0.5 truncate">{song.artist}</p>
-                        )}
-                      </div>
-
-                      {/* Action buttons */}
-                      <div className="flex items-center gap-0.5 shrink-0 -mt-1 -mr-1" onClick={e => e.stopPropagation()}>
-                        {!isSelectionMode && <AddToPlaylistBtn song={song} showToast={showToast} />}
-                        {!isSelectionMode && song.video_url && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); onOpenVideo?.(song.video_url!); }}
-                            title="Watch Video"
-                            className="shrink-0 w-11 h-11 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors relative group/tooltip"
-                          >
-                            <CustomYoutubeIcon size={26} />
-                            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[10px] rounded opacity-0 group-hover/tooltip:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">Watch Video</span>
-                          </button>
-                        )}
+                    {/* Row 1: Title + Artist on left, Play button on right */}
+                    <div className="flex items-start justify-between gap-3 mb-5">
+                      {/* Left: icon chip + title/artist stack */}
+                      <div className="flex items-start gap-3 min-w-0">
+                        {/* Music note icon */}
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
+                          style={{ background: "rgba(99,102,241,0.18)", boxShadow: "0 0 0 1px rgba(99,102,241,0.2)" }}>
+                          <Music size={18} className="text-indigo-400" />
+                        </div>
+                        {/* Title + Artist */}
+                        <div className="min-w-0">
+                          <h3 className="text-xl font-extrabold text-white leading-tight tracking-tight mb-1 line-clamp-2 group-hover:text-indigo-200 transition-colors">
+                            {toSafeTitle(song.title)}
+                          </h3>
+                          <p className="text-sm font-medium truncate" style={{ color: "rgba(156,163,175,0.85)" }}>
+                            {song.artist || <span className="italic" style={{ color: "rgba(107,114,128,0.8)" }}>Unknown Artist</span>}
+                          </p>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Footer: tags + date separated by subtle divider */}
-                    <div className="mt-auto pt-3 border-t border-gray-100 dark:border-gray-700/60 flex items-center justify-between gap-2">
-                      <div className="flex flex-wrap gap-1.5">
-                        {Array.isArray(song.tags) && song.tags.slice(0, 3).map((tag) => (
-                          <span key={tag.id} className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold ${tag.color}`}>{tag.name}</span>
-                        ))}
-                        {Array.isArray(song.tags) && song.tags.length > 3 && (
-                          <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">+{song.tags.length - 3}</span>
-                        )}
+                    {/* Info chips: MOOD/LANGUAGE + CREATED */}
+                    <div className="grid grid-cols-2 gap-2 mt-auto">
+                      {/* Tags chip */}
+                      <div className="rounded-xl px-3 py-2.5" style={{ background: "rgba(255,255,255,0.04)" }}>
+                        <p className="text-[9px] font-bold tracking-widest text-gray-600 uppercase mb-1">Mood / Language</p>
+                        <p className="text-[13px] font-bold text-amber-400 truncate leading-tight">
+                          {Array.isArray(song.tags) && song.tags.length > 0
+                            ? song.tags.map(t => t.name).join(" • ")
+                            : <span className="text-gray-600">—</span>
+                          }
+                        </p>
                       </div>
-                      <p className="text-xs text-gray-400 dark:text-gray-500 font-medium shrink-0">
-                        {song.created_at ? new Date(song.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ""}
-                      </p>
+                      {/* Date chip */}
+                      <div className="rounded-xl px-3 py-2.5 flex items-center justify-between gap-1" style={{ background: "rgba(255,255,255,0.04)" }}>
+                        <div className="min-w-0">
+                          <p className="text-[9px] font-bold tracking-widest text-gray-600 uppercase mb-1">Created</p>
+                          <p className="text-[13px] font-bold text-white leading-tight">
+                            {song.created_at
+                              ? new Date(song.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase()
+                              : "—"}
+                          </p>
+                        </div>
+                        <BarChart2 size={20} className="text-indigo-500/60 shrink-0" />
+                      </div>
                     </div>
 
                   </div>
+
+                  {/* ── Action bar ── */}
+                  {!isSelectionMode && (
+                    <div className="flex items-stretch border-t border-white/[0.06]" style={{ background: "rgba(255,255,255,0.025)" }}
+                      onClick={e => e.stopPropagation()}>
+                      {canEditSong && (
+                        <>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); song.video_url ? onOpenVideo?.(song.video_url) : undefined; }}
+                            disabled={!song.video_url}
+                            className="flex-1 flex items-center justify-center gap-1.5 py-3.5 text-[11px] font-bold tracking-widest uppercase transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                            style={{ color: song.video_url ? "rgba(129,140,248,0.9)" : "rgba(156,163,175,0.4)" }}
+                            onMouseEnter={e => { if (song.video_url) e.currentTarget.style.color = "rgba(255,255,255,0.9)"; }}
+                            onMouseLeave={e => { e.currentTarget.style.color = song.video_url ? "rgba(129,140,248,0.9)" : "rgba(156,163,175,0.4)"; }}
+                          >
+                            <Play size={13} className={song.video_url ? "fill-current" : ""} />
+                            Watch Video
+                          </button>
+                          <div className="w-px bg-white/[0.06] self-stretch" />
+                        </>
+                      )}
+                      <AddToPlaylistBarBtn song={song} showToast={showToast} />
+                    </div>
+                  )}
+                  {isSelectionMode && (
+                    <div className="absolute top-3 right-3">
+                      {selectedSongIds.includes(song.id)
+                        ? <div className="bg-indigo-600 text-white p-1.5 rounded-lg"><Check size={14} /></div>
+                        : <div className="w-6 h-6 rounded-lg border-2 border-white/20" />}
+                    </div>
+                  )}
                 </div>
               ))}
               {!isLoadingSongs && (!Array.isArray(filteredSongs) || filteredSongs.length === 0) && (
@@ -1961,14 +2247,14 @@ showToast("error", "Failed to extract text from image. Please try again.");
 
           {/* ── LIST VIEW ─────────────────────────────────── */}
           {songView === "list" && (
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-0.5">
               {/* List header */}
               {!isLoadingSongs && Array.isArray(filteredSongs) && filteredSongs.length > 0 && (
-                <div className="hidden sm:grid grid-cols-[1fr_auto_auto_auto] gap-4 px-4 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                <div className="hidden sm:grid grid-cols-[1fr_auto_auto_auto] gap-4 px-4 pb-2 text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-500">
                   <span>Title / Artist</span>
-                  <span className="w-40 text-left">Tags</span>
-                  <span className="w-32 text-left">Added</span>
-                  <span className="w-6" />
+                  <span className="w-44 text-left">Tags</span>
+                  <span className="w-28 text-left">Added</span>
+                  <span className="w-16" />
                 </div>
               )}
 
@@ -1988,48 +2274,87 @@ showToast("error", "Failed to extract text from image. Please try again.");
                 <div
                   key={song.id}
                   onClick={() => isSelectionMode ? toggleSongSelection(song.id) : setSelectedSong(song)}
-                  className={`grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-2 sm:gap-4 items-center px-4 py-4 rounded-xl border cursor-pointer group transition-all duration-150 ${selectedSongIds.includes(song.id)
-                    ? "bg-indigo-50 dark:bg-indigo-900/20 border-indigo-300 dark:border-indigo-700"
-                    : "bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700/60 hover:bg-gray-50 dark:hover:bg-gray-700/50 hover:border-indigo-200 dark:hover:border-indigo-700/70"
-                    }`}
+                  className={`flex sm:grid sm:grid-cols-[1fr_auto_auto_auto] items-center gap-3 sm:gap-4 px-3 sm:px-4 py-3 rounded-xl border cursor-pointer group transition-all duration-150 ${
+                    selectedSongIds.includes(song.id)
+                      ? "border-indigo-600/50 ring-1 ring-indigo-500/30"
+                      : "border-white/[0.06] hover:border-indigo-500/30 hover:bg-white/[0.02]"
+                  }`}
+                  style={{ background: selectedSongIds.includes(song.id) ? "rgba(99,102,241,0.12)" : "#13151f" }}
                 >
-                  {/* Title + Artist */}
+                  {/* Selection checkbox */}
+                  {isSelectionMode && (
+                    <div className="shrink-0">
+                      {selectedSongIds.includes(song.id)
+                        ? <div className="bg-indigo-600 text-white p-1 rounded-md"><Check size={14} /></div>
+                        : <div className="border-2 border-white/20 rounded-md w-5 h-5" style={{ background: "rgba(255,255,255,0.04)" }} />}
+                    </div>
+                  )}
+
+                  {/* Col 1: Icon chip + Title + Artist */}
                   <div className="flex items-center gap-3 min-w-0">
-                    {isSelectionMode && (
-                      <div className="shrink-0">
-                        {selectedSongIds.includes(song.id)
-                          ? <div className="bg-indigo-600 text-white p-1 rounded-md"><Check size={14} /></div>
-                          : <div className="bg-white dark:bg-gray-700 border-2 border-gray-200 dark:border-gray-600 rounded-md w-5 h-5" />}
-                      </div>
-                    )}
+                    <div className="w-9 h-9 shrink-0 rounded-xl flex items-center justify-center"
+                      style={{ background: "rgba(99,102,241,0.18)", boxShadow: "0 0 0 1px rgba(99,102,241,0.2)" }}
+                    >
+                      <Music size={15} className="text-indigo-400" />
+                    </div>
                     <div className="min-w-0">
-                      <p className="font-bold text-sm text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate">{toSafeTitle(song.title)}</p>
-                      {song.artist && <p className="text-xs text-indigo-500 dark:text-indigo-400 font-semibold truncate">{song.artist}</p>}
+                      <p className="font-bold text-sm text-white group-hover:text-indigo-300 transition-colors truncate tracking-tight leading-snug">
+                        {toSafeTitle(song.title)}
+                      </p>
+                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                        {song.artist && (
+                          <span className="text-[11px] text-indigo-400 font-semibold truncate">{song.artist}</span>
+                        )}
+                        {/* Tags inline on mobile only */}
+                        {Array.isArray(song.tags) && song.tags.length > 0 && (
+                          <span className="sm:hidden inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border"
+                            style={{
+                              background: "rgba(255,255,255,0.04)",
+                              borderColor: "rgba(255,255,255,0.1)",
+                              color: "rgba(251,191,36,0.9)"
+                            }}>
+                            {song.tags.map(t => t.name).join(", ")}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  {/* Tags */}
-                  <div className="flex flex-wrap gap-1 w-40">
-                    {Array.isArray(song.tags) && song.tags.slice(0, 2).map((tag) => (
-                      <span key={tag.id} className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${tag.color}`}>{tag.name}</span>
-                    ))}
-                    {Array.isArray(song.tags) && song.tags.length > 2 && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">+{song.tags.length - 2}</span>
+
+                  {/* Col 2: Tags — desktop only */}
+                  <div className="hidden sm:block w-44 shrink-0">
+                    {Array.isArray(song.tags) && song.tags.length > 0 ? (
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-[11px] font-semibold border"
+                        style={{
+                          background: "rgba(255,255,255,0.04)",
+                          borderColor: "rgba(255,255,255,0.1)",
+                          color: "rgba(251,191,36,0.9)"
+                        }}>
+                        {song.tags.map(t => t.name).join(", ")}
+                      </span>
+                    ) : (
+                      <span className="text-gray-600 text-[11px]">—</span>
                     )}
                   </div>
-                  {/* Date */}
-                  <p className="text-[11px] text-gray-400 dark:text-gray-500 w-32 whitespace-nowrap">
+
+                  {/* Col 3: Date — desktop only */}
+                  <p className="hidden sm:block text-[11px] w-28 whitespace-nowrap tabular-nums" style={{ color: "rgba(156,163,175,0.7)" }}>
                     {song.created_at ? new Date(song.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : "—"}
                   </p>
-                  {/* Video + playlist icons */}
-                  <div className="w-14 flex items-center justify-end gap-0.5" onClick={e => e.stopPropagation()}>
+
+                  {/* Col 4: Actions */}
+                  <div className="flex items-center justify-end gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
                     {!isSelectionMode && <AddToPlaylistBtn song={song} showToast={showToast} />}
                     {song.video_url && !isSelectionMode && (
                       <button
                         onClick={(e) => { e.stopPropagation(); onOpenVideo?.(song.video_url!); }}
                         title="Watch Video"
-                        className="opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="w-8 h-8 flex items-center justify-center rounded-full transition-all hover:scale-105 active:scale-95 shrink-0"
+                        style={{
+                          background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+                          boxShadow: "0 2px 10px rgba(99,102,241,0.4)"
+                        }}
                       >
-                        <CustomYoutubeIcon size={17} />
+                        <Play size={13} className="text-white fill-white ml-0.5" />
                       </button>
                     )}
                   </div>

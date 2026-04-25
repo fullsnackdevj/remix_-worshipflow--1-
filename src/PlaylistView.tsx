@@ -6,7 +6,7 @@ import {
   Search, BookOpen, Guitar, MoreVertical, Copy, Shuffle,
   SkipBack, SkipForward, Repeat, Repeat1, Volume2, VolumeX,
   Mic2, Pencil, ArrowUp, ArrowDown, ChevronLeft, Share2, Globe, Link,
-  Image,
+  Image, GripVertical, Info,
 } from "lucide-react";
 import { Song } from "./types";
 import {
@@ -71,12 +71,12 @@ function EmojiPicker({ selected, onSelect, onClose }: {
 }
 
 // ── SoundBar animation — small 3-bar equalizer shown on the now-playing row ──
-function SoundBar() {
+function SoundBar({ color = "#818cf8" }: { color?: string }) {
   return (
     <span className="flex gap-px items-end" style={{ height: 14, width: 12 }}>
-      <span className="w-0.5 rounded-full bg-indigo-400" style={{ height: "60%", animation: "plSoundbar 0.5s ease-in-out infinite alternate" }} />
-      <span className="w-0.5 rounded-full bg-indigo-400" style={{ height: "100%", animation: "plSoundbar 0.5s ease-in-out 0.2s infinite alternate" }} />
-      <span className="w-0.5 rounded-full bg-indigo-400" style={{ height: "40%", animation: "plSoundbar 0.5s ease-in-out 0.1s infinite alternate" }} />
+      <span className="w-0.5 rounded-full" style={{ backgroundColor: color, height: "60%", animation: "plSoundbar 0.5s ease-in-out infinite alternate" }} />
+      <span className="w-0.5 rounded-full" style={{ backgroundColor: color, height: "100%", animation: "plSoundbar 0.5s ease-in-out 0.2s infinite alternate" }} />
+      <span className="w-0.5 rounded-full" style={{ backgroundColor: color, height: "40%", animation: "plSoundbar 0.5s ease-in-out 0.1s infinite alternate" }} />
     </span>
   );
 }
@@ -106,13 +106,32 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
   const [showEmojiPicker, setShowEmoji]   = useState(false);
   const [editingId, setEditingId]         = useState<string | null>(null);
   const [editName, setEditName]           = useState("");
+  const [editModalName, setEditModalName]   = useState("");
+  const [editModalEmoji, setEditModalEmoji] = useState("🎵");
+  const [showEditModalEmoji, setShowEditModalEmoji] = useState(false);
   const [menuId, setMenuId]               = useState<string | null>(null);
   const [searchQ, setSearchQ]             = useState("");
   const [lyricTab, setLyricTab]           = useState<"lyrics" | "chords">("lyrics");
   const [dragId, setDragId]               = useState<string | null>(null);
   const [dragOver, setDragOver]           = useState<number | null>(null);
+  // Pointer-based drag refs (works on both mouse and touch)
+  const pointerDragId    = useRef<string | null>(null);
+  const pointerGhost     = useRef<HTMLElement | null>(null);
+  const pointerOffsetY   = useRef(0);
   const [editSongId, setEditSongId]       = useState<string | null>(null);
-  const [mobileShowList, setMobileShowList]     = useState(!activeId); // mobile: show list or content
+  const [showHowTo, setShowHowTo]         = useState(false);
+  // Blink the ℹ️ button for the first 3 visits to the playlist module
+  const [infoBlinking] = useState(() => {
+    try {
+      const v = parseInt(localStorage.getItem("wf_playlist_info_visits") ?? "0", 10);
+      const next = v + 1;
+      localStorage.setItem("wf_playlist_info_visits", String(next));
+      return next <= 3;
+    } catch { return false; }
+  });
+
+  // Always land on the playlist list when the module is first opened
+  const [mobileShowList, setMobileShowList]     = useState(true); // always show list on mount
   const [mobileLyricsOpen, setMobileLyricsOpen] = useState(false);    // mobile: lyrics/chords sheet
   const [mobileLyricTab, setMobileLyricTab]     = useState<"lyrics" | "chords">("lyrics");
 
@@ -151,34 +170,25 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
     const existingSlug = pl.publishedSlug ?? "";
     const defaultSlug  = existingSlug || toSlug(pl.name);
 
-    // Reset everything first — modal opens immediately
+    // Pre-fill from local playlist fields immediately (no loading flicker)
     setShareModalPlaylistId(pl.id);
     setShareSlug(defaultSlug);
-    setShareDescription("");
-    setShareBannerUrl("");
-    setShareBannerUrlInput("");
+    setShareDescription(pl.description ?? "");
+    setShareBannerUrl(pl.bannerUrl ?? "");
+    setShareBannerUrlInput(pl.bannerUrl ?? "");
     setShareBannerFile(null);
-    setShareBannerPreview("");
-    setShareAccentColor("");
+    setShareBannerPreview(pl.bannerUrl ?? "");
+    setShareAccentColor(pl.accentColor ?? "");
     setShareLinkCopied(false);
     setMenuId(null);
+    // Pre-fill name & emoji from current playlist
+    setEditModalName(pl.name);
+    setEditModalEmoji(pl.emoji ?? "🎵");
+    setShowEditModalEmoji(false);
 
     if (existingSlug) {
       setShareSlugAvailable(true);
       setSharePublishedSlug(existingSlug);
-
-      // ── Restore saved data from Firestore (description, banner, accent) ──
-      setShareModalLoading(true);
-      try {
-        const res  = await fetch(`/api/public-playlist/${existingSlug}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.description) setShareDescription(data.description);
-          if (data.bannerUrl)   { setShareBannerUrl(data.bannerUrl); setShareBannerUrlInput(data.bannerUrl); setShareBannerPreview(data.bannerUrl); }
-          if (data.accentColor) setShareAccentColor(data.accentColor);
-        }
-      } catch { /* silently skip if API is unavailable */ }
-      finally  { setShareModalLoading(false); }
     } else {
       setShareSlugAvailable(null);
       setSharePublishedSlug(null);
@@ -262,10 +272,16 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
       const d = await r.json();
       if (!r.ok) { showToast("error", d.error ?? "Failed to publish"); return; }
 
-      // ── Persist slug & banner back to playlist state ──────────────────────
+      // ── Persist slug, banner, accent, description back to playlist state ──
       setPlaylists(prev =>
         prev.map(x => x.id === shareModalPlaylistId
-          ? { ...x, publishedSlug: shareSlug }
+          ? {
+              ...x,
+              publishedSlug: shareSlug,
+              bannerUrl: resolvedBannerUrl || undefined,
+              accentColor: shareAccentColor || undefined,
+              description: shareDescription || undefined,
+            }
           : x
         )
       );
@@ -637,19 +653,93 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
   };
 
   // ── Drag-to-reorder ────────────────────────────────────────────────────────
-  const handleDrop = (targetIdx: number) => {
-    if (!dragId || !activePlaylist) return;
+  const handleDrop = (targetIdx: number, srcId?: string) => {
+    const id = srcId ?? dragId;
+    if (!id || !activePlaylist) return;
     const ids = [...activePlaylist.songIds];
-    const from = ids.indexOf(dragId);
+    const from = ids.indexOf(id);
     if (from === -1) return;
     ids.splice(from, 1);
-    ids.splice(targetIdx, 0, dragId);
+    ids.splice(targetIdx, 0, id);
     setPlaylists(p => p.map(x =>
       x.id === activePlaylist.id
         ? { ...x, songIds: ids, updatedAt: new Date().toISOString() }
         : x,
     ));
     setDragId(null); setDragOver(null);
+  };
+
+  // ── Pointer-based drag (works on desktop mouse + mobile touch) ──────────────
+  const onGripPointerDown = (e: React.PointerEvent, songId: string, songTitle: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+
+    pointerDragId.current = songId;
+    pointerOffsetY.current = 16; // offset below pointer tip
+    setDragId(songId);
+
+    // Build a clean, minimal ghost pill
+    const ghost = document.createElement("div");
+    ghost.setAttribute("aria-hidden", "true");
+    ghost.style.cssText = [
+      "position:fixed",
+      `left:${e.clientX - 12}px`,
+      `top:${e.clientY + pointerOffsetY.current}px`,
+      "padding:8px 14px",
+      "background:rgba(15,17,23,0.95)",
+      "backdrop-filter:blur(12px)",
+      "border:1px solid rgba(255,255,255,0.12)",
+      "border-radius:12px",
+      "box-shadow:0 12px 40px rgba(0,0,0,0.5)",
+      "color:white",
+      "font-size:13px",
+      "font-weight:600",
+      "font-family:inherit",
+      "pointer-events:none",
+      "z-index:99999",
+      "white-space:nowrap",
+      "display:flex",
+      "align-items:center",
+      "gap:8px",
+      "user-select:none",
+      "transform:rotate(-1deg)",
+      "transition:transform 0.1s ease",
+    ].join(";");
+    ghost.innerHTML = `<span style="opacity:0.5;font-size:11px">≡</span> ${songTitle}`;
+    document.body.appendChild(ghost);
+    pointerGhost.current = ghost;
+  };
+
+  const onGripPointerMove = (e: React.PointerEvent) => {
+    if (!pointerDragId.current) return;
+    e.preventDefault();
+    // Move ghost
+    if (pointerGhost.current) {
+      pointerGhost.current.style.left = `${e.clientX - 12}px`;
+      pointerGhost.current.style.top  = `${e.clientY + pointerOffsetY.current}px`;
+    }
+    // Find hover target row
+    if (pointerGhost.current) pointerGhost.current.style.display = "none";
+    const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+    if (pointerGhost.current) pointerGhost.current.style.display = "";
+    const row = el?.closest("[data-song-idx]") as HTMLElement | null;
+    const idxStr = row?.dataset.songIdx;
+    if (idxStr !== undefined) setDragOver(parseInt(idxStr, 10));
+  };
+
+  const onGripPointerUp = (e: React.PointerEvent) => {
+    if (!pointerDragId.current) return;
+    // Remove ghost
+    if (pointerGhost.current) {
+      document.body.removeChild(pointerGhost.current);
+      pointerGhost.current = null;
+    }
+    // Drop
+    if (dragOver !== null) handleDrop(dragOver, pointerDragId.current);
+    pointerDragId.current = null;
+    setDragId(null);
+    setDragOver(null);
   };
 
   // ── Lyrics renderer ────────────────────────────────────────────────────────
@@ -689,12 +779,22 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
               <ListMusic size={16} className="text-indigo-400 shrink-0" />
               <span className="text-sm font-bold text-gray-900 dark:text-white tracking-tight">My Playlists</span>
             </div>
-            <button
-              onClick={() => setCreating(v => !v)}
-              title="New playlist"
-              className="p-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors shrink-0">
-              <Plus size={15} />
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => { setShowHowTo(true); }}
+                title="How to use Playlist"
+                className={`relative w-9 h-9 flex items-center justify-center rounded-lg text-gray-400 dark:text-gray-500 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors shrink-0 ${
+                  infoBlinking ? "ring-2 ring-indigo-400 animate-pulse" : ""
+                }`}>
+                <Info size={16} />
+              </button>
+              <button
+                onClick={() => setCreating(v => !v)}
+                title="New playlist"
+                className="w-9 h-9 flex items-center justify-center rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors shrink-0">
+                <Plus size={15} />
+              </button>
+            </div>
           </div>
 
           {/* Create form */}
@@ -782,7 +882,7 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
                         <MoreVertical size={15} />
                       </button>
                       {menuId === pl.id && (
-                        <div className="absolute right-0 top-full mt-1 w-40 bg-white dark:bg-[#1a1f2e] border border-gray-200 dark:border-gray-700/80 rounded-xl shadow-xl z-[400] overflow-hidden">
+                        <div className="absolute right-0 top-full mt-1 w-44 bg-white dark:bg-[#1a1f2e] border border-gray-200 dark:border-gray-700/80 rounded-xl shadow-xl z-[400] overflow-hidden">
                           {onNavigateToSongs && (
                             <button onClick={() => { setMenuId(null); onNavigateToSongs(); }}
                               className="flex items-center gap-2 w-full px-3 py-2.5 text-sm text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:text-indigo-300 dark:hover:text-indigo-200 transition-colors text-left">
@@ -791,14 +891,10 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
                           )}
                           {onNavigateToSongs && <div className="h-px bg-gray-200 dark:bg-gray-800 mx-2" />}
                           <button onClick={() => openShareModal(pl)}
-                            className="flex items-center gap-2 w-full px-3 py-2.5 text-sm text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors text-left">
-                            <Share2 size={12} /> Share Link
+                            className="flex items-center gap-2 w-full px-3 py-2.5 text-sm text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 hover:text-indigo-300 transition-colors text-left">
+                            <Edit3 size={12} /> Edit Playlist
                           </button>
                           <div className="h-px bg-gray-200 dark:bg-gray-800 mx-2" />
-                          <button onClick={() => { setEditingId(pl.id); setEditName(pl.name); setMenuId(null); }}
-                            className="flex items-center gap-2 w-full px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition-colors text-left">
-                            <Edit3 size={12} /> Rename
-                          </button>
                           <button onClick={() => duplicatePlaylist(pl)}
                             className="flex items-center gap-2 w-full px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition-colors text-left">
                             <Copy size={12} /> Duplicate
@@ -827,12 +923,22 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
                 <ListMusic size={20} className="text-indigo-400 shrink-0" />
                 <span className="text-base font-bold text-gray-900 dark:text-white tracking-tight">My Playlists</span>
               </div>
-              <button
-                onClick={() => setCreating(v => !v)}
-                title="New playlist"
-                className="p-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white transition-colors shrink-0 active:scale-95">
-                <Plus size={18} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setShowHowTo(true); }}
+                  title="How to use Playlist"
+                  className={`relative w-11 h-11 flex items-center justify-center rounded-xl text-gray-400 dark:text-gray-500 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors shrink-0 active:scale-95 ${
+                    infoBlinking ? "ring-2 ring-indigo-400 animate-pulse" : ""
+                  }`}>
+                  <Info size={20} />
+                </button>
+                <button
+                  onClick={() => setCreating(v => !v)}
+                  title="New playlist"
+                  className="w-11 h-11 flex items-center justify-center rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white transition-colors shrink-0 active:scale-95">
+                  <Plus size={18} />
+                </button>
+              </div>
             </div>
 
             {/* Create form */}
@@ -918,14 +1024,10 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
                               )}
                               {onNavigateToSongs && <div className="h-px bg-gray-200 dark:bg-gray-800 mx-3" />}
                               <button onClick={e => { e.stopPropagation(); openShareModal(pl); }}
-                                className="flex items-center gap-3 w-full px-4 py-4 text-base text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors text-left">
-                                <Share2 size={16} /> Share Link
+                                className="flex items-center gap-3 w-full px-4 py-4 text-base text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 hover:text-indigo-300 transition-colors text-left">
+                                <Edit3 size={16} /> Edit Playlist
                               </button>
                               <div className="h-px bg-gray-200 dark:bg-gray-800 mx-3" />
-                              <button onClick={e => { e.stopPropagation(); setEditingId(pl.id); setEditName(pl.name); setMenuId(null); }}
-                                className="flex items-center gap-3 w-full px-4 py-4 text-base text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition-colors text-left">
-                                <Edit3 size={16} /> Rename
-                              </button>
                               <button onClick={e => { e.stopPropagation(); duplicatePlaylist(pl); }}
                                 className="flex items-center gap-3 w-full px-4 py-4 text-base text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition-colors text-left">
                                 <Copy size={16} /> Duplicate
@@ -948,7 +1050,7 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
         )}
 
         {/* ── CENTER: Track list (hidden on mobile when list panel is showing) ─────── */}
-        <div className={`flex-col flex-1 min-w-0 overflow-hidden ${activePlaylist ? "border-r border-gray-200 dark:border-gray-800/50" : ""} ${
+        <div className={`flex-col flex-1 min-w-0 overflow-hidden border-r border-gray-200 dark:border-gray-800/50 ${
           mobileShowList ? "hidden lg:flex" : "flex"
         }`}>
 
@@ -1021,7 +1123,13 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
           ) : (
             <>
               {/* ── Playlist header ── */}
-              <div className="shrink-0 bg-gradient-to-b from-indigo-50 dark:from-indigo-950/50 via-white dark:via-[#0d0f14]/80 to-gray-50 dark:to-[#0d0f14] px-4 pt-3 pb-3">
+              <div
+                className={`shrink-0 px-4 pt-3 pb-3 ${!activePlaylist.accentColor ? "bg-gradient-to-b from-indigo-50 dark:from-indigo-950/50 via-white dark:via-[#0d0f14]/80 to-gray-50 dark:to-[#0d0f14]" : ""}`}
+                style={activePlaylist.accentColor
+                  ? { background: `linear-gradient(to bottom, ${activePlaylist.accentColor}30, ${activePlaylist.accentColor}08, transparent)` }
+                  : undefined
+                }
+              >
                 {/* Mobile back button */}
                 <button
                   onClick={() => { setMobileShowList(true); setEditingId(null); setMenuId(null); }}
@@ -1030,30 +1138,40 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
                   <ChevronLeft size={18} />
                   All Playlists
                 </button>
-                {/* Desktop back button — returns to the playlist grid/list */}
-                <button
-                  onClick={() => { setActiveId(null); setEditingId(null); setMenuId(null); }}
-                  className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-gray-100 dark:bg-gray-800/70 hover:bg-gray-200 dark:hover:bg-gray-700/80 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-medium transition-all mb-3 active:scale-95 self-start"
-                >
-                  <ChevronLeft size={15} />
-                  All Playlists
-                </button>
                 <div className="flex items-center gap-4">
-                  {/* Cover art — comfortable on mobile */}
-                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-br from-indigo-200 dark:from-indigo-700/60 to-purple-200 dark:to-purple-900/60 border border-indigo-200 dark:border-indigo-600/20 flex items-center justify-center text-4xl sm:text-5xl shadow-xl shrink-0 select-none">
-                    {activePlaylist.emoji ?? "🎵"}
+                  {/* Cover art — shows banner image if set, otherwise emoji */}
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl border border-indigo-200 dark:border-indigo-600/20 shadow-xl shrink-0 select-none overflow-hidden relative"
+                    style={{ background: activePlaylist.accentColor ? `${activePlaylist.accentColor}30` : undefined }}
+                  >
+                    {activePlaylist.bannerUrl ? (
+                      <img src={activePlaylist.bannerUrl} alt={activePlaylist.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-4xl sm:text-5xl bg-gradient-to-br from-indigo-200 dark:from-indigo-700/60 to-purple-200 dark:to-purple-900/60">
+                        {activePlaylist.emoji ?? "🎵"}
+                      </div>
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-0.5">Playlist</p>
+                    <p
+                      className="text-xs font-bold uppercase tracking-widest mb-0.5 text-indigo-400"
+                      style={activePlaylist.accentColor ? { color: activePlaylist.accentColor } : undefined}
+                    >
+                      Playlist
+                    </p>
                     <h2 className="text-lg sm:text-xl font-black text-gray-900 dark:text-white leading-tight truncate">{activePlaylist.name}</h2>
                     <div className="flex items-center gap-2 flex-wrap mt-0.5">
                       <p className="text-sm text-gray-500 whitespace-nowrap shrink-0">
                         {activePlaylist.songIds.length} {activePlaylist.songIds.length === 1 ? "song" : "songs"}
                       </p>
-                      {currentSong && <p className="text-sm text-indigo-400 truncate min-w-0">· {currentSong.title}</p>}
+                      {currentSong && (
+                        <p
+                          className="text-sm truncate min-w-0 text-indigo-400"
+                          style={activePlaylist.accentColor ? { color: activePlaylist.accentColor } : undefined}
+                        >· {currentSong.title}</p>
+                      )}
                     </div>
                     {/* Buttons — bigger for comfortable tapping */}
-                    <div className="flex items-center gap-2 mt-3 flex-wrap">
+                    <div className="flex items-center gap-2 mt-3">
                       <button
                         onClick={() => {
                           if (!hasSongs) return;
@@ -1061,27 +1179,29 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
                           else playSong(playlistSongs[0].id);
                         }}
                         disabled={!hasSongs}
-                        className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white font-bold text-sm transition-all active:scale-95 shadow-md">
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-full disabled:opacity-40 text-white font-bold text-sm whitespace-nowrap transition-all active:scale-95 shadow-md"
+                        style={{ background: activePlaylist.accentColor || "#4f46e5" }}
+                      >
                         {isPlaying && currentSong
-                          ? <><Pause size={14} className="fill-white" /> Pause</>
-                          : <><Play size={14} className="fill-white" /> Play All</>
+                          ? <><Pause size={14} className="fill-white shrink-0" /> Pause</>
+                          : <><Play size={14} className="fill-white shrink-0" /> Play All</>
                         }
                       </button>
                       <button
                         onClick={doShuffle}
                         disabled={!hasSongs}
-                        className={`flex items-center gap-2 px-4 py-2.5 rounded-full font-bold text-sm transition-all active:scale-95 disabled:opacity-40 ${
+                        className={`flex items-center gap-2 px-4 py-2.5 rounded-full font-bold text-sm whitespace-nowrap transition-all active:scale-95 disabled:opacity-40 ${
                           isShuffle ? "bg-emerald-600/80 text-white" : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
                         }`}>
-                        <Shuffle size={14} /> Shuffle
+                        <Shuffle size={14} className="shrink-0" /> Shuffle
                       </button>
-                      {currentSong && (
-                        <button
-                          onClick={() => setMobileLyricsOpen(true)}
-                          className="lg:hidden flex items-center gap-2 px-4 py-2.5 rounded-full font-bold text-sm bg-purple-700/60 hover:bg-purple-700 text-white transition-all active:scale-95">
-                          <BookOpen size={14} /> Lyrics
-                        </button>
-                      )}
+                      <button
+                        onClick={() => currentSong && setMobileLyricsOpen(true)}
+                        className={`lg:hidden flex items-center gap-2 px-4 py-2.5 rounded-full font-bold text-sm bg-purple-700/60 hover:bg-purple-700 text-white transition-all active:scale-95 ${
+                          currentSong ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+                        }`}>
+                        <BookOpen size={14} /> Lyrics
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1106,9 +1226,10 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
 
               {/* ── Column headers ── */}
               <div className="px-5 shrink-0 border-b border-gray-200 dark:border-gray-800/40 pb-1.5 mb-0.5">
-                <div className="grid items-center text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-600 px-1" style={{ gridTemplateColumns: "2.5rem 1fr 3rem" }}>
+                <div className="grid items-center text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-600 px-1" style={{ gridTemplateColumns: "2rem 1fr 2.5rem 2.5rem" }}>
                   <span className="text-center">#</span>
                   <span>Title</span>
+                  <span />
                   <span />
                 </div>
               </div>
@@ -1151,28 +1272,37 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
                       return (
                         <div
                           key={song.id}
-                          draggable
-                          onDragStart={() => setDragId(song.id)}
-                          onDragEnter={() => setDragOver(idx)}
-                          onDragOver={e => e.preventDefault()}
-                          onDrop={() => handleDrop(idx)}
-                          onDragEnd={() => { setDragId(null); setDragOver(null); }}
-                          onClick={() => playSong(song.id)}
+                          data-song-idx={idx}
+                          data-song-id={song.id}
+                          onClick={() => { if (!pointerDragId.current) playSong(song.id); }}
                           className={`group grid items-center px-2 py-3.5 rounded-2xl cursor-pointer transition-all duration-100 select-none ${
                             isNow
-                              ? "bg-indigo-50 dark:bg-indigo-500/15 ring-1 ring-indigo-200 dark:ring-indigo-500/20"
+                              ? ""
                               : dragOver === idx && dragId !== song.id
-                                ? "bg-indigo-50 dark:bg-indigo-500/10 ring-1 ring-indigo-300 dark:ring-indigo-500/30"
+                                ? "ring-1 ring-inset"
                                 : "hover:bg-gray-100 dark:hover:bg-gray-800/50"
                           }`}
-                          style={{ gridTemplateColumns: "2.5rem 1fr 3rem" }}
+                          style={{
+                            gridTemplateColumns: "2rem 1fr 2.5rem 2.5rem",
+                            ...(isNow ? {
+                              background: activePlaylist.accentColor
+                                ? `${activePlaylist.accentColor}20`
+                                : "rgba(99,102,241,0.12)",
+                              boxShadow: `inset 0 0 0 1px ${activePlaylist.accentColor || "#6366f1"}33`,
+                            } : dragOver === idx && dragId !== song.id ? {
+                              background: activePlaylist.accentColor
+                                ? `${activePlaylist.accentColor}12`
+                                : "rgba(99,102,241,0.08)",
+                              boxShadow: `inset 0 0 0 1px ${activePlaylist.accentColor || "#6366f1"}44`,
+                            } : {}),
+                          }}
                         >
                           {/* # or playing indicator */}
                           <div className="flex items-center justify-center w-full">
                             {isNow && isPlaying
-                              ? <SoundBar />
+                              ? <SoundBar color={activePlaylist.accentColor || "#818cf8"} />
                               : isNow
-                                ? <Music size={16} className="text-indigo-400" />
+                                ? <Music size={16} style={{ color: activePlaylist.accentColor || "#818cf8" }} />
                                 : <>
                                     <span className="text-sm text-gray-500 dark:text-gray-600 group-hover:hidden tabular-nums">{idx + 1}</span>
                                     <Play size={16} className="hidden group-hover:block text-gray-700 dark:text-white fill-gray-700 dark:fill-white" />
@@ -1182,19 +1312,57 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
 
                           {/* Title / artist */}
                           <div className="min-w-0 pr-2">
-                            <p className={`text-base font-semibold truncate ${isNow ? "text-indigo-600 dark:text-indigo-300" : "text-gray-900 dark:text-white"}`}>{song.title}</p>
+                            <p
+                              className={`text-base font-semibold truncate ${isNow ? "" : "text-gray-900 dark:text-white"}`}
+                              style={isNow ? { color: activePlaylist.accentColor || "#818cf8" } : undefined}
+                            >{song.title}</p>
                             {song.artist && <p className="text-sm text-gray-500 truncate mt-0.5">{song.artist}</p>}
                           </div>
 
-                          {/* Song actions — fat touch target */}
-                          <div className="flex items-center justify-center">
+                          {/* Grip handle — pointer drag initiator (works on mouse + touch) */}
+                          <div
+                            className="flex items-center justify-center touch-none cursor-grab active:cursor-grabbing"
+                            onPointerDown={e => onGripPointerDown(e, song.id, song.title)}
+                            onPointerMove={onGripPointerMove}
+                            onPointerUp={onGripPointerUp}
+                            onPointerCancel={onGripPointerUp}
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <GripVertical size={16} className="text-gray-400 dark:text-gray-600" />
+                          </div>
+
+                          {/* Song actions — inline dropdown anchored to button */}
+                          <div className="relative flex items-center justify-center" onClick={e => e.stopPropagation()}>
                             <button
-                              onClick={e => { e.stopPropagation(); setEditSongId(song.id); }}
+                              onClick={e => {
+                                e.stopPropagation();
+                                setEditSongId(editSongId === song.id ? null : song.id);
+                              }}
                               title="Song options"
-                              className="w-11 h-11 flex items-center justify-center rounded-xl text-gray-400 dark:text-gray-600 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/60 transition-all active:scale-90"
+                              className="w-11 h-11 flex items-center justify-center rounded-xl text-gray-400 dark:text-gray-600 hover:text-gray-300 hover:bg-white/[0.06] transition-all active:scale-90"
                             >
                               <MoreVertical size={18} />
                             </button>
+
+                            {/* Dropdown — absolute, anchored right-edge above button */}
+                            {editSongId === song.id && (
+                              <>
+                                {/* Backdrop */}
+                                <div className="fixed inset-0 z-[99998]" onClick={() => setEditSongId(null)} />
+                                <div className="absolute right-full top-1/2 -translate-y-1/2 mr-2 z-[99999] rounded-xl overflow-hidden shadow-2xl border border-white/10 w-44">
+                                  <button
+                                    onClick={() => {
+                                      if (activePlaylist) removeSong(activePlaylist.id, song.id);
+                                      setEditSongId(null);
+                                    }}
+                                    className="flex items-center gap-2.5 w-full px-4 py-3 text-sm font-semibold text-red-400 bg-gray-900 hover:bg-red-950/60 transition-colors active:scale-95"
+                                  >
+                                    <Trash2 size={14} className="shrink-0" />
+                                    Remove from Playlist
+                                  </button>
+                                </div>
+                              </>
+                            )}
                           </div>
                         </div>
                       );
@@ -1206,88 +1374,96 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
           )}
         </div>
 
-        {/* ── Song Edit Action Sheet ───────────────────────────────────────── */}
-        {editSongId && activePlaylist && (() => {
-          const editSong = playlistSongs.find(s => s.id === editSongId);
-          const editIdx  = playlistSongs.findIndex(s => s.id === editSongId);
-          if (!editSong) return null;
-          return (
-            <>
-              {/* Backdrop */}
-              <div
-                className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
-                onClick={() => setEditSongId(null)}
-              />
-              {/* Sheet */}
-              <div className="fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-[#13151c] border-t border-gray-200 dark:border-gray-700/60 rounded-t-2xl shadow-2xl animate-slide-up">
-                {/* Handle */}
-                <div className="flex justify-center pt-3 pb-1">
-                  <div className="w-10 h-1 rounded-full bg-gray-300 dark:bg-gray-700" />
+        {/* ── How-To Modal ─────────────────────────────────────────────────── */}
+        {showHowTo && (
+          <>
+            <div className="fixed inset-0 z-[55] bg-black/70 backdrop-blur-sm" onClick={() => setShowHowTo(false)} />
+            <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-[60] max-w-lg mx-auto bg-[#13151c] border border-gray-700/60 rounded-3xl shadow-2xl overflow-hidden">
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-800/50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-indigo-600/20 flex items-center justify-center">
+                    <ListMusic size={20} className="text-indigo-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-bold text-white">How to Use Playlist</h2>
+                    <p className="text-xs text-gray-500 mt-0.5">Your worship setlist manager</p>
+                  </div>
                 </div>
-                {/* Song info */}
-                <div className="px-5 py-3 border-b border-gray-200 dark:border-gray-800/60">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-500 dark:text-indigo-400 mb-0.5">Editing</p>
-                  <p className="text-base font-bold text-gray-900 dark:text-white truncate">{editSong.title}</p>
-                  {editSong.artist && <p className="text-xs text-gray-500 truncate">{editSong.artist}</p>}
-                </div>
-                {/* Actions */}
-                <div className="px-4 py-3 flex flex-col gap-2">
-                  {/* Move Up */}
-                  <button
-                    disabled={editIdx === 0}
-                    onClick={() => {
-                      if (editIdx <= 0) return;
-                      const ids = [...activePlaylist.songIds];
-                      [ids[editIdx - 1], ids[editIdx]] = [ids[editIdx], ids[editIdx - 1]];
-                      setPlaylists(p => p.map(x => x.id === activePlaylist.id ? { ...x, songIds: ids, updatedAt: new Date().toISOString() } : x));
-                      setEditSongId(null);
-                      showToast("success", "Moved up.");
-                    }}
-                    className="flex items-center gap-3 w-full px-4 py-3.5 rounded-xl bg-gray-100 dark:bg-gray-800/60 hover:bg-gray-200 dark:hover:bg-gray-700/60 disabled:opacity-30 disabled:cursor-not-allowed text-gray-800 dark:text-white font-medium text-sm transition-all active:scale-[0.98]"
-                  >
-                    <ArrowUp size={17} className="text-indigo-500 dark:text-indigo-400 shrink-0" />
-                    Move Up
-                  </button>
-                  {/* Move Down */}
-                  <button
-                    disabled={editIdx === playlistSongs.length - 1}
-                    onClick={() => {
-                      if (editIdx >= playlistSongs.length - 1) return;
-                      const ids = [...activePlaylist.songIds];
-                      [ids[editIdx], ids[editIdx + 1]] = [ids[editIdx + 1], ids[editIdx]];
-                      setPlaylists(p => p.map(x => x.id === activePlaylist.id ? { ...x, songIds: ids, updatedAt: new Date().toISOString() } : x));
-                      setEditSongId(null);
-                      showToast("success", "Moved down.");
-                    }}
-                    className="flex items-center gap-3 w-full px-4 py-3.5 rounded-xl bg-gray-100 dark:bg-gray-800/60 hover:bg-gray-200 dark:hover:bg-gray-700/60 disabled:opacity-30 disabled:cursor-not-allowed text-gray-800 dark:text-white font-medium text-sm transition-all active:scale-[0.98]"
-                  >
-                    <ArrowDown size={17} className="text-indigo-500 dark:text-indigo-400 shrink-0" />
-                    Move Down
-                  </button>
-                  {/* Remove */}
-                  <button
-                    onClick={() => {
-                      removeSong(activePlaylist.id, editSongId);
-                      setEditSongId(null);
-                    }}
-                    className="flex items-center gap-3 w-full px-4 py-3.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 font-medium text-sm transition-all active:scale-[0.98]"
-                  >
-                    <Trash2 size={17} className="shrink-0" />
-                    Remove from Playlist
-                  </button>
-                  {/* Cancel */}
-                  <button
-                    onClick={() => setEditSongId(null)}
-                    className="flex items-center justify-center gap-3 w-full px-4 py-3.5 rounded-xl bg-gray-100 dark:bg-gray-900 hover:bg-gray-200 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400 font-medium text-sm transition-all active:scale-[0.98] mt-1"
-                  >
-                    Cancel
-                  </button>
-                </div>
-                <div className="pb-safe pb-4" />
+                <button onClick={() => setShowHowTo(false)} className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-500 hover:text-white hover:bg-gray-800 transition-colors">
+                  <X size={16} />
+                </button>
               </div>
-            </>
-          );
-        })()} 
+
+              {/* Steps */}
+              <div className="px-6 py-5 space-y-5 overflow-y-auto max-h-[70vh]">
+                {[
+                  {
+                    num: "1",
+                    color: "bg-indigo-500",
+                    title: "Create a Playlist",
+                    desc: "Tap the blue + button (top-right of this panel). Type a name, optionally pick an emoji, then press Enter or tap the ✓ checkmark to save.",
+                  },
+                  {
+                    num: "2",
+                    color: "bg-violet-500",
+                    title: "Add Songs to a Playlist",
+                    desc: "Open a playlist, then tap its ⋮ (three dots) menu → 'Add Songs'. This takes you to Song Management where each song has a playlist icon (🎵). Tap that icon on any song to add it instantly.",
+                  },
+                  {
+                    num: "3",
+                    color: "bg-blue-500",
+                    title: "Play a Song",
+                    desc: "Open a playlist and tap any song row once — it starts playing immediately. The song title and a sound wave indicator will highlight the active track.",
+                  },
+                  {
+                    num: "4",
+                    color: "bg-green-500",
+                    title: "Player Controls",
+                    desc: "The player bar appears at the bottom once a song is playing. Use Play/Pause, Skip Back/Forward, Shuffle, and Repeat controls. Tap 'Play All' in the playlist header to start from the first song.",
+                  },
+                  {
+                    num: "5",
+                    color: "bg-amber-500",
+                    title: "Reorder Songs",
+                    desc: "Press and hold the ⠿ grip handle (right side of a song row) then drag up or down to reorder. Works with both mouse and touch — just hold until the ghost appears, then drag.",
+                  },
+                  {
+                    num: "6",
+                    color: "bg-pink-500",
+                    title: "Remove a Song",
+                    desc: "Tap the ⋮ (three dots) on the right of any song row. A 'Remove from Playlist' option appears to the left of the button — tap it to remove the song.",
+                  },
+                  {
+                    num: "7",
+                    color: "bg-rose-500",
+                    title: "Edit Playlist & Share",
+                    desc: "Hover or long-press a playlist in the sidebar → tap ⋮ → 'Edit Playlist'. Here you can rename, change emoji, set a banner image, pick a theme colour, and publish a public shareable link that anyone can open without logging in.",
+                  },
+                ].map(step => (
+                  <div key={step.num} className="flex gap-4">
+                    <div className={`w-7 h-7 rounded-full ${step.color} flex items-center justify-center text-white text-xs font-bold shrink-0 mt-0.5`}>
+                      {step.num}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-white">{step.title}</p>
+                      <p className="text-xs text-gray-400 leading-relaxed mt-0.5">{step.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-4 border-t border-gray-800/50">
+                <button
+                  onClick={() => setShowHowTo(false)}
+                  className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold transition-colors active:scale-95">
+                  Got it!
+                </button>
+              </div>
+            </div>
+          </>
+        )}
 
         {/* ── Share / Publish Modal ─────────────────────────────────────────── */}
         {shareModalPlaylistId && (() => {
@@ -1303,12 +1479,12 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-800/50">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-emerald-600/20 flex items-center justify-center">
-                      <Globe size={18} className="text-emerald-400" />
+                    <div className="w-10 h-10 rounded-2xl bg-indigo-600/20 flex items-center justify-center">
+                      <Pencil size={18} className="text-indigo-400" />
                     </div>
                     <div>
-                      <h2 className="text-base font-bold text-white">Share Public Link</h2>
-                      <p className="text-xs text-gray-500">{pl.emoji} {pl.name}</p>
+                      <h2 className="text-base font-bold text-white">Edit Playlist</h2>
+                      <p className="text-xs text-gray-500">{editModalEmoji} {editModalName || pl.name}</p>
                     </div>
                   </div>
                   <button onClick={() => setShareModalPlaylistId(null)}
@@ -1318,6 +1494,39 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
                 </div>
 
                 <div className="px-6 py-5 space-y-5 overflow-y-auto" style={{ maxHeight: "calc(90vh - 160px)" }}>
+
+                  {/* ── Playlist Identity (Name + Emoji) ─────────────────── */}
+                  <div>
+                    <label className="text-xs font-bold uppercase tracking-widest text-gray-500 block mb-2">Playlist Name</label>
+                    <div className="flex items-center gap-3">
+                      <div className="relative shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setShowEditModalEmoji(v => !v)}
+                          className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl hover:bg-gray-800 transition-colors border border-gray-700/60"
+                          style={{ background: "rgba(255,255,255,0.04)" }}
+                        >
+                          {editModalEmoji}
+                        </button>
+                        {showEditModalEmoji && (
+                          <EmojiPicker
+                            selected={editModalEmoji}
+                            onSelect={e => { setEditModalEmoji(e); setShowEditModalEmoji(false); }}
+                            onClose={() => setShowEditModalEmoji(false)}
+                          />
+                        )}
+                      </div>
+                      <input
+                        value={editModalName}
+                        onChange={e => setEditModalName(e.target.value)}
+                        placeholder="Playlist name…"
+                        className="flex-1 px-4 py-3 bg-gray-800/60 border border-gray-700/60 rounded-xl text-sm text-white outline-none focus:border-indigo-500/60 transition-colors"
+                        maxLength={80}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="h-px bg-gray-800/60" />
 
                   {/* Loading indicator while restoring saved data */}
                   {shareModalLoading && (
@@ -1506,38 +1715,57 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
                   </p>
                 </div>
 
-                {/* ── Actions ─────────────────────────────────────────────── */}
-                <div className="flex items-center gap-3 px-6 pb-6 pt-2 border-t border-gray-800/50">
-                  {sharePublishedSlug ? (
-                    <>
-                      <button
-                        onClick={publishPlaylist}
-                        disabled={sharePublishing || shareSlugAvailable === false}
-                        className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-bold text-sm transition-all active:scale-95"
-                      >
-                        {sharePublishing
-                          ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                          : <><Share2 size={15} /> {shareSlug !== sharePublishedSlug ? "Update & Republish" : "Republish"}</>}
-                      </button>
-                      <button
-                        onClick={unpublishPlaylist}
-                        disabled={sharePublishing}
-                        className="px-4 py-3 rounded-2xl text-red-400 hover:bg-red-900/20 font-semibold text-sm transition-all active:scale-95 disabled:opacity-40"
-                      >
-                        Remove
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      onClick={publishPlaylist}
-                      disabled={sharePublishing || !shareSlug || shareSlugAvailable === false}
-                      className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:opacity-90 disabled:opacity-40 text-white font-bold text-sm transition-all active:scale-95 shadow-lg"
-                    >
-                      {sharePublishing
-                        ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        : <><Globe size={15} /> Publish &amp; Get Link</>}
-                    </button>
-                  )}
+                {/* ── Actions: Save + Cancel ───────────────────────────────── */}
+                <div className="flex items-center gap-3 px-6 pb-6 pt-3 border-t border-gray-800/50">
+                  {/* Save — persists locally AND republishes if already live */}
+                  <button
+                    disabled={sharePublishing}
+                    onClick={async () => {
+                      const newName        = editModalName.trim() || pl.name;
+                      const newEmoji       = editModalEmoji;
+                      const newBannerUrl   = shareBannerUrlInput.trim() || shareBannerUrl || "";
+                      const newAccentColor = shareAccentColor;
+                      const newDescription = shareDescription;
+
+                      // 1. Save to local playlist state
+                      setPlaylists(prev => {
+                        const updated = prev.map(x => x.id === pl.id
+                          ? {
+                              ...x,
+                              name: newName,
+                              emoji: newEmoji,
+                              bannerUrl: newBannerUrl || undefined,
+                              accentColor: newAccentColor || undefined,
+                              description: newDescription || undefined,
+                              updatedAt: new Date().toISOString(),
+                            }
+                          : x
+                        );
+                        return updated;
+                      });
+
+                      // 2. If already published, republish with new data
+                      if (sharePublishedSlug || shareSlug) {
+                        await publishPlaylist();
+                      } else {
+                        showToast("success", "Playlist saved.");
+                        setShareModalPlaylistId(null);
+                      }
+                    }}
+                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-bold text-sm transition-all active:scale-95 shadow-lg"
+                  >
+                    {sharePublishing
+                      ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      : <><Check size={15} /> Save</>}
+                  </button>
+
+                  {/* Cancel */}
+                  <button
+                    onClick={() => setShareModalPlaylistId(null)}
+                    className="px-5 py-3 rounded-2xl font-semibold text-sm transition-all active:scale-95 text-gray-400 hover:text-white hover:bg-gray-800"
+                  >
+                    Cancel
+                  </button>
                 </div>
               </div>
             </>
@@ -1608,8 +1836,7 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
           </>
         )} 
 
-        {/* ── RIGHT: Video + Lyrics/Chords — only when a playlist is active ── */}
-        {activePlaylist && (
+        {/* ── RIGHT: Video + Lyrics/Chords ───────────────────────────────── */}
         <div className="hidden lg:flex flex-col w-[340px] xl:w-[400px] shrink-0 overflow-hidden border-l border-gray-200 dark:border-gray-800/50 bg-gray-50 dark:bg-[#0a0c10]">
 
           {/* Video — fixed aspect ratio */}
@@ -1673,7 +1900,6 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
             </div>
           </div>
         </div>
-        )}
       </div>
 
       {/* ════════════════════════════════════════════════════════════════════
@@ -1684,7 +1910,13 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
 
         {/* Mobile: visible + scrubable progress strip */}
         <div className="relative h-1.5 bg-gray-200 dark:bg-gray-700 lg:hidden">
-          <div className="h-full bg-gradient-to-r from-indigo-500 to-purple-600 rounded-r-full" style={{ width: `${progress * 100}%` }} />
+          <div
+            className="h-full rounded-r-full"
+            style={{
+              width: `${progress * 100}%`,
+              background: activePlaylist?.accentColor || "linear-gradient(to right, #6366f1, #9333ea)",
+            }}
+          />
           <input
             type="range" min={0} max={1} step={0.001} value={progress}
             onChange={handleSeek}
@@ -1697,11 +1929,15 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
 
           {/* Thumbnail + song info */}
           <div className="flex items-center gap-3 min-w-0 flex-1 lg:w-52 lg:flex-none">
-            <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0 ${
-              currentSong
-                ? "bg-gradient-to-br from-indigo-200 dark:from-indigo-700/70 to-purple-200 dark:to-purple-900/70 border border-indigo-200 dark:border-indigo-600/20"
-                : "bg-gray-800"
-            }`}>
+            <div
+              className={`w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0 ${!currentSong ? "bg-gray-800" : ""}`}
+              style={currentSong ? {
+                background: activePlaylist?.accentColor
+                  ? `${activePlaylist.accentColor}30`
+                  : "linear-gradient(135deg, #c7d2fe, #e9d5ff)",
+                border: `1px solid ${activePlaylist?.accentColor ? `${activePlaylist.accentColor}50` : "rgba(199,210,254,0.4)"}`,
+              } : undefined}
+            >
               {currentSong ? (activePlaylist?.emoji ?? "🎵") : <Music size={16} className="text-gray-600" />}
             </div>
             <div className="min-w-0">
