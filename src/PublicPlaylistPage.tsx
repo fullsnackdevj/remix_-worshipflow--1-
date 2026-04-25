@@ -288,6 +288,26 @@ export default function PublicPlaylistPage({ slug }: { slug: string }) {
 
   useEffect(() => () => stopTicker(), [stopTicker]);
 
+  // ── Auto-play a random song on first page visit ───────────────────────────
+  // Fires once when playlist data arrives. Picks a random song that has a
+  // YouTube URL and attempts autoplay. Desktop browsers will usually allow it;
+  // mobile browsers may block silent autoplay — the song will be pre-selected
+  // and ready to play instantly on the first tap.
+  const autoPlayedRef = useRef(false);
+  useEffect(() => {
+    if (!playlist || autoPlayedRef.current) return;
+    const playable = playlist.songs
+      .map((s, i) => ({ s, i }))
+      .filter(({ s }) => !!extractYtId(s.youtubeUrl ?? ""));
+    if (playable.length === 0) return;
+    autoPlayedRef.current = true;
+    const { s, i } = playable[Math.floor(Math.random() * playable.length)];
+    const vid = extractYtId(s.youtubeUrl ?? "")!;
+    setCurrentIdx(i);
+    buildPlayer(vid, true);
+    setIsPlaying(true);
+  }, [playlist, buildPlayer]);
+
   // ── Media Session API — lock screen / notification controls ───────────────
   // Works on Android Chrome 57+ and iOS Safari 15+.
   // Note: background audio *continuation* depends on the OS/browser; iOS may
