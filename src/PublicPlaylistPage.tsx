@@ -470,18 +470,15 @@ export default function PublicPlaylistPage({ slug }: { slug: string }) {
 
         {/* Banner image — full width, no side padding */}
         {playlist.bannerUrl ? (
-          <div className="relative w-full">
+          <div className="relative w-full overflow-hidden" style={{ maxHeight: "clamp(160px, 30vw, 260px)" }}>
             <img
               src={playlist.bannerUrl}
               alt={playlist.name}
-              style={{
-                display: "block",
-                width: "100%",
-                height: "auto",   // Natural aspect ratio — no cropping, no stretching
-              }}
+              className="w-full h-full object-cover object-top"
+              style={{ minHeight: "100%", display: "block" }}
             />
             {/* Bottom fade into dark bg */}
-            <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#080a0f] to-transparent" />
+            <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-[#080a0f] to-transparent" />
           </div>
         ) : (
           /* No banner fallback: just a minimal dark strip */
