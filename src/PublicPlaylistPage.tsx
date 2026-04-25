@@ -124,7 +124,7 @@ export default function PublicPlaylistPage({ slug }: { slug: string }) {
   const ytReadyRef     = useRef(false);
   const apiPollRef     = useRef<ReturnType<typeof setInterval> | null>(null);
   // Double-tap / double-click detection for song rows (works on both touch + mouse)
-  const tapRef         = useRef<{ idx: number; ts: number; timer: ReturnType<typeof setTimeout> | null }>({ idx: -1, ts: 0, timer: null });
+
 
   // Keep refs in sync
   useEffect(() => { playlistRef.current = playlist; }, [playlist]);
@@ -345,35 +345,15 @@ export default function PublicPlaylistPage({ slug }: { slug: string }) {
     }
   };
 
-  // ── Unified row double-tap / double-click handler ─────────────────────────
-  // Works on both mouse (dblclick) and touch (two taps within 300 ms).
-  // • Double tap/click any song   → play it
-  // • Single tap current song     → toggle play/pause
-  // • Single tap other song       → wait; if 2nd tap comes within 300 ms, play
+  // ── Single-tap row handler ────────────────────────────────────────────────
+  // • Tap any song       → play it immediately
+  // • Tap current song   → toggle play/pause
   const handleRowTap = useCallback((idx: number) => {
-    const now = Date.now();
-    const { idx: lastIdx, ts: lastTs, timer } = tapRef.current;
-    const isDoubleTap = lastIdx === idx && now - lastTs < 300;
-
-    if (timer) { clearTimeout(timer); tapRef.current.timer = null; }
-
-    if (isDoubleTap) {
-      tapRef.current = { idx: -1, ts: 0, timer: null };
-      playAt(idx);
-      return;
-    }
-
     if (currentIdxRef.current === idx && playerRef.current) {
-      tapRef.current = { idx: -1, ts: 0, timer: null };
       togglePlay();
       return;
     }
-
-    tapRef.current = {
-      idx,
-      ts: now,
-      timer: setTimeout(() => { tapRef.current = { idx: -1, ts: 0, timer: null }; }, 300),
-    };
+    playAt(idx);
   }, [playAt, togglePlay]);
 
   const handlePrev = () => {
@@ -575,7 +555,7 @@ export default function PublicPlaylistPage({ slug }: { slug: string }) {
               <Info size={15} style={{ color: `var(--accent)` }} className="relative" />
             </span>
             <p className="flex-1 text-xs leading-relaxed" style={{ color: `color-mix(in srgb, var(--accent) 90%, white)` }}>
-              Tap the <BookOpen size={12} className="inline mb-0.5" /> book icon at the bottom bar to read the lyrics and chords for any song.
+              Tap any song to play it. Tap the <BookOpen size={12} className="inline mb-0.5" /> book icon to read lyrics and chords.
             </p>
             <button
               onClick={dismissTip}
@@ -602,7 +582,7 @@ export default function PublicPlaylistPage({ slug }: { slug: string }) {
                 <div
                   key={song.id}
                   onClick={() => handleRowTap(idx)}
-                  title="Double-tap to play · Single-tap to pause/resume current"
+                  title="Tap to play · Tap again to pause/resume"
                   className="group grid items-center gap-3 px-4 py-3 rounded-xl cursor-pointer transition-all select-none"
                   style={isNow ? {
                     gridTemplateColumns: "40px 1fr auto",
