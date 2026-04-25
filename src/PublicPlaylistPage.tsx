@@ -493,25 +493,7 @@ export default function PublicPlaylistPage({ slug }: { slug: string }) {
 
           {/* Action buttons */}
           <div className="flex items-center gap-3 flex-wrap">
-            <button
-              onClick={() => {
-                if (!hasSongs) return;
-                if (playerRef.current && currentSong && hasVideo) {
-                  togglePlay();
-                } else if (hasAnyVideo) {
-                  const firstPlayable = playlist!.songs.findIndex(s => extractYtId(s.youtubeUrl ?? ""));
-                  playAt(firstPlayable >= 0 ? firstPlayable : 0);
-                }
-              }}
-              disabled={!hasSongs || !hasAnyVideo}
-              title={!hasAnyVideo ? "No YouTube links added to songs yet" : undefined}
-              style={{ background: `var(--accent)`, boxShadow: `0 8px 32px color-mix(in srgb, var(--accent) 35%, transparent)` }}
-              className="flex items-center gap-2.5 px-7 py-3 rounded-full hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-sm transition-all active:scale-95"
-            >
-              {isPlaying && currentSong
-                ? <><Pause size={16} className="fill-white" /> Pause</>
-                : <><Play size={16} className="fill-white" /> Play All</>}
-            </button>
+
             <button
               onClick={() => setIsShuffle(v => !v)}
               disabled={!hasSongs}
