@@ -82,8 +82,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Without this, cached songs/members/schedules from the signed-out
         // session would briefly flash on the next user's screen.
         try {
+            // Preserve playlist data — it's user-authored content, not a session cache.
+            // Only clear runtime caches (songs, members, schedules, notifications, etc.).
+            const PRESERVE_KEYS = new Set(["wf_playlists_v1", "wf_last_playlist", "wf_playlist_info_visits"]);
             Object.keys(localStorage)
-                .filter(k => k.startsWith("wf_"))
+                .filter(k => k.startsWith("wf_") && !PRESERVE_KEYS.has(k))
                 .forEach(k => localStorage.removeItem(k));
         } catch { /* noop — storage may be restricted */ }
         await signOut(auth);
