@@ -47,6 +47,10 @@ service cloud.firestore {
     match /users/{userId}/bibleDevotions/{devotionId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
+    // My Playlists (one doc per playlist — full Firestore sync)
+    match /users/{userId}/playlists/{playlistId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
 
     // ── Shared Playlists — public read, auth'd write (via server only) ─────────
     // Anyone with the slug link can read the playlist data.

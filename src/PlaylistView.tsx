@@ -11,13 +11,23 @@ import {
 import { Song } from "./types";
 import {
   Playlist, loadPlaylists, savePlaylists,
+  playlistsCol, playlistDoc,
+  savePlaylistToFirestore, deletePlaylistFromFirestore,
+  migrateLocalPlaylistsToFirestore,
 } from "./playlistUtils";
 import { db, storage } from "./firebase";
+import { onSnapshot } from "firebase/firestore";
 import { ref as sRef, uploadBytes, getDownloadURL } from "firebase/storage";
+import { useAuth } from "./AuthContext";
 
 // Re-export so SongsView.tsx can still import from "./PlaylistView"
 export type { Playlist } from "./playlistUtils";
-export { loadPlaylists, savePlaylists, addSongToPlaylist } from "./playlistUtils";
+export {
+  loadPlaylists, savePlaylists, addSongToPlaylist,
+  playlistsCol, playlistDoc,
+  savePlaylistToFirestore, deletePlaylistFromFirestore,
+  addSongToPlaylistFirestore, createPlaylistWithSong,
+} from "./playlistUtils";
 
 
 function genId(): string {
@@ -94,8 +104,11 @@ interface Props {
 // =============================================================================
 export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }: Props) {
 
+  const { user } = useAuth();
+
   // ── Playlist state ─────────────────────────────────────────────────────────
-  const [playlists, setPlaylists]         = useState<Playlist[]>(() => loadPlaylists());
+  const [playlists, setPlaylists]         = useState<Playlist[]>([]);
+  const [playlistsLoaded, setPlaylistsLoaded] = useState(false);
   const [activeId, setActiveIdState]      = useState<string | null>(() => {
     // Restore last active playlist from localStorage on first render
     try { return localStorage.getItem("wf_last_playlist") ?? null; } catch { return null; }
@@ -273,8 +286,8 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
       if (!r.ok) { showToast("error", d.error ?? "Failed to publish"); return; }
 
       // ── Persist slug, banner, accent, description back to playlist state ──
-      setPlaylists(prev =>
-        prev.map(x => x.id === shareModalPlaylistId
+      setPlaylists(prev => {
+        const updated = prev.map(x => x.id === shareModalPlaylistId
           ? {
               ...x,
               publishedSlug: shareSlug,
@@ -283,8 +296,11 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
               description: shareDescription || undefined,
             }
           : x
-        )
-      );
+        );
+        const pl = updated.find(x => x.id === shareModalPlaylistId);
+        if (pl) writePlaylist(pl);
+        return updated;
+      });
       setSharePublishedSlug(shareSlug);   // update to new slug
       setShareBannerUrl(resolvedBannerUrl);
       setShareBannerFile(null);
@@ -304,7 +320,12 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ slug: sharePublishedSlug, playlist: { name: "", emoji: "" }, songs: [], unpublish: true }),
       });
-      setPlaylists(prev => prev.map(x => x.id === shareModalPlaylistId ? { ...x, publishedSlug: undefined } : x));
+      setPlaylists(prev => {
+        const updated = prev.map(x => x.id === shareModalPlaylistId ? { ...x, publishedSlug: undefined } : x);
+        const pl = updated.find(x => x.id === shareModalPlaylistId);
+        if (pl) writePlaylist(pl);
+        return updated;
+      });
       setSharePublishedSlug(null);
       setShareSlug("");
       showToast("info", "Public link removed.");
@@ -338,8 +359,38 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
   const isPlayingRef      = useRef(false);
   const currentSongIdRef  = useRef<string | null>(null);
 
-  // ── Auto-persist whenever playlists changes ────────────────────────────────
-  useEffect(() => { savePlaylists(playlists); }, [playlists]);
+  // ── Firestore real-time listener ──────────────────────────────────────────
+  useEffect(() => {
+    if (!user) return;
+    const col = playlistsCol(user.uid);
+    const unsub = onSnapshot(col, (snap) => {
+      const pls = snap.docs.map(d => d.data() as Playlist);
+      pls.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      setPlaylists(pls);
+      setPlaylistsLoaded(true);
+    });
+    return () => unsub();
+  }, [user]);
+
+  // ── One-time migration from localStorage ──────────────────────────────────
+  useEffect(() => {
+    if (!user || !playlistsLoaded) return;
+    migrateLocalPlaylistsToFirestore(user.uid).then(count => {
+      if (count > 0) showToast("success", `☁️ ${count} playlist${count > 1 ? "s" : ""} migrated to cloud!`);
+    }).catch(() => { /* silent */ });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, playlistsLoaded]);
+
+  // ── Firestore write helpers ────────────────────────────────────────────────
+  const writePlaylist = useCallback(async (pl: Playlist) => {
+    if (!user) return;
+    try { await savePlaylistToFirestore(user.uid, pl); } catch { /* silent — onSnapshot will self-heal */ }
+  }, [user]);
+
+  const deletePlaylistDoc = useCallback(async (id: string) => {
+    if (!user) return;
+    try { await deletePlaylistFromFirestore(user.uid, id); } catch { }
+  }, [user]);
 
   // ── Helper: set active ID and persist it ──────────────────────────────────
   const setActiveId = useCallback((id: string | null) => {
@@ -350,18 +401,16 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
     } catch { }
   }, []);
 
-  // ── Reload playlists on mount. Validate stored active ID still exists ──────
+  // ── Validate stored active ID when playlists load from Firestore ──────────
   useEffect(() => {
-    const fresh = loadPlaylists();
-    setPlaylists(fresh);
-    // If the restored activeId doesn't exist in the freshly loaded list,
-    // fall back to the first playlist (if any).
+    if (!playlistsLoaded) return;
     setActiveIdState(prev => {
-      if (prev && fresh.find(p => p.id === prev)) return prev;  // still valid
-      if (fresh.length > 0) return fresh[0].id;                 // fallback
+      if (prev && playlists.find(p => p.id === prev)) return prev; // still valid
+      if (playlists.length > 0) return playlists[0].id;            // fallback
       return null;
     });
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playlistsLoaded]);
 
   // ── Focus helpers ──────────────────────────────────────────────────────────
   useEffect(() => { if (creating) setTimeout(() => createInputRef.current?.focus(), 40); }, [creating]);
@@ -600,10 +649,12 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
       id: genId(), name, emoji: newEmoji, songIds: [],
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     };
+    // Optimistic update — Firestore write happens in background
     setPlaylists(p => [...p, pl]);
     setNewName(""); setNewEmoji("🎵"); setCreating(false);
     setActiveId(pl.id);
     showToast("success", `"${name}" created!`);
+    writePlaylist(pl);
   };
 
   const deletePlaylist = (id: string) => {
@@ -611,6 +662,7 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
     setPlaylists(p => p.filter(x => x.id !== id));
     if (activeId === id) { setActiveId(null); setCurrentSongId(null); }
     showToast("success", `"${pl?.name}" deleted.`);
+    deletePlaylistDoc(id);
   };
 
   const saveEdit = (id: string) => {
@@ -618,14 +670,17 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
     if (!name) { setEditingId(null); return; }
     setPlaylists(p => {
       const updated = p.map(x => x.id === id ? { ...x, name, updatedAt: new Date().toISOString() } : x);
-      // ── Auto-sync name to Firestore if this playlist is publicly shared ──
       const pl = updated.find(x => x.id === id);
-      if (pl?.publishedSlug) {
-        fetch("/api/public-playlist/sync-name", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ slug: pl.publishedSlug, name, emoji: pl.emoji ?? "🎵" }),
-        }).catch(() => { /* silent — non-critical */ });
+      if (pl) {
+        writePlaylist(pl);
+        // Also sync name to public shared playlist if live
+        if (pl.publishedSlug) {
+          fetch("/api/public-playlist/sync-name", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ slug: pl.publishedSlug, name, emoji: pl.emoji ?? "🎵" }),
+          }).catch(() => { /* silent */ });
+        }
       }
       return updated;
     });
@@ -633,11 +688,16 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
   };
 
   const removeSong = (playlistId: string, songId: string) => {
-    setPlaylists(p => p.map(x =>
-      x.id === playlistId
-        ? { ...x, songIds: x.songIds.filter(id => id !== songId), updatedAt: new Date().toISOString() }
-        : x,
-    ));
+    setPlaylists(p => {
+      const updated = p.map(x =>
+        x.id === playlistId
+          ? { ...x, songIds: x.songIds.filter(id => id !== songId), updatedAt: new Date().toISOString() }
+          : x,
+      );
+      const pl = updated.find(x => x.id === playlistId);
+      if (pl) writePlaylist(pl);
+      return updated;
+    });
     if (currentSongId === songId) setCurrentSongId(null);
     showToast("success", "Song removed.");
   };
@@ -645,11 +705,13 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
   const duplicatePlaylist = (pl: Playlist) => {
     const copy: Playlist = {
       ...pl, id: genId(), name: `${pl.name} (Copy)`,
+      publishedSlug: undefined, // don't copy the public link
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     };
     setPlaylists(p => [...p, copy]);
     setMenuId(null);
     showToast("success", `Duplicated "${pl.name}"`);
+    writePlaylist(copy);
   };
 
   // ── Drag-to-reorder ────────────────────────────────────────────────────────
@@ -661,11 +723,16 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
     if (from === -1) return;
     ids.splice(from, 1);
     ids.splice(targetIdx, 0, id);
-    setPlaylists(p => p.map(x =>
-      x.id === activePlaylist.id
-        ? { ...x, songIds: ids, updatedAt: new Date().toISOString() }
-        : x,
-    ));
+    setPlaylists(p => {
+      const updated = p.map(x =>
+        x.id === activePlaylist.id
+          ? { ...x, songIds: ids, updatedAt: new Date().toISOString() }
+          : x,
+      );
+      const pl = updated.find(x => x.id === activePlaylist.id);
+      if (pl) writePlaylist(pl);
+      return updated;
+    });
     setDragId(null); setDragOver(null);
   };
 

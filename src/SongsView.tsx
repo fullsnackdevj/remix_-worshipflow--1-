@@ -10,7 +10,11 @@ import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, ChevronLeft
   Shield, Mail, Guitar, Sliders, Palette, Lock, AlertTriangle, CheckCircle, BookMarked,
   HandMetal, Headphones, HelpCircle, Undo2, Redo2, Play, ListMusic, BookmarkPlus, BarChart2 } from "lucide-react";
 import SongsLibraryPlayer, { LibraryTrack } from "./SongsLibraryPlayer";
-import { loadPlaylists, addSongToPlaylist, Playlist } from "./PlaylistView";
+import { loadPlaylists, addSongToPlaylist, Playlist,
+  addSongToPlaylistFirestore, createPlaylistWithSong,
+  playlistsCol } from "./PlaylistView";
+import { useAuth } from "./AuthContext";
+import { onSnapshot } from "firebase/firestore";
 
 // ── Module-level helpers ──────────────────────────────────────────────────────
 const CustomYoutubeIcon = ({ size = 24, className = "" }: { size?: number, className?: string }) => (
@@ -31,6 +35,7 @@ const CustomVideoBtnIcon = ({ size = 20, className = "" }: { size?: number, clas
 // Uses createPortal so the dropdown renders at <body> level — never clipped or
 // hidden behind other cards. Position is calculated SYNCHRONOUSLY on click.
 function AddToPlaylistBtn({ song, showToast, variant }: { song: Song; showToast: (type: string, msg: string) => void; variant?: "detail" }) {
+  const { user } = useAuth();
   const [open, setOpen]       = useState(false);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [creating, setCreating]   = useState(false);
@@ -43,13 +48,23 @@ function AddToPlaylistBtn({ song, showToast, variant }: { song: Song; showToast:
 
   const DROPDOWN_W = 240;
 
+  // Live-sync playlist list from Firestore when user is available
+  useEffect(() => {
+    if (!user) return;
+    const unsub = onSnapshot(playlistsCol(user.uid), snap => {
+      const pls = snap.docs.map(d => d.data() as Playlist);
+      pls.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      setPlaylists(pls);
+    });
+    return () => unsub();
+  }, [user]);
+
   // ── Open / close ────────────────────────────────────────────────────────
   const openDropdown = (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
     if (open) { setOpen(false); return; }
 
-    setPlaylists(loadPlaylists());
     setCreating(false);
     setNewName("");
 
@@ -119,28 +134,21 @@ function AddToPlaylistBtn({ song, showToast, variant }: { song: Song; showToast:
   }, [creating]);
 
   // ── Actions ─────────────────────────────────────────────────────────────
-  const handleAdd = (playlistId: string, playlistName: string) => {
-    const result = addSongToPlaylist(playlistId, song.id);
-    if (result === "added")   showToast("success", `Added to "${playlistName}"`);
+  const handleAdd = async (playlistId: string, playlistName: string) => {
+    if (!user) return;
+    const result = await addSongToPlaylistFirestore(user.uid, playlistId, song.id, playlists);
+    if (result === "added")        showToast("success", `Added to "${playlistName}"`);
     else if (result === "already") showToast("error", `Already in "${playlistName}"`);
     setOpen(false);
   };
 
-  const handleCreateAndAdd = () => {
+  const handleCreateAndAdd = async () => {
     const name = newName.trim();
-    if (!name) return;
-    const existing = loadPlaylists();
-    const newPl: Playlist = {
-      id: `pl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-      name, emoji: "🎵",
-      songIds: [song.id],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    try { localStorage.setItem("wf_playlists_v1", JSON.stringify([...existing, newPl])); } catch { }
-    showToast("success", `Created "${name}" and added song!`);
-    // Refresh local list so the new playlist shows immediately next time
-    setPlaylists([...existing, newPl]);
+    if (!name || !user) return;
+    try {
+      await createPlaylistWithSong(user.uid, name, song.id);
+      showToast("success", `Created "${name}" and added song!`);
+    } catch { showToast("error", "Failed to create playlist."); }
     setOpen(false);
   };
 
@@ -275,6 +283,7 @@ function AddToPlaylistBtn({ song, showToast, variant }: { song: Song; showToast:
 
 // ── Full-width Add to Playlist bar button (for grid card footer) ──────────────
 function AddToPlaylistBarBtn({ song, showToast }: { song: Song; showToast: (type: string, msg: string) => void }) {
+  const { user } = useAuth();
   const [open, setOpen]       = useState(false);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [creating, setCreating]   = useState(false);
@@ -285,10 +294,21 @@ function AddToPlaylistBarBtn({ song, showToast }: { song: Song; showToast: (type
   const inputRef = useRef<HTMLInputElement>(null);
   const DROPDOWN_W = 240;
 
+  // Live-sync playlist list from Firestore
+  useEffect(() => {
+    if (!user) return;
+    const unsub = onSnapshot(playlistsCol(user.uid), snap => {
+      const pls = snap.docs.map(d => d.data() as Playlist);
+      pls.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      setPlaylists(pls);
+    });
+    return () => unsub();
+  }, [user]);
+
   const openDropdown = (e: React.MouseEvent) => {
     e.stopPropagation(); e.preventDefault();
     if (open) { setOpen(false); return; }
-    setPlaylists(loadPlaylists()); setCreating(false); setNewName("");
+    setCreating(false); setNewName("");
     if (btnRef.current) {
       const rect = btnRef.current.getBoundingClientRect();
       let left = rect.right - DROPDOWN_W;
@@ -346,19 +366,20 @@ function AddToPlaylistBarBtn({ song, showToast }: { song: Song; showToast: (type
   }, [open]);
   useEffect(() => { if (creating) setTimeout(() => inputRef.current?.focus(), 40); }, [creating]);
 
-  const handleAdd = (playlistId: string, playlistName: string) => {
-    const result = addSongToPlaylist(playlistId, song.id);
-    if (result === "added")   showToast("success", `Added to "${playlistName}"`);
+  const handleAdd = async (playlistId: string, playlistName: string) => {
+    if (!user) return;
+    const result = await addSongToPlaylistFirestore(user.uid, playlistId, song.id, playlists);
+    if (result === "added")        showToast("success", `Added to "${playlistName}"`);
     else if (result === "already") showToast("error", `Already in "${playlistName}"`);
     setOpen(false);
   };
-  const handleCreateAndAdd = () => {
-    const name = newName.trim(); if (!name) return;
-    const existing = loadPlaylists();
-    const newPl: Playlist = { id: `pl_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, name, emoji: "🎵", songIds: [song.id], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-    try { localStorage.setItem("wf_playlists_v1", JSON.stringify([...existing, newPl])); } catch { }
-    showToast("success", `Created "${name}" and added song!`);
-    setPlaylists([...existing, newPl]); setOpen(false);
+  const handleCreateAndAdd = async () => {
+    const name = newName.trim(); if (!name || !user) return;
+    try {
+      await createPlaylistWithSong(user.uid, name, song.id);
+      showToast("success", `Created "${name}" and added song!`);
+    } catch { showToast("error", "Failed to create playlist."); }
+    setOpen(false);
   };
   const inPlaylistIds = new Set(playlists.filter(p => p.songIds.includes(song.id)).map(p => p.id));
 
