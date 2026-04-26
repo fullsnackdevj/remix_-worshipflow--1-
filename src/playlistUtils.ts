@@ -1,6 +1,7 @@
 // ── Playlist utility helpers ──────────────────────────────────────────────────
-// localStorage is no longer the source of truth — Firestore is.
-// loadPlaylists() is kept ONLY for one-time migration on first Firestore login.
+// Firestore is the source of truth. Playlists are SHARED across all org members
+// (stored in the top-level "wfPlaylists" collection, not under a user's path).
+// localStorage helpers are kept only for the one-time migration.
 
 import { db } from "./firebase";
 import {
@@ -18,6 +19,7 @@ export interface Playlist {
   bannerUrl?: string;     // cover art / banner shown in internal + public view
   accentColor?: string;   // theme accent color
   description?: string;   // optional description
+  createdBy?: string;     // uid of the user who created the playlist
 }
 
 const STORAGE_KEY = "wf_playlists_v1";
@@ -36,12 +38,15 @@ export function clearLocalPlaylists(): void {
   try { localStorage.removeItem(STORAGE_KEY); } catch { }
 }
 
-// ── Firestore path helper ─────────────────────────────────────────────────────
-export function playlistsCol(uid: string) {
-  return collection(db, "users", uid, "playlists");
+// ── Firestore path helpers — shared org-wide collection ───────────────────────
+// All authenticated members share the same "wfPlaylists" collection.
+// The `uid` parameter is accepted but unused in path construction so that
+// call-sites don't need to change if we add per-user filtering later.
+export function playlistsCol(_uid?: string) {
+  return collection(db, "wfPlaylists");
 }
-export function playlistDoc(uid: string, playlistId: string) {
-  return doc(db, "users", uid, "playlists", playlistId);
+export function playlistDoc(_uid: string | undefined, playlistId: string) {
+  return doc(db, "wfPlaylists", playlistId);
 }
 
 // ── Write a single playlist to Firestore ─────────────────────────────────────
@@ -55,20 +60,21 @@ export async function deletePlaylistFromFirestore(uid: string, playlistId: strin
 }
 
 // ── Migrate: push all local playlists to Firestore, then clear localStorage ───
+// Only runs if localStorage has data. If the shared collection already has docs,
+// it won't overwrite — it just clears localStorage.
 export async function migrateLocalPlaylistsToFirestore(uid: string): Promise<number> {
   const local = loadPlaylists();
   if (local.length === 0) return 0;
 
-  // Check if Firestore already has data (don't overwrite)
-  const snap = await getDocs(playlistsCol(uid));
+  // Check if the shared collection already has data (skip migration)
+  const snap = await getDocs(playlistsCol());
   if (!snap.empty) {
-    // Firestore already has playlists — don't overwrite, just clean up localStorage
     clearLocalPlaylists();
     return 0;
   }
 
   const batch = writeBatch(db);
-  local.forEach(pl => batch.set(playlistDoc(uid, pl.id), pl));
+  local.forEach(pl => batch.set(playlistDoc(uid, pl.id), { ...pl, createdBy: uid }));
   await batch.commit();
   clearLocalPlaylists();
   return local.length;
@@ -107,6 +113,7 @@ export async function createPlaylistWithSong(
     songIds: [songId],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    createdBy: uid,
   };
   await setDoc(playlistDoc(uid, pl.id), pl);
   return pl;

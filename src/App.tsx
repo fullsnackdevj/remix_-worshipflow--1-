@@ -1888,14 +1888,12 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                   isLineupOpen={lineupOpen}
                 />
               ) : currentView === "playlist" ? (
-                isRoleAdmin ? (
                 <PlaylistView
                   allSongs={allSongs}
                   showToast={showToast}
                   onOpenVideo={openVideo}
                   onNavigateToSongs={() => setCurrentView("songs")}
                 />
-                ) : <>{setCurrentView("dashboard")}</>
               ) : currentView === "rehearsal" ? (
                 <RehearsalView
                   allSchedules={allSchedules}
