@@ -890,12 +890,12 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
                             </button>
                           )}
                           {onNavigateToSongs && <div className="h-px bg-gray-200 dark:bg-gray-800 mx-2" />}
-                          <button onClick={() => openShareModal(pl)}
+                          <button onClick={e => { e.stopPropagation(); openShareModal(pl); }}
                             className="flex items-center gap-2 w-full px-3 py-2.5 text-sm text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 hover:text-indigo-300 transition-colors text-left">
                             <Edit3 size={12} /> Edit Playlist
                           </button>
                           <div className="h-px bg-gray-200 dark:bg-gray-800 mx-2" />
-                          <button onClick={() => duplicatePlaylist(pl)}
+                          <button onClick={e => { e.stopPropagation(); duplicatePlaylist(pl); }}
                             className="flex items-center gap-2 w-full px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition-colors text-left">
                             <Copy size={12} /> Duplicate
                           </button>
