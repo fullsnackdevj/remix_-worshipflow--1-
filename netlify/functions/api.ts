@@ -1475,10 +1475,14 @@ BULLET: [...]`;
 
     // ─── OCR ────────────────────────────────────────────────────────────────────
     if (rawPath === "/ocr" && method === "POST") {
-
         try {
             const { base64Data, mimeType, type } = body;
             if (!base64Data || !mimeType || !type) return json(400, { error: "Missing required fields" });
+
+            if (!process.env.GEMINI_API_KEY) {
+                console.error("OCR Error: GEMINI_API_KEY is not configured");
+                return json(500, { error: "OCR service is not configured (missing API key)" });
+            }
 
             const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
             const response = await ai.models.generateContent({
@@ -1489,27 +1493,32 @@ BULLET: [...]`;
                         parts: [
                             { inlineData: { data: base64Data, mimeType } },
                             {
-                                text: `You are a precise music document transcriber. Transcribe ALL visible text from this image EXACTLY as it appears, preserving:
-- Every section label (e.g. "Verse:", "Chorus:", "Bridge:", "Pre Chorus:", etc.)
-- Every tag or annotation (e.g. "//JOYFUL", "(3x)", "(Jesus...)")
-- Every song title or header at the top
-- Every chord or lyric line, in the correct order
-- Empty lines between sections for spacing
-
-Rules:
-- Do NOT skip any line of text you can see.
-- Do NOT add, invent, or summarize anything.
-- Do NOT use Markdown formatting (no **, no ##, no bullets).
-- Output ONLY the plain text transcription, nothing else.`,
+                                text: `You are a precise music document transcriber. Transcribe ALL visible text from this image EXACTLY as it appears, preserving:\n- Every section label (e.g. "Verse:", "Chorus:", "Bridge:", "Pre Chorus:", etc.)\n- Every tag or annotation (e.g. "//JOYFUL", "(3x)", "(Jesus...)")\n- Every song title or header at the top\n- Every chord or lyric line, in the correct order\n- Empty lines between sections for spacing\n\nRules:\n- Do NOT skip any line of text you can see.\n- Do NOT add, invent, or summarize anything.\n- Do NOT use Markdown formatting (no **, no ##, no bullets).\n- Output ONLY the plain text transcription, nothing else.`,
                             },
                         ],
                     },
                 ],
             });
-            return json(200, { text: response.text });
+
+            // In @google/genai v1.x, response.text throws when candidates are empty
+            // or content is safety-filtered. Safely extract via optional chaining.
+            let rawText = "";
+            try {
+                rawText =
+                    response.candidates?.[0]?.content?.parts
+                        ?.filter((p: any) => typeof p.text === "string")
+                        ?.map((p: any) => p.text as string)
+                        ?.join("") ?? "";
+                if (!rawText) rawText = (response as any).text ?? "";
+            } catch {
+                // response.text threw — no usable text in this response
+            }
+
+            const cleanText = rawText.replace(/\*\*/g, "");
+            return json(200, { text: cleanText });
         } catch (err: any) {
-            console.error("OCR Error:", err);
-            return json(500, { error: "Failed to extract text from image" });
+            console.error("OCR Error:", err?.message ?? err);
+            return json(500, { error: err?.message ?? "Failed to extract text from image" });
         }
     }
 

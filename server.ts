@@ -2048,6 +2048,11 @@ app.post("/api/ocr", async (req, res) => {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
+    if (!process.env.GEMINI_API_KEY) {
+      console.error("OCR Error: GEMINI_API_KEY is not configured");
+      return res.status(500).json({ error: "OCR service is not configured (missing API key)" });
+    }
+
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
@@ -2062,28 +2067,32 @@ app.post("/api/ocr", async (req, res) => {
               },
             },
             {
-              text: `You are a precise music document transcriber. Transcribe ALL visible text from this image EXACTLY as it appears, preserving:
-- Every section label (e.g. "Verse:", "Chorus:", "Bridge:", "Pre Chorus:", etc.)
-- Every tag or annotation (e.g. "//JOYFUL", "(3x)", "(Jesus...)")
-- Every song title or header at the top
-- Every chord or lyric line, in the correct order
-- Empty lines between sections for spacing
-
-Rules:
-- Do NOT skip any line of text you can see.
-- Do NOT add, invent, or summarize anything.
-- Do NOT use Markdown formatting (no **, no ##, no bullets).
-- Output ONLY the plain text transcription, nothing else.`,
+              text: `You are a precise music document transcriber. Transcribe ALL visible text from this image EXACTLY as it appears, preserving:\n- Every section label (e.g. "Verse:", "Chorus:", "Bridge:", "Pre Chorus:", etc.)\n- Every tag or annotation (e.g. "//JOYFUL", "(3x)", "(Jesus...)")\n- Every song title or header at the top\n- Every chord or lyric line, in the correct order\n- Empty lines between sections for spacing\n\nRules:\n- Do NOT skip any line of text you can see.\n- Do NOT add, invent, or summarize anything.\n- Do NOT use Markdown formatting (no **, no ##, no bullets).\n- Output ONLY the plain text transcription, nothing else.`,
             },
           ],
         },
       ],
     });
 
-    res.json({ text: response.text });
-  } catch (error) {
-    console.error("OCR Error:", error);
-    res.status(500).json({ error: "Failed to extract text from image" });
+    // In @google/genai v1.x, response.text throws when candidates are empty or
+    // content is safety-filtered. Safely extract from candidates with a fallback.
+    let rawText = "";
+    try {
+      rawText =
+        response.candidates?.[0]?.content?.parts
+          ?.filter((p: any) => typeof p.text === "string")
+          ?.map((p: any) => p.text as string)
+          ?.join("") ?? "";
+      if (!rawText) rawText = (response as any).text ?? "";
+    } catch {
+      // response.text threw — no usable text in this response
+    }
+
+    const cleanText = rawText.replace(/\*\*/g, "");
+    res.json({ text: cleanText });
+  } catch (error: any) {
+    console.error("OCR Error:", error?.message ?? error);
+    res.status(500).json({ error: error?.message ?? "Failed to extract text from image" });
   }
 });
 
