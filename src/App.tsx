@@ -68,11 +68,12 @@ const BibleView            = lazy(() => import("./BibleView"));
 const DesignRequestsView  = lazy(() => import("./DesignRequestsView"));
 const EventsView          = lazy(() => import("./EventsView"));
 const PlaylistView        = lazy(() => import("./PlaylistView"));
+const LiveStageView       = lazy(() => import("./LiveStageView"));
 // AutoTextarea & DatePicker are tiny UI primitives — import statically to avoid extra chunk round-trips
 import AutoTextarea from "./AutoTextarea";
 import DatePicker from "./DatePicker";
 
-import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, CheckSquare, Check, Filter, Users, Calendar, Ticket, Phone, UserPlus, Camera, BookOpen, BookMarked, LayoutGrid, Mic2, Copy, Pencil, Shield, Mail, Bell, Lock, AlertTriangle, CheckCircle, HelpCircle, FlaskConical, NotebookPen, SquareKanban, Feather, Palette, Code2, ListMusic } from "lucide-react";
+import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, CheckSquare, Check, Filter, Users, Calendar, Ticket, Phone, UserPlus, Camera, BookOpen, BookMarked, LayoutGrid, Mic2, Copy, Pencil, Shield, Mail, Bell, Lock, AlertTriangle, CheckCircle, HelpCircle, FlaskConical, NotebookPen, SquareKanban, Feather, Palette, Code2, ListMusic, Radio } from "lucide-react";
 import { Song, Tag, Member, ScheduleMember, Schedule } from "./types";
 import LineupPlayer, { LineupTrack, CurrentUser } from "./LineupPlayer";
 import SongsLibraryPlayer, { LibraryTrack } from "./SongsLibraryPlayer";
@@ -368,7 +369,7 @@ export default function App() {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
   const [isDarkMode, setIsDarkMode] = useState(true);
-  const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "playground" | "admin" | "team-notes" | "rehearsal" | "freedom-wall" | "preaching" | "design-requests" | "bible" | "playlist">("dashboard");
+  const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "playground" | "admin" | "team-notes" | "rehearsal" | "freedom-wall" | "preaching" | "design-requests" | "bible" | "playlist" | "live-stage">("dashboard");
   // Tracks when Rehearsal mobile fullscreen is active so we can hide the app header
   const [rehearsalFullscreen, setRehearsalFullscreen] = useState(false);
   // Bump this key every time user navigates to Design Requests — forces a remount + fresh fetch
@@ -1428,6 +1429,23 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Freedom Wall</span>}
           </div>
 
+          {/* Live Stage — open to all roles */}
+          <div className="relative group/tip">
+            <button
+              onClick={() => { setCurrentView("live-stage"); setIsMobileMenuOpen(false); }}
+              className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-all font-medium text-sm ${
+                currentView === "live-stage"
+                  ? "bg-red-500/15 text-red-400"
+                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
+              } ${isSidebarCollapsed ? "justify-center" : ""}`}
+              title="Live Stage"
+            >
+              <Radio size={18} className="shrink-0" />
+              {!isSidebarCollapsed && <span>Live Stage</span>}
+            </button>
+            {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Live Stage</span>}
+          </div>
+
           {/* Design Requests — Admin + Audio/Tech + Designer (team role) */}
           {canAccessDesignRequests && (
             <div className="relative group/tip">
@@ -1928,7 +1946,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                   onToast={showToast}
                 />
               ) : currentView === "design-requests" ? (
-                (isRoleAdmin || effectiveRole === "audio_tech") ? (
+                (canAccessDesignRequests) ? (
                   <DesignRequestsView
                     key={designRequestsKey}
                     currentUserId={user?.uid ?? ""}
@@ -1965,6 +1983,12 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                   isAdmin={isRoleAdmin || (myMemberProfile?.eventsAccess ?? false)}
                   onToast={showToast}
                   members={allMembers}
+                />
+              ) : currentView === "live-stage" ? (
+                <LiveStageView
+                  allSongs={allSongs}
+                  isAdmin={isRoleAdmin}
+                  onToast={showToast}
                 />
               ) : null}
               </Suspense>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
-  Palette, BookOpen, CalendarDays, User2, Clock, ChevronDown, ChevronUp,
+  Palette, BookOpen, CalendarDays, User2, Clock, ChevronDown, ChevronUp, ChevronsUpDown,
   RefreshCw, Loader2, CornerUpLeft, FileText, Lightbulb, Heart, BookMarked,
   PenLine, CheckCircle2, InboxIcon, AlertTriangle, Copy, Check, Info, X,
   Brush, Sparkles, CheckCheck,
@@ -127,10 +127,10 @@ function Section({ icon, label, children }: { icon: React.ReactNode; label: stri
   return (
     <div className="mb-5">
       <div className="flex items-center gap-2 mb-2">
-        <span style={{ color: "rgba(var(--wf-c1),0.7)", display: "flex" }}>{icon}</span>
-        <span style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.35)", textTransform: "uppercase", letterSpacing: "0.08em" }}>{label}</span>
+        <span className="text-indigo-400/70 flex">{icon}</span>
+        <span className="text-xs font-bold text-white/40 uppercase tracking-widest">{label}</span>
       </div>
-      <div style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", lineHeight: 1.65 }}>{children}</div>
+      <div className="text-sm text-white/75 leading-relaxed">{children}</div>
     </div>
   );
 }
@@ -189,16 +189,11 @@ function DesignStatusBadge({ item }: { item: SermonDraft }) {
 
   if (item.designStatus === "design_done") {
     return (
-      <div className="flex items-center gap-1.5 rounded-full px-2.5 py-1"
-        style={{ background: "rgba(52,211,153,0.12)", border: "1px solid rgba(52,211,153,0.3)" }}>
-        <CheckCheck size={10} style={{ color: "#34d399" }} />
-        <span style={{ fontSize: 10, color: "#34d399", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>
-          Slides Done
-        </span>
+      <div className="flex items-center gap-1.5 rounded-full px-3 py-1 bg-emerald-500/12 border border-emerald-400/30">
+        <CheckCheck size={12} className="text-emerald-400" />
+        <span className="text-xs font-bold text-emerald-400 uppercase tracking-wide">Slides Done</span>
         {item.designerName && (
-          <span style={{ fontSize: 10, color: "rgba(52,211,153,0.65)", fontWeight: 500 }}>
-            · {item.designerName.split(" ")[0]}
-          </span>
+          <span className="text-xs text-emerald-400/65 font-medium">· {item.designerName.split(" ")[0]}</span>
         )}
       </div>
     );
@@ -208,28 +203,22 @@ function DesignStatusBadge({ item }: { item: SermonDraft }) {
     return (
       <div className="relative">
         <div
-          className="flex items-center gap-1.5 rounded-full px-2.5 py-1 cursor-default"
-          style={{ background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.3)" }}
+          className="flex items-center gap-1.5 rounded-full px-3 py-1 cursor-default bg-violet-500/12 border border-violet-400/30"
           onMouseEnter={() => setShowTooltip(true)}
           onMouseLeave={() => setShowTooltip(false)}
         >
-          <Brush size={10} style={{ color: "#a78bfa" }} />
-          <span style={{ fontSize: 10, color: "#a78bfa", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>
-            Design in Progress
-          </span>
+          <Brush size={12} className="text-violet-300" />
+          <span className="text-xs font-bold text-violet-300 uppercase tracking-wide">In Design</span>
           {item.designerName && (
-            <span style={{ fontSize: 10, color: "rgba(167,139,250,0.65)", fontWeight: 500 }}>
-              · {item.designerName.split(" ")[0]}
-            </span>
+            <span className="text-xs text-violet-300/65 font-medium">· {item.designerName.split(" ")[0]}</span>
           )}
         </div>
         {showTooltip && item.designerName && (
-          <div className="absolute bottom-full left-0 mb-1.5 z-50 rounded-xl px-3 py-2 whitespace-nowrap"
-            style={{ background: "rgba(15,15,30,0.97)", border: "1px solid rgba(139,92,246,0.3)", boxShadow: "0 8px 24px rgba(0,0,0,0.6)", fontSize: 11 }}>
-            <p style={{ color: "rgba(255,255,255,0.5)", marginBottom: 2 }}>Designer</p>
-            <p style={{ color: "#fff", fontWeight: 700 }}>{item.designerName}</p>
+          <div className="absolute bottom-full left-0 mb-1.5 z-50 rounded-xl px-3 py-2 whitespace-nowrap bg-gray-900/97 border border-violet-400/30 shadow-[0_8px_24px_rgba(0,0,0,0.6)]">
+            <p className="text-xs text-white/50 mb-0.5">Designer</p>
+            <p className="text-sm font-bold text-white">{item.designerName}</p>
             {item.designClaimedAt && (
-              <p style={{ color: "rgba(255,255,255,0.3)", marginTop: 2 }}>Claimed {timeAgo(item.designClaimedAt)}</p>
+              <p className="text-xs text-white/30 mt-0.5">Claimed {timeAgo(item.designClaimedAt)}</p>
             )}
           </div>
         )}
@@ -238,12 +227,9 @@ function DesignStatusBadge({ item }: { item: SermonDraft }) {
   }
 
   return (
-    <div className="flex items-center gap-1.5 rounded-full px-2.5 py-1"
-      style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-      <Clock size={9} style={{ color: "rgba(255,255,255,0.3)" }} />
-      <span style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" }}>
-        Awaiting Designer
-      </span>
+    <div className="flex items-center gap-1.5 rounded-full px-3 py-1 bg-white/[0.04] border border-white/[0.08]">
+      <Clock size={12} className="text-white/30" />
+      <span className="text-xs font-semibold text-white/30 uppercase tracking-wide">Awaiting Designer</span>
     </div>
   );
 }
@@ -424,27 +410,16 @@ export default function DesignRequestsView({ currentUserId, currentUserName, cur
 
   return (
     <>
-    <div
-      className="flex flex-col h-full overflow-hidden"
-      style={{ background: "linear-gradient(160deg, var(--wf-bg4) 0%, var(--wf-bg4) 100%)", minHeight: 0 }}
-    >
+    <div className="flex flex-col h-full overflow-hidden bg-gray-950" style={{ minHeight: 0 }}>
       {/* ── Header ── */}
-      <div
-        className="flex-shrink-0 flex items-center justify-between px-4 pt-5 pb-4"
-        style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
-      >
+      <div className="flex-shrink-0 flex items-center justify-between px-4 pt-5 pb-4 border-b border-white/[0.06]">
         <div className="flex items-center gap-3">
-          <div
-            className="flex items-center justify-center rounded-xl"
-            style={{ width: 40, height: 40, background: "linear-gradient(135deg, rgba(var(--wf-c1),0.25), rgba(var(--wf-c2),0.25))", border: "1.5px solid rgba(var(--wf-c1),0.4)" }}
-          >
-            <Palette size={20} style={{ color: "var(--wf-at3)" }} />
+          <div className="flex items-center justify-center rounded-xl w-10 h-10 bg-gradient-to-br from-violet-500/25 to-indigo-500/25 border border-violet-500/40 shadow-[0_0_12px_rgba(139,92,246,0.2)]">
+            <Palette size={20} className="text-violet-300" />
           </div>
           <div>
-            <h1 style={{ fontSize: 18, fontWeight: 800, color: "#fff", letterSpacing: "-0.02em" }}>
-              Design Requests
-            </h1>
-            <p style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", fontWeight: 500 }}>
+            <h1 className="text-[18px] font-extrabold text-white tracking-tight">Design Requests</h1>
+            <p className="text-[11px] text-white/35 font-medium">
               {loading ? "Loading…" : `${items.length} submitted sermon${items.length !== 1 ? "s" : ""}`}
             </p>
           </div>
@@ -454,15 +429,12 @@ export default function DesignRequestsView({ currentUserId, currentUserName, cur
           <button
             onClick={() => { setInfoOpen(true); if (infoGlowing) { localStorage.setItem("wf_design_requests_info_seen", "1"); setInfoGlowing(false); } }}
             title="How Design Requests Works"
-            className="flex items-center justify-center rounded-full transition-all active:scale-95"
-            style={{
-              width: 36, height: 36,
-              background: infoGlowing ? "rgba(var(--wf-c3),0.15)" : "rgba(255,255,255,0.05)",
-              border: `1px solid ${infoGlowing ? "rgba(var(--wf-c3),0.4)" : "rgba(255,255,255,0.1)"}`,
-              color: infoGlowing ? "var(--wf-at3)" : "rgba(255,255,255,0.5)",
-              animation: infoGlowing ? "newModulePulse 2s ease-in-out infinite" : "none",
-              boxShadow: infoGlowing ? "0 0 0 1px rgba(var(--wf-c3),0.25), 0 0 10px rgba(var(--wf-c3),0.2)" : "none",
-            }}
+            className={`flex items-center justify-center rounded-full w-9 h-9 transition-all active:scale-95 ${
+              infoGlowing
+                ? "bg-violet-500/15 border border-violet-400/40 text-violet-300 shadow-[0_0_10px_rgba(139,92,246,0.2)]"
+                : "bg-white/5 border border-white/10 text-white/50 hover:text-white/80"
+            }`}
+            style={{ animation: infoGlowing ? "newModulePulse 2s ease-in-out infinite" : "none" }}
           >
             <Info size={16} />
           </button>
@@ -471,8 +443,7 @@ export default function DesignRequestsView({ currentUserId, currentUserName, cur
             onClick={fetchItems}
             disabled={loading}
             title="Refresh"
-            className="flex items-center justify-center rounded-full transition-all active:scale-95"
-            style={{ width: 36, height: 36, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.5)" }}
+            className="flex items-center justify-center rounded-full w-9 h-9 bg-white/5 border border-white/10 text-white/50 hover:text-white/80 transition-all active:scale-95"
           >
             {loading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
           </button>
@@ -480,12 +451,9 @@ export default function DesignRequestsView({ currentUserId, currentUserName, cur
       </div>
 
       {/* ── Banner ── */}
-      <div
-        className="flex-shrink-0 mx-4 mt-3 mb-2 rounded-xl px-4 py-3 flex items-start gap-3"
-        style={{ background: "rgba(var(--wf-c1),0.07)", border: "1px solid rgba(var(--wf-c1),0.18)" }}
-      >
-        <Palette size={16} style={{ color: "var(--wf-at)", marginTop: 1, flexShrink: 0 }} />
-        <p style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", lineHeight: 1.5 }}>
+      <div className="flex-shrink-0 mx-4 mt-3 mb-2 rounded-xl px-4 py-3 flex items-start gap-3 bg-indigo-500/[0.07] border border-indigo-400/20">
+        <Palette size={16} className="text-indigo-300 mt-0.5 shrink-0" />
+        <p className="text-[12px] text-white/55 leading-relaxed">
           Sermons submitted by the preacher will appear here. Volunteer to design slides and notify the preacher when done.
         </p>
       </div>
@@ -497,8 +465,7 @@ export default function DesignRequestsView({ currentUserId, currentUserName, cur
         {loading && (
           <div className="space-y-3 mt-2">
             {[1, 2, 3].map(i => (
-              <div key={i} className="rounded-2xl overflow-hidden animate-pulse"
-                style={{ height: 90, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }} />
+              <div key={i} className="rounded-2xl overflow-hidden animate-pulse h-[90px] bg-white/[0.04] border border-white/[0.06]" />
             ))}
           </div>
         )}
@@ -506,18 +473,18 @@ export default function DesignRequestsView({ currentUserId, currentUserName, cur
         {/* Empty state */}
         {!loading && items.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 px-4">
-            <div className="flex items-center justify-center rounded-3xl mb-4"
-              style={{ width: 64, height: 64, background: "rgba(var(--wf-c1),0.08)", border: "1px solid rgba(var(--wf-c1),0.15)" }}>
-              <InboxIcon size={28} style={{ color: "rgba(var(--wf-c1),0.4)" }} />
+            <div className="flex items-center justify-center rounded-3xl mb-4 w-16 h-16 bg-violet-500/[0.08] border border-violet-400/15">
+              <InboxIcon size={28} className="text-violet-400/40" />
             </div>
-            <p className="font-bold text-center" style={{ fontSize: 15, color: "rgba(255,255,255,0.3)" }}>No design requests yet</p>
-            <p className="text-center mt-1" style={{ fontSize: 12, color: "rgba(255,255,255,0.15)" }}>
+            <p className="font-bold text-center text-[15px] text-white/30">No design requests yet</p>
+            <p className="text-center mt-1 text-[12px] text-white/15">
               When a preacher submits a sermon draft,<br />it will appear here for your review.
             </p>
           </div>
         )}
 
-        {/* Cards */}
+        {/* Cards — 2-column grid on desktop */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
         {!loading && items.map(item => {
           const isExpanded = expandedId === item.id;
           const scriptureText = item.scriptures?.[0]?.text || item.mainVerse || "";
@@ -531,118 +498,120 @@ export default function DesignRequestsView({ currentUserId, currentUserName, cur
             <div
               key={item.id}
               ref={el => { cardRefs.current[item.id] = el; }}
-              className="rounded-2xl mb-3 overflow-hidden transition-all"
-              style={{
-                background: "rgba(255,255,255,0.025)",
-                border: highlightedId === item.id
-                  ? "1.5px solid rgba(245,158,11,0.8)"
-                  : `1px solid ${isDone ? "rgba(52,211,153,0.25)" : inDesign ? "rgba(139,92,246,0.25)" : "rgba(var(--wf-c1),0.2)"}`,
-                boxShadow: highlightedId === item.id
-                  ? "0 0 0 3px rgba(245,158,11,0.2), 0 8px 32px rgba(0,0,0,0.4)"
-                  : isExpanded ? "0 0 0 1px rgba(var(--wf-c1),0.3), 0 8px 32px rgba(0,0,0,0.4)" : "none",
-                transition: "border 0.3s ease, box-shadow 0.3s ease",
-              }}
+              className={`rounded-2xl overflow-hidden transition-all border ${
+                highlightedId === item.id
+                  ? "border-amber-400/80 shadow-[0_0_0_3px_rgba(245,158,11,0.2),0_8px_32px_rgba(0,0,0,0.4)]"
+                  : isDone
+                    ? "border-emerald-500/25 bg-white/[0.025]"
+                    : inDesign
+                      ? "border-violet-500/25 bg-white/[0.025]"
+                      : isExpanded
+                        ? "border-indigo-400/30 shadow-[0_8px_32px_rgba(0,0,0,0.4)] bg-white/[0.025]"
+                        : "border-white/[0.08] bg-white/[0.025]"
+              }`}
+              style={{ transition: "border 0.3s ease, box-shadow 0.3s ease" }}
             >
-              {/* Card Header — always visible */}
-              <div className="px-4 pt-4 pb-3">
-                {/* Status + time row */}
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-1.5">
-                    {(item.submissionVersion ?? 1) > 1 ? (
-                      <>
-                        <div className="flex items-center gap-1.5 rounded-full px-2 py-0.5"
-                          style={{ background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.3)" }}>
-                          <RefreshCw size={9} style={{ color: "#fbbf24" }} />
-                          <span style={{ fontSize: 10, color: "#fbbf24", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                            Latest Version
-                          </span>
-                        </div>
-                        <span style={{ fontSize: 9, color: "rgba(255,255,255,0.25)", fontWeight: 600 }}
-                          title={`Submitted ${item.submissionVersion} time(s)`}>
-                          v{item.submissionVersion}
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 size={11} style={{ color: "#34d399" }} />
-                        <span style={{ fontSize: 10, color: "#34d399", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                          Submitted
-                        </span>
-                      </>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1" style={{ color: "rgba(255,255,255,0.25)", fontSize: 10 }}>
-                    <Clock size={9} />
-                    <span>{timeAgo(item.submittedAt)}</span>
+              {/* ── Card Body ── */}
+              <div className="px-5 pt-6 pb-0">
+
+                {/* Row 1: Status badge + time-ago */}
+                <div className="flex items-center justify-between mb-5">
+                  {(item.submissionVersion ?? 1) > 1 ? (
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 rounded-full px-3 py-1.5 bg-amber-500/15 border border-amber-400/30">
+                        <RefreshCw size={12} className="text-amber-400" />
+                        <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Latest Version</span>
+                      </div>
+                      <span className="text-xs text-white/25 font-semibold" title={`Submitted ${item.submissionVersion} time(s)`}>
+                        v{item.submissionVersion}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 rounded-full px-3 py-1.5 bg-emerald-500/15 border border-emerald-500/30">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                      <span className="text-xs font-bold text-emerald-400 uppercase tracking-widest">Submitted</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-1.5 text-xs text-white/30 font-medium">
+                    <Clock size={12} />
+                    <span className="uppercase tracking-wide">{timeAgo(item.submittedAt)}</span>
                   </div>
                 </div>
 
-                {/* Title */}
-                <p className="font-bold" style={{ fontSize: 15, color: "#fff", letterSpacing: "-0.01em", lineHeight: 1.3 }}>
+                {/* Row 2: Big title */}
+                <h2 className="text-2xl font-extrabold text-white tracking-tight leading-tight uppercase mb-2">
                   {item.title || "Untitled Sermon"}
-                </p>
+                </h2>
                 {item.subtitle && (
-                  <p style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", marginTop: 2 }}>
+                  <p className="text-xs text-white/35 font-semibold uppercase tracking-widest mb-4">
                     {item.subtitle}
                   </p>
                 )}
 
-                {/* Scripture pill */}
+                {/* Scripture */}
                 {scriptureText && (
-                  <div className="flex items-center gap-1.5 mt-2">
-                    <BookOpen size={10} style={{ color: "rgba(var(--wf-c1),0.6)", flexShrink: 0 }} />
-                    <p style={{ fontSize: 11, color: "rgba(var(--wf-c1),0.8)", fontWeight: 500 }} className="truncate">
+                  <div className="flex items-center gap-2 mb-5">
+                    <BookOpen size={13} className="text-indigo-400/60 shrink-0" />
+                    <p className="text-sm text-indigo-300/80 font-medium truncate">
                       {scriptureText}
-                      {hasMore && <span style={{ color: "rgba(var(--wf-c1),0.4)" }}> +{item.scriptures!.length - 1}</span>}
+                      {hasMore && <span className="text-indigo-400/40"> +{item.scriptures!.length - 1}</span>}
                     </p>
                   </div>
                 )}
 
-                {/* Meta row */}
-                <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+                {/* Row 3: Meta pills */}
+                <div className="flex items-center gap-2 flex-wrap mb-6">
                   {item.submittedByName && (
-                    <span className="flex items-center gap-1 rounded-full px-2 py-0.5"
-                      style={{ background: "rgba(var(--wf-c1),0.1)", border: "1px solid rgba(var(--wf-c1),0.2)" }}>
-                      <User2 size={9} style={{ color: "rgba(var(--wf-c1),0.7)" }} />
-                      <span style={{ fontSize: 10, color: "rgba(var(--wf-c1),0.85)", fontWeight: 600 }}>{item.submittedByName}</span>
+                    <span className="flex items-center gap-1.5 rounded-xl px-3 py-2.5 bg-white/[0.05] border border-white/10">
+                      <User2 size={13} className="text-white/50" />
+                      <span className="text-xs text-white/75 font-semibold">{item.submittedByName}</span>
                     </span>
                   )}
                   {item.scheduledDate && (
-                    <span className="flex items-center gap-1 rounded-full px-2 py-0.5"
-                      style={{ background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.2)" }}>
-                      <CalendarDays size={9} style={{ color: "rgba(245,158,11,0.8)" }} />
-                      <span style={{ fontSize: 10, color: "rgba(245,158,11,0.9)", fontWeight: 600 }}>
+                    <span className="flex items-center gap-1.5 rounded-xl px-3 py-2.5 bg-white/[0.05] border border-white/10">
+                      <CalendarDays size={13} className="text-white/50" />
+                      <span className="text-xs text-white/75 font-semibold uppercase tracking-wide">
                         {new Date(item.scheduledDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                       </span>
                     </span>
                   )}
                   {item.serviceType && (
-                    <span className="rounded-full px-2 py-0.5"
-                      style={{ background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.2)", fontSize: 10, color: "rgba(52,211,153,0.9)", fontWeight: 600 }}>
+                    <span className="rounded-xl px-3 py-2.5 bg-indigo-500/10 border border-indigo-400/20 text-xs text-indigo-300 font-bold uppercase tracking-widest">
                       {item.serviceType}
                     </span>
                   )}
                 </div>
 
-                {/* ── Design Status Row ── */}
-                <div className="flex items-center gap-2 mt-2.5 flex-wrap">
-                  <DesignStatusBadge item={item} />
-                </div>
-
-                {/* Action buttons row */}
-                <div className="flex items-center gap-2 mt-3 pt-2.5"
-                  style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                  {/* Expand */}
-                  <button
-                    onClick={() => setExpandedId(isExpanded ? null : item.id)}
-                    className="flex items-center gap-1.5 rounded-full px-3 flex-1 justify-center transition-all active:scale-95"
-                    style={{ height: 30, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", fontSize: 11, color: "rgba(255,255,255,0.5)", fontWeight: 600 }}
-                  >
-                    {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                    {isExpanded ? "Hide details" : "View full sermon"}
-                  </button>
-
-                  {/* Copy to clipboard */}
+                {/* Row 4: Design status block — copy button lives here */}
+                <div className="flex items-center gap-4 mb-6 p-4 rounded-2xl bg-white/[0.03] border border-white/[0.06]">
+                  {/* Status icon */}
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
+                    isDone
+                      ? "bg-emerald-500/20 border border-emerald-500/30"
+                      : inDesign
+                        ? "bg-violet-500/20 border border-violet-500/30"
+                        : "bg-white/[0.06] border border-white/10"
+                  }`}>
+                    {isDone
+                      ? <CheckCheck size={20} className="text-emerald-400" />
+                      : inDesign
+                        ? <Brush size={20} className="text-violet-300" />
+                        : <Clock size={20} className="text-white/30" />
+                    }
+                  </div>
+                  {/* Status text */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mb-1">Design Status</p>
+                    <p className="text-sm font-bold text-white leading-none">
+                      {isDone
+                        ? `Slides Done${item.designerName ? " • " + item.designerName.split(" ")[0] : ""}`
+                        : inDesign
+                          ? `In Design${item.designerName ? " • " + item.designerName.split(" ")[0] : ""}`
+                          : "Awaiting Designer"
+                      }
+                    </p>
+                  </div>
+                  {/* Copy button — lives here, contextually relevant */}
                   <button
                     onClick={async () => {
                       try {
@@ -654,85 +623,103 @@ export default function DesignRequestsView({ currentUserId, currentUserName, cur
                         onToast?.("error", "Could not copy. Please try again.");
                       }
                     }}
-                    title="Copy sermon to clipboard"
-                    className="flex items-center justify-center rounded-full transition-all active:scale-95"
-                    style={{
-                      width: 30, height: 30, flexShrink: 0,
-                      background: copiedId === item.id ? "rgba(52,211,153,0.15)" : "rgba(255,255,255,0.04)",
-                      border: `1px solid ${copiedId === item.id ? "rgba(52,211,153,0.35)" : "rgba(255,255,255,0.1)"}`,
-                      color: copiedId === item.id ? "#34d399" : "rgba(255,255,255,0.4)",
-                      transition: "all 0.2s ease",
-                    }}
+                    title="Copy sermon content"
+                    className={`w-9 h-9 shrink-0 flex items-center justify-center rounded-xl border transition-all active:scale-95 ${
+                      copiedId === item.id
+                        ? "bg-emerald-500/20 border-emerald-400/40 text-emerald-400"
+                        : "bg-white/[0.04] border-white/[0.08] text-white/30 hover:text-white/70 hover:bg-white/[0.08]"
+                    }`}
                   >
-                    {copiedId === item.id ? <Check size={12} /> : <Copy size={12} />}
+                    {copiedId === item.id ? <Check size={15} /> : <Copy size={15} />}
                   </button>
-
-                  {/* ── Volunteer button — only when pending/unclaimed ── */}
-                  {isPending && (
-                    <button
-                      onClick={() => handleClaim(item)}
-                      disabled={claimingId === item.id}
-                      title="Volunteer to design slides"
-                      className="flex items-center gap-1.5 rounded-full px-3 transition-all active:scale-95"
-                      style={{
-                        height: 30, flexShrink: 0,
-                        background: "rgba(139,92,246,0.15)",
-                        border: "1px solid rgba(139,92,246,0.35)",
-                        fontSize: 11, color: "#a78bfa", fontWeight: 700,
-                      }}
-                    >
-                      {claimingId === item.id
-                        ? <Loader2 size={11} className="animate-spin" />
-                        : <Sparkles size={11} />}
-                      I'll design this
-                    </button>
-                  )}
-
-                  {/* ── Mark Done button — only for the assigned designer ── */}
-                  {isMine && (
-                    <button
-                      onClick={() => handleComplete(item)}
-                      disabled={completingId === item.id}
-                      title="Mark slides as complete"
-                      className="flex items-center gap-1.5 rounded-full px-3 transition-all active:scale-95"
-                      style={{
-                        height: 30, flexShrink: 0,
-                        background: "rgba(16,185,129,0.15)",
-                        border: "1px solid rgba(16,185,129,0.35)",
-                        fontSize: 11, color: "#34d399", fontWeight: 700,
-                      }}
-                    >
-                      {completingId === item.id
-                        ? <Loader2 size={11} className="animate-spin" />
-                        : <CheckCheck size={11} />}
-                      Done!
-                    </button>
-                  )}
-
-                  {/* ── Recall — admin or submitter ── */}
-                  {(isAdmin || item.authorId === currentUserId) && (
-                    <button
-                      onClick={() => handleRecall(item)}
-                      disabled={recallingId === item.id}
-                      title="Recall to Drafts"
-                      className="flex items-center gap-1.5 rounded-full px-3 transition-all active:scale-95"
-                      style={{ height: 30, background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.25)", fontSize: 11, color: "rgba(245,158,11,0.85)", fontWeight: 600 }}
-                    >
-                      {recallingId === item.id
-                        ? <Loader2 size={11} className="animate-spin" />
-                        : <CornerUpLeft size={11} />}
-                      Recall
-                    </button>
-                  )}
                 </div>
               </div>
 
+
+              {/* ── Bottom Action Bar ── */}
+              <div className="flex border-t border-white/[0.06] min-w-0">
+                {/* Left: Details (expand) */}
+                <div className="flex items-center flex-1 min-w-0 px-4 py-4 bg-white/[0.02]">
+                  <button
+                    onClick={() => setExpandedId(isExpanded ? null : item.id)}
+                    className="flex items-center gap-3 flex-1 min-w-0 group transition-all active:scale-95"
+                  >
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-white/[0.06] border border-white/10 group-hover:bg-white/10 transition-colors">
+                      {isExpanded ? <ChevronUp size={15} className="text-white/70" /> : <ChevronsUpDown size={15} className="text-white/70" />}
+                    </div>
+                    <div className="text-left min-w-0">
+                      <p className="text-[9px] font-bold text-white/30 uppercase tracking-widest whitespace-nowrap">Details</p>
+                      <p className="text-xs font-extrabold text-white uppercase tracking-wide leading-none whitespace-nowrap">
+                        {isExpanded ? "Hide Preview" : "Preview Sermon"}
+                      </p>
+                    </div>
+                  </button>
+                </div>
+
+
+                {/* Right: Primary action */}
+                {isPending && (
+                  <button
+                    onClick={() => handleClaim(item)}
+                    disabled={claimingId === item.id}
+                    className="flex items-center gap-2 px-4 py-3 shrink-0 border-l border-violet-500/30 bg-violet-500/10 hover:bg-violet-500/20 transition-all active:scale-[0.98]"
+                  >
+                    <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 bg-violet-500/20 border border-violet-400/30">
+                      {claimingId === item.id ? <Loader2 size={15} className="animate-spin text-violet-300" /> : <Sparkles size={15} className="text-violet-300" />}
+                    </div>
+                    <div className="text-left">
+                      <p className="text-[9px] font-bold text-violet-400/60 uppercase tracking-widest whitespace-nowrap">Action</p>
+                      <p className="text-xs font-extrabold text-violet-300 uppercase tracking-wide leading-none whitespace-nowrap">I'll Design This</p>
+                    </div>
+                  </button>
+                )}
+                {isMine && (
+                  <button
+                    onClick={() => handleComplete(item)}
+                    disabled={completingId === item.id}
+                    className="flex items-center gap-2 px-4 py-3 shrink-0 border-l border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 transition-all active:scale-[0.98]"
+                  >
+                    <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 bg-emerald-500/20 border border-emerald-400/30">
+                      {completingId === item.id ? <Loader2 size={15} className="animate-spin text-emerald-400" /> : <CheckCheck size={15} className="text-emerald-400" />}
+                    </div>
+                    <div className="text-left">
+                      <p className="text-[9px] font-bold text-emerald-400/60 uppercase tracking-widest whitespace-nowrap">Action</p>
+                      <p className="text-xs font-extrabold text-emerald-400 uppercase tracking-wide leading-none whitespace-nowrap">Mark as Done!</p>
+                    </div>
+                  </button>
+                )}
+                {!isPending && !isMine && (isAdmin || item.authorId === currentUserId) && (
+                  <button
+                    onClick={() => handleRecall(item)}
+                    disabled={recallingId === item.id}
+                    className="flex items-center gap-2 px-4 py-3 shrink-0 border-l border-amber-400/30 bg-amber-500/10 hover:bg-amber-500/20 transition-all active:scale-[0.98]"
+                  >
+                    <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 bg-amber-500/20 border border-amber-400/30">
+                      {recallingId === item.id ? <Loader2 size={15} className="animate-spin text-amber-400" /> : <CornerUpLeft size={15} className="text-amber-400" />}
+                    </div>
+                    <div className="text-left">
+                      <p className="text-[9px] font-bold text-amber-400/60 uppercase tracking-widest whitespace-nowrap">Action</p>
+                      <p className="text-xs font-extrabold text-amber-300 uppercase tracking-wide leading-none whitespace-nowrap">Recall to Drafts</p>
+                    </div>
+                  </button>
+                )}
+                {isMine && (isAdmin || item.authorId === currentUserId) && (
+                  <button
+                    onClick={() => handleRecall(item)}
+                    disabled={recallingId === item.id}
+                    className="flex items-center justify-center w-10 shrink-0 border-l border-amber-400/20 bg-amber-500/[0.06] hover:bg-amber-500/15 transition-all active:scale-[0.98]"
+                    title="Recall to Drafts"
+                  >
+                    {recallingId === item.id ? <Loader2 size={14} className="animate-spin text-amber-400/60" /> : <CornerUpLeft size={14} className="text-amber-400/60" />}
+                  </button>
+                )}
+              </div>
+
+
+
               {/* Expanded detail panel */}
               {isExpanded && (
-                <div
-                  className="px-4 pb-4 pt-3"
-                  style={{ borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(0,0,0,0.15)" }}
-                >
+                <div className="px-4 pb-4 pt-3 border-t border-white/[0.06] bg-black/15">
                   {/* All scriptures */}
                   {(item.scriptures?.length ?? 0) > 1 && (
                     <Section icon={<BookOpen size={13} />} label="Main Scriptures">
@@ -825,6 +812,7 @@ export default function DesignRequestsView({ currentUserId, currentUserName, cur
             </div>
           );
         })}
+        </div>
       </div>
     </div>
 

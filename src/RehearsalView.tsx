@@ -538,9 +538,8 @@ export default function RehearsalView({
 
     // ── Event picker (only when multiple events have lineups) ─────────────────
     const eventPickerBar = upcomingEvents.length > 1 ? (
-        <div className="shrink-0 flex items-center gap-1.5 px-3 py-2 overflow-x-auto no-scrollbar"
-            style={{ background: "#0e1018", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-            <span className="text-[10px] font-bold uppercase tracking-widest shrink-0 mr-1" style={{ color: "rgba(255,255,255,0.3)" }}>Event:</span>
+        <div className="shrink-0 flex items-center gap-1.5 px-4 py-2 overflow-x-auto no-scrollbar bg-gray-950 border-b border-white/[0.06]">
+            <span className="text-[10px] font-bold uppercase tracking-widest shrink-0 mr-1 text-gray-500">Event:</span>
             {upcomingEvents.map((ev, idx) => {
                 const evName = (ev as any).eventName || (ev.serviceType === "sunday" ? "Sunday Service" : "Midweek Service");
                 const dateLabel = new Date(ev.date + "T00:00:00").toLocaleDateString("en", { month: "short", day: "numeric" });
@@ -550,21 +549,17 @@ export default function RehearsalView({
                     <button
                         key={ev.id ?? idx}
                         onClick={() => { setSelectedEventIdx(idx); setActiveSong(ev.songLineup?.joyful ? "joyful" : "solemn"); }}
-                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all shrink-0"
-                        style={isActive ? {
-                            background: "linear-gradient(135deg,#6366f1,#8b5cf6)",
-                            color: "#fff",
-                        } : {
-                            background: "rgba(255,255,255,0.05)",
-                            color: "rgba(255,255,255,0.45)",
-                            border: "1px solid rgba(255,255,255,0.08)",
-                        }}
+                        className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-all shrink-0 ${
+                            isActive
+                                ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/30"
+                                : "bg-white/5 border border-white/[0.08] text-white/40 hover:text-white/70 hover:bg-white/10"
+                        }`}
                     >
                         <span>{evName}</span>
-                        <span className="text-[10px] px-1 py-0.5 rounded-full font-bold"
-                            style={{ background: isActive ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.08)", color: isActive ? "#fff" : "rgba(255,255,255,0.4)" }}
-                        >{songCount}</span>
-                        <span className="text-[10px] opacity-70">{dateLabel}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                            isActive ? "bg-white/20 text-white" : "bg-white/10 text-white/40"
+                        }`}>{songCount}</span>
+                        <span className="text-[10px] opacity-60">{dateLabel}</span>
                     </button>
                 );
             })}
@@ -573,8 +568,7 @@ export default function RehearsalView({
 
     // ── Song navigator header ─────────────────────────────────────────────────
     const songNavBar = (
-        <div className="shrink-0 flex items-center gap-2 px-4 py-3"
-            style={{ background: "#13151f", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+        <div className="shrink-0 flex items-center gap-2 px-4 py-3 bg-gray-900/80 border-b border-white/[0.06] backdrop-blur-sm">
             <button onClick={goPrev} disabled={!canPrev}
                 className="p-2 rounded-xl transition-all disabled:opacity-20 disabled:cursor-not-allowed active:scale-95"
                 style={{ color: "rgba(255,255,255,0.4)" }}
@@ -695,12 +689,12 @@ export default function RehearsalView({
             onTouchEnd={onTouchEnd}
         >
             {/* Single shared header row */}
-            <div className="flex items-center shrink-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+            <div className="flex items-center shrink-0 bg-gray-900/60 border-b border-white/[0.07] backdrop-blur-sm">
                 {/* Lyrics header */}
                 <div className="flex-1 flex items-center justify-between px-4 py-2.5">
                     <div className="flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 rounded-full" style={{ background: "rgba(244,63,94,0.9)", boxShadow: "0 0 6px rgba(244,63,94,0.6)" }} />
-                        <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "rgba(244,63,94,0.9)" }}>Lyrics</span>
+                        <div className="w-1.5 h-1.5 rounded-full bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.6)]" />
+                        <span className="text-[11px] font-bold uppercase tracking-widest text-rose-400">Lyrics</span>
                         {!lyricsEdit.isEditing && !chordsEdit.isEditing && zoomControls}
                     </div>
                     <div className="flex items-center gap-1">
@@ -708,12 +702,12 @@ export default function RehearsalView({
                     </div>
                 </div>
                 {/* Vertical divider */}
-                <div className="w-px self-stretch shrink-0" style={{ background: "rgba(255,255,255,0.07)" }} />
+                <div className="w-px self-stretch shrink-0 bg-white/[0.07]" />
                 {/* Chords header */}
                 <div className="flex-1 flex items-center justify-between px-4 py-2.5">
                     <div className="flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 rounded-full" style={{ background: "rgba(99,102,241,0.9)", boxShadow: "0 0 6px rgba(99,102,241,0.6)" }} />
-                        <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "rgba(99,102,241,0.9)" }}>Chords</span>
+                        <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 shadow-[0_0_6px_rgba(99,102,241,0.6)]" />
+                        <span className="text-[11px] font-bold uppercase tracking-widest text-indigo-400">Chords</span>
                     </div>
                     <div className="flex items-center gap-1">
                         {chordsEdit.isEditing ? editToolbar("chords") : (
@@ -732,7 +726,7 @@ export default function RehearsalView({
                     {columnContent("lyrics")}
                 </div>
                 {/* Vertical divider */}
-                <div className="w-px shrink-0" style={{ background: "rgba(255,255,255,0.07)" }} />
+                <div className="w-px shrink-0 bg-white/[0.07]" />
                 <div className={`flex-1 flex flex-col ${chordsEdit.isEditing ? "overflow-hidden" : "overflow-y-auto"}`}>
                     {columnContent("chords")}
                 </div>
@@ -748,20 +742,26 @@ export default function RehearsalView({
             onTouchEnd={onTouchEnd}
         >
             {/* ── Tab bar ── */}
-            <div className="shrink-0 flex items-center gap-2 px-3 py-2" style={{ background: "#13151f", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                <div className="flex flex-1 rounded-2xl p-1 gap-1" style={{ background: "rgba(255,255,255,0.04)" }}>
+            <div className="shrink-0 flex items-center gap-2 px-3 py-2 bg-gray-900 border-b border-white/[0.06]">
+                <div className="flex flex-1 rounded-2xl p-1 gap-1 bg-white/[0.04]">
                     <button
                         onClick={() => setMobileTab("lyrics")}
-                        className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all active:scale-95`}
-                        style={mobileTab === "lyrics" ? { background: "linear-gradient(135deg,#6366f1,#8b5cf6)", color: "#fff" } : { color: "rgba(255,255,255,0.4)" }}
+                        className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all active:scale-95 ${
+                            mobileTab === "lyrics"
+                                ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md"
+                                : "text-white/40"
+                        }`}
                     >
                         <BookOpen size={16} />
                         Lyrics
                     </button>
                     <button
                         onClick={() => setMobileTab("chords")}
-                        className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all active:scale-95`}
-                        style={mobileTab === "chords" ? { background: "linear-gradient(135deg,#7c3aed,#a855f7)", color: "#fff" } : { color: "rgba(255,255,255,0.4)" }}
+                        className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all active:scale-95 ${
+                            mobileTab === "chords"
+                                ? "bg-gradient-to-r from-violet-700 to-purple-600 text-white shadow-md"
+                                : "text-white/40"
+                        }`}
                     >
                         <Guitar size={16} />
                         Chords
@@ -770,13 +770,16 @@ export default function RehearsalView({
             </div>
 
             {/* ── Panel header with controls ── */}
-            <div className="shrink-0 flex items-center justify-between px-4 py-2" style={{ background: "#13151f", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+            <div className="shrink-0 flex items-center justify-between px-4 py-2 bg-gray-900 border-b border-white/[0.06]">
                 <div className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full"
-                        style={{ background: mobileTab === "lyrics" ? "rgba(244,63,94,0.9)" : "rgba(99,102,241,0.9)",
-                                 boxShadow: mobileTab === "lyrics" ? "0 0 6px rgba(244,63,94,0.5)" : "0 0 6px rgba(99,102,241,0.5)" }} />
-                    <span className="text-[11px] font-bold uppercase tracking-widest"
-                        style={{ color: mobileTab === "lyrics" ? "rgba(251,113,133,0.9)" : "rgba(129,140,248,0.9)" }}>
+                    <div className={`w-1.5 h-1.5 rounded-full ${
+                        mobileTab === "lyrics"
+                            ? "bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.5)]"
+                            : "bg-indigo-500 shadow-[0_0_6px_rgba(99,102,241,0.5)]"
+                    }`} />
+                    <span className={`text-[11px] font-bold uppercase tracking-widest ${
+                        mobileTab === "lyrics" ? "text-rose-400" : "text-indigo-400"
+                    }`}>
                         {mobileTab === "lyrics" ? "Lyrics" : "Chords"}
                     </span>
                     {!(mobileTab === "lyrics" ? lyricsEdit : chordsEdit).isEditing && zoomControls}
@@ -791,10 +794,7 @@ export default function RehearsalView({
                                 <button
                                     onClick={() => setMobileFullscreen(true)}
                                     title="Full screen"
-                                    className="w-10 h-10 flex items-center justify-center rounded-xl transition-all active:scale-95"
-                                    style={{ color: "rgba(255,255,255,0.35)" }}
-                                    onMouseEnter={e => (e.currentTarget.style.color = "rgba(99,102,241,0.9)")}
-                                    onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.35)")}>
+                                    className="w-10 h-10 flex items-center justify-center rounded-xl transition-all active:scale-95 text-white/35 hover:text-indigo-400">
                                     <Maximize2 size={18} />
                                 </button>
                             </>
@@ -923,15 +923,20 @@ export default function RehearsalView({
 
     return (
         <div className="flex flex-col h-full overflow-hidden -m-4 sm:-m-6">
-            {/* Event label banner */}
-            <div className="shrink-0 px-4 py-2.5" style={{ background: "linear-gradient(90deg,#6366f1,#7c3aed)", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
-                <p className="text-xs font-semibold uppercase tracking-wider text-white/80">
-                    🎵 {(event as any).eventName ?? "Worship Service"} &middot;{" "}
-                    {new Date(event.date + "T00:00:00").toLocaleDateString("en", { weekday: "short", month: "short", day: "numeric" })}
-                    {upcomingEvents.length > 1 && (
-                        <span className="ml-2 opacity-70">· {clampedEventIdx + 1} of {upcomingEvents.length} events</span>
-                    )}
-                </p>
+            {/* ── Event label banner ── */}
+            <div className="shrink-0 flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-700 border-b border-white/10">
+                <span className="text-base">🎵</span>
+                <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold uppercase tracking-widest text-white/90 leading-none">
+                        {(event as any).eventName ?? "Worship Service"}
+                    </p>
+                    <p className="text-[10px] text-white/60 mt-0.5 leading-none">
+                        {new Date(event.date + "T00:00:00").toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric" })}
+                        {upcomingEvents.length > 1 && (
+                            <span className="ml-2 opacity-70">· {clampedEventIdx + 1} of {upcomingEvents.length}</span>
+                        )}
+                    </p>
+                </div>
             </div>
 
             {/* Event picker */}
@@ -940,16 +945,19 @@ export default function RehearsalView({
             {/* Song navigator */}
             {songNavBar}
 
-            {/* Artist + key info */}
+            {/* ── Artist / key info strip ── */}
             {currentSong && (
-                <div className="shrink-0 px-4 py-2" style={{ background: "#0e1018", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                    <p className="text-xs" style={{ color: "rgba(255,255,255,0.45)" }}>
-                        <span className="font-semibold" style={{ color: "rgba(255,255,255,0.85)" }}>{currentSong.title}</span>
-                        {currentSong.artist && <span> · {currentSong.artist}</span>}
-                        {(currentSong.updated_by_name) && (
-                            <span className="ml-2" style={{ color: "rgba(255,255,255,0.35)" }}>
-                                · last edited by <span style={{ color: "rgba(129,140,248,0.85)" }} className="font-medium">{currentSong.updated_by_name}</span>
-                            </span>
+                <div className="shrink-0 px-4 py-2 bg-gray-950 border-b border-white/[0.05]">
+                    <p className="text-xs text-white/40 truncate">
+                        <span className="font-semibold text-white/80">{currentSong.title}</span>
+                        {currentSong.artist && <span className="mx-1">·</span>}
+                        {currentSong.artist && <span>{currentSong.artist}</span>}
+                        {currentSong.updated_by_name && (
+                            <>
+                                <span className="mx-1">·</span>
+                                <span>edited by </span>
+                                <span className="text-indigo-400 font-medium">{currentSong.updated_by_name}</span>
+                            </>
                         )}
                     </p>
                 </div>

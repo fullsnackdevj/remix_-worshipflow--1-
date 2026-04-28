@@ -17,6 +17,7 @@ const EventDashboardPage       = lazy(() => import('./EventDashboardPage.tsx'));
 const InternalContributionPage = lazy(() => import('./InternalContributionPage.tsx'));
 const InternalMemberFormPage   = lazy(() => import('./InternalMemberFormPage.tsx'));
 const PublicPlaylistPage       = lazy(() => import('./PublicPlaylistPage.tsx'));
+const LiveDisplayPage          = lazy(() => import('./LiveDisplayPage.tsx'));
 
 // Returning users skip the full splash — first visit gets brand impression, repeat visits feel instant
 const isReturning = (() => { try { return !!sessionStorage.getItem('wf_visited'); } catch { return false; } })();
@@ -99,6 +100,16 @@ function Root() {
   // Determine view: path-based takes priority over query param
   const publicView    = pathDashMatch ? 'dashboard' : params.get('view');
   const publicPlaylistSlug = pathPlayMatch?.[1] ?? null;
+
+  // ── Public live-display: /live-display (no auth required, used by OBS) ──
+  const isLiveDisplay = pathname === '/live-display';
+  if (isLiveDisplay) {
+    return (
+      <Suspense fallback={<div style={{ background: 'transparent', width: '100vw', height: '100vh' }} />}>
+        <LiveDisplayPage />
+      </Suspense>
+    );
+  }
 
   const fallback = (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#030712' }}>

@@ -702,14 +702,10 @@ export default function TeamNotesView({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingNoteId]);
 
-  // Close cat menu on outside click
+  // Close category menu on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (
-        showCatMenu &&
-        catMenuRef.current &&
-        !catMenuRef.current.contains(e.target as Node)
-      ) {
+      if (showCatMenu && catMenuRef.current && !catMenuRef.current.contains(e.target as Node)) {
         setShowCatMenu(false);
       }
     };
@@ -862,24 +858,34 @@ export default function TeamNotesView({
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
 
-  const currentCatLabel =
-    catFilter === "all" ? "All Categories" : catConfig(catFilter).label;
+  const currentCatLabel = catFilter === "all" ? "All Categories" : catConfig(catFilter).label;
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="w-full">
       {/* ── Page Header ── */}
-      <div className="flex items-start justify-between mb-6 gap-3 flex-wrap">
-        <div>
-          <h2 className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-white flex items-center gap-2.5">
-            <span className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-sm shadow-indigo-500/30"><NotebookPen size={16} className="text-white" /></span> Notes
-          </h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 max-w-[260px] leading-snug">
-            {activeTab === "personal"
-              ? "Private notes only visible to you."
-              : "Meeting recaps, decisions, and team announcements."}
-          </p>
+      <div className="flex items-center justify-between gap-3 mb-6">
+        {/* Title — min-w-0 lets it shrink so the button never wraps */}
+        <div className="flex items-center gap-3 min-w-0">
+          <span className={`w-10 h-10 rounded-2xl flex items-center justify-center shadow-lg shrink-0 ${
+            activeTab === "personal"
+              ? "bg-gradient-to-br from-amber-500 to-orange-400 shadow-amber-500/30"
+              : "bg-gradient-to-br from-indigo-500 via-violet-500 to-purple-600 shadow-indigo-500/30"
+          }`}>
+            <NotebookPen size={18} className="text-white" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-lg font-extrabold tracking-tight text-gray-900 dark:text-white leading-none">
+              {activeTab === "personal" ? "Personal Notes" : "Team Notes"}
+            </h2>
+            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 leading-none truncate">
+              {activeTab === "personal"
+                ? "Private · visible only to you"
+                : "Shared with the team"}
+            </p>
+          </div>
         </div>
-        {/* New Note button — routes to correct tab's form */}
+
+        {/* New Note button */}
         <button
           onClick={() => {
             if (activeTab === "personal") {
@@ -889,37 +895,56 @@ export default function TeamNotesView({
               setShowForm(true);
             }
           }}
-          className={`flex items-center gap-2 px-5 py-2.5 text-white text-sm font-semibold rounded-xl transition-all shadow-md ${
+          className={`flex items-center gap-2 px-4 py-2 text-white text-sm font-semibold rounded-xl
+                       transition-all shadow-md active:scale-95 ${
             activeTab === "personal"
-              ? "bg-amber-500 hover:bg-amber-400 shadow-amber-500/25"
-              : "bg-indigo-600 hover:bg-indigo-500 shadow-indigo-500/25"
+              ? "bg-gradient-to-r from-amber-500 to-orange-400 hover:from-amber-400 hover:to-orange-300 shadow-amber-500/30"
+              : "bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 shadow-indigo-500/30"
           }`}
         >
-          <Plus size={16} /> New Note
+          <Plus size={15} /> New Note
         </button>
       </div>
 
       {/* ── Tab Switcher ── */}
-      <div className="flex items-center gap-1 mb-6 p-1 bg-gray-100/80 dark:bg-gray-800/80 rounded-2xl w-fit border border-gray-200/50 dark:border-gray-700/50 backdrop-blur-sm">
+      <div className="flex items-center gap-1 mb-6 p-1
+                      bg-gray-100/80 dark:bg-gray-800/60
+                      rounded-2xl w-full sm:w-fit
+                      border border-gray-200/60 dark:border-white/[0.06]
+                      backdrop-blur-sm shadow-sm">
         <button
           onClick={() => setActiveTab("personal")}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+          className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
             activeTab === "personal"
-              ? "bg-gradient-to-r from-amber-500 to-orange-400 text-white shadow-md shadow-amber-500/25"
-              : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white hover:bg-white/60 dark:hover:bg-white/5"
+              ? "bg-gradient-to-r from-amber-500 to-orange-400 text-white shadow-md shadow-amber-500/30"
+              : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white hover:bg-white/70 dark:hover:bg-white/5"
           }`}
         >
-          <Lock size={14} /> Personal Notes
+          <Lock size={14} />
+          Personal
+          {activeTab === "personal" && (
+            <span className="ml-0.5 w-1.5 h-1.5 rounded-full bg-white/70 shrink-0" />
+          )}
         </button>
         <button
           onClick={() => setActiveTab("team")}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+          className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
             activeTab === "team"
-              ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/25"
-              : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white hover:bg-white/60 dark:hover:bg-white/5"
+              ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/30"
+              : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white hover:bg-white/70 dark:hover:bg-white/5"
           }`}
         >
-          <Users size={14} /> Team Notes
+          <Users size={14} />
+          Team
+          {notes.length > 0 && (
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none ${
+              activeTab === "team"
+                ? "bg-white/25 text-white"
+                : "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-300"
+            }`}>
+              {notes.length}
+            </span>
+          )}
         </button>
       </div>
 
@@ -935,42 +960,29 @@ export default function TeamNotesView({
           <div className="flex items-center gap-2 mb-5 flex-wrap">
             {/* Search */}
             <div className="relative flex-1 min-w-[180px]">
-              <Search
-                size={14}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-              />
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search notes…"
+                placeholder="Search team notes…"
                 className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-400 transition-all"
               />
             </div>
 
-            {/* Category filter */}
+            {/* Category dropdown */}
             <div className="relative" ref={catMenuRef}>
               <button
-                onClick={() => setShowCatMenu((v) => !v)}
+                onClick={() => setShowCatMenu(v => !v)}
                 className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800/80 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all"
               >
-                {currentCatLabel}{" "}
-                <ChevronDown
-                  size={13}
-                  className={`transition-transform ${showCatMenu ? "rotate-180" : ""}`}
-                />
+                {currentCatLabel} <ChevronDown size={13} className={`transition-transform ${showCatMenu ? "rotate-180" : ""}`} />
               </button>
               {showCatMenu && (
                 <div className="absolute right-0 top-full mt-1 w-44 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-20 overflow-hidden">
-                  {[
-                    { value: "all", label: "All Categories" },
-                    ...CATEGORIES.map((c) => ({ value: c.value, label: c.label })),
-                  ].map((opt) => (
+                  {[{ value: "all", label: "All Categories" }, ...CATEGORIES.map(c => ({ value: c.value, label: c.label }))].map(opt => (
                     <button
                       key={opt.value}
-                      onClick={() => {
-                        setCatFilter(opt.value as CategoryValue | "all");
-                        setShowCatMenu(false);
-                      }}
+                      onClick={() => { setCatFilter(opt.value as CategoryValue | "all"); setShowCatMenu(false); }}
                       className={`w-full text-left px-3 py-2 text-sm transition-colors ${
                         catFilter === opt.value
                           ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-semibold"
@@ -985,50 +997,61 @@ export default function TeamNotesView({
             </div>
           </div>
 
-          {/* ── Notes List ── */}
+          {/* ── Notes Grid ── */}
           {loading ? (
-            <div className="flex items-center justify-center py-20 text-gray-400">
-              <Loader2 size={24} className="animate-spin mr-3" /> Loading notes…
+            <div className="flex flex-col items-center justify-center py-24 gap-4 text-gray-400">
+              <Loader2 size={32} className="animate-spin text-indigo-400" />
+              <p className="text-sm font-medium">Loading team notes…</p>
             </div>
           ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
-              <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-indigo-100 to-violet-100 dark:from-indigo-900/30 dark:to-violet-900/20 flex items-center justify-center mb-5 shadow-inner">
-                <NotebookPen size={32} className="text-indigo-500 dark:text-indigo-400" />
+            <div className="flex flex-col items-center justify-center py-24 text-center gap-4">
+              {/* Illustrated empty state */}
+              <div className="relative w-24 h-24 mb-2">
+                <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-indigo-500/20 via-violet-500/15 to-purple-500/10 dark:from-indigo-500/10 dark:to-purple-500/5 blur-xl" />
+                <div className="relative w-24 h-24 rounded-3xl bg-gradient-to-br from-indigo-100 to-violet-100 dark:from-indigo-900/40 dark:to-violet-900/20
+                               flex items-center justify-center border border-indigo-200/60 dark:border-indigo-700/40 shadow-lg">
+                  <NotebookPen size={36} className="text-indigo-500 dark:text-indigo-400" />
+                </div>
               </div>
-              <p className="text-base font-bold text-gray-800 dark:text-gray-200">
-                {q || catFilter !== "all" ? "No notes match your search" : "No notes yet"}
-              </p>
-              <p className="text-sm text-gray-400 mt-1">
-                {q || catFilter !== "all"
-                  ? "Try a different search or category"
-                  : "Post your first meeting recap or announcement!"}
-              </p>
+              <div>
+                <p className="text-base font-bold text-gray-800 dark:text-gray-200">
+                  {q || catFilter !== "all" ? "No notes match" : "No team notes yet"}
+                </p>
+                <p className="text-sm text-gray-400 mt-1">
+                  {q || catFilter !== "all"
+                    ? "Try a different search or category filter"
+                    : "Post your first meeting recap, decision, or announcement!"}
+                </p>
+              </div>
               {!q && catFilter === "all" && (
                 <button
-                  onClick={() => {
-                    setEditing(null);
-                    setShowForm(true);
-                  }}
-                  className="mt-5 flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl transition-all shadow-md shadow-indigo-500/25"
+                  onClick={() => { setEditing(null); setShowForm(true); }}
+                  className="flex items-center gap-2 px-5 py-2.5
+                             bg-gradient-to-r from-indigo-600 to-violet-600
+                             hover:from-indigo-500 hover:to-violet-500
+                             text-white text-sm font-semibold rounded-xl transition-all
+                             shadow-lg shadow-indigo-500/25 active:scale-95"
                 >
                   <Plus size={15} /> Create your first note
                 </button>
               )}
             </div>
           ) : (
-            <div className="space-y-4">
+            /* Responsive 2-col masonry grid on md+, 1-col on mobile */
+            <div className="columns-1 md:columns-2 gap-4 space-y-0">
               {filtered.map((note) => (
-                <NoteCard
-                  key={note.id}
-                  note={note}
-                  userId={userId}
-                  userRole={userRole}
-                  onEdit={(n) => { setEditing(n); setShowForm(true); }}
-                  onDelete={handleDelete}
-                  onPin={handlePin}
-                  onLike={handleLike}
-                  onView={(n) => setViewing(n)}
-                />
+                <div key={note.id} className="break-inside-avoid mb-4">
+                  <NoteCard
+                    note={note}
+                    userId={userId}
+                    userRole={userRole}
+                    onEdit={(n) => { setEditing(n); setShowForm(true); }}
+                    onDelete={handleDelete}
+                    onPin={handlePin}
+                    onLike={handleLike}
+                    onView={(n) => setViewing(n)}
+                  />
+                </div>
               ))}
             </div>
           )}

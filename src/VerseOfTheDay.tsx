@@ -156,42 +156,7 @@ export default function VerseOfTheDay({ userId }: Props) {
                         </p>
                     </div>
 
-                    {/* Reactions — overflow-x scroll on mobile, wrap on desktop */}
-                    <div className="mt-4 flex gap-1.5 items-center overflow-x-auto pb-0.5" style={{ scrollbarWidth: "none" }}>
-                        {VERSE_REACTIONS.map(({ key, label, icon }) => {
-                            const users = reactions[key] ?? [];
-                            const reacted = users.includes(userId);
-                            return (
-                                <button
-                                    key={key}
-                                    onClick={() => toggleReaction(key)}
-                                    title={label}
-                                    aria-label={label}
-                                    className={`group relative flex items-center gap-1 px-2.5 py-1 rounded-full border text-sm transition-all active:scale-95 select-none ${
-                                        reacted
-                                            ? "bg-indigo-50 dark:bg-indigo-900/30 border-indigo-300 dark:border-indigo-600/50 scale-105"
-                                            : "bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600/50 hover:bg-gray-100 dark:hover:bg-gray-700"
-                                    }`}
-                                >
-                                    <span className="leading-none" style={{ fontSize: 14 }}>{icon}</span>
-                                    {users.length > 0 && (
-                                        <span className={`text-sm font-bold tabular-nums ${reacted ? "text-indigo-600 dark:text-indigo-300" : "text-gray-500 dark:text-gray-400"}`}>
-                                            {users.length}
-                                        </span>
-                                    )}
-                                    {/* Tooltip */}
-                                    <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-gray-900 dark:bg-gray-950 text-white text-[10px] px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-10 shadow-lg">
-                                        {label}
-                                    </span>
-                                </button>
-                            );
-                        })}
-                        {totalReactions > 0 && (
-                            <span className="text-sm text-gray-400 dark:text-gray-500 ml-0.5">
-                                {totalReactions} reaction{totalReactions !== 1 ? "s" : ""}
-                            </span>
-                        )}
-                    </div>
+
                 </div>
 
                 {/* RIGHT — Insight + Cross Refs: HIDDEN on mobile/tablet, flex on lg+ only */}

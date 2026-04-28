@@ -176,7 +176,7 @@ function PersonalNoteCard({
 
   return (
     <div
-      className={`group relative rounded-2xl border transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer ${
+      className={`group relative rounded-2xl border transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer break-inside-avoid ${
         note.pinned
           ? "border-amber-300 dark:border-amber-600/70 bg-amber-50/70 dark:bg-amber-900/15 shadow-sm"
           : "border-gray-200 dark:border-gray-700/50 bg-white dark:bg-gray-800/60 hover:border-amber-200 dark:hover:border-amber-800/40"
@@ -641,7 +641,7 @@ export default function PersonalNotesTab({ userId, onToast, openTrigger = 0 }: P
           )}
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="columns-1 md:columns-2 gap-4 space-y-4">
           {filtered.map(note => (
             <PersonalNoteCard
               key={note.id}

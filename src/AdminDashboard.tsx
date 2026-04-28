@@ -862,10 +862,7 @@ export default function AdminDashboard({
                                         onGreetingSent={(memberId) => {
                                             if (!userId) return;
                                             const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
-                                            // Write IMMEDIATELY — this is called before the API fetch,
-                                            // so the key exists the moment the user taps Send.
                                             try { localStorage.setItem(`wf_bday_sent_${userId}_${memberId}_${today}`, "1"); } catch { /* noop */ }
-                                            // If ALL celebrants are now greeted, close the modal right away.
                                             const allDone = celebrants.every(c =>
                                                 localStorage.getItem(`wf_bday_sent_${userId}_${c.id}_${today}`) === "1"
                                             );
@@ -879,38 +876,34 @@ export default function AdminDashboard({
                 </div>
             )}
 
-            {/* ── Top section:
-                Mobile (< 640px):   1-col stack — verse, then tasks, then 2x2 stats
-                Tablet (640–1023px): verse full width, then 4-col stats horizontal row
-                Desktop (1024px+):  3-col: [verse | tasks | 2x2 stats]
-            ── */}
-            <div className="grid grid-cols-1 lg:grid-cols-[2fr_1.5fr_1.5fr] gap-5">
-                {/* LEFT — Daily Bible Verse: span 2 cols when tasks are hidden */}
+            {/* ── Top section — 3-col desktop: [Verse | Tasks | 2×2 stats] ── */}
+            <div className="grid grid-cols-1 lg:grid-cols-[2fr_1.5fr_1.5fr] gap-4">
+                {/* LEFT — Daily Bible Verse: spans 2 cols when tasks are hidden */}
                 <div className={hasActiveTasks ? "" : "lg:col-span-2"}>
                   <VerseOfTheDay userId={userId} userName={userName.split(" ")[0] || userName} userPhoto="" />
                 </div>
-                {/* CENTER — My Tasks (hidden at tablet/mobile when empty) */}
+                {/* CENTER — My Tasks */}
                 <MyTasksCard userName={userName} userEmail={userEmail} members={members} onNavigate={onNavigate} onVisibilityChange={setHasActiveTasks} />
-                {/* RIGHT — Stat tiles: 2x2 on desktop, 4-col horizontal on tablet (sm:) */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 gap-3 sm:gap-4">
+                {/* RIGHT — 2×2 metric tiles */}
+                <div className="grid grid-cols-2 gap-4">
                     <div className="stagger-1">
                     <MetricTile label="Songs" value={songs.length} sub={`${songsUsed} in services`}
-                        iconBg="bg-indigo-100 dark:bg-indigo-900/40" icon={<Music size={20} className="text-indigo-600 dark:text-indigo-400" />}
+                        iconBg="bg-indigo-100 dark:bg-indigo-900/40" icon={<Music size={16} className="text-indigo-600 dark:text-indigo-400" />}
                         onClick={() => onNavigate("songs")} />
                     </div>
                     <div className="stagger-2">
                     <MetricTile label="Members" value={members.length} sub={`${members.filter(m => m.status !== "inactive").length} active`}
-                        iconBg="bg-violet-100 dark:bg-violet-900/40" icon={<Users size={20} className="text-violet-600 dark:text-violet-400" />}
+                        iconBg="bg-violet-100 dark:bg-violet-900/40" icon={<Users size={16} className="text-violet-600 dark:text-violet-400" />}
                         onClick={() => onNavigate("members")} />
                     </div>
                     <div className="stagger-3">
                     <MetricTile label="Events" value={totalEvents} sub={`${upcomingEvents.length} upcoming`}
-                        iconBg="bg-emerald-100 dark:bg-emerald-900/40" icon={<Zap size={20} className="text-emerald-600 dark:text-emerald-400" />}
+                        iconBg="bg-emerald-100 dark:bg-emerald-900/40" icon={<Zap size={16} className="text-emerald-600 dark:text-emerald-400" />}
                         onClick={() => onNavigate("schedule")} />
                     </div>
                     <div className="stagger-4">
                     <MetricTile label="Issues" value={openBugs + openFeqs} sub={`${openBugs} bugs · ${openFeqs} req`}
-                        iconBg="bg-amber-100 dark:bg-amber-900/40" icon={<AlertCircle size={20} className="text-amber-600 dark:text-amber-400" />} />
+                        iconBg="bg-amber-100 dark:bg-amber-900/40" icon={<AlertCircle size={16} className="text-amber-600 dark:text-amber-400" />} />
                     </div>
                 </div>
             </div>

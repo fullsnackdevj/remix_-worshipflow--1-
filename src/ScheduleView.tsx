@@ -621,45 +621,49 @@ showToast("error", "Could not save acknowledgment. Try again.");
   return (
     <>
     <div className="max-w-7xl mx-auto">
-      {/* Toolbar */}
-      <div className="flex items-center justify-between gap-2 mb-5">
 
-        {/* Left: view toggle */}
-        <div className="flex items-center bg-gray-100 dark:bg-gray-800/80 rounded-2xl p-1 gap-0.5 shrink-0 border border-gray-200 dark:border-gray-700/60">
-          <button onClick={() => setScheduleView("month")} className={`flex items-center justify-center gap-1.5 w-9 h-9 sm:w-auto sm:h-auto sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold tracking-wide transition-all ${
-            scheduleView === "month"
-              ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm"
-              : "text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-          }`}>
-            <Calendar size={14} />
-            <span className="hidden sm:inline">Month</span>
-          </button>
-          <button onClick={() => setScheduleView("list")} className={`flex items-center justify-center gap-1.5 w-9 h-9 sm:w-auto sm:h-auto sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold tracking-wide transition-all ${
-            scheduleView === "list"
-              ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm"
-              : "text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-          }`}>
-            <List size={14} />
-            <span className="hidden sm:inline">List</span>
-          </button>
-        </div>
+      {/* ── Toolbar ─────────────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between gap-3 mb-5 flex-wrap">
 
-        {/* Center: month navigation */}
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setCalendarMonth(new Date(year, month - 1, 1))}
-            className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-all text-gray-400 dark:text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
-          ><ChevronLeft size={16} /></button>
-          <h2 className="font-black text-gray-900 dark:text-white text-sm sm:text-base min-w-[110px] sm:min-w-[148px] text-center tracking-tight">
+        {/* LEFT — Month title + nav arrows + TODAY */}
+        <div className="flex items-center gap-2 min-w-0">
+          <h2 className="font-black text-gray-900 dark:text-white text-lg sm:text-2xl tracking-tight uppercase">
             {calendarMonth.toLocaleDateString("en", { month: "long", year: "numeric" })}
           </h2>
-          <button
-            onClick={() => setCalendarMonth(new Date(year, month + 1, 1))}
-            className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-all text-gray-400 dark:text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
-          ><ChevronRight size={16} /></button>
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={() => setCalendarMonth(new Date(year, month - 1, 1))}
+              className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-all text-gray-400 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white"
+            ><ChevronLeft size={15} /></button>
+            <button
+              onClick={() => setCalendarMonth(new Date(year, month + 1, 1))}
+              className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-all text-gray-400 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white"
+            ><ChevronRight size={15} /></button>
+          </div>
+
         </div>
 
-        {/* Right: Add Event button */}
+        {/* CENTER — View tabs */}
+        <div className="flex items-center bg-gray-100 dark:bg-white/5 rounded-xl p-1 gap-0.5 border border-gray-200 dark:border-white/10">
+          <button onClick={() => setScheduleView("month")} className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold tracking-wide transition-all ${
+            scheduleView === "month"
+              ? "bg-white dark:bg-violet-600 text-indigo-600 dark:text-white shadow-sm"
+              : "text-gray-400 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+          }`}>
+            <Calendar size={13} />
+            <span>MONTH</span>
+          </button>
+          <button onClick={() => setScheduleView("list")} className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold tracking-wide transition-all ${
+            scheduleView === "list"
+              ? "bg-white dark:bg-violet-600 text-indigo-600 dark:text-white shadow-sm"
+              : "text-gray-400 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+          }`}>
+            <List size={13} />
+            <span>LIST</span>
+          </button>
+        </div>
+
+        {/* RIGHT — Add Event button */}
         <div className="shrink-0">
           {(() => {
             const isListView = scheduleView === "list";
@@ -683,18 +687,18 @@ showToast("error", "Could not save acknowledgment. Try again.");
               return (
                 <button
                   onClick={() => { setSelectedEventId(null); setSchedPanelMode("edit"); openBlankEventForm(selectedScheduleDate!); }}
-                  className="flex items-center justify-center gap-1.5 h-9 px-3 sm:px-4 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 active:scale-[0.97] text-xs font-bold transition-all shadow-sm shadow-indigo-500/25"
+                  className="flex items-center justify-center gap-1.5 h-9 px-4 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-xl hover:from-violet-500 hover:to-indigo-500 active:scale-[0.97] text-xs font-bold transition-all shadow-lg shadow-violet-500/30"
                 >
-                  <Plus size={15} />
-                  <span className="hidden sm:inline whitespace-nowrap">{label}</span>
+                  <Plus size={14} />
+                  <span className="whitespace-nowrap">{label}</span>
                 </button>
               );
             }
             return (
               <button disabled title={disabledTitle}
-                className="flex items-center justify-center gap-1.5 h-9 px-3 sm:px-4 rounded-xl text-xs font-bold bg-gray-100 dark:bg-gray-800 text-gray-300 dark:text-gray-600 cursor-not-allowed select-none">
-                <Plus size={15} />
-                <span className="hidden sm:inline whitespace-nowrap">{label}</span>
+                className="flex items-center justify-center gap-1.5 h-9 px-4 rounded-xl text-xs font-bold bg-gray-100 dark:bg-white/5 text-gray-300 dark:text-gray-600 cursor-not-allowed select-none border border-gray-200 dark:border-white/10">
+                <Plus size={14} />
+                <span className="whitespace-nowrap">{label}</span>
               </button>
             );
           })()}
@@ -705,16 +709,16 @@ showToast("error", "Could not save acknowledgment. Try again.");
       <div className="flex gap-4 relative">
         <div className="flex-1 min-w-0">
           {scheduleView === "month" ? (
-            <div className="bg-white dark:bg-gray-800/80 rounded-2xl border border-gray-200 dark:border-gray-700/60 overflow-hidden shadow-sm">
+            <div className="bg-white dark:bg-gray-900/90 rounded-2xl border border-gray-200 dark:border-white/8 overflow-hidden shadow-xl dark:shadow-black/40">
               {/* Day-of-week header */}
-              <div className="grid grid-cols-7 bg-gray-50 dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700/60">
+              <div className="grid grid-cols-7 bg-gray-50 dark:bg-black/30 border-b border-gray-100 dark:border-white/8">
                 {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(d => (
-                  <div key={d} className="py-2.5 text-center text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">{d}</div>
+                  <div key={d} className="py-3 text-center text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">{d}</div>
                 ))}
               </div>
               <div className="grid grid-cols-7">
                 {Array.from({ length: firstDow }).map((_, i) => (
-                  <div key={`e${i}`} className="min-h-[76px] lg:min-h-[100px] border-b border-r border-gray-100 dark:border-gray-700/30 bg-gray-50/50 dark:bg-gray-800/30" />
+                  <div key={`e${i}`} className="min-h-[80px] lg:min-h-[108px] border-b border-r border-gray-100 dark:border-white/5 bg-gray-50/30 dark:bg-black/15" />
                 ))}
                 {Array.from({ length: daysInMonth }).map((_, i) => {
                   const day = i + 1;
@@ -733,15 +737,15 @@ showToast("error", "Could not save acknowledgment. Try again.");
                       onClick={() => openScheduleEditor(dateStr)}
                       title={isDeadCell ? "Past date — no events or tasks" : undefined}
                       className={[
-                        "group relative min-h-[76px] lg:min-h-[100px] border-b border-r border-gray-100 dark:border-gray-700/30 p-1.5 text-left transition-all duration-150",
-                        isDeadCell ? "opacity-30 cursor-not-allowed" : "hover:bg-indigo-50/60 dark:hover:bg-indigo-900/15",
-                        isSelected ? "bg-indigo-50/80 dark:bg-indigo-900/25 ring-1 ring-inset ring-indigo-300 dark:ring-indigo-700/60" : "",
-                        isCellPast && !isDeadCell ? "bg-gray-50/40 dark:bg-transparent" : "",
+                        "group relative min-h-[80px] lg:min-h-[108px] border-b border-r border-gray-100 dark:border-white/5 p-1.5 text-left transition-all duration-150",
+                        isDeadCell ? "opacity-30 bg-gray-50/50 dark:bg-black/20" : "hover:bg-violet-50/40 dark:hover:bg-violet-900/10",
+                        isSelected ? "bg-violet-50/80 dark:bg-violet-900/20 ring-1 ring-inset ring-violet-300 dark:ring-violet-600/40" : "",
+                        !isDeadCell && isCellPast ? "bg-gray-50/30 dark:bg-black/10" : "",
                       ].join(" ")}
                     >
                       {/* Day number */}
                       <div className="flex items-center justify-between mb-1">
-                        <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold transition-colors ${
+                        <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold transition-all ${
                           isToday
                             ? "bg-indigo-600 text-white shadow-sm"
                             : isSelected
@@ -758,19 +762,22 @@ showToast("error", "Could not save acknowledgment. Try again.");
                           >+</span>
                         )}
                       </div>
-                      {/* Event pills */}
+                      {/* Event pills — colored by event type */}
                       {schedEvents.length > 0 && (() => {
-                        const pillStyles = [
-                          "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300",
-                          "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300",
-                          "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300",
-                          "bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300",
-                          "bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300",
-                        ];
+                        const getPillCls = (name: string) => {
+                          const n = name.toLowerCase();
+                          if (n.includes("sunday"))      return "bg-violet-600 dark:bg-violet-600/90 text-white";
+                          if (n.includes("midweek"))     return "bg-amber-700 dark:bg-amber-700/90 text-white";
+                          if (n.includes("evening") || (n.includes("worship") && !n.includes("sunday"))) return "bg-orange-600 dark:bg-orange-600/90 text-white";
+                          if (n.includes("maintenance")) return "bg-red-700 dark:bg-red-700/90 text-white";
+                          if (n.includes("prayer"))      return "bg-emerald-700 dark:bg-emerald-700/90 text-white";
+                          if (n.includes("youth"))       return "bg-sky-600 dark:bg-sky-600/90 text-white";
+                          return "bg-indigo-600 dark:bg-indigo-600/90 text-white";
+                        };
                         if (schedEvents.length >= 3) {
                           return (
-                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-fuchsia-100 dark:bg-fuchsia-900/40 text-fuchsia-700 dark:text-fuchsia-300">
-                              ● {schedEvents.length} events
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-fuchsia-600 text-white">
+                              &#9679; {schedEvents.length} events
                             </span>
                           );
                         }
@@ -778,9 +785,8 @@ showToast("error", "Could not save acknowledgment. Try again.");
                           <div className="flex flex-col gap-0.5">
                             {schedEvents.map((ev, ei) => {
                               const nm = (ev as any).eventName || (ev.serviceType === "sunday" ? "Sunday Service" : "Midweek Service");
-                              const pillCls = pillStyles[ei % pillStyles.length];
                               return (
-                                <span key={ei} className={`truncate text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-tight ${pillCls}`}>
+                                <span key={ei} className={`truncate text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded-md leading-tight ${getPillCls(nm)}`}>
                                   {nm}
                                 </span>
                               );

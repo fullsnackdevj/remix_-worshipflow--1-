@@ -5,11 +5,20 @@ import {
   ChevronUp, Trash2, X, BookMarked, Lightbulb, Heart, Star,
   PlusCircle, Check, Loader2, RefreshCw, List, GripVertical, CalendarDays,
   ChevronLeft, ChevronRight, PanelRight, PanelLeft, CornerDownLeft, Eye, EyeOff, Printer, PenLine,
-  SendHorizonal, CheckCircle2, Info,
+  SendHorizonal, CheckCircle2, Info, AlertTriangle,
 } from "lucide-react";
 import DatePicker from "./DatePicker";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+// Detects if user typed/pasted 2+ verse references into one field.
+// Triggers when there's a newline followed by what looks like a new bible reference.
+function hasMultipleVerses(text: string): boolean {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  if (lines.length < 2) return false;
+  // A bible verse line typically starts with: optional number prefix, book name, space, digits
+  const versePattern = /^(?:\d\s)?[A-Z][a-zA-Z]+\s+\d/;
+  return lines.slice(1).some(l => versePattern.test(l));
+}
 interface BibleVerse { verse: number; text: string; }
 interface CollectedVerse { ref: string; text: string; translation: string; }
 interface KeyPoint {
@@ -1422,7 +1431,7 @@ function SermonCanvas({
                 className="w-full bg-transparent border-none outline-none placeholder-white/15 resize-none overflow-hidden"
                 style={{ fontSize: 15, color: "rgba(255,255,255,0.4)", caretColor: "var(--wf-c1-hex)", marginBottom: 14, lineHeight: 1.5 }}
               />
-              {/* Scriptures — multi-row */}
+              {/* Scriptures — one verse per card */}
               {(() => {
                 const scriptureList = (draft.scriptures && draft.scriptures.length > 0)
                   ? draft.scriptures
@@ -1430,22 +1439,33 @@ function SermonCanvas({
                 return (
                   <div className="flex flex-col gap-2">
                     {scriptureList.map((s, idx) => (
-                      <div key={s.id} className="rounded-xl px-3 py-2.5"
-                        style={{ background: "rgba(var(--wf-c1),0.08)", border: "1px solid rgba(var(--wf-c1),0.15)" }}>
-                        {/* Label row */}
+                      <div key={s.id} className="rounded-xl px-3 pt-2.5 pb-3"
+                        style={{
+                          background: "rgba(var(--wf-c1),0.08)",
+                          border: "1px solid rgba(var(--wf-c1),0.15)",
+                        }}>
+                        {/* Label row + remove button */}
                         <div className="flex items-center gap-1.5 mb-1.5">
                           <BookMarked size={12} className="text-indigo-400 shrink-0" />
-                          {idx === 0 && (
-                            <span className="text-[11px] font-bold uppercase tracking-widest"
-                              style={{ color: "rgba(var(--wf-c1),0.7)" }}>Scripture</span>
-                          )}
-                          {idx > 0 && (
-                            <span className="text-[11px] font-bold uppercase tracking-widest"
-                              style={{ color: "rgba(var(--wf-c1),0.45)" }}>+Verse</span>
+                          <span className="text-[11px] font-bold uppercase tracking-widest flex-1"
+                            style={{ color: idx === 0 ? "rgba(var(--wf-c1),0.7)" : "rgba(var(--wf-c1),0.45)" }}>
+                            {idx === 0 ? "Scripture" : `Verse ${idx + 1}`}
+                          </span>
+                          {scriptureList.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = scriptureList.filter((_, i) => i !== idx);
+                                onChange('scriptures', updated);
+                                if (idx === 0) onChange('mainVerse', updated[0]?.text ?? '');
+                              }}
+                              title="Remove this verse"
+                              className="shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
+                              style={{ width: 22, height: 22, minWidth: 22, background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.35)", color: "#f87171", fontSize: 14, fontWeight: 700, lineHeight: 1 }}
+                            >×</button>
                           )}
                         </div>
-                        {/* Textarea + buttons row */}
-                        <div className="flex items-start gap-2">
+                        {/* Textarea — single line only, Enter blocked */}
                         <textarea
                           value={s.text}
                           onChange={e => {
@@ -1454,57 +1474,35 @@ function SermonCanvas({
                             if (idx === 0) onChange('mainVerse', e.target.value);
                             e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px";
                           }}
+                          onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }}
+                          onPaste={e => {
+                            e.preventDefault();
+                            const pasted = e.clipboardData.getData('text').replace(/\n/g, ' ').trim();
+                            const updated = scriptureList.map((x, i) => i === idx ? { ...x, text: pasted } : x);
+                            onChange('scriptures', updated);
+                            if (idx === 0) onChange('mainVerse', pasted);
+                          }}
                           placeholder={idx === 0 ? "e.g. John 3:16-17" : "e.g. Romans 8:28"}
                           onFocus={e => { onFieldFocus(e.currentTarget, { type: "draft", field: "scriptures", scriptureIdx: idx }); e.currentTarget.style.height = "auto"; e.currentTarget.style.height = e.currentTarget.scrollHeight + "px"; }}
                           rows={1}
-                          className="flex-1 bg-transparent border-none outline-none placeholder-white/20 min-w-0 resize-none overflow-hidden"
+                          className="w-full bg-transparent border-none outline-none placeholder-white/20 resize-none overflow-hidden"
                           style={{ fontSize: 15, color: "rgba(var(--wf-c3),0.9)", caretColor: "var(--wf-c1-hex)", lineHeight: 1.6 }}
                         />
-                        {/* Remove button */}
-                        {scriptureList.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const updated = scriptureList.filter((_, i) => i !== idx);
-                              onChange('scriptures', updated);
-                              if (idx === 0) onChange('mainVerse', updated[0]?.text ?? '');
-                            }}
-                            title="Remove this verse"
-                            className="shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90 mt-0.5"
-                            style={{
-                              width: 28, height: 28, minWidth: 28,
-                              background: "rgba(239,68,68,0.18)",
-                              border: "1px solid rgba(239,68,68,0.4)",
-                              color: "#f87171",
-                              fontSize: 16, fontWeight: 700, lineHeight: 1,
-                            }}
-                          >−</button>
-                        )}
-                        {/* Add button */}
-                        {idx === scriptureList.length - 1 && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const newEntry = { id: uid(), text: '' };
-                              onChange('scriptures', [...scriptureList, newEntry]);
-                            }}
-                            title="Add another verse"
-                            className="shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90 mt-0.5"
-                            style={{
-                              width: 28, height: 28, minWidth: 28,
-                              background: "rgba(var(--wf-c1),0.25)",
-                              border: "1px solid rgba(var(--wf-c1),0.5)",
-                              color: "var(--wf-at2)",
-                              fontSize: 18, fontWeight: 700, lineHeight: 1,
-                            }}
-                          >+</button>
-                        )}
-                        </div>
                       </div>
                     ))}
+                    {/* Add another verse — full-width pill below */}
+                    <button
+                      type="button"
+                      onClick={() => onChange('scriptures', [...scriptureList, { id: uid(), text: '' }])}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl transition-all active:scale-95 hover:opacity-90"
+                      style={{ background: "rgba(var(--wf-c1),0.06)", border: "1px dashed rgba(var(--wf-c1),0.3)", color: "rgba(var(--wf-c1),0.7)", fontSize: 13, fontWeight: 600 }}
+                    >
+                      <Plus size={14} /> Add another verse
+                    </button>
                   </div>
                 );
               })()}
+
             </div>
           )}
         </div>
@@ -1582,56 +1580,62 @@ function SermonCanvas({
                           <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "rgba(var(--wf-c1),0.65)" }}>Scripture</span>
                         </div>
                         {kpList.map((sv, sidx) => (
-                          <div key={sv.id} className="rounded-lg px-3 py-2.5"
-                            style={{ background: "rgba(var(--wf-c1),0.06)", border: "1px solid rgba(var(--wf-c1),0.15)" }}>
-                            {/* Label */}
+                          <div key={sv.id} className="rounded-lg px-3 pt-2 pb-2.5"
+                            style={{
+                              background: "rgba(var(--wf-c1),0.06)",
+                              border: hasMultipleVerses(sv.text)
+                                ? "1px solid rgba(245,158,11,0.5)"
+                                : "1px solid rgba(var(--wf-c1),0.15)",
+                            }}>
+                            {/* Label row + remove button */}
                             <div className="flex items-center gap-1 mb-1.5">
-                              {sidx === 0
-                                ? <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "rgba(var(--wf-c1),0.65)" }}>Scripture</span>
-                                : <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "rgba(var(--wf-c1),0.4)" }}>+Verse</span>
-                              }
-                            </div>
-                            {/* Textarea + action buttons */}
-                            <div className="flex items-start gap-2">
-                              <textarea
-                                value={sv.text}
-                                rows={1}
-                                onChange={e => {
-                                  const updated = kpList.map((x, xi) => xi === sidx ? { ...x, text: e.target.value } : x);
-                                  updateKeyPointScriptures(kp.id, updated);
-                                  e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px";
-                                }}
-                                onFocus={e => { onFieldFocus(e.currentTarget, { type: "kp", kpId: kp.id, kpField: "scripture", kpScriptureIdx: sidx }); e.currentTarget.style.height = "auto"; e.currentTarget.style.height = e.currentTarget.scrollHeight + "px"; }}
-                                placeholder={sidx === 0 ? "e.g. John 13:34-35" : "e.g. Romans 5:8"}
-                                className="flex-1 bg-transparent border-none outline-none placeholder-white/25 min-w-0 resize-none overflow-hidden"
-                                style={{ color: "var(--wf-at2)", fontSize: 15, lineHeight: 1.6 }}
-                              />
-                              {/* Remove button */}
+                              <span className="text-[11px] font-bold uppercase tracking-widest flex-1"
+                                style={{ color: sidx === 0 ? "rgba(var(--wf-c1),0.65)" : "rgba(var(--wf-c1),0.4)" }}>
+                                {sidx === 0 ? "Scripture" : `Verse ${sidx + 1}`}
+                              </span>
                               {kpList.length > 1 && (
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    const updated = kpList.filter((_, xi) => xi !== sidx);
-                                    updateKeyPointScriptures(kp.id, updated);
-                                  }}
+                                  onClick={() => updateKeyPointScriptures(kp.id, kpList.filter((_, xi) => xi !== sidx))}
                                   title="Remove verse"
-                                  className="shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90 mt-0.5"
-                                  style={{ width: 28, height: 28, minWidth: 28, background: "rgba(239,68,68,0.18)", border: "1px solid rgba(239,68,68,0.4)", color: "#f87171", fontSize: 16, fontWeight: 700, lineHeight: 1 }}
-                                >−</button>
-                              )}
-                              {/* Add button */}
-                              {sidx === kpList.length - 1 && (
-                                <button
-                                  type="button"
-                                  onClick={() => updateKeyPointScriptures(kp.id, [...kpList, { id: uid(), text: '' }])}
-                                  title="Add another verse"
-                                  className="shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90 mt-0.5"
-                                  style={{ width: 28, height: 28, minWidth: 28, background: "rgba(var(--wf-c1),0.25)", border: "1px solid rgba(var(--wf-c1),0.5)", color: "var(--wf-at2)", fontSize: 18, fontWeight: 700, lineHeight: 1 }}
-                                >+</button>
+                                  className="shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
+                                  style={{ width: 22, height: 22, minWidth: 22, background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.35)", color: "#f87171", fontSize: 14, fontWeight: 700, lineHeight: 1 }}
+                                >×</button>
                               )}
                             </div>
+                            {/* Textarea — single line only, Enter blocked */}
+                            <textarea
+                              value={sv.text}
+                              rows={1}
+                              onChange={e => {
+                                const updated = kpList.map((x, xi) => xi === sidx ? { ...x, text: e.target.value } : x);
+                                updateKeyPointScriptures(kp.id, updated);
+                                e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px";
+                              }}
+                              onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }}
+                              onPaste={e => {
+                                e.preventDefault();
+                                const pasted = e.clipboardData.getData('text').replace(/\n/g, ' ').trim();
+                                const updated = kpList.map((x, xi) => xi === sidx ? { ...x, text: pasted } : x);
+                                updateKeyPointScriptures(kp.id, updated);
+                              }}
+                              onFocus={e => { onFieldFocus(e.currentTarget, { type: "kp", kpId: kp.id, kpField: "scripture", kpScriptureIdx: sidx }); e.currentTarget.style.height = "auto"; e.currentTarget.style.height = e.currentTarget.scrollHeight + "px"; }}
+                              placeholder={sidx === 0 ? "e.g. John 13:34-35" : "e.g. Romans 5:8"}
+                              className="w-full bg-transparent border-none outline-none placeholder-white/25 resize-none overflow-hidden"
+                              style={{ color: "var(--wf-at2)", fontSize: 15, lineHeight: 1.6 }}
+                            />
                           </div>
                         ))}
+
+                        {/* Add another verse — full-width pill below */}
+                        <button
+                          type="button"
+                          onClick={() => updateKeyPointScriptures(kp.id, [...kpList, { id: uid(), text: '' }])}
+                          className="w-full flex items-center justify-center gap-2 py-2 rounded-xl transition-all active:scale-95 hover:opacity-90"
+                          style={{ background: "rgba(var(--wf-c1),0.05)", border: "1px dashed rgba(var(--wf-c1),0.25)", color: "rgba(var(--wf-c1),0.6)", fontSize: 12, fontWeight: 600 }}
+                        >
+                          <Plus size={13} /> Add another verse
+                        </button>
                       </div>
                     );
                   })()}
@@ -2481,27 +2485,49 @@ export default function PreachingView({ currentUser, onToast, initialTab }: Prop
 
       if (target.type === 'draft') {
         if (target.field === 'scriptures' && target.scriptureIdx !== undefined) {
-          // Insert into a specific main-title scripture row
           const idx = target.scriptureIdx;
           const cur = activeDraft?.scriptures ?? [];
-          const updated = cur.map((s, i) => i === idx ? { ...s, text: newVal } : s);
-          handleChange('scriptures', updated);
-          handleChange('mainVerse', updated[0]?.text ?? '');
+          const currentText = cur[idx]?.text ?? '';
+          if (currentText.trim()) {
+            // Field already has a verse — add a NEW card instead of appending
+            const newEntry = { id: uid(), text: formatted };
+            const updated = [...cur, newEntry];
+            handleChange('scriptures', updated);
+            handleChange('mainVerse', updated[0]?.text ?? '');
+            onToast?.('info', `Added as a new verse card`);
+          } else {
+            // Field is empty — insert normally
+            const updated = cur.map((s, i) => i === idx ? { ...s, text: formatted } : s);
+            handleChange('scriptures', updated);
+            handleChange('mainVerse', updated[0]?.text ?? '');
+            onToast?.('success', `${ref} inserted`);
+          }
         } else {
           handleChange(target.field, newVal);
+          onToast?.('success', `${ref} inserted`);
         }
       } else {
         // Key point field
         if (target.kpField === 'scripture' && target.kpScriptureIdx !== undefined) {
-          // Insert into a specific kp scripture row
           const sidx = target.kpScriptureIdx;
           const kps = activeDraft?.keyPoints ?? [];
+          const kp = kps.find(k => k.id === target.kpId);
+          const list = (kp?.scriptures && kp.scriptures.length > 0)
+            ? kp.scriptures
+            : [{ id: uid(), text: kp?.scripture || '' }];
+          const currentText = list[sidx]?.text ?? '';
+          let newList;
+          if (currentText.trim()) {
+            // Field already has a verse — add a NEW card instead of appending
+            newList = [...list, { id: uid(), text: formatted }];
+            onToast?.('info', `Added as a new verse card`);
+          } else {
+            // Field is empty — insert normally
+            newList = list.map((s, i) => i === sidx ? { ...s, text: formatted } : s);
+            onToast?.('success', `${ref} inserted`);
+          }
           const updated = kps.map(k => {
             if (k.id !== target.kpId) return k;
-            const list = (k.scriptures && k.scriptures.length > 0)
-              ? k.scriptures
-              : [{ id: uid(), text: k.scripture || '' }];
-            const newList = list.map((s, i) => i === sidx ? { ...s, text: newVal } : s);
             return { ...k, scriptures: newList, scripture: newList[0]?.text ?? '' };
           });
           handleChange('keyPoints', updated);
@@ -2511,10 +2537,10 @@ export default function PreachingView({ currentUser, onToast, initialTab }: Prop
               k.id === target.kpId ? { ...k, [target.kpField]: newVal } : k
             )
           );
+          onToast?.('success', `${ref} inserted`);
         }
       }
-      requestAnimationFrame(() => { el.focus(); el.setSelectionRange(newPos, newPos); });
-      onToast?.('success', `${ref} inserted`);
+
     } else {
       // No field is focused — warn the user instead of silently appending
       onToast?.('error',
