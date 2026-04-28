@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Search, X, ChevronRight, Radio, Music2, Layers, Play, Wand2, AlignCenter, AlignLeft, Video, Upload } from "lucide-react";
+import { Search, X, ChevronRight, Radio, Music2, Layers, Play, Wand2, AlignCenter, AlignLeft, Video, Upload, Copy, Check as CheckIcon } from "lucide-react";
 import type { Song } from "./types";
 import gsap from "gsap";
 
@@ -70,9 +70,20 @@ function parseSections(raw: string): LyricSection[] {
 
 function splitWords(line: string) { return line.split(/(\s+)/).filter(Boolean); }
 
+// ─ Sacred words — always render bigger (because it's God) ────────────────────
+const SACRED_WORDS = new Set([
+  'jesus','christ','diyos','dios','god','lord','yahweh','jehovah','emmanuel',
+]);
+function isSacred(word: string): boolean {
+  // Strip punctuation for matching
+  return SACRED_WORDS.has(word.toLowerCase().replace(/[^a-z]/g, ''));
+}
+
 // ─ Echo: two font sizes, same font, random-ish assignment ─────────────────────
 const FUNC_WORDS = new Set(['a','an','the','to','of','in','at','by','for','on','and','or','but','is','are','was','were','i','we','he','she','it','my','our','your','his','her','its']);
 function echoWordSm(word: string, gIdx: number): number {
+  // Sacred words are BIGGEST — always elevated above everything
+  if (isSacred(word)) return 1.75;
   // Function/connector words are always small; content words alternate BIG/SMALL
   if (FUNC_WORDS.has(word.toLowerCase())) return 0.62;
   const hash = word.toLowerCase().split('').reduce((a, c) => a + c.charCodeAt(0), 0) + gIdx * 11;
@@ -208,10 +219,21 @@ function Screen({ slide, bgStyle, echoAlign, echoLines, bgVideo }: {
   const renderLine = (line: string, style: AnimStyle) => {
     if (style === "typewriter")
       return line.split("").map((ch, i) => <span key={i} className="pc" style={{ display:"inline" }}>{ch === " " ? "\u00a0" : ch}</span>);
-    return splitWords(line).map((tok, i) =>
-      tok.trim() ? <span key={i} className="pw" style={{ display:"inline-block", marginRight:"0.22em" }}>{tok}</span>
-                 : <span key={i}>&nbsp;</span>
-    );
+    return splitWords(line).map((tok, i) => {
+      if (!tok.trim()) return <span key={i}>&nbsp;</span>;
+      if (isSacred(tok)) {
+        return (
+          <span key={i} className="pw" style={{
+            display: "inline-block", marginRight: "0.22em",
+            fontSize: "1.45em",
+            fontWeight: 900,
+            textShadow: "0 0 30px rgba(255,220,80,0.55), 0 3px 40px rgba(0,0,0,0.99)",
+            verticalAlign: "middle",
+          }}>{tok}</span>
+        );
+      }
+      return <span key={i} className="pw" style={{ display:"inline-block", marginRight:"0.22em" }}>{tok}</span>;
+    });
   };
 
   // Font: 10% of box width — big for LED wall
@@ -298,10 +320,7 @@ function Screen({ slide, bgStyle, echoAlign, echoLines, bgVideo }: {
                       fontWeight: 900,
                       letterSpacing: "-0.02em",
                       lineHeight: 1,
-                      color: "transparent",
-                      // paintOrder ensures stroke renders behind the fill — no broken/jagged edges
-                      paintOrder: "stroke fill",
-                      WebkitTextStroke: `${Math.max(2, Math.round(fs * 0.028))}px rgba(255,255,255,0.28)`,
+                      color: "rgba(255,255,255,0.14)",
                       userSelect: "none",
                     }}>{track}</div>
                   </div>
@@ -345,7 +364,8 @@ function Screen({ slide, bgStyle, echoAlign, echoLines, bgVideo }: {
                   };
 
                   const makeSpan = (word: string, gIdx: number, efs: number) => {
-                    const sm = echoWordSm(word, gIdx);
+                    const sm     = echoWordSm(word, gIdx);
+                    const sacred = isSacred(word);
                     return (
                       <span key={gIdx} className="pw" style={{
                         fontSize:      Math.round(efs * sm),
@@ -353,7 +373,9 @@ function Screen({ slide, bgStyle, echoAlign, echoLines, bgVideo }: {
                         letterSpacing: sm > 1 ? "-0.03em" : "-0.01em",
                         lineHeight:    0.9,
                         color:         "#fff",
-                        textShadow:    "0 3px 40px rgba(0,0,0,0.99)",
+                        textShadow:    sacred
+                          ? "0 0 40px rgba(255,220,80,0.65), 0 3px 40px rgba(0,0,0,0.99)"
+                          : "0 3px 40px rgba(0,0,0,0.99)",
                         textTransform: "uppercase",
                         display:       "inline-block",
                         verticalAlign: "baseline",
@@ -453,10 +475,24 @@ export default function LiveStageView({ allSongs }: Props) {
   const [bgVideo, setBgVideo]           = useState<BgVideo | null>(null);
   const [showVideoPanel, setShowVideoPanel] = useState(false);
   const [ytInput, setYtInput]           = useState("");
+  const [obsUrlCopied, setObsUrlCopied] = useState(false);
+  const [activeSection, setActiveSection] = useState<string | null>(null); // tab selection
+
+  // ── Sync active slide → /api/live-push → OBS polling ──
+  // No Firestore, no auth — pure local HTTP, works offline.
+  const pushToFirestore = (slide: LyricSlide | null) => {
+    const payload = slide
+      ? { songTitle: selectedSong?.title ?? "", lines: slide.lines, animStyle: slide.animStyle, visible: true, bgIdx, echoAlign, echoLines, bgVideo }
+      : { songTitle: "", lines: [], animStyle: "word-fade", visible: false, bgIdx, echoAlign, echoLines, bgVideo };
+    fetch("/api/live-push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }).catch(() => {});
+  };
+
+  useEffect(() => { pushToFirestore(activeSlide); }, [activeSlide, bgIdx, echoAlign, echoLines, bgVideo]); // eslint-disable-line
+
 
   useEffect(() => {
-    if (!selectedSong) { setSections([]); setActiveSlide(null); return; }
-    setSections(parseSections(selectedSong.lyrics)); setActiveSlide(null);
+    if (!selectedSong) { setSections([]); setActiveSlide(null); setActiveSection(null); return; }
+    setSections(parseSections(selectedSong.lyrics)); setActiveSlide(null); setActiveSection(null);
   }, [selectedSong]);
 
   // Update animation for a specific slide
@@ -475,8 +511,8 @@ export default function LiveStageView({ allSongs }: Props) {
   };
 
   const filtered = query.trim()
-    ? allSongs.filter(s => s.title.toLowerCase().includes(query.toLowerCase()) || (s.artist??"").toLowerCase().includes(query.toLowerCase())).slice(0,12)
-    : allSongs.slice(0,12);
+    ? allSongs.filter(s => s.title.toLowerCase().includes(query.toLowerCase()) || (s.artist??"").toLowerCase().includes(query.toLowerCase()))
+    : allSongs;
 
   // Flatten all slides for keyboard navigation
   const allSlides = sections.flatMap(s => s.slides);
@@ -513,75 +549,81 @@ export default function LiveStageView({ allSongs }: Props) {
   }, [activeSlide]);
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", height:"100%", background:"#07090f", color:"#fff", overflow:"hidden", fontFamily:"inherit" }}>
+    <div style={{ display:"flex", flexDirection:"column", height:"100%", background:"var(--wf-surface,#07090f)", color:"#fff", overflow:"hidden", fontFamily:"inherit" }}>
 
-      {/* Top Bar */}
-      <div style={{ flexShrink:0, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 20px", borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-          <div style={{ width:32, height:32, borderRadius:10, background:"rgba(239,68,68,0.15)", border:"1px solid rgba(239,68,68,0.3)", display:"flex", alignItems:"center", justifyContent:"center" }}>
-            <Radio size={14} color="#f87171" />
+      {/* ── Top Bar ─────────────────────────────────────────────────────── */}
+      <div style={{ flexShrink:0, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 20px", borderBottom:"1px solid rgba(255,255,255,0.07)", minHeight:56 }}>
+
+        {/* Left: icon + title */}
+        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+          <div style={{ width:36, height:36, borderRadius:10, background:"rgba(239,68,68,0.15)", border:"1px solid rgba(239,68,68,0.3)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+            <Radio size={16} color="#f87171" />
           </div>
           <div>
-            <p style={{ fontSize:13, fontWeight:700, margin:0 }}>Live Stage</p>
-            <p style={{ fontSize:10, color:"rgba(255,255,255,0.3)", margin:0 }}>LED wall mode · per-slide animation · centered lyrics</p>
+            <p style={{ fontSize:14, fontWeight:700, margin:0, letterSpacing:"-0.01em" }}>Live Stage</p>
+            <p style={{ fontSize:11, color:"rgba(255,255,255,0.35)", margin:0 }}>LED wall · per-slide animation · centered lyrics</p>
           </div>
         </div>
-        {/* Top Bar right side: BG swatches + Video BG */}
-        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+
+        {/* Right: BG swatches + Video BG */}
+        <div style={{ display:"flex", alignItems:"center", gap:14 }}>
+
           {/* BG swatches */}
-          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-            <span style={{ fontSize:9, color:"rgba(255,255,255,0.2)", textTransform:"uppercase", letterSpacing:"0.1em" }}>Background:</span>
+          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+            <span style={{ fontSize:10, color:"rgba(255,255,255,0.25)", textTransform:"uppercase", letterSpacing:"0.1em", fontWeight:600 }}>BG:</span>
             {BG_PRESETS.map((bg,i) => (
               <button key={i} onClick={() => setBgIdx(i)} title={bg.label}
-                style={{ width:20, height:20, borderRadius:5, background:bg.style, border:bgIdx===i?"2px solid #a78bfa":"2px solid transparent", cursor:"pointer", transform:bgIdx===i?"scale(1.15)":"scale(1)", transition:"all 0.15s", opacity: bgVideo ? 0.35 : 1 }} />
+                style={{ width:24, height:24, borderRadius:6, background:bg.style, border:bgIdx===i?"2px solid #a78bfa":"2px solid transparent", cursor:"pointer", transform:bgIdx===i?"scale(1.18)":"scale(1)", transition:"all 0.15s ease", opacity:bgVideo ? 0.35 : 1, flexShrink:0 }} />
             ))}
           </div>
 
-          {/* Video BG control */}
+          {/* Video BG */}
           <div style={{ position:"relative" }}>
             <button onClick={() => setShowVideoPanel(p => !p)}
-              style={{ display:"flex", alignItems:"center", gap:5, padding:"5px 10px", borderRadius:8, cursor:"pointer", fontSize:10, fontWeight:600, transition:"all 0.15s",
-                border: bgVideo ? "1px solid rgba(52,211,153,0.5)" : "1px solid rgba(255,255,255,0.1)",
-                background: bgVideo ? "rgba(52,211,153,0.12)" : "rgba(255,255,255,0.04)",
-                color: bgVideo ? "#34d399" : "rgba(255,255,255,0.5)" }}>
-              <Video size={11} />{bgVideo ? "Video ✓" : "Video BG"}
+              style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 12px", borderRadius:8, cursor:"pointer", fontSize:11, fontWeight:600, transition:"all 0.15s ease", height:36, whiteSpace:"nowrap",
+                border: bgVideo ? "1px solid rgba(52,211,153,0.5)" : "1px solid rgba(255,255,255,0.12)",
+                background: bgVideo ? "rgba(52,211,153,0.12)" : "rgba(255,255,255,0.05)",
+                color: bgVideo ? "#34d399" : "rgba(255,255,255,0.55)" }}>
+              <Video size={13} />{bgVideo ? "Video ✓" : "Video BG"}
             </button>
 
             {showVideoPanel && (
-              <div style={{ position:"absolute", right:0, top:"calc(100% + 8px)", width:272, background:"#0e1120", border:"1px solid rgba(255,255,255,0.1)", borderRadius:12, padding:14, zIndex:200, boxShadow:"0 12px 40px rgba(0,0,0,0.9)" }}>
+              <div style={{ position:"absolute", right:0, top:"calc(100% + 8px)", width:280, background:"#0e1120", border:"1px solid rgba(255,255,255,0.1)", borderRadius:12, padding:16, zIndex:200, boxShadow:"0 16px 48px rgba(0,0,0,0.9)" }}>
                 {/* Local file */}
-                <p style={{ fontSize:9, fontWeight:700, color:"rgba(255,255,255,0.3)", textTransform:"uppercase", letterSpacing:"0.1em", margin:"0 0 7px" }}>Local File</p>
-                <label style={{ display:"flex", alignItems:"center", gap:7, padding:"8px 10px", borderRadius:8, background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.09)", cursor:"pointer", fontSize:11, color:"rgba(255,255,255,0.65)" }}>
-                  <Upload size={12} />
+                <p style={{ fontSize:10, fontWeight:700, color:"rgba(255,255,255,0.3)", textTransform:"uppercase", letterSpacing:"0.1em", margin:"0 0 8px" }}>Local File</p>
+                <label style={{ display:"flex", alignItems:"center", gap:8, padding:"9px 12px", borderRadius:8, background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.09)", cursor:"pointer", fontSize:12, color:"rgba(255,255,255,0.65)" }}>
+                  <Upload size={13} />
                   {bgVideo?.type === "local" ? "Change video file…" : "Upload video file…"}
                   <input type="file" accept="video/webm,video/mp4,video/quicktime,video/x-msvideo,video/x-matroska,video/ogg,video/*" style={{ display:"none" }}
-                    onChange={e => {
+                    onChange={async e => {
                       const file = e.target.files?.[0]; if (!file) return;
-                      if (bgVideo?.type === "local") URL.revokeObjectURL(bgVideo.url);
-                      setBgVideo({ type:"local", url:URL.createObjectURL(file) });
+                      const fd = new FormData(); fd.append("video", file);
+                      const r = await fetch("/api/live-bg-video", { method: "POST", body: fd });
+                      if (!r.ok) { alert("Video upload failed — is the dev server running?"); return; }
+                      setBgVideo({ type:"local", url:"/api/live-bg-video" });
                     }} />
                 </label>
 
                 {/* YouTube */}
-                <p style={{ fontSize:9, fontWeight:700, color:"rgba(255,255,255,0.3)", textTransform:"uppercase", letterSpacing:"0.1em", margin:"12px 0 7px" }}>YouTube Link</p>
-                <div style={{ display:"flex", gap:5 }}>
+                <p style={{ fontSize:10, fontWeight:700, color:"rgba(255,255,255,0.3)", textTransform:"uppercase", letterSpacing:"0.1em", margin:"14px 0 8px" }}>YouTube Link</p>
+                <div style={{ display:"flex", gap:6 }}>
                   <input value={ytInput} onChange={e => setYtInput(e.target.value)}
                     placeholder="https://youtube.com/watch?v=…"
                     onKeyDown={e => { if (e.key==="Enter") { const id=extractYtId(ytInput); if(id){setBgVideo({type:"youtube",videoId:id});setYtInput("");} } }}
-                    style={{ flex:1, padding:"6px 9px", borderRadius:7, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.09)", color:"#fff", fontSize:11, outline:"none" }} />
+                    style={{ flex:1, padding:"7px 10px", borderRadius:7, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.09)", color:"#fff", fontSize:12, outline:"none" }} />
                   <button onClick={() => { const id=extractYtId(ytInput); if(id){setBgVideo({type:"youtube",videoId:id});setYtInput("");} }}
-                    style={{ padding:"6px 11px", borderRadius:7, background:"rgba(99,102,241,0.2)", border:"1px solid rgba(99,102,241,0.35)", color:"#818cf8", fontSize:11, fontWeight:700, cursor:"pointer" }}>Apply</button>
+                    style={{ padding:"7px 12px", borderRadius:7, background:"rgba(99,102,241,0.2)", border:"1px solid rgba(99,102,241,0.35)", color:"#818cf8", fontSize:11, fontWeight:700, cursor:"pointer" }}>Apply</button>
                 </div>
-                {!extractYtId(ytInput) && ytInput.length > 3 && <p style={{ margin:"4px 0 0", fontSize:9, color:"#f87171" }}>⚠ Couldn't find a video ID — check the URL</p>}
+                {!extractYtId(ytInput) && ytInput.length > 3 && <p style={{ margin:"5px 0 0", fontSize:10, color:"#f87171" }}>⚠ Couldn't find a video ID — check the URL</p>}
 
-                {/* Active video status + remove */}
+                {/* Active video status */}
                 {bgVideo && (
                   <>
-                    <div style={{ marginTop:10, padding:"6px 9px", borderRadius:7, background:"rgba(52,211,153,0.08)", border:"1px solid rgba(52,211,153,0.2)", fontSize:10, color:"#34d399" }}>
-                      ✓ {bgVideo.type === "local" ? "Local video looping" : `YouTube looping: ${bgVideo.videoId}`}
+                    <div style={{ marginTop:12, padding:"7px 10px", borderRadius:8, background:"rgba(52,211,153,0.08)", border:"1px solid rgba(52,211,153,0.2)", fontSize:11, color:"#34d399" }}>
+                      ✓ {bgVideo.type === "local" ? "Local video looping" : `YouTube: ${bgVideo.videoId}`}
                     </div>
-                    <button onClick={() => { if(bgVideo.type==="local") URL.revokeObjectURL(bgVideo.url); setBgVideo(null); }}
-                      style={{ marginTop:6, width:"100%", padding:"6px", borderRadius:7, background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.2)", color:"#f87171", fontSize:11, fontWeight:600, cursor:"pointer" }}>
+                    <button onClick={() => { fetch("/api/live-bg-video", { method:"DELETE" }).catch(()=>{}); setBgVideo(null); }}
+                      style={{ marginTop:8, width:"100%", padding:"8px", borderRadius:8, background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.2)", color:"#f87171", fontSize:11, fontWeight:600, cursor:"pointer" }}>
                       Remove Video
                     </button>
                   </>
@@ -592,160 +634,182 @@ export default function LiveStageView({ allSongs }: Props) {
         </div>
       </div>
 
-      {/* Two Column */}
+      {/* ── Two-Column Body ──────────────────────────────────────────────── */}
       <div style={{ flex:1, display:"flex", overflow:"hidden", minHeight:0 }}>
 
-        {/* LEFT */}
-        <div style={{ width:300, flexShrink:0, display:"flex", flexDirection:"column", borderRight:"1px solid rgba(255,255,255,0.06)", overflow:"hidden" }}>
+        {/* ── LEFT PANEL ──────────────────────────────────────────────── */}
+        <div style={{ width:300, flexShrink:0, display:"flex", flexDirection:"column", borderRight:"1px solid rgba(255,255,255,0.07)", overflow:"hidden", background:"rgba(0,0,0,0.15)" }}>
+
           {/* Search */}
-          <div style={{ padding:"10px 12px", borderBottom:"1px solid rgba(255,255,255,0.05)", flexShrink:0 }}>
+          <div style={{ padding:"12px 12px 10px", borderBottom:"1px solid rgba(255,255,255,0.05)", flexShrink:0 }}>
             <div style={{ position:"relative" }}>
-              <Search size={12} style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)", color:"rgba(255,255,255,0.25)", pointerEvents:"none" }} />
+              <Search size={13} style={{ position:"absolute", left:11, top:"50%", transform:"translateY(-50%)", color:"rgba(255,255,255,0.25)", pointerEvents:"none" }} />
               <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search songs…"
-                style={{ width:"100%", paddingLeft:30, paddingRight:28, paddingTop:7, paddingBottom:7, borderRadius:10, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.08)", color:"#fff", fontSize:13, outline:"none", boxSizing:"border-box" }} />
-              {query && <button onClick={()=>setQuery("")} style={{ position:"absolute", right:8, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", color:"rgba(255,255,255,0.3)", padding:0 }}><X size={12} /></button>}
+                style={{ width:"100%", paddingLeft:34, paddingRight:32, paddingTop:9, paddingBottom:9, borderRadius:10, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.09)", color:"#fff", fontSize:13, outline:"none", boxSizing:"border-box", transition:"border 0.15s" }}
+                onFocus={e=>(e.target as HTMLInputElement).style.border="1px solid rgba(167,139,250,0.4)"}
+                onBlur={e=>(e.target as HTMLInputElement).style.border="1px solid rgba(255,255,255,0.09)"} />
+              {query && (
+                <button onClick={()=>setQuery("")} style={{ position:"absolute", right:9, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", color:"rgba(255,255,255,0.3)", padding:0, display:"flex" }}>
+                  <X size={13} />
+                </button>
+              )}
             </div>
           </div>
 
-          <div style={{ flex:1, overflowY:"auto", padding:"10px", display:"flex", flexDirection:"column", gap:4 }}>
+          {/* List area */}
+          <div style={{ flex:1, overflowY:"auto", padding:"10px 10px", display:"flex", flexDirection:"column", gap:4 }}>
+
+            {/* ── Song selection list ── */}
             {!selectedSong ? (
               <>
-                {filtered.length===0 && <p style={{ textAlign:"center", fontSize:12, color:"rgba(255,255,255,0.15)", padding:"32px 0" }}>No songs found</p>}
+                {filtered.length===0 && (
+                  <p style={{ textAlign:"center", fontSize:12, color:"rgba(255,255,255,0.15)", padding:"40px 0" }}>No songs found</p>
+                )}
                 {filtered.map(song => (
                   <button key={song.id} onClick={()=>setSelectedSong(song)}
-                    style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 10px", borderRadius:10, background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.05)", cursor:"pointer", textAlign:"left", width:"100%", transition:"all 0.15s" }}
-                    onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background="rgba(255,255,255,0.07)";}}
-                    onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="rgba(255,255,255,0.03)";}}>
-                    <div style={{ width:28, height:28, borderRadius:8, background:"rgba(99,102,241,0.12)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                      <Music2 size={12} color="#818cf8" />
+                    style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 11px", borderRadius:10, background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.05)", cursor:"pointer", textAlign:"left", width:"100%", transition:"all 0.15s ease", minHeight:48 }}
+                    onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background="rgba(255,255,255,0.07)"}
+                    onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="rgba(255,255,255,0.03)"}>
+                    <div style={{ width:32, height:32, borderRadius:9, background:"rgba(99,102,241,0.12)", border:"1px solid rgba(99,102,241,0.18)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                      <Music2 size={13} color="#818cf8" />
                     </div>
                     <div style={{ flex:1, minWidth:0 }}>
-                      <p style={{ margin:0, fontSize:12, fontWeight:600, color:"rgba(255,255,255,0.8)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{song.title}</p>
-                      {song.artist && <p style={{ margin:0, fontSize:10, color:"rgba(255,255,255,0.25)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{song.artist}</p>}
+                      <p style={{ margin:0, fontSize:13, fontWeight:600, color:"rgba(255,255,255,0.85)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{song.title}</p>
+                      {song.artist && <p style={{ margin:0, fontSize:11, color:"rgba(255,255,255,0.28)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{song.artist}</p>}
                     </div>
-                    <ChevronRight size={12} color="rgba(255,255,255,0.2)" />
+                    <ChevronRight size={13} color="rgba(255,255,255,0.2)" />
                   </button>
                 ))}
               </>
             ) : (
+
+              /* ── Song detail + slide list ── */
               <>
+                {/* Back button */}
                 <button onClick={()=>{setSelectedSong(null);setActiveSlide(null);}}
-                  style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 8px", borderRadius:8, background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.06)", cursor:"pointer", marginBottom:4, width:"100%", color:"rgba(255,255,255,0.45)", fontSize:11, fontWeight:600 }}>
-                  <X size={11} />Back to songs
+                  style={{ display:"flex", alignItems:"center", gap:7, padding:"8px 11px", borderRadius:9, background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", cursor:"pointer", marginBottom:8, width:"100%", color:"rgba(255,255,255,0.5)", fontSize:12, fontWeight:600, transition:"all 0.15s", minHeight:36 }}
+                  onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background="rgba(255,255,255,0.08)"}
+                  onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="rgba(255,255,255,0.04)"}>
+                  <X size={12} />Back to songs
                 </button>
-                <div style={{ padding:"8px 10px", marginBottom:6, borderRadius:10, background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.05)" }}>
-                  <p style={{ margin:0, fontSize:13, fontWeight:700, color:"#fff" }}>{selectedSong.title}</p>
-                  {selectedSong.artist && <p style={{ margin:0, fontSize:10, color:"rgba(255,255,255,0.3)" }}>{selectedSong.artist}</p>}
+
+                {/* Selected song info */}
+                <div style={{ padding:"10px 12px", marginBottom:8, borderRadius:10, background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)" }}>
+                  <p style={{ margin:0, fontSize:14, fontWeight:700, color:"#fff", letterSpacing:"-0.01em" }}>{selectedSong.title}</p>
+                  {selectedSong.artist && <p style={{ margin:"2px 0 0", fontSize:11, color:"rgba(255,255,255,0.35)" }}>{selectedSong.artist}</p>}
                 </div>
 
-                {/* ── Global Controls ───────────────────────────────── */}
-                <div style={{ padding:"6px 8px 8px", marginBottom:6, borderRadius:10, background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.05)" }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:4, marginBottom:5 }}>
-                    <Wand2 size={9} color="rgba(255,255,255,0.25)" />
-                    <span style={{ fontSize:9, fontWeight:700, color:"rgba(255,255,255,0.25)", textTransform:"uppercase", letterSpacing:"0.1em" }}>Apply to All Slides</span>
+                {/* ── Global Controls: Echo · Center · Auto ──────────── */}
+                <div style={{ padding:"10px 12px", marginBottom:8, borderRadius:10, background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.06)" }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:10 }}>
+                    <Wand2 size={11} color="rgba(255,255,255,0.3)" />
+                    <span style={{ fontSize:10, fontWeight:700, color:"rgba(255,255,255,0.3)", textTransform:"uppercase", letterSpacing:"0.1em" }}>Display Style</span>
                   </div>
-                  <div style={{ display:"flex", gap:2, flexWrap:"wrap", marginBottom:6 }}>
-                    {ANIM_OPTIONS.map(a => (
-                      <button key={a} onClick={() => setAllAnim(a)}
-                        onMouseEnter={e => (e.currentTarget as HTMLElement).style.background="rgba(255,255,255,0.1)"}
-                        onMouseLeave={e => (e.currentTarget as HTMLElement).style.background="rgba(255,255,255,0.04)"}
-                        style={{ padding:"3px 7px", borderRadius:5, fontSize:8, fontWeight:600, cursor:"pointer",
-                          border:"1px solid rgba(255,255,255,0.1)", background:"rgba(255,255,255,0.04)",
-                          color:"rgba(255,255,255,0.5)", transition:"all 0.12s" }}>
-                        {ANIM_LABELS[a]}
-                      </button>
-                    ))}
-                  </div>
-                  {/* Echo text align toggle */}
-                  <div style={{ display:"flex", alignItems:"center", gap:4, borderTop:"1px solid rgba(255,255,255,0.04)", paddingTop:5, marginBottom:4 }}>
-                    <span style={{ fontSize:9, color:"rgba(255,255,255,0.2)", fontWeight:600, whiteSpace:"nowrap" }}>Echo align:</span>
-                    {(["center", "centered-left", "left"] as const).map(opt => (
-                      <button key={opt} onClick={() => setEchoAlign(opt)}
-                        style={{ display:"flex", alignItems:"center", gap:3, padding:"2px 6px", borderRadius:5, fontSize:8, fontWeight:600, cursor:"pointer", transition:"all 0.12s",
-                          border: echoAlign===opt ? "1px solid #a78bfa" : "1px solid rgba(255,255,255,0.08)",
-                          background: echoAlign===opt ? "rgba(167,139,250,0.15)" : "rgba(255,255,255,0.02)",
-                          color: echoAlign===opt ? "#a78bfa" : "rgba(255,255,255,0.3)" }}>
-                        {opt === "center" && <><AlignCenter size={8} />Center</>}
-                        {opt === "centered-left" && <><AlignLeft size={8} />C-Left</>}
-                        {opt === "left" && <><AlignLeft size={8} />Left</>}
-                      </button>
-                    ))}
-                  </div>
-                  {/* Echo lines toggle — controls how many rows words are split into */}
-                  <div style={{ display:"flex", alignItems:"center", gap:4 }}>
-                    <span style={{ fontSize:9, color:"rgba(255,255,255,0.2)", fontWeight:600, whiteSpace:"nowrap" }}>Lines:</span>
-                    {(["auto", "2", "3"] as const).map(opt => (
-                      <button key={opt} onClick={() => setEchoLines(opt)}
-                        style={{ padding:"2px 8px", borderRadius:5, fontSize:8, fontWeight:600, cursor:"pointer", transition:"all 0.12s",
-                          border: echoLines===opt ? "1px solid #34d399" : "1px solid rgba(255,255,255,0.08)",
-                          background: echoLines===opt ? "rgba(52,211,153,0.15)" : "rgba(255,255,255,0.02)",
-                          color: echoLines===opt ? "#34d399" : "rgba(255,255,255,0.3)" }}>
-                        {opt === "auto" ? "Auto" : `${opt} Lines`}
-                      </button>
-                    ))}
-                    {echoLines !== "auto" && <span style={{ fontSize:8, color:"rgba(52,211,153,0.5)", fontStyle:"italic" }}>↑ bigger</span>}
+                  <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+                    {/* Echo — apply echo animation to all */}
+                    <button onClick={() => setAllAnim("echo")}
+                      style={{ flex:1, padding:"7px 0", borderRadius:8, fontSize:11, fontWeight:700, cursor:"pointer", transition:"all 0.15s ease",
+                        border:"1px solid rgba(167,139,250,0.35)", background:"rgba(167,139,250,0.12)", color:"#a78bfa" }}
+                      onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background="rgba(167,139,250,0.22)"}
+                      onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="rgba(167,139,250,0.12)"}>
+                      ✦ Echo
+                    </button>
+                    {/* Center align */}
+                    <button onClick={() => setEchoAlign("center")}
+                      style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:5, padding:"7px 0", borderRadius:8, fontSize:11, fontWeight:700, cursor:"pointer", transition:"all 0.15s ease",
+                        border: echoAlign==="center" ? "1px solid #a78bfa" : "1px solid rgba(255,255,255,0.1)",
+                        background: echoAlign==="center" ? "rgba(167,139,250,0.15)" : "rgba(255,255,255,0.04)",
+                        color: echoAlign==="center" ? "#a78bfa" : "rgba(255,255,255,0.4)" }}
+                      onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background= echoAlign==="center" ? "rgba(167,139,250,0.22)" : "rgba(255,255,255,0.08)"}
+                      onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background= echoAlign==="center" ? "rgba(167,139,250,0.15)" : "rgba(255,255,255,0.04)"}>
+                      <AlignCenter size={11} />Center
+                    </button>
+                    {/* Auto lines */}
+                    <button onClick={() => setEchoLines("auto")}
+                      style={{ flex:1, padding:"7px 0", borderRadius:8, fontSize:11, fontWeight:700, cursor:"pointer", transition:"all 0.15s ease",
+                        border: echoLines==="auto" ? "1px solid #34d399" : "1px solid rgba(255,255,255,0.1)",
+                        background: echoLines==="auto" ? "rgba(52,211,153,0.15)" : "rgba(255,255,255,0.04)",
+                        color: echoLines==="auto" ? "#34d399" : "rgba(255,255,255,0.4)" }}
+                      onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background= echoLines==="auto" ? "rgba(52,211,153,0.22)" : "rgba(255,255,255,0.08)"}
+                      onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background= echoLines==="auto" ? "rgba(52,211,153,0.15)" : "rgba(255,255,255,0.04)"}>
+                      Auto
+                    </button>
                   </div>
                 </div>
 
-                {sections.length===0 && <p style={{ textAlign:"center", fontSize:11, color:"rgba(255,255,255,0.15)", padding:"24px 0" }}>No lyrics found</p>}
+                {sections.length===0 && (
+                  <p style={{ textAlign:"center", fontSize:12, color:"rgba(255,255,255,0.15)", padding:"28px 0" }}>No lyrics found</p>
+                )}
 
-                {sections.map((sec,si) => {
-                  const col = sectionColor(sec.label);
+                {/* ── Section tabs ────────────────────────────────────── */}
+                {sections.length > 0 && (() => {
+                  const visibleSec = activeSection
+                    ? sections.filter(s => s.label === activeSection)
+                    : sections.slice(0, 1); // default to first section
+                  const tabSec = activeSection ?? sections[0]?.label;
                   return (
-                    <div key={si} style={{ marginBottom:8 }}>
-                      {/* Section header */}
-                      <div style={{ display:"flex", alignItems:"center", gap:5, padding:"3px 6px", marginBottom:3 }}>
-                        <Layers size={10} color={col.accent} />
-                        <span style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.1em", color:col.accent }}>{sec.label}</span>
-                        <span style={{ fontSize:9, color:"rgba(255,255,255,0.15)" }}>{sec.slides.length} slide{sec.slides.length>1?"s":""}</span>
-                      </div>
-
-                      {/* Slides */}
-                      <div style={{ display:"flex", flexDirection:"column", gap:4, paddingLeft:4 }}>
-                        {sec.slides.map(slide => {
-                          const isActive = activeSlide?.id===slide.id;
+                    <>
+                      {/* Tabs row */}
+                      <div style={{ display:"flex", gap:4, flexWrap:"wrap", marginBottom:8, paddingBottom:8, borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
+                        {sections.map(sec => {
+                          const col = sectionColor(sec.label);
+                          const isTab = tabSec === sec.label;
                           return (
-                            <div key={slide.id} data-slide-id={slide.id} style={{ borderRadius:10, border:`1px solid ${isActive?col.activeBorder:col.border}`, background:isActive?col.active:col.bg, overflow:"hidden", transition:"all 0.18s" }}>
-                              {/* Slide click area */}
-                              <button onClick={()=>setActiveSlide(isActive?null:slide)}
-                                style={{ width:"100%", textAlign:"left", background:"none", border:"none", cursor:"pointer", padding:"8px 10px" }}>
-                                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:4 }}>
-                                  <span style={{ fontSize:9, color:col.accent, fontWeight:700, opacity:0.75 }}>
-                                    Slide {slide.slideNum}{slide.totalSlides>1?` / ${slide.totalSlides}`:""}
-                                  </span>
-                                  {isActive && (
-                                    <span style={{ display:"flex", alignItems:"center", gap:3, fontSize:9, fontWeight:700, color:col.accent }}>
-                                      <Play size={7} fill={col.accent} color={col.accent} />DISPLAYING
-                                    </span>
-                                  )}
-                                </div>
-                                {slide.lines.map((line,i) => (
-                                  <p key={i} style={{ margin:0, fontSize:11, lineHeight:1.5, color:isActive?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.4)", fontStyle:"italic", wordBreak:"break-word", whiteSpace:"normal" }}>{line}</p>
-                                ))}
-                              </button>
-                              {/* Per-slide animation picker */}
-                              <div style={{ display:"flex", gap:2, padding:"4px 8px 6px", flexWrap:"wrap", borderTop:"1px solid rgba(255,255,255,0.05)" }}>
-                                {ANIM_OPTIONS.map(a => (
-                                  <button key={a} onClick={()=>setSlideAnim(slide.id,a)}
-                                    style={{ padding:"2px 6px", borderRadius:5, fontSize:8, fontWeight:600, cursor:"pointer",
-                                      border: slide.animStyle===a?`1px solid ${col.accent}`:"1px solid rgba(255,255,255,0.08)",
-                                      background: slide.animStyle===a?"rgba(255,255,255,0.1)":"rgba(255,255,255,0.02)",
-                                      color: slide.animStyle===a?col.accent:"rgba(255,255,255,0.3)", transition:"all 0.12s" }}>
-                                    {ANIM_LABELS[a]}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
+                            <button key={sec.label} onClick={() => setActiveSection(sec.label)}
+                              style={{ padding:"4px 10px", borderRadius:20, fontSize:10, fontWeight:700, cursor:"pointer", transition:"all 0.15s ease",
+                                border: isTab ? `1px solid ${col.accent}` : "1px solid rgba(255,255,255,0.08)",
+                                background: isTab ? `${col.bg}` : "transparent",
+                                color: isTab ? col.accent : "rgba(255,255,255,0.35)" }}>
+                              {sec.label}
+                            </button>
                           );
                         })}
                       </div>
-                    </div>
-                  );
-                })}
 
+                      {/* Slides for active tab */}
+                      {visibleSec.map(sec => {
+                        const col = sectionColor(sec.label);
+                        return (
+                          <div key={sec.label} style={{ display:"flex", flexDirection:"column", gap:5 }}>
+                            {sec.slides.map(slide => {
+                              const isActive = activeSlide?.id===slide.id;
+                              return (
+                                <button key={slide.id} data-slide-id={slide.id}
+                                  onClick={() => setActiveSlide(isActive ? null : slide)}
+                                  style={{ width:"100%", textAlign:"left", cursor:"pointer", padding:"10px 12px", borderRadius:10,
+                                    border:`1px solid ${isActive ? col.activeBorder : col.border}`,
+                                    background: isActive ? col.active : col.bg,
+                                    transition:"all 0.18s ease" }}>
+                                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: slide.lines.length > 0 ? 5 : 0 }}>
+                                    <span style={{ fontSize:10, color:col.accent, fontWeight:700, opacity:0.85 }}>
+                                      Slide {slide.slideNum}{slide.totalSlides>1?` / ${slide.totalSlides}`:""}
+                                    </span>
+                                    {isActive && (
+                                      <span style={{ display:"flex", alignItems:"center", gap:4, fontSize:10, fontWeight:700, color:col.accent,
+                                        border:`1px solid ${col.activeBorder}`, borderRadius:20, padding:"2px 7px", background:col.active }}>
+                                        <Play size={8} fill={col.accent} color={col.accent} />LIVE
+                                      </span>
+                                    )}
+                                  </div>
+                                  {slide.lines.map((line, i) => (
+                                    <p key={i} style={{ margin:0, fontSize:12, lineHeight:1.55, color:isActive?"rgba(255,255,255,0.92)":"rgba(255,255,255,0.45)", fontStyle:"italic", wordBreak:"break-word", whiteSpace:"normal" }}>{line}</p>
+                                  ))}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
+                    </>
+                  );
+                })()}
+
+                {/* Clear display */}
                 {activeSlide && (
-                  <button onClick={()=>setActiveSlide(null)}
-                    style={{ marginTop:4, padding:"8px", borderRadius:10, background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.06)", color:"rgba(255,255,255,0.25)", fontSize:11, fontWeight:600, cursor:"pointer", width:"100%" }}>
+                  <button onClick={() => { setActiveSlide(null); pushToFirestore(null); }}
+                    style={{ marginTop:6, padding:"9px", borderRadius:10, background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.07)", color:"rgba(255,255,255,0.3)", fontSize:12, fontWeight:600, cursor:"pointer", width:"100%", transition:"all 0.15s ease" }}
+                    onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background="rgba(239,68,68,0.08)"}
+                    onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="rgba(255,255,255,0.02)"}>
                     ✕ Clear Display
                   </button>
                 )}
@@ -754,24 +818,41 @@ export default function LiveStageView({ allSongs }: Props) {
           </div>
         </div>
 
-        {/* RIGHT — Screen */}
+        {/* ── RIGHT PANEL — Screen preview ────────────────────────────── */}
         <div style={{ flex:1, display:"flex", flexDirection:"column", background:"#050709", overflow:"hidden" }}>
+
           {/* Toolbar */}
-          <div style={{ flexShrink:0, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"8px 16px", borderBottom:"1px solid rgba(255,255,255,0.04)" }}>
-            <span style={{ fontSize:9, fontWeight:700, color:"rgba(255,255,255,0.2)", textTransform:"uppercase", letterSpacing:"0.12em" }}>Output Display · 16:9</span>
-            <span style={{ fontSize:9, color:"rgba(255,255,255,0.1)" }}>10% safe zone · LED wall mode · per-slide animation</span>
+          <div style={{ flexShrink:0, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 18px", borderBottom:"1px solid rgba(255,255,255,0.05)", minHeight:44 }}>
+            <span style={{ fontSize:10, fontWeight:700, color:"rgba(255,255,255,0.25)", textTransform:"uppercase", letterSpacing:"0.12em" }}>Output Display · 16:9</span>
+            <span style={{ fontSize:10, color:"rgba(255,255,255,0.15)", fontStyle:"italic" }}>10% safe zone · LED wall mode · per-slide animation</span>
           </div>
-          {/* Canvas area — fills remaining space, Screen handles 16:9 letterboxing internally */}
+
+          {/* Canvas */}
           <div style={{ flex:1, overflow:"hidden", padding:16 }}>
             <Screen slide={activeSlide} bgStyle={BG_PRESETS[bgIdx].style} echoAlign={echoAlign} echoLines={echoLines} bgVideo={bgVideo} />
           </div>
+
           {/* Footer */}
-          <div style={{ flexShrink:0, padding:"6px 16px", borderTop:"1px solid rgba(255,255,255,0.04)", display:"flex", justifyContent:"space-between" }}>
-            <p style={{ margin:0, fontSize:9, color:"rgba(255,255,255,0.1)" }}>← Click a slide on the left to display</p>
-            <p style={{ margin:0, fontSize:9, color:"rgba(255,255,255,0.12)" }}>OBS: <span style={{ color:"rgba(167,139,250,0.4)" }}>/live-display</span></p>
+          <div style={{ flexShrink:0, padding:"9px 18px", borderTop:"1px solid rgba(255,255,255,0.05)", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, minHeight:44 }}>
+            <p style={{ margin:0, fontSize:11, color:"rgba(255,255,255,0.18)", letterSpacing:"0.01em" }}>
+              Click a slide to display · <kbd style={{ background:"rgba(255,255,255,0.07)", borderRadius:4, padding:"1px 5px", fontSize:10 }}>Space</kbd> / <kbd style={{ background:"rgba(255,255,255,0.07)", borderRadius:4, padding:"1px 5px", fontSize:10 }}>↓</kbd> next · <kbd style={{ background:"rgba(255,255,255,0.07)", borderRadius:4, padding:"1px 5px", fontSize:10 }}>↑</kbd> prev · <kbd style={{ background:"rgba(255,255,255,0.07)", borderRadius:4, padding:"1px 5px", fontSize:10 }}>Esc</kbd> clear
+            </p>
+            <button
+              onClick={() => {
+                const url = `${window.location.origin}/live-display`;
+                navigator.clipboard.writeText(url).then(() => { setObsUrlCopied(true); setTimeout(() => setObsUrlCopied(false), 2000); });
+              }}
+              title="Copy OBS Browser Source URL"
+              style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px", borderRadius:8, cursor:"pointer", fontSize:11, fontWeight:700, whiteSpace:"nowrap", flexShrink:0, transition:"all 0.15s ease",
+                border: obsUrlCopied ? "1px solid rgba(52,211,153,0.5)" : "1px solid rgba(167,139,250,0.4)",
+                background: obsUrlCopied ? "rgba(52,211,153,0.12)" : "rgba(167,139,250,0.12)",
+                color: obsUrlCopied ? "#34d399" : "#a78bfa" }}>
+              {obsUrlCopied ? <><CheckIcon size={12} /> Copied!</> : <><Copy size={12} /> OBS URL</>}
+            </button>
           </div>
         </div>
       </div>
     </div>
   );
 }
+

@@ -143,6 +143,53 @@ export default function PublicPlaylistPage({ slug }: { slug: string }) {
     return () => ctrl.abort();
   }, [slug]);
 
+  // ── Dynamic PWA manifest ────────────────────────────────────────────────────
+  // iOS/Android "Add to Home Screen" reads the <link rel="manifest"> at the
+  // moment of the gesture. By swapping in a blob manifest whose start_url and
+  // scope are scoped to this specific /p/<slug> URL, the installed shortcut will
+  // open the playlist page directly instead of the root "/" of the app.
+  useEffect(() => {
+    const pageUrl = `/p/${slug}`;
+    const manifest = {
+      name: "WorshipFlow",
+      short_name: "WorshipFlow",
+      description: "Worship team scheduling, song & member management",
+      start_url: pageUrl,
+      scope: pageUrl,
+      display: "standalone",
+      background_color: "#0f172a",
+      theme_color: "#6366f1",
+      orientation: "portrait-primary",
+      icons: [
+        { src: "/icon-192x192.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
+        { src: "/icon-512x512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
+      ],
+    };
+
+    const blob = new Blob([JSON.stringify(manifest)], { type: "application/json" });
+    const blobUrl = URL.createObjectURL(blob);
+
+    // Swap the manifest link to the blob
+    const existing = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+    const prevHref = existing?.getAttribute("href") ?? "/manifest.json";
+
+    if (existing) {
+      existing.setAttribute("href", blobUrl);
+    } else {
+      const link = document.createElement("link");
+      link.rel = "manifest";
+      link.href = blobUrl;
+      document.head.appendChild(link);
+    }
+
+    return () => {
+      // Restore the original manifest when navigating away
+      const el = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+      if (el) el.setAttribute("href", prevHref);
+      URL.revokeObjectURL(blobUrl);
+    };
+  }, [slug]);
+
   const stopTicker = useCallback(() => {
     if (tickerRef.current) { clearInterval(tickerRef.current); tickerRef.current = null; }
   }, []);

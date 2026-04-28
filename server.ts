@@ -294,7 +294,80 @@ async function writeNotification(firestore: admin.firestore.Firestore, payload: 
   }
 }
 
+// ── Live Stage SSE — real-time lyrics push to OBS Browser Source ─────────────
+// No auth required — these endpoints are local-only (localhost:3000).
+// The controller POSTs to /api/live-push; OBS subscribes to /api/live-sse.
+
+let liveState: Record<string, unknown> = { visible: false, lines: [], songTitle: "", animStyle: "word-fade", updatedAt: 0 };
+const sseClients = new Set<import("express").Response>();
+
+// POST /api/live-push — controller writes the active slide
+app.post("/api/live-push", (req, res) => {
+  liveState = { ...req.body, updatedAt: Date.now() };
+  // Broadcast to all connected SSE clients (OBS display pages)
+  const payload = `data: ${JSON.stringify(liveState)}\n\n`;
+  sseClients.forEach(client => { try { client.write(payload); } catch { sseClients.delete(client); } });
+  res.json({ ok: true, clients: sseClients.size });
+});
+
+// GET /api/live-sse — OBS Browser Source subscribes here
+app.get("/api/live-sse", (req, res) => {
+  res.setHeader("Content-Type",  "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection",    "keep-alive");
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.flushHeaders();
+
+  // Send current state immediately so OBS has something on connect
+  res.write(`data: ${JSON.stringify(liveState)}\n\n`);
+
+  // Keep-alive ping every 25 s (prevents OBS from closing the connection)
+  const ping = setInterval(() => { try { res.write(`: ping\n\n`); } catch { clearInterval(ping); } }, 25000);
+
+  sseClients.add(res);
+  req.on("close", () => { sseClients.delete(res); clearInterval(ping); });
+});
+
+// GET /api/live-state — simple polling fallback (more reliable in OBS CEF)
+app.get("/api/live-state", (_req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Cache-Control", "no-cache, no-store");
+  res.json(liveState);
+});
+
+// ── Live background video — local file upload ──────────────────────────────────
+// The app uploads the video here; OBS fetches /api/live-bg-video to play it.
+// Blob: URLs only live in the source tab's process — OBS needs a real HTTP URL.
+let liveBgVideoBuffer: Buffer | null = null;
+let liveBgVideoMime   = "video/mp4";
+
+// POST /api/live-bg-video — controller uploads the video file
+app.post("/api/live-bg-video", multer({ storage: multer.memoryStorage(), limits: { fileSize: 500 * 1024 * 1024 } }).single("video"), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No file" });
+  liveBgVideoBuffer = req.file.buffer;
+  liveBgVideoMime   = req.file.mimetype || "video/mp4";
+  console.log(`[LiveBG] Video uploaded: ${req.file.originalname} (${(req.file.size / 1024 / 1024).toFixed(1)} MB)`);
+  res.json({ ok: true, url: "/api/live-bg-video" });
+});
+
+// GET /api/live-bg-video — OBS Browser Source fetches video from here
+app.get("/api/live-bg-video", (_req, res) => {
+  if (!liveBgVideoBuffer) return res.status(404).json({ error: "No video uploaded" });
+  res.setHeader("Content-Type", liveBgVideoMime);
+  res.setHeader("Content-Length", liveBgVideoBuffer.length);
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.end(liveBgVideoBuffer);
+});
+
+// DELETE /api/live-bg-video — clear stored video
+app.delete("/api/live-bg-video", (_req, res) => {
+  liveBgVideoBuffer = null;
+  res.json({ ok: true });
+});
+
 // POST /api/fcm-token — store FCM device token for a user
+
 app.post("/api/fcm-token", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.json({ success: true });
