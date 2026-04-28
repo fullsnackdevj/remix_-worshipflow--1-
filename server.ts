@@ -1783,19 +1783,32 @@ app.post("/api/auth/request", async (req, res) => {
   if (!email) return res.status(400).json({ error: "Missing email" });
   const firestore = getDb();
   if (!firestore) return res.status(500).json({ error: "Firebase not configured" });
+
+  // Already approved — skip everything
   const existing = await firestore.collection("approved_users").doc(email).get();
   if (existing.exists) return res.json({ skipped: true });
-  await firestore.collection("pending_users").doc(email).set({ email, name, photo, requestedAt: new Date().toISOString() });
 
-  // Notify admin of new access request
-  writeNotification(firestore, {
-    type: "access_request",
-    message: `New access request`,
-    subMessage: `${name || email} is requesting access to WorshipFlow`,
-    actorName: name || email,
-    actorPhoto: photo,
-    targetAudience: "admin_only",
+  // Already pending — silently update (name/photo may have changed) but DON'T
+  // fire another notification. This stops spam when the user taps sign-in
+  // multiple times or refreshes the login page.
+  const pendingDoc = await firestore.collection("pending_users").doc(email).get();
+  const alreadyPending = pendingDoc.exists;
+
+  await firestore.collection("pending_users").doc(email).set({
+    email, name, photo, requestedAt: new Date().toISOString(),
   });
+
+  if (!alreadyPending) {
+    // Only notify admin on the FIRST request from this email
+    writeNotification(firestore, {
+      type: "access_request",
+      message: "New access request",
+      subMessage: `${name || email} is requesting access to WorshipFlow`,
+      actorName: name || email,
+      actorPhoto: photo,
+      targetAudience: "admin_only",
+    });
+  }
 
   return res.json({ success: true });
 });

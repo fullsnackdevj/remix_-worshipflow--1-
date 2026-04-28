@@ -498,21 +498,33 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
     if (rawPath === "/auth/request" && method === "POST") {
         const { email, name = "", photo = "" } = body;
         if (!email) return json(400, { error: "Missing email" });
-        // Only log if not already approved
+
+        // Already approved — skip everything
         const existing = await firestore?.collection("approved_users").doc(email).get();
         if (existing?.exists) return json(200, { skipped: true });
+
+        // Already pending — silently update (name/photo may have changed) but DON'T
+        // fire another notification. This stops spam when the user taps sign-in
+        // multiple times or refreshes the login page.
+        const pendingDoc = await firestore?.collection("pending_users").doc(email).get();
+        const alreadyPending = pendingDoc?.exists ?? false;
+
         await firestore?.collection("pending_users").doc(email).set({
             email, name, photo,
             requestedAt: new Date().toISOString(),
         });
-        // Notify admin
-        writeNotif(firestore, {
-            type: "access_request",
-            message: "New access request",
-            subMessage: `${name || email} is requesting access to WorshipFlow`,
-            actorName: name || email, actorPhoto: photo,
-            targetAudience: "admin_only",
-        });
+
+        if (!alreadyPending) {
+            // Only notify admin on the FIRST request from this email
+            writeNotif(firestore, {
+                type: "access_request",
+                message: "New access request",
+                subMessage: `${name || email} is requesting access to WorshipFlow`,
+                actorName: name || email, actorPhoto: photo,
+                targetAudience: "admin_only",
+            });
+        }
+
         return json(200, { success: true });
     }
 
