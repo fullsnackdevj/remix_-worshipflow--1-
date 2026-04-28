@@ -567,7 +567,7 @@ export default function PublicPlaylistPage({ slug }: { slug: string }) {
               <Info size={15} style={{ color: `var(--accent)` }} className="relative" />
             </span>
             <p className="flex-1 text-xs leading-relaxed" style={{ color: `color-mix(in srgb, var(--accent) 90%, white)` }}>
-              Tap any song to play it. Tap the <BookOpen size={12} className="inline mb-0.5" /> book icon to read lyrics and chords.
+              Tap any song to play it. Tap the <BookOpen size={12} className="inline mb-0.5" /> book icon to read lyrics.
             </p>
             <button
               onClick={dismissTip}

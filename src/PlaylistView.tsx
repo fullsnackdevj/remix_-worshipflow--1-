@@ -308,6 +308,7 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
       setShareBannerUrl(resolvedBannerUrl);
       setShareBannerFile(null);
       showToast("success", slugChanged ? "Slug updated & republished!" : "Playlist published! Link is ready to share.");
+      setShareModalPlaylistId(null);       // close modal after save
     } catch (err: any) {
       console.error("[publish]", err);
       showToast("error", "Network error. Please try again.");
