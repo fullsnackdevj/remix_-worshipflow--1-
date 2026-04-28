@@ -2,9 +2,18 @@
   command = "npm run build"
   publish = "dist"
   functions = "netlify/functions"
+  edge_functions = "netlify/edge-functions"
 
 [functions]
   node_bundler = "esbuild"
+
+# ── Edge Functions ────────────────────────────────────────────────────────────
+# Runs at the CDN edge BEFORE HTML reaches the browser.
+# Injects the slug-specific manifest link so iOS "Add to Home Screen" pins
+# the correct /p/:slug URL instead of the root "/".
+[[edge_functions]]
+  path = "/p/*"
+  function = "playlist-manifest-injector"
 
 [build.environment]
   RESEND_API_KEY = ""
@@ -66,7 +75,7 @@
 [[headers]]
   for = "/manifest.json"
   [headers.values]
-    Cache-Control = "public, max-age=3600"
+    Cache-Control = "no-store"
 
 # JSON data files: no-cache so they always refresh
 [[headers]]
