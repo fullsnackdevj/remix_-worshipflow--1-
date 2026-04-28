@@ -148,6 +148,8 @@ export default function PublicPlaylistPage({ slug }: { slug: string }) {
   // moment of the gesture. We swap in a server-side manifest whose start_url
   // and scope are scoped to this /p/<slug> URL. Safari rejects blob: URLs so
   // we use a real API endpoint (/api/playlist-manifest/:slug) instead.
+  // NOTE: The Netlify Edge Function handles this at the CDN level (before JS
+  // runs), so this JS swap is a belt-and-suspenders fallback.
   useEffect(() => {
     const manifestHref = `/api/playlist-manifest/${slug}`;
 
@@ -169,6 +171,21 @@ export default function PublicPlaylistPage({ slug }: { slug: string }) {
       if (el) el.setAttribute("href", prevHref);
     };
   }, [slug]);
+
+  // ── Suppress Android Chrome "Install app" prompt ─────────────────────────
+  // Chrome fires "beforeinstallprompt" when it thinks a PWA should be installed.
+  // On playlist pages this is harmful — it would install the full app with the
+  // root start_url ("/") from a cached manifest, sending users to the login wall
+  // instead of this playlist. We capture and prevent the event entirely.
+  // Android users who want a shortcut can use Chrome menu → "Add to Home Screen"
+  // which saves the CURRENT URL (the playlist) as a simple bookmark shortcut.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault(); // suppress the native install dialog
+    };
+    window.addEventListener("beforeinstallprompt", handler);
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
 
   const stopTicker = useCallback(() => {
     if (tickerRef.current) { clearInterval(tickerRef.current); tickerRef.current = null; }
