@@ -1,6 +1,7 @@
 import React, {
   useState, useEffect, useRef, useCallback, useMemo,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   ListMusic, Plus, Trash2, Edit3, Check, X, Music, Play, Pause,
   Search, BookOpen, Guitar, MoreVertical, Copy, Shuffle,
@@ -123,6 +124,8 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
   const [editModalEmoji, setEditModalEmoji] = useState("🎵");
   const [showEditModalEmoji, setShowEditModalEmoji] = useState(false);
   const [menuId, setMenuId]               = useState<string | null>(null);
+  const [menuPos, setMenuPos]             = useState<{ top: number; left: number } | null>(null);
+  const menuPortalRef                     = useRef<HTMLDivElement>(null);
   const [searchQ, setSearchQ]             = useState("");
   const [lyricTab, setLyricTab]           = useState<"lyrics" | "chords">("lyrics");
   const [dragId, setDragId]               = useState<string | null>(null);
@@ -416,13 +419,19 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
   useEffect(() => { if (creating) setTimeout(() => createInputRef.current?.focus(), 40); }, [creating]);
   useEffect(() => { if (editingId) setTimeout(() => editInputRef.current?.focus(), 40); }, [editingId]);
 
-  // ── Close context menu on outside click ───────────────────────────────────
+  // ── Close context menu on outside click / scroll ────────────────────────
   useEffect(() => {
     const h = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuId(null);
+      if (menuPortalRef.current && menuPortalRef.current.contains(e.target as Node)) return;
+      setMenuId(null); setMenuPos(null);
     };
+    const s = () => { setMenuId(null); setMenuPos(null); };
     document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
+    window.addEventListener("scroll", s, true);
+    return () => {
+      document.removeEventListener("mousedown", h);
+      window.removeEventListener("scroll", s, true);
+    };
   }, []);
 
   // ── Spacebar shortcut is registered AFTER togglePlay is defined (see below) ─
@@ -939,40 +948,21 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
                     </div>
                   )}
 
-                  {/* Context menu */}
+                  {/* Context menu trigger */}
                   {!isEdit && (
-                    <div className="relative shrink-0" ref={menuId === pl.id ? menuRef : undefined}>
+                    <div className="relative shrink-0">
                       <button
-                        onClick={e => { e.stopPropagation(); setMenuId(v => v === pl.id ? null : pl.id); }}
+                        onClick={e => {
+                          e.stopPropagation();
+                          if (menuId === pl.id) { setMenuId(null); setMenuPos(null); return; }
+                          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                          setMenuPos({ top: rect.bottom + 4, left: rect.right - 176 });
+                          setMenuId(pl.id);
+                        }}
                         className="opacity-0 group-hover:opacity-100 p-1.5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 hover:text-gray-700 dark:hover:text-white transition-all"
                       >
                         <MoreVertical size={15} />
                       </button>
-                      {menuId === pl.id && (
-                        <div className="absolute right-0 top-full mt-1 w-44 bg-white dark:bg-[#1a1f2e] border border-gray-200 dark:border-gray-700/80 rounded-xl shadow-xl z-[400] overflow-hidden">
-                          {onNavigateToSongs && (
-                            <button onClick={() => { setMenuId(null); onNavigateToSongs(); }}
-                              className="flex items-center gap-2 w-full px-3 py-2.5 text-sm text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:text-indigo-300 dark:hover:text-indigo-200 transition-colors text-left">
-                              <Plus size={12} /> Add Songs
-                            </button>
-                          )}
-                          {onNavigateToSongs && <div className="h-px bg-gray-200 dark:bg-gray-800 mx-2" />}
-                          <button onClick={e => { e.stopPropagation(); openShareModal(pl); }}
-                            className="flex items-center gap-2 w-full px-3 py-2.5 text-sm text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 hover:text-indigo-300 transition-colors text-left">
-                            <Edit3 size={12} /> Edit Playlist
-                          </button>
-                          <div className="h-px bg-gray-200 dark:bg-gray-800 mx-2" />
-                          <button onClick={e => { e.stopPropagation(); duplicatePlaylist(pl); }}
-                            className="flex items-center gap-2 w-full px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition-colors text-left">
-                            <Copy size={12} /> Duplicate
-                          </button>
-                          <div className="h-px bg-gray-200 dark:bg-gray-800 mx-2" />
-                          <button onClick={() => { setMenuId(null); deletePlaylist(pl.id); }}
-                            className="flex items-center gap-2 w-full px-3 py-2.5 text-sm text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-300 transition-colors text-left">
-                            <Trash2 size={12} /> Delete
-                          </button>
-                        </div>
-                      )}
                     </div>
                   )}
                 </div>
@@ -1076,36 +1066,17 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
                       {!isEdit && (
                         <div className="relative shrink-0" ref={menuId === pl.id ? menuRef : undefined}>
                           <button
-                            onClick={e => { e.stopPropagation(); setMenuId(v => v === pl.id ? null : pl.id); }}
+                            onClick={e => {
+                              e.stopPropagation();
+                              if (menuId === pl.id) { setMenuId(null); setMenuPos(null); return; }
+                              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                              setMenuPos({ top: rect.bottom + 4, left: rect.right - 192 });
+                              setMenuId(pl.id);
+                            }}
                             className="p-3 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-900 dark:hover:text-white transition-all active:scale-90"
                           >
                             <MoreVertical size={18} />
                           </button>
-                          {menuId === pl.id && (
-                            <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-[#1a1f2e] border border-gray-200 dark:border-gray-700/80 rounded-2xl shadow-xl z-[400] overflow-hidden">
-                              {onNavigateToSongs && (
-                                <button onClick={e => { e.stopPropagation(); setMenuId(null); onNavigateToSongs(); }}
-                                  className="flex items-center gap-3 w-full px-4 py-4 text-base text-indigo-600 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-200 transition-colors text-left">
-                                  <Plus size={16} /> Add Songs
-                                </button>
-                              )}
-                              {onNavigateToSongs && <div className="h-px bg-gray-200 dark:bg-gray-800 mx-3" />}
-                              <button onClick={e => { e.stopPropagation(); openShareModal(pl); }}
-                                className="flex items-center gap-3 w-full px-4 py-4 text-base text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 hover:text-indigo-300 transition-colors text-left">
-                                <Edit3 size={16} /> Edit Playlist
-                              </button>
-                              <div className="h-px bg-gray-200 dark:bg-gray-800 mx-3" />
-                              <button onClick={e => { e.stopPropagation(); duplicatePlaylist(pl); }}
-                                className="flex items-center gap-3 w-full px-4 py-4 text-base text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition-colors text-left">
-                                <Copy size={16} /> Duplicate
-                              </button>
-                              <div className="h-px bg-gray-200 dark:bg-gray-800 mx-3" />
-                              <button onClick={e => { e.stopPropagation(); setMenuId(null); deletePlaylist(pl.id); }}
-                                className="flex items-center gap-3 w-full px-4 py-4 text-base text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-300 transition-colors text-left">
-                                <Trash2 size={16} /> Delete
-                              </button>
-                            </div>
-                          )}
                         </div>
                       )}
                     </div>
@@ -1532,12 +1503,12 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
           </>
         )}
 
-        {/* ── Share / Publish Modal ─────────────────────────────────────────── */}
+        {/* ── Share / Publish Modal — rendered via portal to escape overflow-hidden ── */}
         {shareModalPlaylistId && (() => {
           const pl = playlists.find(p => p.id === shareModalPlaylistId);
           if (!pl) return null;
           const publicUrl = `${window.location.origin}/p/${shareSlug}`;
-          return (
+          return createPortal(
             <>
               {/* Backdrop */}
               <div className="fixed inset-0 z-[55] bg-black/70 backdrop-blur-sm" onClick={() => setShareModalPlaylistId(null)} />
@@ -1790,28 +1761,43 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
                     onClick={async () => {
                       const newName        = editModalName.trim() || pl.name;
                       const newEmoji       = editModalEmoji;
-                      const newBannerUrl   = shareBannerUrlInput.trim() || shareBannerUrl || "";
-                      const newAccentColor = shareAccentColor;
                       const newDescription = shareDescription;
+                      const newAccentColor = shareAccentColor;
 
-                      // 1. Save to local playlist state
+                      // Resolve banner URL — upload file if one was selected
+                      let newBannerUrl = shareBannerUrl || "";
+                      if (shareBannerFile) {
+                        try {
+                          newBannerUrl = await uploadBannerFile(shareBannerFile);
+                          setShareBannerFile(null);
+                          setShareBannerUrl(newBannerUrl);
+                        } catch {
+                          showToast("error", "Failed to upload banner image.");
+                          return;
+                        }
+                      } else if (shareBannerUrlInput.trim()) {
+                        newBannerUrl = shareBannerUrlInput.trim();
+                      }
+
+                      // Build the updated playlist object
+                      const updatedPl = {
+                        ...pl,
+                        name:        newName,
+                        emoji:       newEmoji,
+                        bannerUrl:   newBannerUrl || undefined,
+                        accentColor: newAccentColor || undefined,
+                        description: newDescription || undefined,
+                        updatedAt:   new Date().toISOString(),
+                      };
+
+                      // 1. Persist to Firestore immediately
                       setPlaylists(prev => {
-                        const updated = prev.map(x => x.id === pl.id
-                          ? {
-                              ...x,
-                              name: newName,
-                              emoji: newEmoji,
-                              bannerUrl: newBannerUrl || undefined,
-                              accentColor: newAccentColor || undefined,
-                              description: newDescription || undefined,
-                              updatedAt: new Date().toISOString(),
-                            }
-                          : x
-                        );
+                        const updated = prev.map(x => x.id === pl.id ? updatedPl : x);
                         return updated;
                       });
+                      writePlaylist(updatedPl);           // ← was missing before
 
-                      // 2. If already published, republish with new data
+                      // 2. If already published, republish with the fresh data
                       if (sharePublishedSlug || shareSlug) {
                         await publishPlaylist();
                       } else {
@@ -1835,7 +1821,8 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
                   </button>
                 </div>
               </div>
-            </>
+            </>,
+            document.body
           );
         })()}
 
@@ -2100,6 +2087,42 @@ export default function PlaylistView({ allSongs, showToast, onNavigateToSongs }:
           to   { transform: scaleY(1); }
         }
       `}</style>
+
+      {/* ── Portal context menu — renders at body level, never clipped ── */}
+      {menuId && menuPos && (() => {
+        const pl = playlists.find(p => p.id === menuId);
+        if (!pl) return null;
+        return createPortal(
+          <div
+            ref={menuPortalRef}
+            style={{ position: "fixed", top: menuPos.top, left: Math.max(8, menuPos.left), zIndex: 99999, minWidth: 192 }}
+            className="bg-white dark:bg-[#1a1f2e] border border-gray-200 dark:border-gray-700/80 rounded-2xl shadow-2xl overflow-hidden"
+          >
+            {onNavigateToSongs && (
+              <button onClick={() => { setMenuId(null); setMenuPos(null); onNavigateToSongs(); }}
+                className="flex items-center gap-2 w-full px-4 py-3 text-sm text-indigo-600 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-200 transition-colors text-left">
+                <Plus size={13} /> Add Songs
+              </button>
+            )}
+            {onNavigateToSongs && <div className="h-px bg-gray-200 dark:bg-gray-800 mx-2" />}
+            <button onClick={() => { setMenuId(null); setMenuPos(null); openShareModal(pl); }}
+              className="flex items-center gap-2 w-full px-4 py-3 text-sm text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 hover:text-indigo-300 transition-colors text-left">
+              <Edit3 size={13} /> Edit Playlist
+            </button>
+            <div className="h-px bg-gray-200 dark:bg-gray-800 mx-2" />
+            <button onClick={() => { setMenuId(null); setMenuPos(null); duplicatePlaylist(pl); }}
+              className="flex items-center gap-2 w-full px-4 py-3 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition-colors text-left">
+              <Copy size={13} /> Duplicate
+            </button>
+            <div className="h-px bg-gray-200 dark:bg-gray-800 mx-2" />
+            <button onClick={() => { setMenuId(null); setMenuPos(null); deletePlaylist(pl.id); }}
+              className="flex items-center gap-2 w-full px-4 py-3 text-sm text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-300 transition-colors text-left">
+              <Trash2 size={13} /> Delete
+            </button>
+          </div>,
+          document.body
+        );
+      })()}
     </div>
   );
 }

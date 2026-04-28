@@ -138,7 +138,7 @@ function AddToPlaylistBtn({ song, showToast, variant }: { song: Song; showToast:
     if (!user) return;
     const result = await addSongToPlaylistFirestore(user.uid, playlistId, song.id, playlists);
     if (result === "added")        showToast("success", `Added to "${playlistName}"`);
-    else if (result === "already") showToast("error", `Already in "${playlistName}"`);
+    else if (result === "already") showToast("info", `"${song.title}" is already in "${playlistName}" ✓`);
     setOpen(false);
   };
 
@@ -178,10 +178,9 @@ function AddToPlaylistBtn({ song, showToast, variant }: { song: Song; showToast:
               key={pl.id}
               onMouseDown={e => e.stopPropagation()}
               onClick={() => handleAdd(pl.id, pl.name)}
-              disabled={inPlaylistIds.has(pl.id)}
               className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm transition-colors text-left ${
                 inPlaylistIds.has(pl.id)
-                  ? "text-indigo-400 bg-indigo-900/20 cursor-default"
+                  ? "text-indigo-400 bg-indigo-900/20 hover:bg-indigo-900/30"
                   : "text-gray-300 hover:bg-gray-800 hover:text-white"
               }`}
             >
@@ -370,7 +369,7 @@ function AddToPlaylistBarBtn({ song, showToast }: { song: Song; showToast: (type
     if (!user) return;
     const result = await addSongToPlaylistFirestore(user.uid, playlistId, song.id, playlists);
     if (result === "added")        showToast("success", `Added to "${playlistName}"`);
-    else if (result === "already") showToast("error", `Already in "${playlistName}"`);
+    else if (result === "already") showToast("info", `"${song.title}" is already in "${playlistName}" ✓`);
     setOpen(false);
   };
   const handleCreateAndAdd = async () => {
@@ -392,9 +391,8 @@ function AddToPlaylistBarBtn({ song, showToast }: { song: Song; showToast: (type
         <div className="max-h-52 overflow-y-auto">
           {playlists.map(pl => (
             <button key={pl.id} onMouseDown={e => e.stopPropagation()} onClick={() => handleAdd(pl.id, pl.name)}
-              disabled={inPlaylistIds.has(pl.id)}
               className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm transition-colors text-left ${
-                inPlaylistIds.has(pl.id) ? "text-indigo-400 bg-indigo-900/20 cursor-default" : "text-gray-300 hover:bg-gray-800 hover:text-white"
+                inPlaylistIds.has(pl.id) ? "text-indigo-400 bg-indigo-900/20 hover:bg-indigo-900/30" : "text-gray-300 hover:bg-gray-800 hover:text-white"
               }`}>
               <span className="text-base shrink-0">{pl.emoji ?? "🎵"}</span>
               <span className="flex-1 truncate">{pl.name}</span>
