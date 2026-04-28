@@ -366,6 +366,32 @@ app.delete("/api/live-bg-video", (_req, res) => {
   res.json({ ok: true });
 });
 
+// GET /api/playlist-manifest/:slug — dynamic PWA manifest for public playlist pages
+// iOS Safari rejects blob: URLs for manifests; this real endpoint returns a manifest
+// with start_url and scope set to /p/:slug so "Add to Home Screen" opens the right page.
+app.get("/api/playlist-manifest/:slug", (req, res) => {
+  const { slug } = req.params;
+  const pageUrl = `/p/${slug}`;
+  const manifest = {
+    name: "WorshipFlow",
+    short_name: "WorshipFlow",
+    description: "Worship team scheduling, song & member management",
+    start_url: pageUrl,
+    scope: pageUrl,
+    display: "standalone",
+    background_color: "#0f172a",
+    theme_color: "#6366f1",
+    orientation: "portrait-primary",
+    icons: [
+      { src: "/icon-192x192.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
+      { src: "/icon-512x512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
+    ],
+  };
+  res.setHeader("Content-Type", "application/manifest+json");
+  res.setHeader("Cache-Control", "no-store");
+  res.json(manifest);
+});
+
 // POST /api/fcm-token — store FCM device token for a user
 
 app.post("/api/fcm-token", async (req, res) => {

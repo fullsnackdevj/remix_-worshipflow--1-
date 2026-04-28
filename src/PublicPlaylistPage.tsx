@@ -145,48 +145,28 @@ export default function PublicPlaylistPage({ slug }: { slug: string }) {
 
   // ── Dynamic PWA manifest ────────────────────────────────────────────────────
   // iOS/Android "Add to Home Screen" reads the <link rel="manifest"> at the
-  // moment of the gesture. By swapping in a blob manifest whose start_url and
-  // scope are scoped to this specific /p/<slug> URL, the installed shortcut will
-  // open the playlist page directly instead of the root "/" of the app.
+  // moment of the gesture. We swap in a server-side manifest whose start_url
+  // and scope are scoped to this /p/<slug> URL. Safari rejects blob: URLs so
+  // we use a real API endpoint (/api/playlist-manifest/:slug) instead.
   useEffect(() => {
-    const pageUrl = `/p/${slug}`;
-    const manifest = {
-      name: "WorshipFlow",
-      short_name: "WorshipFlow",
-      description: "Worship team scheduling, song & member management",
-      start_url: pageUrl,
-      scope: pageUrl,
-      display: "standalone",
-      background_color: "#0f172a",
-      theme_color: "#6366f1",
-      orientation: "portrait-primary",
-      icons: [
-        { src: "/icon-192x192.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
-        { src: "/icon-512x512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
-      ],
-    };
+    const manifestHref = `/api/playlist-manifest/${slug}`;
 
-    const blob = new Blob([JSON.stringify(manifest)], { type: "application/json" });
-    const blobUrl = URL.createObjectURL(blob);
-
-    // Swap the manifest link to the blob
     const existing = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
     const prevHref = existing?.getAttribute("href") ?? "/manifest.json";
 
     if (existing) {
-      existing.setAttribute("href", blobUrl);
+      existing.setAttribute("href", manifestHref);
     } else {
       const link = document.createElement("link");
       link.rel = "manifest";
-      link.href = blobUrl;
+      link.href = manifestHref;
       document.head.appendChild(link);
     }
 
     return () => {
-      // Restore the original manifest when navigating away
+      // Restore the original manifest when navigating away from this page
       const el = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
       if (el) el.setAttribute("href", prevHref);
-      URL.revokeObjectURL(blobUrl);
     };
   }, [slug]);
 

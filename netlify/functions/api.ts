@@ -3988,6 +3988,38 @@ BULLET: [...]`;
         }
     }
 
+    // ── GET /playlist-manifest/:slug ————————————————————————————————————————————
+    // No auth required. Returns a PWA manifest scoped to /p/:slug so that iOS/Android
+    // "Add to Home Screen" pins the specific playlist URL, not the root "/".
+    const manifestMatch = rawPath.match(/^\/playlist-manifest\/([^/]+)$/);
+    if (manifestMatch && method === "GET") {
+        const slug = manifestMatch[1];
+        const pageUrl = `/p/${slug}`;
+        const manifest = {
+            name: "WorshipFlow",
+            short_name: "WorshipFlow",
+            description: "Worship team scheduling, song & member management",
+            start_url: pageUrl,
+            scope: pageUrl,
+            display: "standalone",
+            background_color: "#0f172a",
+            theme_color: "#6366f1",
+            orientation: "portrait-primary",
+            icons: [
+                { src: "/icon-192x192.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
+                { src: "/icon-512x512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
+            ],
+        };
+        return {
+            statusCode: 200,
+            headers: {
+                "Content-Type": "application/manifest+json",
+                "Cache-Control": "no-store",
+            },
+            body: JSON.stringify(manifest),
+        };
+    }
+
     return json(404, { error: "Not found" });
 
 };
