@@ -3,6 +3,12 @@ import admin from "firebase-admin";
 import { GoogleGenAI } from "@google/genai";
 import { Resend } from "resend";
 
+// ── Live Stage in-memory cache ────────────────────────────────────────────────
+// Module-level variable — persists across requests on the SAME warm function
+// instance. Eliminates Firestore reads on every OBS poll (every 250ms).
+// On cold start, cache is empty → falls back to Firestore once, then stays warm.
+let _liveStateCache: Record<string, unknown> | null = null;
+
 // Firebase init
 function getDb(): FirebaseFirestore.Firestore | null {
     const projectId = process.env.FIREBASE_PROJECT_ID;
@@ -995,16 +1001,18 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
 
     // ── Live Stage ─────────────────────────────────────────────────────────
     // POST /api/live-push — called by LiveStageView on every slide change
-    // Stores the current live state in Firestore so OBS can poll it.
+    // Writes to in-memory cache (instant) + Firestore (durable backup).
     // ⚠️ No auth — OBS browser source has no session.
     if (rawPath === "/live-push" && method === "POST") {
         if (!firestore) return json(500, { error: "DB unavailable" });
         try {
-            const state = {
-                ...body,
-                updatedAt: Date.now(),
-            };
-            await firestore.collection("live_state").doc("current").set(state);
+            const state = { ...body, updatedAt: Date.now() };
+            // 1. Update in-memory cache immediately (no Firestore latency)
+            _liveStateCache = state;
+            // 2. Persist to Firestore in background (fire-and-forget for speed)
+            firestore.collection("live_state").doc("current").set(state).catch(
+                (e: unknown) => console.error("live-push Firestore write error:", e)
+            );
             return json(200, { ok: true });
         } catch (e) {
             console.error("live-push error:", e);
@@ -1013,19 +1021,25 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
     }
 
     // GET /api/live-state — polled by LiveDisplayPage every 250ms
-    // Returns the current live state from Firestore.
+    // Serves from in-memory cache (near-instant). Falls back to Firestore on cold start.
     // ⚠️ No auth — OBS browser source has no session.
     if (rawPath === "/live-state" && method === "GET") {
-        if (!firestore) return json(500, { error: "DB unavailable" });
+        // Serve from cache if available (warm instance — no Firestore read needed)
+        if (_liveStateCache !== null) {
+            return json(200, _liveStateCache);
+        }
+        // Cold start fallback — read from Firestore once, then cache it
+        if (!firestore) return json(200, { visible: false, lines: [], songTitle: "", animStyle: "word-fade", updatedAt: 0 });
         try {
             const doc = await firestore.collection("live_state").doc("current").get();
-            if (!doc.exists) {
-                return json(200, { visible: false, lines: [], songTitle: "", animStyle: "word-fade", updatedAt: 0 });
-            }
-            return json(200, doc.data());
+            const state = doc.exists
+                ? (doc.data() as Record<string, unknown>)
+                : { visible: false, lines: [], songTitle: "", animStyle: "word-fade", updatedAt: 0 };
+            _liveStateCache = state; // warm the cache
+            return json(200, state);
         } catch (e) {
             console.error("live-state error:", e);
-            return json(500, { error: "Failed to fetch live state" });
+            return json(200, { visible: false, lines: [], songTitle: "", animStyle: "word-fade", updatedAt: 0 });
         }
     }
 
