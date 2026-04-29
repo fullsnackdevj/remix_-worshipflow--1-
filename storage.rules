@@ -22,6 +22,13 @@ service firebase.storage {
       allow write: if request.auth != null;
     }
 
+    // ── Live Stage fade screen image/video — uploaded by admin, read by OBS ────
+    // OBS Browser Source has no auth session, so reads must be public.
+    match /live-fade-bg/{filename} {
+      allow read:  if true;
+      allow write: if request.auth != null;
+    }
+
     // ── All other paths: require authentication ───────────────────────────────
     match /{allPaths=**} {
       allow read, write: if request.auth != null;
