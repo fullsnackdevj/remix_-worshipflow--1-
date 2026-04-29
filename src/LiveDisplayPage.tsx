@@ -2,14 +2,23 @@
  * LiveDisplayPage — OBS Browser Source target.
  * URL: /live-display
  *
- * Polls /api/live-state every 100ms via HTTP — reliable in OBS CEF.
- * The Netlify function serves from an in-memory cache (warm) or Firestore (cold),
- * giving an effective round-trip of ~150ms and end-to-end latency under 250ms.
+ * Polls /api/live-state every 250 ms — no auth, no Firestore.
+ *
+ * EXACT copy of LiveStageView's Screen component rendering logic:
+ *  - ResizeObserver box sizing (strict 16:9 if needed, or full screen for OBS)
+ *  - fs = box.w * 0.10 (same formula)
+ *  - Echo: echoWordSm() mixed sizes, safeFsForRows() overflow guard, forced rows
+ *  - Echo marquee: 5 scrolling outline rows behind the main lyrics
+ *  - All 7 animation styles via GSAP
+ *  - Vignette + stage glow overlays
  */
 import React, {
-  useEffect, useRef, useState, useCallback,
+  useEffect, useRef, useState,
 } from "react";
 import gsap from "gsap";
+import { db } from "./firebase";
+import { doc, onSnapshot } from "firebase/firestore";
+
 
 type AnimStyle = "fade" | "slide-up" | "word-fade" | "word-bounce" | "typewriter" | "blur-in" | "echo" | "breathe";
 
@@ -184,90 +193,76 @@ export default function LiveDisplayPage() {
   // Font size: exactly 10% of box width — matches controller formula
   const fs = box.w > 0 ? Math.round(box.w * 0.10) : 192; // 192 ≈ 10% of 1920
 
-  // ── Poll /api/live-state every 100 ms ────────────────────────────────────
-  // HTTP polling is the only reliable approach for OBS CEF (no WebSocket SDK).
-  // The Netlify function serves from an in-memory cache on warm instances
-  // so each poll completes in ~30ms; cold-start reads Firestore (~300ms).
-  const poll = useCallback(async () => {
-    try {
-      const r = await fetch("/api/live-state", { cache: "no-store" });
-      if (!r.ok) return;
-      const data: LiveState = await r.json();
-      setConnected(true);
-
-      const key = `${data.updatedAt}`;
-      if (key === lastKeyRef.current) return;
-      lastKeyRef.current = key;
-
-      // Scene-switch transitioning signal: fade to black
-      if (data.transitioning) {
-        setFadeBlack(true);
-        return;
-      }
-      setFadeBlack(false);
-
-      // Fade Screen mode: show blank/image overlay — but STILL update live scene data
-      // so the background is pre-loaded; when fade lifts there is no flash.
-      if (data.fadeScreen) {
-        const bg = data.fadeScreenBg ?? { type: "color", color: "#000" };
-        prevFadeScreenRef.current = bg;
-        setFadeScreen(bg);
-      } else {
-        setFadeScreen(null);
-      }
-
-      // _fadeOnly: just update overlay state. Don't re-run lyric animation — the slide
-      // content hasn't changed, only the fade screen toggled on or off.
-      if (data._fadeOnly) return;
-
-      const lyricsEl = lyricsRef.current;
-      if (!lyricsEl) { setLive(data); return; }
-
-      // Cancel everything in flight first
-      if (loopCleanupRef.current) { loopCleanupRef.current(); loopCleanupRef.current = null; }
-      if (rafRef.current !== null) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
-      gsap.killTweensOf(lyricsEl);
-      const allChildren = Array.from(lyricsEl.querySelectorAll("*"));
-      gsap.killTweensOf(allChildren);
-      gsap.set(allChildren, { clearProps: "opacity,transform,filter,scale" });
-
-      if (data.visible && data.lines.length > 0) {
-        animatingRef.current = true;
-        gsap.to(lyricsEl, {
-          opacity: 0, duration: 0.2, ease: "power2.in",
-          onComplete: () => {
-            setLive(data);
-            // Double-RAF ensures new React DOM is painted before GSAP reads elements
-            rafRef.current = requestAnimationFrame(() =>
-              requestAnimationFrame(() => {
-                rafRef.current = null;
-                gsap.set(lyricsEl, { opacity: 1 });
-                gsap.set(Array.from(lyricsEl.querySelectorAll("*")), { clearProps: "opacity,transform,filter,scale" });
-                animIn(lyricsEl, data.animStyle);
-                animatingRef.current = false;
-                if (data.loopEnabled !== false)
-                  loopCleanupRef.current = idleLoop(lyricsEl, data.animStyle, data.loopInterval ?? 3500);
-              })
-            );
-          },
-        });
-      } else {
-        animatingRef.current = false;
-        gsap.to(lyricsEl, {
-          opacity: 0, duration: 0.35, ease: "power2.in",
-          onComplete: () => setLive(data),
-        });
-      }
-    } catch {
-      setConnected(false);
-    }
-  }, []);
-
+  // ── Real-time Firestore listener — replaces 250ms HTTP polling ─────────────
+  // onSnapshot uses a persistent WebSocket — updates arrive in ~50ms.
+  // Firestore rules allow public read on live_state/* (no auth needed for OBS).
   useEffect(() => {
-    poll();
-    const id = setInterval(poll, 100);
-    return () => clearInterval(id);
-  }, [poll]);
+    const unsubscribe = onSnapshot(
+      doc(db, "live_state", "current"),
+      (snap) => {
+        setConnected(true);
+        const data: LiveState = snap.exists()
+          ? (snap.data() as LiveState)
+          : { visible: false, lines: [], songTitle: "", animStyle: "word-fade", updatedAt: 0 };
+
+        const key = `${data.updatedAt}`;
+        if (key === lastKeyRef.current) return;
+        lastKeyRef.current = key;
+
+        if (data.transitioning) { setFadeBlack(true); return; }
+        setFadeBlack(false);
+
+        if (data.fadeScreen) {
+          const bg = data.fadeScreenBg ?? { type: "color", color: "#000" };
+          prevFadeScreenRef.current = bg;
+          setFadeScreen(bg);
+        } else {
+          setFadeScreen(null);
+        }
+
+        if (data._fadeOnly) return;
+
+        const lyricsEl = lyricsRef.current;
+        if (!lyricsEl) { setLive(data); return; }
+
+        if (loopCleanupRef.current) { loopCleanupRef.current(); loopCleanupRef.current = null; }
+        if (rafRef.current !== null) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+        gsap.killTweensOf(lyricsEl);
+        const allChildren = Array.from(lyricsEl.querySelectorAll("*"));
+        gsap.killTweensOf(allChildren);
+        gsap.set(allChildren, { clearProps: "opacity,transform,filter,scale" });
+
+        if (data.visible && data.lines.length > 0) {
+          animatingRef.current = true;
+          gsap.to(lyricsEl, {
+            opacity: 0, duration: 0.2, ease: "power2.in",
+            onComplete: () => {
+              setLive(data);
+              rafRef.current = requestAnimationFrame(() =>
+                requestAnimationFrame(() => {
+                  rafRef.current = null;
+                  gsap.set(lyricsEl, { opacity: 1 });
+                  gsap.set(Array.from(lyricsEl.querySelectorAll("*")), { clearProps: "opacity,transform,filter,scale" });
+                  animIn(lyricsEl, data.animStyle);
+                  animatingRef.current = false;
+                  if (data.loopEnabled !== false)
+                    loopCleanupRef.current = idleLoop(lyricsEl, data.animStyle, data.loopInterval ?? 3500);
+                })
+              );
+            },
+          });
+        } else {
+          animatingRef.current = false;
+          gsap.to(lyricsEl, {
+            opacity: 0, duration: 0.35, ease: "power2.in",
+            onComplete: () => setLive(data),
+          });
+        }
+      },
+      () => setConnected(false)
+    );
+    return () => unsubscribe();
+  }, []); // eslint-disable-line
 
   // ── Echo marquee — exact mirror of the useEffect in Screen ───────────────
   // Track ALL marquee tweens so repeat:-1 tweens started in onComplete can be killed
