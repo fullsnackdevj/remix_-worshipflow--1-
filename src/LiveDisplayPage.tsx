@@ -35,10 +35,10 @@ interface LiveState {
   lyricsScale?: number;
   loopEnabled?: boolean;
   loopInterval?: number;
-  bgVideo?: { type: "local"; url: string } | { type: "youtube"; videoId: string } | null;
+  bgVideo?: { type: "local"; url: string } | { type: "firebase"; url: string } | { type: "youtube"; videoId: string } | null;
   transitioning?: boolean;
   fadeScreen?: boolean;
-  fadeScreenBg?: { type: "color"; color: string } | { type: "image-url"; url: string } | { type: "image-local"; url: string };
+  fadeScreenBg?: { type: "color"; color: string } | { type: "image-url"; url: string } | { type: "image-local"; url: string } | { type: "image-firebase"; url: string } | { type: "video-local"; url: string } | { type: "video-firebase"; url: string } | { type: "video-youtube"; videoId: string };
   _fadeOnly?: boolean; // when true: ONLY update overlay, skip lyric animation (fade toggle, not slide change)
 }
 
@@ -448,11 +448,18 @@ export default function LiveDisplayPage() {
             pointerEvents: "none",
             background: bg?.type === "color" ? (bg as {type:"color";color:string}).color : "#000",
           }}>
-            {bg && (bg.type === "image-url" || bg.type === "image-local") && bgUrl && (
+            {/* image-url, image-local, image-firebase — all render as <img> */}
+            {bg && (bg.type === "image-url" || bg.type === "image-local" || bg.type === "image-firebase") && bgUrl && (
               <img src={bgUrl} alt=""
                 style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }} />
             )}
+            {/* video-local — base64 data URL (admin session only, but still rendered if present) */}
             {bg && bg.type === "video-local" && bgUrl && (
+              <video key={bgUrl} src={bgUrl} autoPlay loop muted playsInline
+                style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }} />
+            )}
+            {/* video-firebase — Firebase Storage URL, permanent and OBS-accessible */}
+            {bg && bg.type === "video-firebase" && bgUrl && (
               <video key={bgUrl} src={bgUrl} autoPlay loop muted playsInline
                 style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }} />
             )}

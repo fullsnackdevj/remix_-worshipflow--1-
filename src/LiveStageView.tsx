@@ -12,9 +12,19 @@ type BgVideo   = { type: "local"; url: string } | { type: "firebase"; url: strin
 type FadeScreenBg =
   | { type: "color"; color: string }
   | { type: "image-url"; url: string }
-  | { type: "image-local"; url: string }
-  | { type: "video-local"; url: string }
+  | { type: "image-local"; url: string }     // legacy base64 — stays in IDB only, never sent to Firestore
+  | { type: "image-firebase"; url: string }  // Firebase Storage URL — safe for Firestore ✓
+  | { type: "video-local"; url: string }     // legacy base64 — stays in IDB only, never sent to Firestore
+  | { type: "video-firebase"; url: string }  // Firebase Storage URL — safe for Firestore ✓
   | { type: "video-youtube"; videoId: string };
+
+// Returns a Firestore-safe version of a FadeScreenBg.
+// image-local / video-local are base64 blobs (often >1MB) that exceed Firestore's 1MB doc limit
+// and are not accessible from OBS anyway (session-scoped blob URL). Substitute black.
+const toFiresafeFadeBg = (bg: FadeScreenBg): FadeScreenBg =>
+  bg.type === "image-local" || bg.type === "video-local"
+    ? { type: "color", color: "#000000" }
+    : bg;
 
 // ── IndexedDB helpers — for large data like uploaded images —————————————————
 // localStorage has a ~5MB total limit per origin; a 3-4MB image hits it silently.
@@ -756,6 +766,11 @@ export default function LiveStageView({ allSongs, onToast }: Props) {
   const [modalDrafts,     setModalDrafts]     = useState<Record<PresetName, LivePreset>>({ ...DEFAULT_PRESETS });
   const [videoUploading,  setVideoUploading]  = useState<Record<PresetName, boolean>>({ praise: false, worship: false });
   const [videoProgress,   setVideoProgress]   = useState<Record<PresetName, number>>({ praise: 0, worship: 0 });
+  // Fade screen background upload progress
+  const [fadeImgUploading, setFadeImgUploading] = useState(false);
+  const [fadeImgProgress,  setFadeImgProgress]  = useState(0);
+  const [fadeVidUploading, setFadeVidUploading] = useState(false);
+  const [fadeVidProgress,  setFadeVidProgress]  = useState(0);
 
   // presetActivated: always false on load — user must explicitly tap a preset pill each session
   const [presetActivated, setPresetActivated] = useState<boolean>(false);
@@ -807,7 +822,8 @@ export default function LiveStageView({ allSongs, onToast }: Props) {
       fetch("/api/live-push", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...sceneBase, fadeScreen: true, fadeScreenBg: fadeScreenBgRef.current }),
+        // toFiresafeFadeBg strips image-local/video-local base64 (Firestore 1MB limit)
+        body: JSON.stringify({ ...sceneBase, fadeScreen: true, fadeScreenBg: toFiresafeFadeBg(fadeScreenBgRef.current) }),
       }).catch(() => {});
     } else {
       // ── DEACTIVATE fade ───────────────────────────────────────────────────────
@@ -828,6 +844,8 @@ export default function LiveStageView({ allSongs, onToast }: Props) {
   // OUTSIDE THE MODAL (e.g. direct API calls): commits live state + pushes to OBS.
   const saveFadeScreenBg = (bg: FadeScreenBg) => {
     // Always persist to storage so large file uploads aren't lost on Cancel
+    // Large local types (base64) live in IDB only — never in Firestore.
+    // Firebase types are just URLs — store in localStorage (tiny payload).
     if (bg.type === "image-local" || bg.type === "video-local") {
       idbSet("lsv_fade_screen", bg).catch(e =>
         console.warn("[LiveStage] IDB write failed:", e)
@@ -923,12 +941,14 @@ export default function LiveStageView({ allSongs, onToast }: Props) {
       // Sync OBS if fade was active — use best available bg (IDB or already-read localStorage)
       // This covers the common case where the bg is a plain color stored only in localStorage.
       if (fadeScreenActiveRef.current) {
-        const bg = idbBg ?? fadeScreenBgRef.current;
+        const rawBg = idbBg ?? fadeScreenBgRef.current;
+        // Never send image-local / video-local base64 to Firestore — exceeds 1MB limit.
+        const safeBg = toFiresafeFadeBg(rawBg);
         setTimeout(() => {
           fetch("/api/live-push", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ fadeScreen: true, fadeScreenBg: bg, updatedAt: Date.now() }),
+            body: JSON.stringify({ fadeScreen: true, fadeScreenBg: safeBg, updatedAt: Date.now() }),
           }).catch(() => {});
         }, 200);
       }
@@ -1053,12 +1073,12 @@ export default function LiveStageView({ allSongs, onToast }: Props) {
         try { localStorage.setItem("lsv_fade_screen", JSON.stringify(modalFadeScreenBg)); } catch {}
         idbSet("lsv_fade_screen", modalFadeScreenBg).catch(() => {});
       }
-      // Push to OBS if fade is active — use the just-committed value
+      // Push to OBS if fade is active — convert local base64 to black fallback (Firestore 1MB limit)
       if (fadeScreenActiveRef.current) {
         fetch("/api/live-push", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fadeScreen: true, fadeScreenBg: modalFadeScreenBg, updatedAt: Date.now() }),
+          body: JSON.stringify({ fadeScreen: true, fadeScreenBg: toFiresafeFadeBg(modalFadeScreenBg), updatedAt: Date.now() }),
         }).catch(() => {});
       }
       setSettingsSaved(true);
@@ -1318,11 +1338,13 @@ export default function LiveStageView({ allSongs, onToast }: Props) {
               {settingsTab === "fade" && (() => {
                   const isColor    = modalFadeScreenBg.type === "color";
                 const isImgUrl   = modalFadeScreenBg.type === "image-url";
-                const isImgLoc   = modalFadeScreenBg.type === "image-local";
-                const isVidLoc   = modalFadeScreenBg.type === "video-local";
+                // image-local (legacy base64) and image-firebase both use the "Upload Image" tab
+                const isImgLoc   = modalFadeScreenBg.type === "image-local" || modalFadeScreenBg.type === "image-firebase";
+                // video-local (legacy base64) and video-firebase both use the "Upload Video" tab
+                const isVidLoc   = modalFadeScreenBg.type === "video-local" || modalFadeScreenBg.type === "video-firebase";
                 const isVidYt    = modalFadeScreenBg.type === "video-youtube";
                 const hasUrl     = isImgUrl || isImgLoc || isVidLoc;
-                const bgUrl      = hasUrl ? (modalFadeScreenBg as {type:string;url:string}).url : "";
+                const bgUrl      = hasUrl ? (modalFadeScreenBg as {type:string;url?:string}).url ?? "" : "";
                 const ytId       = isVidYt ? (modalFadeScreenBg as {type:string;videoId:string}).videoId : "";
                 return (
                   <div style={{ display:"flex", flexDirection:"column", gap:18 }}>
@@ -1364,8 +1386,8 @@ export default function LiveStageView({ allSongs, onToast }: Props) {
                             <button key={t} onClick={() => {
                               if (t === "color")         saveFadeScreenBg({ type:"color",         color:   isColor  ? (modalFadeScreenBg as {type:"color";color:string}).color : "#000000" });
                               else if (t === "image-url")    saveFadeScreenBg({ type:"image-url",    url:     isImgUrl ? bgUrl : "" });
-                              else if (t === "image-local")  saveFadeScreenBg({ type:"image-local",  url:     isImgLoc ? bgUrl : "" });
-                              else if (t === "video-local")  saveFadeScreenBg({ type:"video-local",  url:     isVidLoc ? bgUrl : "" });
+                              else if (t === "image-local")  saveFadeScreenBg({ type:"image-firebase", url: (isImgLoc && modalFadeScreenBg.type === "image-firebase") ? bgUrl : "" });
+                              else if (t === "video-local")  saveFadeScreenBg({ type:"video-firebase", url: (isVidLoc && modalFadeScreenBg.type === "video-firebase") ? bgUrl : "" });
                               else                           saveFadeScreenBg({ type:"video-youtube", videoId: isVidYt  ? ytId  : "" });
                             }} style={{ padding:"9px 4px", borderRadius:9, fontSize:10, fontWeight:700, cursor:"pointer", transition:"all 0.18s", border:"none",
                               background: isActive ? "rgba(239,68,68,0.22)" : "transparent",
@@ -1413,41 +1435,77 @@ export default function LiveStageView({ allSongs, onToast }: Props) {
                       </div>
                     )}
 
-                    {/* Local image upload */}
+                    {/* Fade image upload — uploads to Firebase Storage so OBS can load it */}
                     {isImgLoc && (
                       <div>
                         <span style={{ fontSize:10, fontWeight:700, color:"rgba(255,255,255,0.35)", textTransform:"uppercase", letterSpacing:"0.12em", display:"block", marginBottom:10 }}>Upload Image</span>
-                        <label style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 12px", borderRadius:9, background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.09)", cursor:"pointer", fontSize:12, color:"rgba(255,255,255,0.6)" }}>
+                        {modalFadeScreenBg.type === "image-local" && (
+                          <p style={{ fontSize:10, color:"#f59e0b", margin:"0 0 8px", lineHeight:1.4 }}>⚠ Re-upload your image — old format can't be sent to OBS. New uploads go to Firebase (permanent).</p>
+                        )}
+                        <label style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 12px", borderRadius:9, background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.09)", cursor: fadeImgUploading ? "not-allowed" : "pointer", fontSize:12, color:"rgba(255,255,255,0.6)" }}>
                           <ImageIcon size={13} />
-                          {bgUrl ? "Replace image…" : "Upload image file…"}
-                          <input type="file" accept="image/*" style={{ display:"none" }}
-                            onChange={e => {
+                          {fadeImgUploading ? `Uploading ${fadeImgProgress}%…` : (bgUrl && modalFadeScreenBg.type === "image-firebase" ? "Replace image…" : "Upload image file…")}
+                          <input type="file" accept="image/*" style={{ display:"none" }} disabled={fadeImgUploading}
+                            onChange={async e => {
                               const file = e.target.files?.[0]; if (!file) return;
-                              const reader = new FileReader();
-                              reader.onload = ev => saveFadeScreenBg({ type:"image-local", url: ev.target?.result as string });
-                              reader.readAsDataURL(file);
+                              try {
+                                setFadeImgUploading(true); setFadeImgProgress(0);
+                                const ext = file.name.split(".").pop() || "jpg";
+                                const sRef = storageRef(storage, `live-fade-bg/image.${ext}`);
+                                const task = uploadBytesResumable(sRef, file);
+                                await new Promise<void>((resolve, reject) => {
+                                  task.on("state_changed",
+                                    snap => setFadeImgProgress(Math.round((snap.bytesTransferred / snap.totalBytes) * 100)),
+                                    reject, resolve);
+                                });
+                                const url = await getDownloadURL(task.snapshot.ref);
+                                saveFadeScreenBg({ type: "image-firebase", url });
+                              } catch {
+                                onToast("Image upload failed — please try again.", "error");
+                              } finally {
+                                setFadeImgUploading(false);
+                                e.target.value = "";
+                              }
                             }} />
                         </label>
-                        {bgUrl && <p style={{ fontSize:10, color:"#34d399", margin:"8px 0 0" }}>✓ Image saved ({(bgUrl.length / 1_000_000).toFixed(1)}MB)</p>}
+                        {bgUrl && modalFadeScreenBg.type === "image-firebase" && <p style={{ fontSize:10, color:"#34d399", margin:"8px 0 0" }}>✓ Image saved to Firebase (loads on OBS)</p>}
                       </div>
                     )}
 
-                    {/* Local video upload */}
+                    {/* Fade video upload — uploads to Firebase Storage so OBS can load it */}
                     {isVidLoc && (
                       <div>
                         <span style={{ fontSize:10, fontWeight:700, color:"rgba(255,255,255,0.35)", textTransform:"uppercase", letterSpacing:"0.12em", display:"block", marginBottom:10 }}>Upload Video</span>
-                        <label style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 12px", borderRadius:9, background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.09)", cursor:"pointer", fontSize:12, color:"rgba(255,255,255,0.6)" }}>
+                        {modalFadeScreenBg.type === "video-local" && (
+                          <p style={{ fontSize:10, color:"#f59e0b", margin:"0 0 8px", lineHeight:1.4 }}>⚠ Re-upload your video — old format can't be sent to OBS. New uploads go to Firebase (permanent).</p>
+                        )}
+                        <label style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 12px", borderRadius:9, background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.09)", cursor: fadeVidUploading ? "not-allowed" : "pointer", fontSize:12, color:"rgba(255,255,255,0.6)" }}>
                           <Video size={13} />
-                          {bgUrl ? "Replace video…" : "Upload video file…"}
-                          <input type="file" accept="video/*" style={{ display:"none" }}
-                            onChange={e => {
+                          {fadeVidUploading ? `Uploading ${fadeVidProgress}%…` : (bgUrl && modalFadeScreenBg.type === "video-firebase" ? "Replace video…" : "Upload video file…")}
+                          <input type="file" accept="video/*" style={{ display:"none" }} disabled={fadeVidUploading}
+                            onChange={async e => {
                               const file = e.target.files?.[0]; if (!file) return;
-                              const reader = new FileReader();
-                              reader.onload = ev => saveFadeScreenBg({ type:"video-local", url: ev.target?.result as string });
-                              reader.readAsDataURL(file);
+                              try {
+                                setFadeVidUploading(true); setFadeVidProgress(0);
+                                const ext = file.name.split(".").pop() || "mp4";
+                                const sRef = storageRef(storage, `live-fade-bg/video.${ext}`);
+                                const task = uploadBytesResumable(sRef, file);
+                                await new Promise<void>((resolve, reject) => {
+                                  task.on("state_changed",
+                                    snap => setFadeVidProgress(Math.round((snap.bytesTransferred / snap.totalBytes) * 100)),
+                                    reject, resolve);
+                                });
+                                const url = await getDownloadURL(task.snapshot.ref);
+                                saveFadeScreenBg({ type: "video-firebase", url });
+                              } catch {
+                                onToast("Video upload failed — please try again.", "error");
+                              } finally {
+                                setFadeVidUploading(false);
+                                e.target.value = "";
+                              }
                             }} />
                         </label>
-                        {bgUrl && <p style={{ fontSize:10, color:"#34d399", margin:"8px 0 0" }}>✓ Video saved ({(bgUrl.length / 1_000_000).toFixed(1)}MB)</p>}
+                        {bgUrl && modalFadeScreenBg.type === "video-firebase" && <p style={{ fontSize:10, color:"#34d399", margin:"8px 0 0" }}>✓ Video saved to Firebase (loads on OBS)</p>}
                         <p style={{ fontSize:10, color:"rgba(255,255,255,0.3)", margin:"6px 0 0" }}>Tip: Use compressed MP4 files for best performance. Loops automatically.</p>
                       </div>
                     )}
