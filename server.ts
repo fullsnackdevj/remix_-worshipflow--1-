@@ -302,11 +302,21 @@ let liveState: Record<string, unknown> = { visible: false, lines: [], songTitle:
 const sseClients = new Set<import("express").Response>();
 
 // POST /api/live-push — controller writes the active slide
-app.post("/api/live-push", (req, res) => {
+// Writes to Firestore (triggers onSnapshot in LiveDisplayPage) AND broadcasts SSE
+app.post("/api/live-push", async (req, res) => {
   liveState = { ...req.body, updatedAt: Date.now() };
-  // Broadcast to all connected SSE clients (OBS display pages)
+  // 1. Broadcast to SSE clients (legacy local fallback)
   const payload = `data: ${JSON.stringify(liveState)}\n\n`;
   sseClients.forEach(client => { try { client.write(payload); } catch { sseClients.delete(client); } });
+  // 2. Write to Firestore — this triggers onSnapshot in LiveDisplayPage (same as production)
+  try {
+    const firestore = getDb();
+    if (firestore) {
+      await firestore.collection("live_stage").doc("current").set(liveState);
+    }
+  } catch (e) {
+    console.warn("[live-push] Firestore write failed (OBS may not update):", e);
+  }
   res.json({ ok: true, clients: sseClients.size });
 });
 
