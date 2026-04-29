@@ -923,10 +923,6 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
   const isDesigner = myMemberProfile?.role === "Designer";
   // Design Requests: Admin + Audio/Tech system role + Designer team role
   const canAccessDesignRequests = isRoleAdmin || effectiveRole === "audio_tech" || isDesigner;
-  // Live Stage: Admin + Audio/Tech + Musician roles + members with liveStageAccess granted in Admin Panel
-  const isAudioTech = effectiveRole === "audio_tech";
-  const isMusicianRole = effectiveRole === "musician";
-  const canAccessLiveStage = isRoleAdmin || isAudioTech || isMusicianRole || (myMemberProfile?.liveStageAccess ?? false);
 
   /** True when the user has a member profile but hasn't set their birthdate yet */
   const needsBirthdatePrompt = !!myMemberProfile && !myMemberProfile.birthdate;
@@ -1433,8 +1429,8 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Freedom Wall</span>}
           </div>
 
-          {/* Live Stage — Admin + Audio/Tech + Musician roles (+ liveStageAccess granted members) */}
-          {canAccessLiveStage && (
+          {/* Live Stage — Admin OR members with liveStageAccess only */}
+          {(isRoleAdmin || myMemberProfile?.liveStageAccess) && (
             <div className="relative group/tip">
               <button
                 onClick={() => { setCurrentView("live-stage"); setIsMobileMenuOpen(false); }}
@@ -1747,7 +1743,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
         <main className="flex-1 overflow-y-auto overflow-x-hidden wf-page-bg">
           <div className="flex flex-col h-full">
             {/* ── Keep-alive LiveStageView — always mounted, shown/hidden via CSS ── */}
-            {canAccessLiveStage && (
+            {isRoleAdmin && (
               <div
                 style={{
                   display: currentView === "live-stage" ? "flex" : "none",

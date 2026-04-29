@@ -4049,6 +4049,31 @@ BULLET: [...]`;
         };
     }
 
+    // ── LIVE STAGE (Firestore-backed for serverless) ──────────────────────────
+    // POST /live-push — controller writes the active slide to Firestore
+    if (rawPath === "/live-push" && method === "POST") {
+        try {
+            if (!firestore) return json(500, { error: "Firebase not configured" });
+            const payload = { ...body, updatedAt: Date.now() };
+            await firestore.collection("live_stage").doc("current").set(payload);
+            return json(200, { ok: true });
+        } catch (err) {
+            return json(500, { error: "Failed to push live state" });
+        }
+    }
+
+    // GET /live-state — OBS Browser Source polls this for the current scene
+    if (rawPath === "/live-state" && method === "GET") {
+        try {
+            if (!firestore) return json(200, { visible: false, lines: [], songTitle: "", animStyle: "word-fade", updatedAt: 0 });
+            const doc = await firestore.collection("live_stage").doc("current").get();
+            const state = doc.exists ? doc.data() : { visible: false, lines: [], songTitle: "", animStyle: "word-fade", updatedAt: 0 };
+            return json(200, state, { "Cache-Control": "no-store" });
+        } catch (err) {
+            return json(200, { visible: false, lines: [], songTitle: "", animStyle: "word-fade", updatedAt: 0 });
+        }
+    }
+
     return json(404, { error: "Not found" });
 
 };
