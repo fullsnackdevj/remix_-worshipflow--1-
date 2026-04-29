@@ -242,6 +242,16 @@ function Screen({ slide, bgStyle, echoAlign, echoLines, echoLineHeight, lyricsSc
     return () => ro.disconnect();
   }, []);
 
+  // On mount: push a clear/hidden state to the API so OBS always starts blank.
+  // Prevents leftover Firestore data from a previous session haunting the display.
+  useEffect(() => {
+    fetch("/api/live-push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ visible: false, lines: [], songTitle: "", animStyle: "word-fade", updatedAt: Date.now() }),
+    }).catch(() => {}); // fire-and-forget
+  }, []); // eslint-disable-line
+
   // When the panel becomes visible (mobile tab switch to "preview"), re-measure
   // AND re-trigger the GSAP animation for the current slide.
   useEffect(() => {
