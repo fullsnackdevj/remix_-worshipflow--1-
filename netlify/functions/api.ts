@@ -1104,7 +1104,7 @@ BULLET: [second major update]
 BULLET: [...]`;
 
             const aiRes = await ai.models.generateContent({
-                model: "gemini-2.5-flash",
+                model: "gemini-2.0-flash",
                 contents: [{ role: "user", parts: [{ text: prompt }] }],
             });
 
@@ -1498,7 +1498,7 @@ BULLET: [...]`;
 
             const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
             const response = await ai.models.generateContent({
-                model: "gemini-2.5-flash",
+                model: "gemini-2.0-flash",
                 contents: [
                     {
                         role: "user",

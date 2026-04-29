@@ -12,6 +12,7 @@ import {
     Bug, Lightbulb, CheckCircle2, AlertCircle, Shield, Bell, UserCheck,
     AlertTriangle, CheckCheck, Megaphone, Plus, UserPlus, Zap, BarChart3,
     TrendingUp, ArrowUpRight, Star, Mic2, BookOpen, Radio, ListMusic, Headphones, ListTodo,
+    Crown, ClipboardCheck, Music2, User,
 } from "lucide-react";
 
 // Member, ScheduleMember, Schedule are imported from ./types
@@ -34,6 +35,7 @@ interface Props {
     lineupTrackCount?: number;
     isLineupOpen?: boolean;
     isLibraryOpen?: boolean;
+    isAdmin?: boolean;
 }
 
 const ROLE_STYLE: Record<string, { label: string; bg: string; text: string; border: string; glow: string }> = {
@@ -45,6 +47,17 @@ const ROLE_STYLE: Record<string, { label: string; bg: string; text: string; bord
     audio_tech: { label: "Audio / Tech", bg: "bg-teal-500/15", text: "text-teal-700 dark:text-teal-300", border: "border-teal-500/40", glow: "rgba(20,184,166,0.25)" },
     member: { label: "Member", bg: "bg-gray-500/10", text: "text-gray-600 dark:text-gray-400", border: "border-gray-500/20", glow: "none" },
     qa_specialist: { label: "QA Specialist", bg: "bg-fuchsia-500/15", text: "text-fuchsia-700 dark:text-fuchsia-300", border: "border-fuchsia-500/40", glow: "rgba(217,70,239,0.25)" },
+};
+
+// Role → icon badge config (icon-only, gradient stroke ring — no glow)
+const ROLE_ICON: Record<string, { Icon: React.ElementType; iconColor: string; gradA: string; gradB: string }> = {
+    admin:        { Icon: Crown,         iconColor: "text-amber-300",  gradA: "#f59e0b", gradB: "#fde68a" },
+    leader:       { Icon: Mic2,          iconColor: "text-indigo-300", gradA: "#6366f1", gradB: "#a5b4fc" },
+    planning_lead:{ Icon: ClipboardCheck,iconColor: "text-rose-300",   gradA: "#f43f5e", gradB: "#fda4af" },
+    musician:     { Icon: Music2,        iconColor: "text-purple-300", gradA: "#a855f7", gradB: "#d8b4fe" },
+    audio_tech:   { Icon: Headphones,    iconColor: "text-teal-300",   gradA: "#14b8a6", gradB: "#5eead4" },
+    member:       { Icon: User,          iconColor: "text-slate-300",  gradA: "#64748b", gradB: "#cbd5e1" },
+    qa_specialist:{ Icon: Shield,        iconColor: "text-fuchsia-300",gradA: "#d946ef", gradB: "#f0abfc" },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -565,6 +578,7 @@ export default function AdminDashboard({
     broadcasts: broadcastsProp, pendingUsers: pendingUsersProp, loadingExtra = false,
     canAddSong, canWriteSchedule, canAddMember, userRole = "admin",
     onOpenLineup, lineupTrackCount = 0, isLineupOpen = false, isLibraryOpen = false,
+    isAdmin = false,
 }: Props) {
     const broadcasts = broadcastsProp ?? [];
     const pendingUsers = pendingUsersProp ?? [];
@@ -586,6 +600,8 @@ export default function AdminDashboard({
     const openBugs = notes.filter(n => n.type === "bug" && !n.resolved && !isDismissed(n)).length;
     const openFeqs = notes.filter(n => n.type === "feature" && !n.resolved && !isDismissed(n)).length;
     const [hasActiveTasks, setHasActiveTasks] = useState(true); // start true to avoid layout flash
+    const [roleBadgeExpanded, setRoleBadgeExpanded] = useState(false);
+    const roleBadgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const resolvedNotes = notes.filter(n => n.resolved).length;
     const totalNotes = notes.length;
@@ -715,86 +731,150 @@ export default function AdminDashboard({
                 {/* Subtle glow wash */}
                 <div className="absolute inset-y-0 left-0 w-56 bg-gradient-to-r from-indigo-500/[0.04] to-transparent pointer-events-none" />
 
-                <div className="relative flex items-center justify-between gap-4 px-6 py-5">
-                    {/* LEFT — Avatar + Greeting */}
-                    <div className="flex items-center gap-4 min-w-0">
-                        {/* Avatar */}
+                {/* Mobile layout: two rows stacked. Desktop: side-by-side */}
+                <div className="relative flex flex-col gap-0 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6 sm:py-5">
+
+                    {/* ── ROW 1 (mobile): Avatar + text. Role badge absolute top-right ── */}
+                    <div className="flex items-center gap-4 min-w-0 px-5 pt-5 pb-3 sm:p-0">
+                        {/* Circular avatar */}
                         <div className="relative shrink-0">
                             {userPhoto ? (
                                 <img src={userPhoto} alt={userName}
-                                    className="w-14 h-14 rounded-2xl object-cover ring-2 ring-indigo-500/30 shadow-md" />
+                                    className="w-16 h-16 rounded-full object-cover ring-2 ring-indigo-500/40 shadow-lg" />
                             ) : (
-                                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-md ring-2 ring-indigo-500/30">
-                                    <span className="text-xl font-black text-white">{first[0]}</span>
+                                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg ring-2 ring-indigo-500/40">
+                                    <span className="text-2xl font-black text-white">{first[0]}</span>
                                 </div>
                             )}
-                            <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white dark:border-gray-800" />
+                            <span className="absolute bottom-0.5 right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white dark:border-gray-800" />
                         </div>
-                        {/* Text */}
-                        <div className="min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                                <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{greeting()}</p>
-                                <span className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full border ${(ROLE_STYLE[userRole] ?? ROLE_STYLE.admin).bg} ${(ROLE_STYLE[userRole] ?? ROLE_STYLE.admin).border} ${(ROLE_STYLE[userRole] ?? ROLE_STYLE.admin).text}`}
-                                    style={{ boxShadow: (ROLE_STYLE[userRole] ?? ROLE_STYLE.admin).glow !== "none" ? `0 0 8px 1px ${(ROLE_STYLE[userRole] ?? ROLE_STYLE.admin).glow}` : undefined }}>
-                                    <Shield size={10} />{(ROLE_STYLE[userRole] ?? ROLE_STYLE.admin).label}
-                                </span>
-                            </div>
-                            <h1 className="text-2xl font-black text-gray-900 dark:text-white leading-tight tracking-tight truncate">
+                        {/* Greeting / Name / Date */}
+                        <div className="min-w-0 pr-20 sm:pr-0">
+                            <p className="text-sm text-gray-500 dark:text-gray-400 font-medium mb-0.5">{greeting()}</p>
+                            <h1 className="text-2xl font-black text-gray-900 dark:text-white leading-tight tracking-tight">
                                 {first} 👋
                             </h1>
-                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 font-medium">
+                            <p className="text-sm text-gray-400 dark:text-gray-500 mt-0.5 font-medium">
                                 {new Date().toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
                             </p>
                         </div>
                     </div>
 
-                    {/* RIGHT — Stats + Actions */}
-                    <div className="flex items-center gap-3 shrink-0 flex-wrap justify-end">
-                        {/* Quick stat pills — hidden on mobile */}
-                        <div className="hidden sm:flex items-center gap-2">
-                            <div className="flex flex-col items-center px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/30 min-w-[52px]">
-                                <span className="text-base font-black text-indigo-600 dark:text-indigo-400 leading-tight">{songs.length}</span>
-                                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Songs</span>
+                    {/* Role icon badge — mobile only, clickable smooth pill expand */}
+                    {(() => {
+                        const ri = ROLE_ICON[userRole] ?? ROLE_ICON.admin;
+                        const rs = ROLE_STYLE[userRole] ?? ROLE_STYLE.admin;
+                        const ease = "cubic-bezier(0.25, 0.46, 0.45, 0.94)";
+                        return (
+                            <div className="absolute top-3 right-3 sm:hidden">
+                                <button
+                                    style={{
+                                        display: "flex", alignItems: "center",
+                                        height: 36,
+                                        maxWidth: roleBadgeExpanded ? 200 : 36,
+                                        overflow: "hidden",
+                                        borderRadius: 999,
+                                        padding: "1.5px",
+                                        background: `linear-gradient(135deg, ${ri.gradA}, ${ri.gradB})`,
+                                        transition: `max-width 0.42s ${ease}`,
+                                        cursor: "pointer",
+                                        border: "none",
+                                        outline: "none",
+                                        whiteSpace: "nowrap",
+                                    }}
+                                    onClick={() => {
+                                        if (roleBadgeTimerRef.current) clearTimeout(roleBadgeTimerRef.current);
+                                        setRoleBadgeExpanded(prev => {
+                                            if (!prev) {
+                                                roleBadgeTimerRef.current = setTimeout(() => setRoleBadgeExpanded(false), 4000);
+                                                return true;
+                                            }
+                                            return false;
+                                        });
+                                    }}
+                                >
+                                    <div style={{
+                                        display: "flex", alignItems: "center", gap: 6,
+                                        width: "100%", height: "100%",
+                                        borderRadius: 999,
+                                        background: "#111827",
+                                        paddingLeft: 7,
+                                        paddingRight: roleBadgeExpanded ? 10 : 7,
+                                        transition: `padding-right 0.42s ${ease}`,
+                                        overflow: "hidden",
+                                    }}>
+                                        <span style={{ width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                            <ri.Icon size={14} className={ri.iconColor} strokeWidth={1.8} />
+                                        </span>
+                                        <span
+                                            className={`text-[11px] font-bold ${ri.iconColor}`}
+                                            style={{
+                                                opacity: roleBadgeExpanded ? 1 : 0,
+                                                transition: roleBadgeExpanded ? "opacity 0.28s ease 0.22s" : "opacity 0.12s ease",
+                                                overflow: "hidden",
+                                                flexShrink: 0,
+                                            }}
+                                        >{rs.label}</span>
+                                    </div>
+                                </button>
                             </div>
-                            <div className="flex flex-col items-center px-3 py-1.5 rounded-xl bg-violet-50 dark:bg-violet-900/20 border border-violet-100 dark:border-violet-800/30 min-w-[52px]">
-                                <span className="text-base font-black text-violet-600 dark:text-violet-400 leading-tight">{members.length}</span>
-                                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Team</span>
-                            </div>
-                            <div className="flex flex-col items-center px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800/30 min-w-[52px]">
-                                <span className="text-base font-black text-emerald-600 dark:text-emerald-400 leading-tight">{upcomingEvents.length}</span>
-                                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Events</span>
-                            </div>
-                        </div>
-                        {/* Divider */}
-                        <div className="hidden sm:block w-px h-8 bg-gray-200 dark:bg-gray-700" />
-                        {/* Actions */}
-                        <div className="flex items-center gap-2 sm:self-stretch">
+                        );
+                    })()}
+
+
+                    {/* ── ROW 2 (mobile): Full-width 50/50 buttons. Desktop: right section ── */}
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:shrink-0 sm:gap-3 px-5 pb-5 sm:p-0">
+
+
+                        {/* Buttons: dynamic grid on mobile (2-col with lineup, 1-col without), flex on desktop */}
+                        <div className={`grid gap-3 sm:flex sm:gap-2 ${onOpenLineup && lineupTrackCount > 0 ? "grid-cols-2" : "grid-cols-1"}`}>
+
+                            {/* Lineup button — only rendered when available */}
                             {onOpenLineup && lineupTrackCount > 0 && (
-                                <div className="relative group flex items-center sm:self-stretch">
-                                    {!isLineupOpen && !isLibraryOpen && <span className="absolute inset-0 rounded-xl bg-indigo-500/30 animate-ping" />}
+                                <div className="relative">
+                                    {!isLineupOpen && !isLibraryOpen && (
+                                        <span className="absolute inset-0 rounded-2xl bg-indigo-500/30 animate-ping pointer-events-none" />
+                                    )}
                                     <button
                                         onClick={isLineupOpen || isLibraryOpen ? undefined : onOpenLineup}
                                         disabled={isLineupOpen || isLibraryOpen}
                                         title={isLineupOpen ? "Now Playing" : isLibraryOpen ? "Close Library Player first" : "Lineup Available"}
-                                        className={`relative flex items-center gap-1.5 px-4 py-2 sm:py-0 sm:h-full rounded-xl text-sm font-semibold transition-all ${
+                                        className={`relative w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl text-sm font-bold transition-all ${
                                             isLineupOpen || isLibraryOpen
                                                 ? "bg-gray-100 dark:bg-gray-700 text-gray-400 cursor-not-allowed"
                                                 : "bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-md hover:shadow-lg hover:scale-105 active:scale-95"
                                         }`}
                                     >
-                                        <ListMusic size={13} />
-                                        <span>Lineup</span>
+                                        <ListMusic size={15} /><span>Lineup</span>
                                     </button>
                                 </div>
                             )}
-                            {!loadingExtra && pendingUsers.length > 0 && (
-                                <button onClick={() => onNavigate("admin")}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 text-amber-700 dark:text-amber-400 text-sm font-semibold hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors">
-                                    <UserCheck size={13} />{pendingUsers.length} pending
+
+                            {/* Admin Panel (admin) OR Calendar (non-admin) — right half */}
+                            {isAdmin ? (
+                                <button
+                                    onClick={() => onNavigate("admin")}
+                                    className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl text-sm font-bold bg-gray-700/60 dark:bg-gray-700/70 border border-gray-600/40 dark:border-gray-600/50 text-gray-100 dark:text-gray-200 hover:bg-gray-600/60 dark:hover:bg-gray-700 transition-all relative"
+                                >
+                                    <Shield size={15} className="text-amber-400" /><span>Admin Panel</span>
+                                    {!loadingExtra && pendingUsers.length > 0 && (
+                                        <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-amber-500 text-white text-[10px] font-black px-1 shadow">
+                                            {pendingUsers.length}
+                                        </span>
+                                    )}
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={() => onNavigate("schedule")}
+                                    className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl text-sm font-bold bg-gray-700/60 dark:bg-gray-700/70 border border-gray-600/40 dark:border-gray-600/50 text-gray-100 dark:text-gray-200 hover:bg-gray-600/60 dark:hover:bg-gray-700 transition-all"
+                                >
+                                    <Calendar size={15} className="text-indigo-400" /><span>Calendar</span>
                                 </button>
                             )}
+
                         </div>
                     </div>
+
                 </div>
             </div>
 

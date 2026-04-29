@@ -108,8 +108,8 @@ function Chip({ name, photo }: { name: string; photo?: string }) {
 }
 
 // ── Shared Header ─────────────────────────────────────────────────────────────
-function DashHeader({ userName, userRole, pendingCount, onNavigate, loadingExtra }: {
-    userName: string; userRole: string; pendingCount: number; onNavigate: (v: any) => void; loadingExtra: boolean;
+function DashHeader({ userName, userRole, pendingCount, onNavigate, loadingExtra, isAdmin }: {
+    userName: string; userRole: string; pendingCount: number; onNavigate: (v: any) => void; loadingExtra: boolean; isAdmin: boolean;
 }) {
     const rs = ROLE_STYLE[userRole] ?? ROLE_STYLE.member;
     return (
@@ -131,7 +131,8 @@ function DashHeader({ userName, userRole, pendingCount, onNavigate, loadingExtra
                     style={{ boxShadow: rs.glow !== "none" ? `0 0 14px 3px ${rs.glow}` : undefined }}>
                     <Shield size={14} /> {rs.label}
                 </div>
-                {!loadingExtra && pendingCount > 0 && (
+                {/* Only admins should see the pending requests button */}
+                {isAdmin && !loadingExtra && pendingCount > 0 && (
                     <button onClick={() => onNavigate("admin")}
                         className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 text-amber-700 dark:text-amber-400 text-sm font-semibold hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors">
                         <UserCheck size={14} /> {pendingCount} pending {pendingCount === 1 ? "request" : "requests"}
@@ -344,30 +345,34 @@ export default function Dashboard({
     const BROADCAST_TTL = 3 * 60 * 1000;
     const now = Date.now();
 
+    // ── Pending users — admin only ────────────────────────────────────────────
+    // Non-admin roles must never see or fetch pending access requests.
     let cachedPending: any[] | null = null;
-    try {
-      const rp = localStorage.getItem("wf_pending_cache");
-      if (rp) { const { data, ts } = JSON.parse(rp); if (now - ts < PENDING_TTL) cachedPending = data; }
-    } catch { /* noop */ }
+    if (isAdmin) {
+      try {
+        const rp = localStorage.getItem("wf_pending_cache");
+        if (rp) { const { data, ts } = JSON.parse(rp); if (now - ts < PENDING_TTL) cachedPending = data; }
+      } catch { /* noop */ }
+    }
 
     let cachedBroadcasts: any[] | null = null;
     try {
       const rb = localStorage.getItem("wf_broadcast_cache");
       if (rb) {
         const { data, ts } = JSON.parse(rb);
-        // Skip empty cache — stale empty should always re-fetch
         if (now - ts < BROADCAST_TTL && Array.isArray(data) && data.length > 0) cachedBroadcasts = data;
       }
     } catch { /* noop */ }
 
-    // Serve cache immediately then always re-fetch broadcasts in background (stale-while-revalidate)
     if (cachedBroadcasts) setBroadcasts(cachedBroadcasts);
 
     Promise.all([
-      cachedPending
-        ? Promise.resolve(cachedPending)
-        : fetch("/api/auth/pending").then(r => r.json()).catch(() => []),
-      // Always re-fetch broadcasts fresh (cache above gives instant display)
+      // Only fetch pending if admin — skip entirely for all other roles
+      isAdmin
+        ? (cachedPending
+            ? Promise.resolve(cachedPending)
+            : fetch("/api/auth/pending").then(r => r.json()).catch(() => []))
+        : Promise.resolve([]),
       fetch("/api/broadcasts/all").then(r => r.json()).catch(() => cachedBroadcasts ?? []),
     ]).then(([p, b]) => {
       const pending    = Array.isArray(p) ? p : [];
@@ -375,11 +380,11 @@ export default function Dashboard({
       setPendingUsers(pending);
       setBroadcasts(broadcasts);
       try {
-        if (!cachedPending) localStorage.setItem("wf_pending_cache", JSON.stringify({ data: pending, ts: now }));
+        if (isAdmin && !cachedPending) localStorage.setItem("wf_pending_cache", JSON.stringify({ data: pending, ts: now }));
         if (broadcasts.length > 0) localStorage.setItem("wf_broadcast_cache", JSON.stringify({ data: broadcasts, ts: now }));
       } catch { /* noop */ }
     }).finally(() => setLoadingExtra(false));
-    }, []);
+    }, [isAdmin]);
 
     // All roles see the full bento dashboard
     return (
@@ -387,6 +392,7 @@ export default function Dashboard({
             userName={userName} userEmail={userEmail} userId={userId} userRole={userRole} userPhoto={userPhoto}
             songs={songs} members={members} schedules={schedules} notes={notes}
             onNavigate={onNavigate}
+            isAdmin={isAdmin}
             broadcasts={broadcasts} pendingUsers={pendingUsers} loadingExtra={loadingExtra}
             canAddSong={canAddSong} canWriteSchedule={canWriteSchedule} canAddMember={canAddMember}
             onOpenLineup={onOpenLineup} lineupTrackCount={lineupTrackCount} isLineupOpen={isLineupOpen}

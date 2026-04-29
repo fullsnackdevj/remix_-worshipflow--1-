@@ -1436,7 +1436,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                 onClick={() => { setCurrentView("live-stage"); setIsMobileMenuOpen(false); }}
                 className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-all font-medium text-sm ${
                   currentView === "live-stage"
-                    ? "bg-red-500/15 text-red-400"
+                    ? "bg-indigo-600/20 text-indigo-400"
                     : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
                 } ${isSidebarCollapsed ? "justify-center" : ""}`}
                 title="Live Stage"
@@ -1618,7 +1618,8 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
 
           <div className="flex-1 flex items-center min-w-0">
             <h1 className="text-base sm:text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap truncate">
-              {currentView === "dashboard" ? "Dashboard" : currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : currentView === "playground" ? "Playground" : currentView === "planner" ? "Ministry Hub" : currentView === "team-notes" ? "Notes" : currentView === "rehearsal" ? "Rehearsal" : currentView === "freedom-wall" ? "Freedom Wall" : currentView === "preaching" ? "Preaching" : currentView === "design-requests" ? "Design Requests" : currentView === "events" ? "Events" : currentView === "bible" ? "Bible" : currentView === "playlist" ? "Playlist" : "Song Management"}
+              {currentView === "dashboard" ? "Dashboard" : currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : currentView === "playground" ? "Playground" : currentView === "planner" ? "Ministry Hub" : currentView === "team-notes" ? "Notes" : currentView === "rehearsal" ? "Rehearsal" : currentView === "freedom-wall" ? "Freedom Wall" : currentView === "preaching" ? "Preaching" : currentView === "design-requests" ? "Design Requests" : currentView === "events" ? "Events" : currentView === "bible" ? "Bible" : currentView === "playlist" ? "Playlist" : currentView === "live-stage" ? "Live Stage" : "Song Management"}
+
             </h1>
           </div>
           <div className="flex items-center gap-2">
@@ -1757,10 +1758,31 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
              4000px canvas from bleeding into the rest of the app layout */}
         <main className="flex-1 overflow-y-auto overflow-x-hidden wf-page-bg">
           <div className="flex flex-col h-full">
+            {/* ── Keep-alive LiveStageView — always mounted, shown/hidden via CSS ── */}
+            {isRoleAdmin && (
+              <div
+                style={{
+                  display: currentView === "live-stage" ? "flex" : "none",
+                  flexDirection: "column",
+                  flex: 1,
+                  overflow: "hidden",
+                  minHeight: 0,
+                }}
+              >
+                <LiveStageView
+                  allSongs={allSongs}
+                  isAdmin={isRoleAdmin}
+                  onToast={showToast}
+                />
+              </div>
+            )}
+
             <div className={`view-enter flex-1 overflow-x-hidden ${
-                currentView === "freedom-wall" || currentView === "preaching" || currentView === "design-requests" || currentView === "bible" || currentView === "playlist"
-                  ? "overflow-y-hidden p-0 flex flex-col"
-                  : "overflow-y-auto p-4 sm:p-6"
+                currentView === "live-stage"
+                  ? "hidden"
+                  : currentView === "freedom-wall" || currentView === "preaching" || currentView === "design-requests" || currentView === "bible" || currentView === "playlist"
+                    ? "overflow-y-hidden p-0 flex flex-col"
+                    : "overflow-y-auto p-4 sm:p-6"
               }`}>
               <ModuleErrorBoundary>
               <Suspense fallback={null}>
@@ -2001,12 +2023,6 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                   isAdmin={isRoleAdmin || (myMemberProfile?.eventsAccess ?? false)}
                   onToast={showToast}
                   members={allMembers}
-                />
-              ) : currentView === "live-stage" && isRoleAdmin ? (
-                <LiveStageView
-                  allSongs={allSongs}
-                  isAdmin={isRoleAdmin}
-                  onToast={showToast}
                 />
               ) : null}
               </Suspense>

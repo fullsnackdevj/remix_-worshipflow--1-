@@ -505,13 +505,16 @@ export default function AdminPanel({
                     ? `/api/release-notes?topic=${encodeURIComponent(topic)}`
                     : "/api/release-notes";
                 const res = await fetch(url);
+                if (!res.ok) throw new Error(`Server error ${res.status}`);
                 const data = await res.json();
+                if (data.error) throw new Error(data.error);
                 if (data.title) setBTitle(data.title);
                 if (data.message) setBMessage(data.message);
                 if (data.bulletPoints?.length) setBBullets(data.bulletPoints);
             }
-        } catch { /* silent fail */ }
-        finally { setBAutoGenerating(false); }
+        } catch (err: any) {
+            onToast?.("error", `Auto-generate failed: ${err?.message ?? "Unknown error"}`);
+        } finally { setBAutoGenerating(false); }
     };
 
     const fetchBroadcasts = async () => {
@@ -927,7 +930,7 @@ export default function AdminPanel({
                             </div>
 
                             {/* Title */}
-                            <input value={bTitle} onChange={e => setBTitle(e.target.value)} placeholder={bType === "maintenance" ? "e.g. App Under Maintenance" : "e.g. New Features Added!"} className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                            <input value={bTitle} onChange={e => setBTitle(e.target.value)} onKeyDown={e => e.stopPropagation()} placeholder={bType === "maintenance" ? "e.g. App Under Maintenance" : "e.g. New Features Added!"} className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
 
                             {/* Message */}
                             <AutoTextarea value={bMessage} onChange={e => setBMessage(e.target.value)} placeholder="Optional message..." minRows={2} className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />

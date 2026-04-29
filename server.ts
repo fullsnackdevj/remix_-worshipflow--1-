@@ -335,36 +335,40 @@ app.get("/api/live-state", (_req, res) => {
   res.json(liveState);
 });
 
-// ── Live background video — local file upload ──────────────────────────────────
-// The app uploads the video here; OBS fetches /api/live-bg-video to play it.
-// Blob: URLs only live in the source tab's process — OBS needs a real HTTP URL.
-let liveBgVideoBuffer: Buffer | null = null;
-let liveBgVideoMime   = "video/mp4";
+// ── Live background video — per-preset local file upload ─────────────────────
+// Each preset (praise, worship) gets its own video slot so they never share.
+const liveBgVideos: Record<string, { buffer: Buffer; mime: string }> = {};
 
-// POST /api/live-bg-video — controller uploads the video file
-app.post("/api/live-bg-video", multer({ storage: multer.memoryStorage(), limits: { fileSize: 500 * 1024 * 1024 } }).single("video"), (req, res) => {
+// POST /api/live-bg-video/:preset
+app.post("/api/live-bg-video/:preset", multer({ storage: multer.memoryStorage(), limits: { fileSize: 500 * 1024 * 1024 } }).single("video"), (req, res) => {
+  const preset = req.params.preset;
   if (!req.file) return res.status(400).json({ error: "No file" });
-  liveBgVideoBuffer = req.file.buffer;
-  liveBgVideoMime   = req.file.mimetype || "video/mp4";
-  console.log(`[LiveBG] Video uploaded: ${req.file.originalname} (${(req.file.size / 1024 / 1024).toFixed(1)} MB)`);
-  res.json({ ok: true, url: "/api/live-bg-video" });
+  liveBgVideos[preset] = { buffer: req.file.buffer, mime: req.file.mimetype || "video/mp4" };
+  console.log(`[LiveBG:${preset}] Video uploaded: ${req.file.originalname} (${(req.file.size / 1024 / 1024).toFixed(1)} MB)`);
+  res.json({ ok: true, url: `/api/live-bg-video/${preset}` });
 });
 
-// GET /api/live-bg-video — OBS Browser Source fetches video from here
-app.get("/api/live-bg-video", (_req, res) => {
-  if (!liveBgVideoBuffer) return res.status(404).json({ error: "No video uploaded" });
-  res.setHeader("Content-Type", liveBgVideoMime);
-  res.setHeader("Content-Length", liveBgVideoBuffer.length);
+// GET /api/live-bg-video/:preset
+app.get("/api/live-bg-video/:preset", (req, res) => {
+  const entry = liveBgVideos[req.params.preset];
+  if (!entry) return res.status(404).json({ error: "No video uploaded for this preset" });
+  res.setHeader("Content-Type", entry.mime);
+  res.setHeader("Content-Length", entry.buffer.length);
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.end(liveBgVideoBuffer);
+  res.end(entry.buffer);
 });
 
-// DELETE /api/live-bg-video — clear stored video
-app.delete("/api/live-bg-video", (_req, res) => {
-  liveBgVideoBuffer = null;
+// DELETE /api/live-bg-video/:preset
+app.delete("/api/live-bg-video/:preset", (req, res) => {
+  delete liveBgVideos[req.params.preset];
   res.json({ ok: true });
 });
+
+// Legacy single-slot endpoints (kept for backward compat — do nothing)
+app.post("/api/live-bg-video", (_req, res) => res.status(410).json({ error: "Use /api/live-bg-video/:preset" }));
+app.get("/api/live-bg-video",  (_req, res) => res.status(410).json({ error: "Use /api/live-bg-video/:preset" }));
+app.delete("/api/live-bg-video", (_req, res) => res.json({ ok: true }));
 
 // GET /api/playlist-manifest/:slug — dynamic PWA manifest for public playlist pages
 // iOS Safari rejects blob: URLs for manifests; this real endpoint returns a manifest
