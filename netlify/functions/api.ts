@@ -993,6 +993,42 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
         } catch (e) { return json(500, { error: "Failed to set flag" }); }
     }
 
+    // ── Live Stage ─────────────────────────────────────────────────────────
+    // POST /api/live-push — called by LiveStageView on every slide change
+    // Stores the current live state in Firestore so OBS can poll it.
+    // ⚠️ No auth — OBS browser source has no session.
+    if (rawPath === "/live-push" && method === "POST") {
+        if (!firestore) return json(500, { error: "DB unavailable" });
+        try {
+            const state = {
+                ...body,
+                updatedAt: Date.now(),
+            };
+            await firestore.collection("live_state").doc("current").set(state);
+            return json(200, { ok: true });
+        } catch (e) {
+            console.error("live-push error:", e);
+            return json(500, { error: "Failed to save live state" });
+        }
+    }
+
+    // GET /api/live-state — polled by LiveDisplayPage every 250ms
+    // Returns the current live state from Firestore.
+    // ⚠️ No auth — OBS browser source has no session.
+    if (rawPath === "/live-state" && method === "GET") {
+        if (!firestore) return json(500, { error: "DB unavailable" });
+        try {
+            const doc = await firestore.collection("live_state").doc("current").get();
+            if (!doc.exists) {
+                return json(200, { visible: false, lines: [], songTitle: "", animStyle: "word-fade", updatedAt: 0 });
+            }
+            return json(200, doc.data());
+        } catch (e) {
+            console.error("live-state error:", e);
+            return json(500, { error: "Failed to fetch live state" });
+        }
+    }
+
     // ── Broadcasts ─────────────────────────────────────────────────────────
     if (rawPath === "/broadcasts" && method === "GET") {
         const email = event.queryStringParameters?.email || "";
