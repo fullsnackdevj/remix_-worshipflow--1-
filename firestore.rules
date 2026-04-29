@@ -62,6 +62,15 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ── Live Stage display state — public read, server-only write ──────────────
+    // OBS Browser Source (/live-display) has no auth session and uses an
+    // onSnapshot listener for zero-latency real-time updates.
+    // Writes go through /api/live-push (Netlify Admin SDK) — client write denied.
+    match /live_state/{doc} {
+      allow read:  if true;
+      allow write: if false;
+    }
+
     // ── All other collections ──────────────────────────────────────────────────
     // All other reads/writes go through Netlify serverless functions
     // (server-side Admin SDK) — deny direct client access.
