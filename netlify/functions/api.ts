@@ -3,12 +3,6 @@ import admin from "firebase-admin";
 import { GoogleGenAI } from "@google/genai";
 import { Resend } from "resend";
 
-// ── Live Stage in-memory cache ────────────────────────────────────────────────
-// Module-level variable — persists across requests on the SAME warm function
-// instance. Eliminates Firestore reads on every OBS poll (every 250ms).
-// On cold start, cache is empty → falls back to Firestore once, then stays warm.
-let _liveStateCache: Record<string, unknown> | null = null;
-
 // Firebase init
 function getDb(): FirebaseFirestore.Firestore | null {
     const projectId = process.env.FIREBASE_PROJECT_ID;
@@ -957,9 +951,7 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             });
 
-            // Proactively prune stale tokens for this user (60-day TTL, fire-and-forget).
-            // Prevents token accumulation where a user can end up with many old docs
-            // causing them to receive N push notifications instead of 1.
+            // Proactively prune stale tokens (60-day TTL, fire-and-forget)
             const cutoff = admin.firestore.Timestamp.fromMillis(Date.now() - 60 * 24 * 60 * 60 * 1000);
             firestore?.collection("fcm_tokens")
                 .where("userId", "==", userId)
@@ -977,8 +969,6 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
             return json(200, { success: true });
         } catch (e) { return json(500, { error: "Failed to store token" }); }
     }
-
-
 
     // GET /api/user-flags — cross-device user flags stored in Firestore
     if (rawPath === "/user-flags" && method === "GET") {
@@ -1000,19 +990,15 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
     }
 
     // ── Live Stage ─────────────────────────────────────────────────────────
-    // POST /api/live-push — called by LiveStageView on every slide change
-    // Writes to in-memory cache (instant) + Firestore (durable backup).
+    // POST /api/live-push — always writes to Firestore directly.
+    // No in-memory cache: Netlify runs multiple instances with separate memory,
+    // so a cache on Instance A is invisible to Instance B handling OBS polls.
     // ⚠️ No auth — OBS browser source has no session.
     if (rawPath === "/live-push" && method === "POST") {
         if (!firestore) return json(500, { error: "DB unavailable" });
         try {
             const state = { ...body, updatedAt: Date.now() };
-            // 1. Update in-memory cache immediately (no Firestore latency)
-            _liveStateCache = state;
-            // 2. Persist to Firestore in background (fire-and-forget for speed)
-            firestore.collection("live_state").doc("current").set(state).catch(
-                (e: unknown) => console.error("live-push Firestore write error:", e)
-            );
+            await firestore.collection("live_state").doc("current").set(state);
             return json(200, { ok: true });
         } catch (e) {
             console.error("live-push error:", e);
@@ -1020,34 +1006,19 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
         }
     }
 
-    // GET /api/live-state — polled by LiveDisplayPage every 250ms
-    // Serves from in-memory cache (near-instant). Falls back to Firestore on cold start.
+    // GET /api/live-state — always reads fresh from Firestore.
+    // 30-min stale guard prevents old session lyrics from haunting OBS.
     // ⚠️ No auth — OBS browser source has no session.
     if (rawPath === "/live-state" && method === "GET") {
         const DEFAULT_HIDDEN = { visible: false, lines: [], songTitle: "", animStyle: "word-fade", updatedAt: 0 };
-        const STALE_MS = 30 * 60 * 1000; // 30 minutes — anything older is treated as a ghost session
-
-        // Serve from cache if available (warm instance — no Firestore read needed)
-        if (_liveStateCache !== null) {
-            // Still guard against stale cache (e.g. function ran all night)
-            const age = Date.now() - (((_liveStateCache.updatedAt as number) ?? 0));
-            if (age > STALE_MS) { _liveStateCache = DEFAULT_HIDDEN; }
-            return json(200, _liveStateCache);
-        }
-        // Cold start fallback — read from Firestore once, then cache it
+        const STALE_MS = 30 * 60 * 1000;
         if (!firestore) return json(200, DEFAULT_HIDDEN);
         try {
             const doc = await firestore.collection("live_state").doc("current").get();
-            if (!doc.exists) {
-                _liveStateCache = DEFAULT_HIDDEN;
-                return json(200, DEFAULT_HIDDEN);
-            }
+            if (!doc.exists) return json(200, DEFAULT_HIDDEN);
             const raw = doc.data() as Record<string, unknown>;
-            // Stale check — don’t let a weeks-old session haunt OBS
             const age = Date.now() - ((raw.updatedAt as number) ?? 0);
-            const state = age > STALE_MS ? DEFAULT_HIDDEN : raw;
-            _liveStateCache = state; // warm the cache
-            return json(200, state);
+            return json(200, age > STALE_MS ? DEFAULT_HIDDEN : raw);
         } catch (e) {
             console.error("live-state error:", e);
             return json(200, DEFAULT_HIDDEN);
