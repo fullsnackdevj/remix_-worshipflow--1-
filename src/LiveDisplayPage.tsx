@@ -2,15 +2,14 @@
  * LiveDisplayPage — OBS Browser Source target.
  * URL: /live-display
  *
- * Uses Firestore onSnapshot for real-time updates (zero polling latency).
- * Falls back to connected=false if Firestore is unavailable.
+ * Polls /api/live-state every 100ms via HTTP — reliable in OBS CEF.
+ * The Netlify function serves from an in-memory cache (warm) or Firestore (cold),
+ * giving an effective round-trip of ~150ms and end-to-end latency under 250ms.
  */
 import React, {
-  useEffect, useRef, useState,
+  useEffect, useRef, useState, useCallback,
 } from "react";
 import gsap from "gsap";
-import { db } from "./firebase";
-import { doc, onSnapshot } from "firebase/firestore";
 
 type AnimStyle = "fade" | "slide-up" | "word-fade" | "word-bounce" | "typewriter" | "blur-in" | "echo" | "breathe";
 
@@ -185,23 +184,19 @@ export default function LiveDisplayPage() {
   // Font size: exactly 10% of box width — matches controller formula
   const fs = box.w > 0 ? Math.round(box.w * 0.10) : 192; // 192 ≈ 10% of 1920
 
-  // ── Firestore real-time listener — replaces 250ms HTTP polling ────────────
-  // onSnapshot fires within ~50ms of the controller writing to Firestore.
-  // This eliminates the 500ms-1s delay seen with serverless HTTP polling.
-  useEffect(() => {
-    const docRef = doc(db, "live_stage", "current");
-    let lastKey = "";
-
-    const unsub = onSnapshot(docRef, (snap) => {
+  // ── Poll /api/live-state every 100 ms ────────────────────────────────────
+  // HTTP polling is the only reliable approach for OBS CEF (no WebSocket SDK).
+  // The Netlify function serves from an in-memory cache on warm instances
+  // so each poll completes in ~30ms; cold-start reads Firestore (~300ms).
+  const poll = useCallback(async () => {
+    try {
+      const r = await fetch("/api/live-state", { cache: "no-store" });
+      if (!r.ok) return;
+      const data: LiveState = await r.json();
       setConnected(true);
 
-      const data: LiveState = snap.exists()
-        ? (snap.data() as LiveState)
-        : { visible: false, lines: [], songTitle: "", animStyle: "word-fade", updatedAt: 0 };
-
       const key = `${data.updatedAt}`;
-      if (key === lastKey) return;
-      lastKey = key;
+      if (key === lastKeyRef.current) return;
       lastKeyRef.current = key;
 
       // Scene-switch transitioning signal: fade to black
@@ -211,7 +206,8 @@ export default function LiveDisplayPage() {
       }
       setFadeBlack(false);
 
-      // Fade Screen mode
+      // Fade Screen mode: show blank/image overlay — but STILL update live scene data
+      // so the background is pre-loaded; when fade lifts there is no flash.
       if (data.fadeScreen) {
         const bg = data.fadeScreenBg ?? { type: "color", color: "#000" };
         prevFadeScreenRef.current = bg;
@@ -220,6 +216,8 @@ export default function LiveDisplayPage() {
         setFadeScreen(null);
       }
 
+      // _fadeOnly: just update overlay state. Don't re-run lyric animation — the slide
+      // content hasn't changed, only the fade screen toggled on or off.
       if (data._fadeOnly) return;
 
       const lyricsEl = lyricsRef.current;
@@ -239,6 +237,7 @@ export default function LiveDisplayPage() {
           opacity: 0, duration: 0.2, ease: "power2.in",
           onComplete: () => {
             setLive(data);
+            // Double-RAF ensures new React DOM is painted before GSAP reads elements
             rafRef.current = requestAnimationFrame(() =>
               requestAnimationFrame(() => {
                 rafRef.current = null;
@@ -259,12 +258,16 @@ export default function LiveDisplayPage() {
           onComplete: () => setLive(data),
         });
       }
-    }, () => {
+    } catch {
       setConnected(false);
-    });
+    }
+  }, []);
 
-    return () => unsub();
-  }, []); // eslint-disable-line
+  useEffect(() => {
+    poll();
+    const id = setInterval(poll, 100);
+    return () => clearInterval(id);
+  }, [poll]);
 
   // ── Echo marquee — exact mirror of the useEffect in Screen ───────────────
   // Track ALL marquee tweens so repeat:-1 tweens started in onComplete can be killed

@@ -4050,11 +4050,18 @@ BULLET: [...]`;
     }
 
     // ── LIVE STAGE (Firestore-backed for serverless) ──────────────────────────
-    // POST /live-push — controller writes the active slide to Firestore
+    // Module-level cache: shared across warm Netlify function invocations.
+    // Eliminates the Firestore read on every /live-state poll.
+    // Cold starts fall back to Firestore to restore state.
+
+    // POST /live-push — controller writes the active slide
     if (rawPath === "/live-push" && method === "POST") {
         try {
             if (!firestore) return json(500, { error: "Firebase not configured" });
             const payload = { ...body, updatedAt: Date.now() };
+            // 1. Update module-level cache immediately (returns to client fast)
+            (globalThis as any).__liveStateCache = payload;
+            // 2. Persist to Firestore for cross-instance / cold-start recovery
             await firestore.collection("live_stage").doc("current").set(payload);
             return json(200, { ok: true });
         } catch (err) {
@@ -4064,10 +4071,16 @@ BULLET: [...]`;
 
     // GET /live-state — OBS Browser Source polls this for the current scene
     if (rawPath === "/live-state" && method === "GET") {
+        // Fast path: return from module-level cache (no Firestore read needed on warm instances)
+        const cached = (globalThis as any).__liveStateCache;
+        if (cached) return json(200, cached, { "Cache-Control": "no-store" });
+        // Cold-start path: read from Firestore to restore state
         try {
             if (!firestore) return json(200, { visible: false, lines: [], songTitle: "", animStyle: "word-fade", updatedAt: 0 });
             const doc = await firestore.collection("live_stage").doc("current").get();
             const state = doc.exists ? doc.data() : { visible: false, lines: [], songTitle: "", animStyle: "word-fade", updatedAt: 0 };
+            // Warm the cache for subsequent polls on this instance
+            (globalThis as any).__liveStateCache = state;
             return json(200, state, { "Cache-Control": "no-store" });
         } catch (err) {
             return json(200, { visible: false, lines: [], songTitle: "", animStyle: "word-fade", updatedAt: 0 });
