@@ -242,15 +242,6 @@ function Screen({ slide, bgStyle, echoAlign, echoLines, echoLineHeight, lyricsSc
     return () => ro.disconnect();
   }, []);
 
-  // On mount: push a clear/hidden state to the API so OBS always starts blank.
-  // Prevents leftover Firestore data from a previous session haunting the display.
-  useEffect(() => {
-    fetch("/api/live-push", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ visible: false, lines: [], songTitle: "", animStyle: "word-fade", updatedAt: Date.now() }),
-    }).catch(() => {}); // fire-and-forget
-  }, []); // eslint-disable-line
 
   // When the panel becomes visible (mobile tab switch to "preview"), re-measure
   // AND re-trigger the GSAP animation for the current slide.
@@ -1082,15 +1073,7 @@ export default function LiveStageView({ allSongs }: Props) {
     }
   };
 
-  // On mount: push initial fade screen so OBS starts black immediately
-  useEffect(() => {
-    const bg: FadeScreenBg = (() => { try { return JSON.parse(localStorage.getItem("lsv_fade_screen") ?? "null") ?? { type: "color", color: "#000000" }; } catch { return { type: "color", color: "#000000" }; } })();
-    fetch("/api/live-push", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fadeScreen: true, fadeScreenBg: bg, updatedAt: Date.now() }),
-    }).catch(() => {});
-  }, []);
+
 
   useEffect(() => { pushToFirestore(activeSlide); }, [activeSlide, bgIdx, echoAlign, echoLines, echoLineHeight, bgVideo]); // eslint-disable-line
 
