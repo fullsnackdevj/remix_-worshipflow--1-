@@ -470,7 +470,7 @@ export default function LiveDisplayPage() {
       {/* Video background — same as Screen component */}
       {live?.bgVideo && (
         <div style={{ position:"absolute", inset:0, overflow:"hidden", zIndex:0 }}>
-          {live.bgVideo.type === "local" ? (
+          {(live.bgVideo.type === "local" || live.bgVideo.type === "firebase") ? (
             <video
               key={live.bgVideo.url}
               src={live.bgVideo.url}

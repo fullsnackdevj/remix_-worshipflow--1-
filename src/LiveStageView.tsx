@@ -913,13 +913,17 @@ export default function LiveStageView({ allSongs, onToast }: Props) {
   // IMPORTANT: After restoring, re-push to OBS if fade is active so OBS never
   // stays black after a hard refresh.
   useEffect(() => {
-    idbGet<FadeScreenBg>("lsv_fade_screen").then(bg => {
-      if (!bg) return;
-      setFadeScreenBg(bg);
-      setModalFadeScreenBg(bg);
-      fadeScreenBgRef.current = bg;
-      // Re-sync OBS with the restored background (small delay so React commits state first)
+    idbGet<FadeScreenBg>("lsv_fade_screen").then(idbBg => {
+      // If IDB has data (image/video local), prefer it over localStorage value
+      if (idbBg) {
+        setFadeScreenBg(idbBg);
+        setModalFadeScreenBg(idbBg);
+        fadeScreenBgRef.current = idbBg;
+      }
+      // Sync OBS if fade was active — use best available bg (IDB or already-read localStorage)
+      // This covers the common case where the bg is a plain color stored only in localStorage.
       if (fadeScreenActiveRef.current) {
+        const bg = idbBg ?? fadeScreenBgRef.current;
         setTimeout(() => {
           fetch("/api/live-push", {
             method: "POST",
