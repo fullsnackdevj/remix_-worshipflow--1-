@@ -1600,6 +1600,26 @@ app.patch("/api/members/:id/events-access", async (req, res) => {
   }
 });
 
+// PATCH /api/members/:id/live-stage-access ── toggle Live Stage module access ──
+app.patch("/api/members/:id/live-stage-access", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(500).json({ error: "Firebase not configured" });
+  const { id } = req.params;
+  const { liveStageAccess } = req.body;
+  if (typeof liveStageAccess !== "boolean")
+    return res.status(400).json({ error: "liveStageAccess must be a boolean" });
+  try {
+    await firestore.collection("members").doc(id).update({
+      liveStageAccess,
+      updated_at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    res.json({ success: true });
+  } catch (e) {
+    console.error("live-stage-access PATCH:", e);
+    res.status(500).json({ error: "Failed to update live stage access" });
+  }
+});
+
 // ─── Scheduling ──────────────────────────────────────────────────────────────
 
 app.get("/api/schedules", async (req, res) => {

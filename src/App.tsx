@@ -923,6 +923,10 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
   const isDesigner = myMemberProfile?.role === "Designer";
   // Design Requests: Admin + Audio/Tech system role + Designer team role
   const canAccessDesignRequests = isRoleAdmin || effectiveRole === "audio_tech" || isDesigner;
+  // Live Stage: Admin + Audio/Tech + Musician roles + members with liveStageAccess granted in Admin Panel
+  const isAudioTech = effectiveRole === "audio_tech";
+  const isMusicianRole = effectiveRole === "musician";
+  const canAccessLiveStage = isRoleAdmin || isAudioTech || isMusicianRole || (myMemberProfile?.liveStageAccess ?? false);
 
   /** True when the user has a member profile but hasn't set their birthdate yet */
   const needsBirthdatePrompt = !!myMemberProfile && !myMemberProfile.birthdate;
@@ -1429,8 +1433,8 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Freedom Wall</span>}
           </div>
 
-          {/* Live Stage — Admin only (clickable); all other roles see a disabled "SOON" item */}
-          {isRoleAdmin ? (
+          {/* Live Stage — Admin + Audio/Tech + Musician roles (+ liveStageAccess granted members) */}
+          {canAccessLiveStage && (
             <div className="relative group/tip">
               <button
                 onClick={() => { setCurrentView("live-stage"); setIsMobileMenuOpen(false); }}
@@ -1445,22 +1449,6 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                 {!isSidebarCollapsed && <span>Live Stage</span>}
               </button>
               {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Live Stage</span>}
-            </div>
-          ) : (
-            <div className="relative group/tip">
-              <div
-                className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-xl font-medium text-sm cursor-not-allowed opacity-40 select-none ${isSidebarCollapsed ? "justify-center" : ""}`}
-                title="Live Stage — Coming Soon"
-              >
-                <Radio size={18} className="shrink-0" />
-                {!isSidebarCollapsed && (
-                  <>
-                    <span>Live Stage</span>
-                    <span className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-gray-500/20 text-gray-400 border border-gray-500/30">SOON</span>
-                  </>
-                )}
-              </div>
-              {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Live Stage (Coming Soon)</span>}
             </div>
           )}
 
@@ -1759,7 +1747,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
         <main className="flex-1 overflow-y-auto overflow-x-hidden wf-page-bg">
           <div className="flex flex-col h-full">
             {/* ── Keep-alive LiveStageView — always mounted, shown/hidden via CSS ── */}
-            {isRoleAdmin && (
+            {canAccessLiveStage && (
               <div
                 style={{
                   display: currentView === "live-stage" ? "flex" : "none",

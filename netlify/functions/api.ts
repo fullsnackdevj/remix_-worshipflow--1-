@@ -1932,6 +1932,23 @@ BULLET: [...]`;
         }
     }
 
+    // PATCH /members/:id/live-stage-access — grant or revoke Live Stage module access
+    const liveStageAccessMatch = rawPath.match(/^\/members\/([^/]+)\/live-stage-access$/);
+    if (liveStageAccessMatch && method === "PATCH") {
+        const memberId = liveStageAccessMatch[1];
+        try {
+            const { liveStageAccess } = body;
+            if (typeof liveStageAccess !== "boolean") return json(400, { error: "liveStageAccess must be a boolean" });
+            await firestore.collection("members").doc(memberId).update({
+                liveStageAccess,
+                updated_at: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            return json(200, { success: true });
+        } catch (err) {
+            return json(500, { error: "Failed to update live stage access" });
+        }
+    }
+
     // PUT /members/:id  &  DELETE /members/:id
     const memberMatch = rawPath.match(/^\/members\/([^/]+)$/);
     if (memberMatch) {
