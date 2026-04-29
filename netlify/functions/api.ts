@@ -1024,22 +1024,33 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
     // Serves from in-memory cache (near-instant). Falls back to Firestore on cold start.
     // ⚠️ No auth — OBS browser source has no session.
     if (rawPath === "/live-state" && method === "GET") {
+        const DEFAULT_HIDDEN = { visible: false, lines: [], songTitle: "", animStyle: "word-fade", updatedAt: 0 };
+        const STALE_MS = 30 * 60 * 1000; // 30 minutes — anything older is treated as a ghost session
+
         // Serve from cache if available (warm instance — no Firestore read needed)
         if (_liveStateCache !== null) {
+            // Still guard against stale cache (e.g. function ran all night)
+            const age = Date.now() - (((_liveStateCache.updatedAt as number) ?? 0));
+            if (age > STALE_MS) { _liveStateCache = DEFAULT_HIDDEN; }
             return json(200, _liveStateCache);
         }
         // Cold start fallback — read from Firestore once, then cache it
-        if (!firestore) return json(200, { visible: false, lines: [], songTitle: "", animStyle: "word-fade", updatedAt: 0 });
+        if (!firestore) return json(200, DEFAULT_HIDDEN);
         try {
             const doc = await firestore.collection("live_state").doc("current").get();
-            const state = doc.exists
-                ? (doc.data() as Record<string, unknown>)
-                : { visible: false, lines: [], songTitle: "", animStyle: "word-fade", updatedAt: 0 };
+            if (!doc.exists) {
+                _liveStateCache = DEFAULT_HIDDEN;
+                return json(200, DEFAULT_HIDDEN);
+            }
+            const raw = doc.data() as Record<string, unknown>;
+            // Stale check — don’t let a weeks-old session haunt OBS
+            const age = Date.now() - ((raw.updatedAt as number) ?? 0);
+            const state = age > STALE_MS ? DEFAULT_HIDDEN : raw;
             _liveStateCache = state; // warm the cache
             return json(200, state);
         } catch (e) {
             console.error("live-state error:", e);
-            return json(200, { visible: false, lines: [], songTitle: "", animStyle: "word-fade", updatedAt: 0 });
+            return json(200, DEFAULT_HIDDEN);
         }
     }
 
