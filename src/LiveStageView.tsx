@@ -2,9 +2,13 @@ import React, { useState, useEffect, useRef } from "react";
 import { Search, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Radio, Music2, Layers, Play, Wand2, AlignCenter, AlignLeft, Video, Upload, Copy, Check as CheckIcon, Settings, Zap, Heart, EyeOff, Image as ImageIcon, Monitor, Timer, PlusCircle, Minus } from "lucide-react";
 import type { Song } from "./types";
 import gsap from "gsap";
+import { storage } from "./firebase";
+import { ref as storageRef, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+
 
 type AnimStyle = "word-fade" | "word-bounce" | "typewriter" | "blur-in" | "fade" | "slide-up" | "echo" | "breathe";
-type BgVideo   = { type: "local"; url: string } | { type: "youtube"; videoId: string };
+type BgVideo   = { type: "local"; url: string } | { type: "firebase"; url: string } | { type: "youtube"; videoId: string };
+
 type FadeScreenBg =
   | { type: "color"; color: string }
   | { type: "image-url"; url: string }
@@ -431,7 +435,7 @@ function Screen({ slide, bgStyle, echoAlign, echoLines, echoLineHeight, lyricsSc
           {/* Video background — rendered first so it sits beneath all overlays */}
           {bgVideo && (
             <div style={{ position:"absolute", inset:0, overflow:"hidden" }}>
-              {bgVideo.type === "local" ? (
+              {(bgVideo.type === "local" || bgVideo.type === "firebase") ? (
                 <video key={bgVideo.url} src={bgVideo.url} autoPlay loop muted playsInline
                   style={{ width:"100%", height:"100%", objectFit:"cover" }} />
               ) : (
@@ -671,7 +675,8 @@ const DEFAULT_PRESETS: Record<PresetName, LivePreset> = {
 
 interface Props { allSongs: Song[]; isAdmin: boolean; onToast: (t:string, m:string) => void; }
 
-export default function LiveStageView({ allSongs }: Props) {
+export default function LiveStageView({ allSongs, onToast }: Props) {
+
   const [query, setQuery]               = useState("");
   const [sceneSongIds, setSceneSongIds] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem("lsv_scene_songs") ?? "[]") ?? []; } catch { return []; }
@@ -749,6 +754,9 @@ export default function LiveStageView({ allSongs }: Props) {
   // ── Modal draft state — edits both presets before committing on Save ────────
   const [settingsTab,     setSettingsTab]     = useState<"praise" | "worship" | "fade">("praise");
   const [modalDrafts,     setModalDrafts]     = useState<Record<PresetName, LivePreset>>({ ...DEFAULT_PRESETS });
+  const [videoUploading,  setVideoUploading]  = useState<Record<PresetName, boolean>>({ praise: false, worship: false });
+  const [videoProgress,   setVideoProgress]   = useState<Record<PresetName, number>>({ praise: 0, worship: 0 });
+
   // presetActivated: always false on load — user must explicitly tap a preset pill each session
   const [presetActivated, setPresetActivated] = useState<boolean>(false);
 
@@ -935,10 +943,13 @@ export default function LiveStageView({ allSongs }: Props) {
     if (legacyVideo && !normalizedPraise.bgVideo && activePreset === "praise")   normalizedPraise.bgVideo  = legacyVideo;
     if (legacyVideo && !normalizedWorship.bgVideo && activePreset === "worship") normalizedWorship.bgVideo = legacyVideo;
     // Clear stale legacy local video URLs that pointed to the old shared endpoint
-    const isStaleLocalUrl = (v: LivePreset["bgVideo"]) =>
-      v?.type === "local" && (v.url === "/api/live-bg-video" || !v.url.includes("/api/live-bg-video/"));
+    // Clear stale server-side local video URLs — the Netlify function has no
+    // persistent filesystem, so /api/live-bg-video/* files are gone after any
+    // cold start. Firebase Storage URLs (type:"firebase") are always permanent.
+    const isStaleLocalUrl = (v: LivePreset["bgVideo"]) => v?.type === "local";
     if (isStaleLocalUrl(normalizedPraise.bgVideo))  normalizedPraise.bgVideo  = null;
     if (isStaleLocalUrl(normalizedWorship.bgVideo)) normalizedWorship.bgVideo = null;
+
     setModalDrafts({ praise: normalizedPraise, worship: normalizedWorship });
     setModalFadeScreenBg({ ...fadeScreenBg }); // snapshot current fade bg into draft
     setFadeImageUrlInput("");
@@ -1596,18 +1607,32 @@ export default function LiveStageView({ allSongs }: Props) {
                   <p style={{ fontSize:10, fontWeight:700, color:"rgba(255,255,255,0.3)", textTransform:"uppercase", letterSpacing:"0.1em", margin:"0 0 10px" }}>Video Background</p>
                   <label style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 12px", borderRadius:9, background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.09)", cursor:"pointer", fontSize:12, color:"rgba(255,255,255,0.6)", marginBottom:8 }}>
                     <Upload size={13} />
-                    {draft.bgVideo?.type === "local" ? "Change video file…" : "Upload local video file…"}
+                    {videoUploading[tab] ? `Uploading ${videoProgress[tab]}%…` : (draft.bgVideo?.type === "local" || draft.bgVideo?.type === "firebase" ? "Change video file…" : "Upload local video file…")}
                     <input type="file" accept="video/webm,video/mp4,video/quicktime,video/x-msvideo,video/x-matroska,video/ogg,video/*" style={{ display:"none" }}
                       onChange={async e => {
                         const file = e.target.files?.[0]; if (!file) return;
-                        const fd = new FormData(); fd.append("video", file);
-                        // Upload to per-preset slot so Praise and Worship never share a video
-                        const r = await fetch(`/api/live-bg-video/${tab}`, { method: "POST", body: fd });
-                        if (!r.ok) { alert("Video upload failed"); return; }
-                        // Cache-bust so browser doesn't serve the old video when preset is switched
-                        updateDraft(tab, "bgVideo", { type:"local", url:`/api/live-bg-video/${tab}?t=${Date.now()}` });
-                        // Reset input so the same file can be re-selected after removal
-                        e.target.value = "";
+                        try {
+                          setVideoUploading(prev => ({ ...prev, [tab]: true }));
+                          setVideoProgress(prev => ({ ...prev, [tab]: 0 }));
+                          const ext = file.name.split(".").pop() || "mp4";
+                          const sRef = storageRef(storage, `live-bg-videos/${tab}.${ext}`);
+                          const task = uploadBytesResumable(sRef, file);
+                          await new Promise<void>((resolve, reject) => {
+                            task.on(
+                              "state_changed",
+                              snap => setVideoProgress(prev => ({ ...prev, [tab]: Math.round((snap.bytesTransferred / snap.totalBytes) * 100) })),
+                              reject,
+                              resolve
+                            );
+                          });
+                          const url = await getDownloadURL(task.snapshot.ref);
+                          updateDraft(tab, "bgVideo", { type: "firebase", url });
+                        } catch {
+                          onToast("Video upload failed — please try again.", "error");
+                        } finally {
+                          setVideoUploading(prev => ({ ...prev, [tab]: false }));
+                          e.target.value = "";
+                        }
                       }} />
                   </label>
                   <div style={{ display:"flex", gap:6 }}>
@@ -1620,15 +1645,11 @@ export default function LiveStageView({ allSongs }: Props) {
                   {draft.bgVideo && (
                     <div style={{ marginTop:10, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"8px 11px", borderRadius:8, background:"rgba(52,211,153,0.08)", border:"1px solid rgba(52,211,153,0.2)" }}>
                       <span style={{ fontSize:11, color:"#34d399" }}>
-                        {draft.bgVideo?.type === "local" ? `Local video (${tab})` : `YouTube: ${(draft.bgVideo as {type:"youtube";videoId:string})?.videoId}`}
+                        {draft.bgVideo?.type === "firebase" ? `✓ Firebase video (${tab})` :
+                         draft.bgVideo?.type === "local"    ? `Local video (${tab})` :
+                         `YouTube: ${(draft.bgVideo as {type:"youtube";videoId:string})?.videoId}`}
                       </span>
-                      <button onClick={async () => {
-                          // If it's a local video, also clear it from the server slot
-                          if (draft.bgVideo?.type === "local") {
-                            await fetch(`/api/live-bg-video/${tab}`, { method: "DELETE" }).catch(() => {});
-                          }
-                          updateDraft(tab, "bgVideo", null);
-                        }}
+                      <button onClick={() => updateDraft(tab, "bgVideo", null)}
                         style={{ padding:"4px 10px", borderRadius:6, background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.15)", color:"rgba(255,255,255,0.5)", fontSize:10, fontWeight:700, cursor:"pointer" }}>Remove</button>
                     </div>
                   )}
