@@ -2,7 +2,7 @@
  * LiveDisplayPage — OBS Browser Source target.
  * URL: /live-display
  *
- * Polls /api/live-state every 250 ms — no auth, no Firestore.
+ * Uses Firestore onSnapshot for real-time updates (~50ms latency). No auth needed.
  *
  * EXACT copy of LiveStageView's Screen component rendering logic:
  *  - ResizeObserver box sizing (strict 16:9 if needed, or full screen for OBS)
