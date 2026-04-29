@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from "react";
 import { Search, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Radio, Music2, Layers, Play, Wand2, AlignCenter, AlignLeft, Video, Upload, Copy, Check as CheckIcon, Settings, Zap, Heart, EyeOff, Image as ImageIcon, Monitor, Timer, PlusCircle, Minus } from "lucide-react";
 import type { Song } from "./types";
 import gsap from "gsap";
+import { storage } from "./firebase";
+import { ref as storageRef, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 
 type AnimStyle = "word-fade" | "word-bounce" | "typewriter" | "blur-in" | "fade" | "slide-up" | "echo" | "breathe";
 type BgVideo   = { type: "local"; url: string } | { type: "youtube"; videoId: string };
@@ -670,7 +672,7 @@ const DEFAULT_PRESETS: Record<PresetName, LivePreset> = {
 
 interface Props { allSongs: Song[]; isAdmin: boolean; onToast: (t:string, m:string) => void; }
 
-export default function LiveStageView({ allSongs }: Props) {
+export default function LiveStageView({ allSongs, onToast }: Props) {
   const [query, setQuery]               = useState("");
   const [sceneSongIds, setSceneSongIds] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem("lsv_scene_songs") ?? "[]") ?? []; } catch { return []; }
@@ -1607,13 +1609,20 @@ export default function LiveStageView({ allSongs }: Props) {
                     <input type="file" accept="video/webm,video/mp4,video/quicktime,video/x-msvideo,video/x-matroska,video/ogg,video/*" style={{ display:"none" }}
                       onChange={async e => {
                         const file = e.target.files?.[0]; if (!file) return;
-                        const fd = new FormData(); fd.append("video", file);
-                        // Upload to per-preset slot so Praise and Worship never share a video
-                        const r = await fetch(`/api/live-bg-video/${tab}`, { method: "POST", body: fd });
-                        if (!r.ok) { alert("Video upload failed"); return; }
-                        // Cache-bust so browser doesn't serve the old video when preset is switched
-                        updateDraft(tab, "bgVideo", { type:"local", url:`/api/live-bg-video/${tab}?t=${Date.now()}` });
-                        // Reset input so the same file can be re-selected after removal
+                        try {
+                          // Upload to Firebase Storage — works on local, staging and production
+                          const path = `live_bg_videos/${tab}_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+                          const fileRef = storageRef(storage, path);
+                          const task = uploadBytesResumable(fileRef, file);
+                          await new Promise<void>((resolve, reject) => {
+                            task.on("state_changed", undefined, reject, resolve);
+                          });
+                          const url = await getDownloadURL(fileRef);
+                          updateDraft(tab, "bgVideo", { type: "local", url });
+                        } catch (err) {
+                          console.error("Video upload failed:", err);
+                          onToast?.("error", "Video upload failed. Check your connection and try again.");
+                        }
                         e.target.value = "";
                       }} />
                   </label>
@@ -1629,13 +1638,7 @@ export default function LiveStageView({ allSongs }: Props) {
                       <span style={{ fontSize:11, color:"#34d399" }}>
                         {draft.bgVideo?.type === "local" ? `Local video (${tab})` : `YouTube: ${(draft.bgVideo as {type:"youtube";videoId:string})?.videoId}`}
                       </span>
-                      <button onClick={async () => {
-                          // If it's a local video, also clear it from the server slot
-                          if (draft.bgVideo?.type === "local") {
-                            await fetch(`/api/live-bg-video/${tab}`, { method: "DELETE" }).catch(() => {});
-                          }
-                          updateDraft(tab, "bgVideo", null);
-                        }}
+                      <button onClick={() => { updateDraft(tab, "bgVideo", null); }}
                         style={{ padding:"4px 10px", borderRadius:6, background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.15)", color:"rgba(255,255,255,0.5)", fontSize:10, fontWeight:700, cursor:"pointer" }}>Remove</button>
                     </div>
                   )}
