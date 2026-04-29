@@ -870,7 +870,7 @@ export default function LiveStageView({ allSongs, onToast }: Props) {
         fetch("/api/live-push", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fadeScreen: true, fadeScreenBg: bg, updatedAt: Date.now() }),
+          body: JSON.stringify({ fadeScreen: true, fadeScreenBg: toFiresafeFadeBg(bg), updatedAt: Date.now() }),
         }).catch(() => {});
       }
     }
@@ -1016,7 +1016,7 @@ export default function LiveStageView({ allSongs, onToast }: Props) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          fadeScreen: true, fadeScreenBg,
+          fadeScreen: true, fadeScreenBg: toFiresafeFadeBg(fadeScreenBg),
           bgIdx: p.bgIdx, echoAlign: p.echoAlign, echoLines: p.echoLines,
           echoLineHeight: p.echoLineHeight, bgVideo: p.bgVideo ?? null,
           loopInterval: p.loopInterval, loopEnabled: p.loopEnabled ?? true, visible: false, lines: [], animStyle: p.animStyle,
