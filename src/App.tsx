@@ -1743,7 +1743,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
         <main className="flex-1 overflow-y-auto overflow-x-hidden wf-page-bg">
           <div className="flex flex-col h-full">
             {/* ── Keep-alive LiveStageView — always mounted, shown/hidden via CSS ── */}
-            {isRoleAdmin && (
+            {(isRoleAdmin || myMemberProfile?.liveStageAccess) && (
               <div
                 style={{
                   display: currentView === "live-stage" ? "flex" : "none",
