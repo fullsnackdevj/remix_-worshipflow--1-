@@ -5,6 +5,7 @@ import { getAuth } from "firebase/auth";
 import { usePushNotifications } from "./usePushNotifications";
 import { useRealtimeNotifications } from "./useRealtimeNotifications";
 import { useSessionTracking } from "./useSessionTracking";
+import { useNetworkStatus } from "./useNetworkStatus";
 
 
 // ── Lightweight always-loaded components ────────────────────────────────────
@@ -972,8 +973,60 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
 
   const canWriteMembers = isRoleAdmin || isQARole; // Worship Leader removed; QA Specialist added
 
+  // ── Network / Offline status ──────────────────────────────────────────────
+  const { isOnline, mode: networkMode } = useNetworkStatus();
+  // Show "Syncing" pill for max 4s so it doesn't linger when server confirms quickly
+  const [showSyncDone, setShowSyncDone] = React.useState(false);
+  useEffect(() => {
+    if (networkMode === 'online' && !isOnline) return; // skip initial render
+    if (networkMode === 'syncing') {
+      setShowSyncDone(false);
+    } else if (networkMode === 'online') {
+      // Brief "All synced ✓" flash when coming back online
+      setShowSyncDone(true);
+      const t = setTimeout(() => setShowSyncDone(false), 3000);
+      return () => clearTimeout(t);
+    }
+  }, [networkMode]);
+
   return (
     <div className="flex h-screen wf-page-bg font-sans text-gray-900 dark:text-gray-100 overflow-hidden">
+
+      {/* 📶 Offline / Sync status banner — slides in when internet is lost or writes are pending */}
+      {(!isOnline || networkMode === 'syncing' || showSyncDone) && (
+        <div
+          className="fixed top-0 left-0 right-0 z-[200] flex justify-center pointer-events-none"
+          style={{ animation: 'slideDown 0.3s ease' }}
+        >
+          <div
+            className={`mt-3 px-4 py-2 rounded-full shadow-lg border text-xs font-semibold flex items-center gap-2 pointer-events-auto transition-all ${
+              !isOnline
+                ? 'bg-amber-500/95 border-amber-400/50 text-white shadow-amber-500/30'
+                : showSyncDone
+                ? 'bg-emerald-600/95 border-emerald-500/50 text-white shadow-emerald-500/30'
+                : 'bg-indigo-600/95 border-indigo-500/50 text-white shadow-indigo-500/30'
+            }`}
+            style={{ backdropFilter: 'blur(8px)' }}
+          >
+            {!isOnline ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-white opacity-90 animate-pulse" />
+                You’re offline — changes will sync when reconnected
+              </>
+            ) : showSyncDone ? (
+              <>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                All changes synced
+              </>
+            ) : (
+              <>
+                <svg className="animate-spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 12a9 9 0 11-6.219-8.56" /></svg>
+                Syncing…
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 🔔 Push Notification Permission Banner — iOS-safe (requires user tap) */}
       {showPushPrompt && (

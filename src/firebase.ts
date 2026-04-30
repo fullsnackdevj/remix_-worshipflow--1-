@@ -1,7 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getMessaging, getToken, onMessage, type Messaging } from "firebase/messaging";
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, enableIndexedDbPersistence, enableMultiTabIndexedDbPersistence } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
 // Firebase client config — loaded from environment variables.
@@ -24,6 +24,26 @@ googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 export const db = getFirestore(app);
 export const storage = getStorage(app);
+
+// ── Firestore Offline Persistence ────────────────────────────────────────────
+// Enables IndexedDB-backed offline caching so the app works without internet.
+// Multi-tab persistence is attempted first (works across multiple open tabs);
+// falls back to single-tab if the browser does not support it.
+// Writes made offline are queued locally and automatically flushed when
+// the connection is restored — no extra code needed at the call site.
+(async () => {
+    try {
+        await enableMultiTabIndexedDbPersistence(db);
+    } catch (err: any) {
+        if (err?.code === 'unimplemented') {
+            // Browser has no IndexedDB (very rare) — offline cache unavailable
+        } else if (err?.code === 'failed-precondition') {
+            // Multi-tab not available — fall back to single-tab persistence
+            try { await enableIndexedDbPersistence(db); } catch { /* noop */ }
+        }
+        // Any other error is silently ignored — the app still works online
+    }
+})();
 
 // Firebase Cloud Messaging — lazily initialized so it never crashes on
 // unsupported platforms (iOS Safari < 16.4, in-app browsers from WhatsApp /
