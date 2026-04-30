@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Search, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Radio, Music2, Layers, Play, Wand2, AlignCenter, AlignLeft, Video, Upload, Copy, Check as CheckIcon, Settings, Zap, Heart, EyeOff, Image as ImageIcon, Monitor, Timer, PlusCircle, Minus } from "lucide-react";
+import { Search, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Radio, Music2, Layers, Play, Wand2, AlignCenter, AlignLeft, Video, Upload, Copy, Check as CheckIcon, Settings, Zap, Heart, EyeOff, Image as ImageIcon, Monitor, Timer, PlusCircle, Minus, LayoutGrid } from "lucide-react";
+import LyricsGridModal from "./LyricsGridModal";
 import type { Song } from "./types";
 import gsap from "gsap";
 import { storage } from "./firebase";
@@ -747,6 +748,7 @@ export default function LiveStageView({ allSongs, onToast }: Props) {
   const [echoApplied,   setEchoApplied]  = useState(() => _cur.animStyle === "echo");
   const [showVideoPanel, setShowVideoPanel] = useState(false);
   const [obsUrlCopied,   setObsUrlCopied]   = useState(false);
+  const [lyricsGridOpen, setLyricsGridOpen] = useState(false);
   const [activeSection,  setActiveSectionState]  = useState<string | null>(() => {
     try { return localStorage.getItem("lsv_active_section") ?? null; } catch { return null; }
   });
@@ -1260,6 +1262,15 @@ export default function LiveStageView({ allSongs, onToast }: Props) {
               );
             })}
           </div>
+          {/* ── Lyrics Grid Facility button ── */}
+          <button onClick={() => setLyricsGridOpen(true)}
+            title="Lyrics Grid Facility"
+            style={{ display:"flex", alignItems:"center", gap:6, padding: isMobile ? "9px" : "8px 14px", borderRadius:10, background:"rgba(99,102,241,0.1)", border:"1px solid rgba(99,102,241,0.25)", color:"#818cf8", fontSize:12, fontWeight:700, cursor:"pointer", transition:"all 0.15s" }}
+            onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background="rgba(99,102,241,0.22)"}
+            onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="rgba(99,102,241,0.1)"}>
+            <LayoutGrid size={isMobile ? 18 : 14} />
+            {!isMobile && "Grid View"}
+          </button>
           <button onClick={openSettings}
             style={{ display:"flex", alignItems:"center", gap:6, padding: isMobile ? "9px" : "8px 14px", borderRadius:10, background:"rgba(167,139,250,0.1)", border:"1px solid rgba(167,139,250,0.25)", color:"#a78bfa", fontSize:12, fontWeight:700, cursor:"pointer", transition:"all 0.15s" }}
             onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background="rgba(167,139,250,0.2)"}
@@ -2098,7 +2109,23 @@ export default function LiveStageView({ allSongs, onToast }: Props) {
           })}
         </div>
       )}
+
+      {/* ── Lyrics Grid Facility Modal ─────────────────────────── */}
+      {lyricsGridOpen && (
+        <LyricsGridModal
+          songs={allSongs}
+          onClose={() => setLyricsGridOpen(false)}
+          initialSongTitle={selectedSong?.title}
+          fadeScreenActive={fadeScreenActive}
+          fadeScreenBg={fadeScreenBg}
+          onToggleFade={toggleFadeScreen}
+          activePreset={activePreset}
+          presetActivated={presetActivated}
+          onApplyPreset={applyPreset}
+          sceneSongs={sceneSongs}
+          liveSettings={{ bgIdx, echoAlign, echoLines, echoLineHeight, lyricsScale, loopEnabled, bgVideo, loopInterval, animStyle: defaultAnimStyle }}
+        />
+      )}
     </div>
   );
 }
-
