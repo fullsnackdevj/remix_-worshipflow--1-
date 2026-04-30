@@ -1223,13 +1223,15 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
           {!isSidebarCollapsed && (
             <div className="flex items-center gap-2 px-3 mb-1.5 mt-1">
               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Worship</p>
-              {/* Yellow offline dot — visible only when offline, completely hidden when online */}
+              {/* Offline indicator — dot + OFFLINE text, hidden when online */}
               {!isOnline && (
-                <span
-                  className="w-2 h-2 rounded-full bg-yellow-400 shrink-0 animate-pulse"
-                  style={{ boxShadow: '0 0 6px rgba(250,204,21,0.9)' }}
-                  title="You’re offline"
-                />
+                <span className="flex items-center gap-1.5">
+                  <span
+                    className="w-2 h-2 rounded-full bg-yellow-400 shrink-0 animate-pulse"
+                    style={{ boxShadow: '0 0 6px rgba(250,204,21,0.9)' }}
+                  />
+                  <span className="text-[9px] font-bold text-yellow-400 uppercase tracking-widest">Offline</span>
+                </span>
               )}
             </div>
           )}
@@ -1665,11 +1667,18 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
             </button>
           )}
 
-          <div className="flex-1 flex items-center min-w-0">
+          <div className="flex-1 flex items-center gap-2.5 min-w-0">
             <h1 className="text-base sm:text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap truncate">
               {currentView === "dashboard" ? "Dashboard" : currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : currentView === "playground" ? "Playground" : currentView === "planner" ? "Ministry Hub" : currentView === "team-notes" ? "Notes" : currentView === "rehearsal" ? "Rehearsal" : currentView === "freedom-wall" ? "Freedom Wall" : currentView === "preaching" ? "Preaching" : currentView === "design-requests" ? "Design Requests" : currentView === "events" ? "Events" : currentView === "bible" ? "Bible" : currentView === "playlist" ? "Playlist" : currentView === "live-stage" ? "Live Stage" : "Song Management"}
-
             </h1>
+            {/* Mobile offline badge — shows in topbar on mobile since sidebar is hidden */}
+            {!isOnline && (
+              <span className="lg:hidden flex items-center gap-1 px-2 py-0.5 rounded-full shrink-0"
+                style={{ background: 'rgba(180,83,9,0.15)', border: '1px solid rgba(250,204,21,0.35)' }}>
+                <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" style={{ boxShadow: '0 0 4px rgba(250,204,21,0.9)' }} />
+                <span className="text-[9px] font-bold text-yellow-400 uppercase tracking-widest">Offline</span>
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
 
