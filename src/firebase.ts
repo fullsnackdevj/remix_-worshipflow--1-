@@ -1,7 +1,11 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getMessaging, getToken, onMessage, type Messaging } from "firebase/messaging";
-import { getFirestore, enableIndexedDbPersistence, enableMultiTabIndexedDbPersistence } from "firebase/firestore";
+import {
+    initializeFirestore,
+    persistentLocalCache,
+    persistentMultipleTabManager,
+} from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
 // Firebase client config — loaded from environment variables.
@@ -22,28 +26,27 @@ export const googleProvider = new GoogleAuthProvider();
 // account after the user has explicitly signed out.
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
-export const db = getFirestore(app);
-export const storage = getStorage(app);
+// ── Firestore with offline persistence (Firebase v9.6+ modern API) ────────────
+// initializeFirestore with persistentLocalCache enables IndexedDB-backed offline
+// caching at construction time — synchronous, no async race conditions, and the
+// officially supported approach for Firebase v12.
+//
+// persistentMultipleTabManager: all open tabs share the same cache and only
+// one tab acts as the network owner. Falls back gracefully to single-tab if
+// the browser does not support it (e.g., private mode on some browsers).
+//
+// What this gives you for free:
+//   • All Firestore reads are served from IndexedDB when offline
+//   • onSnapshot listeners fire with cached data immediately
+//   • Writes made offline are queued and auto-synced when reconnected
+//   • No extra code needed at call sites — it's transparent
+export const db = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+        tabManager: persistentMultipleTabManager(),
+    }),
+});
 
-// ── Firestore Offline Persistence ────────────────────────────────────────────
-// Enables IndexedDB-backed offline caching so the app works without internet.
-// Multi-tab persistence is attempted first (works across multiple open tabs);
-// falls back to single-tab if the browser does not support it.
-// Writes made offline are queued locally and automatically flushed when
-// the connection is restored — no extra code needed at the call site.
-(async () => {
-    try {
-        await enableMultiTabIndexedDbPersistence(db);
-    } catch (err: any) {
-        if (err?.code === 'unimplemented') {
-            // Browser has no IndexedDB (very rare) — offline cache unavailable
-        } else if (err?.code === 'failed-precondition') {
-            // Multi-tab not available — fall back to single-tab persistence
-            try { await enableIndexedDbPersistence(db); } catch { /* noop */ }
-        }
-        // Any other error is silently ignored — the app still works online
-    }
-})();
+export const storage = getStorage(app);
 
 // Firebase Cloud Messaging — lazily initialized so it never crashes on
 // unsupported platforms (iOS Safari < 16.4, in-app browsers from WhatsApp /
