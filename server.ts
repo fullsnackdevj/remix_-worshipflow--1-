@@ -312,7 +312,7 @@ app.post("/api/live-push", async (req, res) => {
   try {
     const firestore = getDb();
     if (firestore) {
-      await firestore.collection("live_stage").doc("current").set(liveState);
+      await firestore.collection("live_state").doc("current").set(liveState);
     }
   } catch (e) {
     console.warn("[live-push] Firestore write failed (OBS may not update):", e);
