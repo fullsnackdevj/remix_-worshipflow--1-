@@ -567,28 +567,45 @@ if (!fs.existsSync(LIVE_BG_DIR)) fs.mkdirSync(LIVE_BG_DIR, { recursive: true });
 // Metadata: maps preset name → { filePath, mime } — loaded from disk on startup
 const liveBgMeta: Record<string, { filePath: string; mime: string }> = {};
 
-// Load any existing videos from disk on startup
+// Load any existing videos/images from disk on startup
 (() => {
   try {
     const files = fs.readdirSync(LIVE_BG_DIR);
     for (const file of files) {
-      const m = file.match(/^([a-zA-Z0-9_-]+)\.(mp4|webm|mov|mkv)$/i);
+      // Accept video AND image extensions for bg presets
+      const m = file.match(/^([a-zA-Z0-9_-]+)\.(mp4|webm|mov|mkv|jpg|jpeg|png|webp|gif)$/i);
       if (!m) continue;
+      if (file.startsWith('_fade_screen')) continue; // handled by fadeBgFilePath separately
       const preset = m[1];
       const ext = m[2].toLowerCase();
-      const mime = ext === "webm" ? "video/webm" : ext === "mov" ? "video/quicktime" : "video/mp4";
+      const mime = ext === "webm" ? "video/webm"
+        : ext === "mov" ? "video/quicktime"
+        : ext === "png"  ? "image/png"
+        : ext === "webp" ? "image/webp"
+        : ext === "gif"  ? "image/gif"
+        : ext === "jpg" || ext === "jpeg" ? "image/jpeg"
+        : "video/mp4";
       liveBgMeta[preset] = { filePath: path.join(LIVE_BG_DIR, file), mime };
       console.log(`[LiveBG] Loaded from disk: ${preset} (${file})`);
     }
   } catch { /* ignore */ }
 })();
 
-// POST /api/live-bg-video/:preset
+// POST /api/live-bg-video/:preset — accepts videos AND images (for image-firebase bg presets)
 app.post("/api/live-bg-video/:preset", multer({ storage: multer.memoryStorage(), limits: { fileSize: 500 * 1024 * 1024 } }).single("video"), (req, res) => {
   const preset = req.params.preset;
   if (!req.file) return res.status(400).json({ error: "No file" });
   const mime = req.file.mimetype || "video/mp4";
-  const ext = mime.includes("webm") ? "webm" : mime.includes("quicktime") || mime.includes("mov") ? "mov" : "mp4";
+  // Derive extension — support both video and image MIME types
+  let ext: string;
+  if (mime.includes("webm")) ext = "webm";
+  else if (mime.includes("quicktime") || mime.includes("mov")) ext = "mov";
+  else if (mime.includes("png")) ext = "png";
+  else if (mime.includes("webp")) ext = "webp";
+  else if (mime.includes("gif")) ext = "gif";
+  else if (mime.includes("jpeg") || mime.includes("jpg")) ext = "jpg";
+  else if (mime.includes("video")) ext = "mp4";
+  else ext = "jpg"; // fallback for unknown image types
   // Remove old file for this preset if it exists
   if (liveBgMeta[preset]) {
     try { fs.unlinkSync(liveBgMeta[preset].filePath); } catch { /* ignore */ }

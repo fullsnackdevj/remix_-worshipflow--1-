@@ -990,6 +990,13 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
     }
 
     // ── Live Stage ─────────────────────────────────────────────────────────
+    // GET /api/camp-status — disk-based checks only work on the local dev server.
+    // On Netlify (serverless), there is no persistent filesystem, so we return a
+    // sentinel { localServerOnly: true } so the UI can gracefully skip disk checks.
+    if (rawPath === "/camp-status" && method === "GET") {
+        return json(200, { localServerOnly: true, diskState: false, praise: false, worship: false, fadeImage: false });
+    }
+
     // POST /api/live-push — always writes to Firestore directly.
     // No in-memory cache: Netlify runs multiple instances with separate memory,
     // so a cache on Instance A is invisible to Instance B handling OBS polls.

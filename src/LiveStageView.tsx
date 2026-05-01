@@ -2409,6 +2409,35 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
                   }),
                 }).catch(() => {});
               }
+              // ── FIX: Upload media to local server disk so Camp Readiness check passes ──
+              // /api/camp-status reads from disk (liveBgMeta), NOT from Firebase/localStorage.
+              // Without this, praise/worship always show "Missing" in the checklist.
+              if (item.type === 'video') {
+                (async () => {
+                  try {
+                    const sourceUrl = blobUrl ?? item.firebaseUrl;
+                    const resp = await fetch(sourceUrl);
+                    const blob = await resp.blob();
+                    const fd   = new FormData();
+                    fd.append('video', blob, item.name);
+                    await fetch(`/api/live-bg-video/${preset}`, { method: 'POST', body: fd });
+                    console.log(`[LiveStage] ${preset} video cached to disk for offline OBS`);
+                  } catch (e) { console.warn(`[LiveStage] Could not cache ${preset} video locally:`, e); }
+                })();
+              } else if (item.type === 'image') {
+                // Images assigned to bg-preset: cache to local server using preset-named endpoint
+                (async () => {
+                  try {
+                    const sourceUrl = blobUrl ?? item.firebaseUrl;
+                    const resp = await fetch(sourceUrl);
+                    const blob = await resp.blob();
+                    const fd   = new FormData();
+                    fd.append('video', blob, item.name); // server accepts any file via 'video' field
+                    await fetch(`/api/live-bg-video/${preset}`, { method: 'POST', body: fd });
+                    console.log(`[LiveStage] ${preset} image cached to disk for offline OBS`);
+                  } catch (e) { console.warn(`[LiveStage] Could not cache ${preset} image locally:`, e); }
+                })();
+              }
               onToast('success', `✅ Applied to ${preset} background — hit Save to lock in`);
             } else if (target === 'fade-screen') {
               const fadeBg: FadeScreenBg = item.type === 'image'
@@ -2420,11 +2449,12 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
               idbSet('lsv_fade_screen', fadeBg).catch(() => {});
               try { localStorage.setItem('lsv_fade_screen', JSON.stringify(fadeBg)); } catch {}
               clearOtherAssignments(target);
-              // Upload blob to local server so OBS can load it offline (no Firebase needed)
-              if (blobUrl && item.type === 'image') {
+              // ── FIX: Upload to local server — use blobUrl if available, else fetch Firebase URL
+              if (item.type === 'image') {
                 (async () => {
                   try {
-                    const resp  = await fetch(blobUrl);
+                    const sourceUrl = blobUrl ?? item.firebaseUrl;
+                    const resp  = await fetch(sourceUrl);
                     const blob  = await resp.blob();
                     const fd    = new FormData();
                     fd.append('image', blob, item.name);
@@ -2522,6 +2552,23 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
                   }),
                 }).catch(() => {});
               }
+              // ── FIX: Upload media to local server disk so Camp Readiness check passes ──
+              // /api/camp-status reads from disk (liveBgMeta), NOT from Firebase/localStorage.
+              // Without this, praise/worship always show "Missing" in the checklist.
+              if (item.type === 'video' || item.type === 'image') {
+                (async () => {
+                  try {
+                    const sourceUrl = blobUrl ?? item.firebaseUrl;
+                    const resp = await fetch(sourceUrl);
+                    const blob = await resp.blob();
+                    const fd   = new FormData();
+                    // Server's /api/live-bg-video/:preset uses 'video' field name for all media
+                    fd.append('video', blob, item.name);
+                    await fetch(`/api/live-bg-video/${preset}`, { method: 'POST', body: fd });
+                    console.log(`[LiveStage] ${preset} media cached to disk for offline OBS`);
+                  } catch (e) { console.warn(`[LiveStage] Could not cache ${preset} media locally:`, e); }
+                })();
+              }
               onToast('success', `✅ "${item.name}" → ${preset === 'praise' ? 'Praise' : 'Worship'} Background`);
             } else if (target === 'fade-screen') {
               const fadeBg: FadeScreenBg = item.type === 'image'
@@ -2533,11 +2580,12 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
               idbSet('lsv_fade_screen', fadeBg).catch(() => {});
               try { localStorage.setItem('lsv_fade_screen', JSON.stringify(fadeBg)); } catch {}
               clearOtherAssignments(target);
-              // Upload blob to local server so OBS can load it offline (no Firebase needed)
-              if (blobUrl && item.type === 'image') {
+              // ── FIX: Upload to local server — use blobUrl if available, else fetch Firebase URL
+              if (item.type === 'image') {
                 (async () => {
                   try {
-                    const resp  = await fetch(blobUrl);
+                    const sourceUrl = blobUrl ?? item.firebaseUrl;
+                    const resp  = await fetch(sourceUrl);
                     const blob  = await resp.blob();
                     const fd    = new FormData();
                     fd.append('image', blob, item.name);
@@ -2648,6 +2696,22 @@ function CampReadinessModal({ onClose, songsCount }: { onClose: () => void; song
     fetch(`/api/camp-status?t=${Date.now()}`, { cache: "no-store" })
       .then(r => r.json())
       .then(data => {
+        // ── Detect Netlify / cloud deployment ──────────────────────────────────
+        // On Netlify, disk storage doesn't exist (serverless = no persistent filesystem).
+        // The endpoint returns { localServerOnly: true } as a sentinel.
+        // In that case, mark disk-based checks as "warn" (unverifiable), not "fail/missing".
+        if (data.localServerOnly) {
+          setChecks([
+            songsCheck,
+            authCheck,
+            { label: "Live state backup", detail: "Only verifiable on local server — not applicable on staging", status: "warn" },
+            { label: "Praise video", detail: "Only verifiable on local server — not applicable on staging", status: "warn" },
+            { label: "Worship video", detail: "Only verifiable on local server — not applicable on staging", status: "warn" },
+            { label: "Fade screen image", detail: "Only verifiable on local server — not applicable on staging", status: "warn" },
+          ]);
+          setServerFetchFailed(false);
+          return;
+        }
         const diskCheck: CheckItem = {
           label: "Live state backup",
           detail: data.diskState ? "Last scene saved to disk ✓" : "No backup yet — push a slide first",
@@ -2655,12 +2719,12 @@ function CampReadinessModal({ onClose, songsCount }: { onClose: () => void; song
         };
         const praiseCheck: CheckItem = {
           label: "Praise video",
-          detail: data.praise ? "praise.webm on disk ✓" : "Missing — upload via Media Library first",
+          detail: data.praise ? "praise.* on disk ✓" : "Missing — upload via Media Library first",
           status: data.praise ? "ok" : "warn",
         };
         const worshipCheck: CheckItem = {
           label: "Worship video",
-          detail: data.worship ? "worship.mp4 on disk ✓" : "Missing — upload via Media Library first",
+          detail: data.worship ? "worship.* on disk ✓" : "Missing — upload via Media Library first",
           status: data.worship ? "ok" : "warn",
         };
         setChecks(prev => {
