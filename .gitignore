@@ -16,3 +16,6 @@ coverage/
 # Generated service worker (rebuilt at deploy time)
 public/firebase-messaging-sw.js
 live-bg-videos/
+
+# Local offline state cache (runtime only, not for git)
+.wf-cache/
