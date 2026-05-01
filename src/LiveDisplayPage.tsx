@@ -35,7 +35,7 @@ interface LiveState {
   lyricsScale?: number;
   loopEnabled?: boolean;
   loopInterval?: number;
-  bgVideo?: { type: "local"; url: string } | { type: "firebase"; url: string; localUrl?: string } | { type: "youtube"; videoId: string } | null;
+  bgVideo?: { type: "local"; url: string } | { type: "firebase"; url: string; localUrl?: string } | { type: "image-firebase"; url: string; localUrl?: string } | { type: "youtube"; videoId: string } | null;
   transitioning?: boolean;
   fadeScreen?: boolean;
   fadeScreenBg?: { type: "color"; color: string } | { type: "image-url"; url: string } | { type: "image-local"; url: string } | { type: "image-firebase"; url: string } | { type: "video-local"; url: string } | { type: "video-firebase"; url: string } | { type: "video-youtube"; videoId: string };
@@ -170,7 +170,9 @@ export default function LiveDisplayPage() {
   const prevFadeScreenRef = useRef<LiveState["fadeScreenBg"] | null>(null);
   // Ignore fadeScreen on the FIRST state received — it's stale from a previous
   // session. Fade should only activate from a live controller push this session.
-  const isFirstStateRef = useRef(true);
+  // EXCEPTION: ?preview=1 is used by the Grid View iframe — show fade immediately.
+  const isPreviewMode = new URLSearchParams(window.location.search).get("preview") === "1";
+  const isFirstStateRef = useRef(!isPreviewMode); // preview=false means suppress is already off
 
   const wrapperRef  = useRef<HTMLDivElement>(null);
   const lyricsRef   = useRef<HTMLDivElement>(null);
@@ -573,6 +575,16 @@ export default function LiveDisplayPage() {
                 style={{ width:"100%", height:"100%", objectFit:"cover" }}
               />
               {/* Dark scrim — keeps lyrics readable over video */}
+              <div style={{ position:"absolute", inset:0, background:"rgba(0,0,0,0.45)" }} />
+            </div>
+          );
+        }
+        // Image background from Media Library
+        if (bv.type === "image-firebase") {
+          const src = (!navigator.onLine && bv.localUrl) ? bv.localUrl : bv.url;
+          return (
+            <div style={{ position:"absolute", inset:0, overflow:"hidden", zIndex:0 }}>
+              <img key={src} src={src} alt="" style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }} />
               <div style={{ position:"absolute", inset:0, background:"rgba(0,0,0,0.45)" }} />
             </div>
           );

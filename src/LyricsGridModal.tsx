@@ -14,7 +14,7 @@
  *   initialSongId? — pre-select a song (e.g. the one currently on Live Stage)
  */
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { X, LayoutGrid, Music2, ChevronDown, EyeOff, Zap, Heart, Monitor, Pencil, Check, AlertCircle } from "lucide-react";
+import { X, LayoutGrid, Music2, ChevronDown, EyeOff, Zap, Heart, Monitor, Pencil, Check, AlertCircle, Settings, Link, FolderOpen } from "lucide-react";
 import type { Song } from "./types";
 import { db } from "./firebase";
 import { doc, onSnapshot } from "firebase/firestore";
@@ -458,6 +458,10 @@ interface Props {
   presetActivated?: boolean;
   onApplyPreset?: (name: "praise" | "worship") => void;
   liveSettings?: LiveSettings;
+  onOpenSettings?: () => void;  // opens the Display Settings modal from grid view
+  onCopyObsUrl?: () => void;    // copies online OBS URL (Firestore mode)
+  onCopyObsLocalUrl?: () => void; // copies offline OBS URL (SSE / local mode)
+  onOpenMediaLibrary?: () => void; // opens the Media Library modal from grid view
 }
 
 export default function LyricsGridModal({
@@ -467,7 +471,24 @@ export default function LyricsGridModal({
   fadeScreenActive, fadeScreenBg, onToggleFade,
   activePreset, presetActivated, onApplyPreset,
   liveSettings,
+  onOpenSettings,
+  onCopyObsUrl,
+  onCopyObsLocalUrl,
+  onOpenMediaLibrary,
 }: Props) {
+  const [obsUrlCopied,      setObsUrlCopied]      = useState(false);
+  const [obsLocalUrlCopied, setObsLocalUrlCopied] = useState(false);
+
+  const handleCopyObsUrl = () => {
+    onCopyObsUrl?.();
+    setObsUrlCopied(true);
+    setTimeout(() => setObsUrlCopied(false), 2000);
+  };
+  const handleCopyObsLocalUrl = () => {
+    onCopyObsLocalUrl?.();
+    setObsLocalUrlCopied(true);
+    setTimeout(() => setObsLocalUrlCopied(false), 2000);
+  };
   const [query, setQuery]               = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [selectedSong, setSelectedSong_] = useState<Song | null>(null);
@@ -481,6 +502,8 @@ export default function LyricsGridModal({
   const [liveSongTitle, setLiveSongTitle] = useState("");
   const [liveConnected, setLiveConnected] = useState(false);
   const [activeSlideId, setActiveSlideId] = useState<string | null>(null);
+  const [liveFadeActive, setLiveFadeActive] = useState(false);
+  const [liveFadeBg, setLiveFadeBg]         = useState<Record<string, unknown> | null>(null);
   const [pushFeedback, setPushFeedback] = useState<string | null>(null);
   const [showPreview, setShowPreview]   = useState(false);
   const [previewWidth, setPreviewWidth] = useState(300);
@@ -720,6 +743,9 @@ export default function LyricsGridModal({
         const d = snap.data() as LiveState;
         setLiveSongTitle(d.songTitle ?? "");
         setLiveLines(d.visible ? (d.lines ?? []) : []);
+        // Sync fade screen state for the preview panel
+        setLiveFadeActive(!!(d as Record<string, unknown>).fadeScreen);
+        setLiveFadeBg((d as Record<string, unknown>).fadeScreenBg as Record<string, unknown> ?? null);
       },
       () => setLiveConnected(false)
     );
@@ -771,13 +797,49 @@ export default function LyricsGridModal({
   );
 
   const handleSelectSong = useCallback((song: Song) => {
-    userPickedRef.current = true;  // lock: stop auto-select from ever overriding this choice
-    setSelectedSong(song);
+    userPickedRef.current = true;
     setDropdownOpen(false);
     setQuery("");
 
-    // Auto-apply matching scene preset based on song tags — mirrors handleSongSelect in LiveStageView
-    // "joyful" tag → Praise scene, "solemn" tag → Worship scene
+    // 1. Flash to black so the transition feels seamless
+    const settings = liveSettingsRef.current;
+    if (fadeActiveRef.current) {
+      // Fade screen is on — just pre-load empty slide behind overlay, no visible transition needed
+      fetch("/api/live-push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          songTitle: "", lines: [], visible: false,
+          fadeScreen: true, fadeScreenBg: safeFirestoreFadeBg(fadeScreenBgRef.current),
+          updatedAt: Date.now(), ...(settings ?? {}),
+        }),
+      }).catch(() => {});
+      setActiveSlideId(null);
+      setSelectedSong(song);
+    } else {
+      // Fade is off — push transitioning (fade to black), then clear, then switch song
+      fetch("/api/live-push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transitioning: true, updatedAt: Date.now() }),
+      }).catch(() => {});
+      setActiveSlideId(null);
+      setTimeout(() => {
+        // 2. After fade completes — push clear (visible:false) with new song context
+        fetch("/api/live-push", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            songTitle: "", lines: [], visible: false,
+            updatedAt: Date.now(), ...(settings ?? {}),
+          }),
+        }).catch(() => {});
+        // 3. Switch the UI to the new song
+        setSelectedSong(song);
+      }, 550);
+    }
+
+    // Auto-apply scene preset based on song tags
     if (onApplyPreset) {
       const resolved = resolvePresetFromSong(song);
       if (resolved && resolved !== activePreset) {
@@ -785,6 +847,7 @@ export default function LyricsGridModal({
       }
     }
   }, [onApplyPreset, activePreset, resolvePresetFromSong]);
+
 
   return (
     /* Backdrop */
@@ -984,6 +1047,72 @@ export default function LyricsGridModal({
           </div>
 
           {/* Monitor / Live Preview — indigo accent */}
+          {/* Media Library — green accent, before OBS Online */}
+          {onOpenMediaLibrary && (
+            <button
+              onClick={onOpenMediaLibrary}
+              className="lgm-icon-btn"
+              title="Media Library"
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+                height: 30, padding: "0 10px", borderRadius: 8, flexShrink: 0,
+                cursor: "pointer", transition: "all 0.15s",
+                background: "rgba(52,211,153,0.08)",
+                border: "1px solid rgba(52,211,153,0.28)",
+                color: "#34d399",
+                fontSize: 11, fontWeight: 600,
+              }}
+              onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "rgba(52,211,153,0.18)"}
+              onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "rgba(52,211,153,0.08)"}
+            >
+              <FolderOpen size={13} />
+              <span className="lgm-btn-label">Media Library</span>
+            </button>
+          )}
+
+          {/* OBS Link — before Live Preview, same rounded-square style */}
+          {(onCopyObsUrl || onCopyObsLocalUrl) && (
+            <>
+              <button
+                onClick={handleCopyObsUrl}
+                className="lgm-icon-btn"
+                title="Copy OBS Browser Source URL (Online — Firestore)"
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+                  height: 30, padding: "0 10px", borderRadius: 8, flexShrink: 0,
+                  cursor: "pointer", transition: "all 0.15s",
+                  background: obsUrlCopied ? "rgba(52,211,153,0.12)" : "rgba(167,139,250,0.10)",
+                  border: obsUrlCopied ? "1px solid rgba(52,211,153,0.5)" : "1px solid rgba(167,139,250,0.30)",
+                  color: obsUrlCopied ? "#34d399" : "#c4b5fd",
+                  fontSize: 11, fontWeight: 600,
+                }}
+                onMouseEnter={e => !obsUrlCopied && ((e.currentTarget as HTMLElement).style.background = "rgba(167,139,250,0.22)")}
+                onMouseLeave={e => !obsUrlCopied && ((e.currentTarget as HTMLElement).style.background = "rgba(167,139,250,0.10)")}
+              >
+                {obsUrlCopied ? <><Check size={13} /> <span className="lgm-btn-label">Copied!</span></> : <><Link size={13} /> <span className="lgm-btn-label">OBS Online</span></>}
+              </button>
+              <button
+                onClick={handleCopyObsLocalUrl}
+                className="lgm-icon-btn"
+                title="Copy OBS Browser Source URL (Offline / Local — SSE mode)"
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+                  height: 30, padding: "0 10px", borderRadius: 8, flexShrink: 0,
+                  cursor: "pointer", transition: "all 0.15s",
+                  background: obsLocalUrlCopied ? "rgba(52,211,153,0.12)" : "rgba(251,146,60,0.10)",
+                  border: obsLocalUrlCopied ? "1px solid rgba(52,211,153,0.5)" : "1px solid rgba(251,146,60,0.35)",
+                  color: obsLocalUrlCopied ? "#34d399" : "#fb923c",
+                  fontSize: 11, fontWeight: 600,
+                }}
+                onMouseEnter={e => !obsLocalUrlCopied && ((e.currentTarget as HTMLElement).style.background = "rgba(251,146,60,0.20)")}
+                onMouseLeave={e => !obsLocalUrlCopied && ((e.currentTarget as HTMLElement).style.background = "rgba(251,146,60,0.10)")}
+              >
+                {obsLocalUrlCopied ? <><Check size={13} /> <span className="lgm-btn-label">Copied!</span></> : <><Link size={13} /> <span className="lgm-btn-label">OBS Offline</span></>}
+              </button>
+            </>
+          )}
+
+          {/* Live Preview toggle */}
           <button
             onClick={() => setShowPreview(v => !v)}
             className="lgm-icon-btn"
@@ -1001,6 +1130,29 @@ export default function LyricsGridModal({
             <Monitor size={13} />
             <span className="lgm-btn-label">Live Preview</span>
           </button>
+
+          {/* Settings — purple accent, same rounded-square style as Live Preview */}
+          {onOpenSettings && (
+            <button
+              onClick={onOpenSettings}
+              className="lgm-icon-btn"
+              title="Display Settings"
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+                height: 30, padding: "0 10px", borderRadius: 8, flexShrink: 0,
+                cursor: "pointer", transition: "all 0.15s",
+                background: "rgba(167,139,250,0.10)",
+                border: "1px solid rgba(167,139,250,0.30)",
+                color: "#c4b5fd",
+                fontSize: 11, fontWeight: 600,
+              }}
+              onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "rgba(167,139,250,0.22)"}
+              onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "rgba(167,139,250,0.10)"}
+            >
+              <Settings size={13} />
+              <span className="lgm-btn-label">Settings</span>
+            </button>
+          )}
 
         </div>
       )}
@@ -1081,7 +1233,7 @@ export default function LyricsGridModal({
           {/* Scaled preview — full width, 16:9 */}
           <div style={{ position: "relative", width: "100%", paddingBottom: "56.25%", background: "#000", overflow: "hidden" }}>
             <iframe
-              src="/live-display"
+              src="/live-display?preview=1"
               title="Live Screen Preview"
               style={{
                 position: "absolute", top: 0, left: 0,
@@ -1091,6 +1243,31 @@ export default function LyricsGridModal({
                 border: "none", pointerEvents: "none", background: "#000",
               }}
             />
+            {/* Fade screen overlay — mirrors what OBS shows, sourced directly from Firestore */}
+            {liveFadeActive && liveFadeBg && (() => {
+              const bg = liveFadeBg as { type?: string; url?: string; color?: string; videoId?: string };
+              return (
+                <div style={{
+                  position: "absolute", inset: 0, zIndex: 10,
+                  transition: "opacity 0.4s ease",
+                  opacity: liveFadeActive ? 1 : 0,
+                  overflow: "hidden",
+                }}>
+                  {(bg.type === "image-firebase" || bg.type === "image-url" || bg.type === "image-local") && bg.url && (
+                    <img src={bg.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  )}
+                  {(bg.type === "video-firebase" || bg.type === "video-local") && bg.url && (
+                    <video src={bg.url} autoPlay muted loop style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  )}
+                  {bg.type === "color" && bg.color && (
+                    <div style={{ width: "100%", height: "100%", background: bg.color }} />
+                  )}
+                  {(!bg.type || !bg.url) && (
+                    <div style={{ width: "100%", height: "100%", background: "#000" }} />
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -1317,10 +1494,14 @@ export default function LyricsGridModal({
         }
         [data-lgm-pulse] { animation: lgm-pulse 1.5s ease-in-out infinite; }
 
+        /* ── Tablet + Mobile: icon-only toolbar ────────────────── */
+        @media (max-width: 1024px) {
+          .lgm-btn-label { display: none !important; }
+        }
+
         /* ── Mobile layout overrides ───────────────────────────── */
         @media (max-width: 640px) {
           .lgm-toolbar { gap: 6px !important; padding: 0 10px !important; }
-          .lgm-btn-label { display: none !important; }
           .lgm-slide-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 6px !important; }
           .lgm-section-tabs { display: none !important; }
           .lgm-grid-padding { padding: 10px !important; }

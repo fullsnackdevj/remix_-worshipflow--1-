@@ -16,9 +16,9 @@ interface LiveState {
   songTitle: string; lines: string[]; animStyle: AnimStyle; visible: boolean; updatedAt: number;
   bgIdx?: number; echoAlign?: "center"|"centered-left"|"left"; echoLines?: "auto"|"2"|"3";
   echoLineHeight?: number; lyricsScale?: number; loopEnabled?: boolean; loopInterval?: number;
-  bgVideo?: {type:"local";url:string}|{type:"firebase";url:string;localUrl?:string}|{type:"youtube";videoId:string}|null;
+  bgVideo?: {type:"local";url:string}|{type:"firebase";url:string;localUrl?:string}|{type:"image-firebase";url:string;localUrl?:string}|{type:"youtube";videoId:string}|null;
   transitioning?: boolean; fadeScreen?: boolean;
-  fadeScreenBg?: {type:"color";color:string}|{type:"image-url";url:string}|{type:"image-local";url:string}|{type:"image-firebase";url:string}|{type:"video-local";url:string}|{type:"video-firebase";url:string}|{type:"video-youtube";videoId:string};
+  fadeScreenBg?: {type:"color";color:string}|{type:"image-url";url:string}|{type:"image-local";url:string}|{type:"image-firebase";url:string;localUrl?:string}|{type:"video-local";url:string}|{type:"video-firebase";url:string;localUrl?:string}|{type:"video-youtube";videoId:string};
   _fadeOnly?: boolean;
 }
 
@@ -97,6 +97,15 @@ export default function LiveDisplayLocalPage() {
   const loopCleanupRef = useRef<(()=>void)|null>(null);
   const rafRef         = useRef<number|null>(null);
   const marqueeTrackTweens = useRef<gsap.core.Tween[]>([]);
+  // ── Persistent background element refs ────────────────────────────────────
+  // Remounting <video> in OBS Browser Source causes a frozen-frame on every
+  // lyrics update. We keep one element in the DOM and imperatively swap .src.
+  const bgVideoRef    = useRef<HTMLVideoElement>(null);
+  const bgVideoSrcRef = useRef<string>("");
+  const bgVideoDivRef = useRef<HTMLDivElement>(null);
+  const bgImgRef      = useRef<HTMLImageElement>(null);
+  const bgImgSrcRef   = useRef<string>("");
+
 
   const [box, setBox] = useState({w:0,h:0});
   useEffect(()=>{
@@ -107,6 +116,41 @@ export default function LiveDisplayLocalPage() {
     return ()=>ro.disconnect();
   },[]);
   const fs = box.w>0 ? Math.round(box.w*0.10) : 192;
+
+  // ── Imperatively update the persistent video/img src ─────────────────────
+  // This runs after every render so we never remount the element — just swap src.
+  useEffect(()=>{
+    const bv = live?.bgVideo ?? null;
+    const videoEl  = bgVideoRef.current;
+    const videoDiv = bgVideoDivRef.current;
+    const imgEl    = bgImgRef.current;
+
+    if(bv && (bv.type==="local"||bv.type==="firebase")){
+      const safeLocal = (bv as {localUrl?:string}).localUrl && !(bv as {localUrl?:string}).localUrl!.startsWith("blob:") ? (bv as {localUrl?:string}).localUrl! : null;
+      const nextSrc = safeLocal || (bv as {url:string}).url;
+      if(videoDiv)  { videoDiv.style.display="block"; }
+      if(imgEl)     { imgEl.style.display="none"; }
+      if(videoEl && nextSrc !== bgVideoSrcRef.current){
+        bgVideoSrcRef.current = nextSrc;
+        videoEl.src = nextSrc;
+        videoEl.load();
+        videoEl.play().catch(()=>{});
+      }
+    } else if(bv && bv.type==="image-firebase"){
+      const safeLocal = (bv as {localUrl?:string}).localUrl && !(bv as {localUrl?:string}).localUrl!.startsWith("blob:") ? (bv as {localUrl?:string}).localUrl! : null;
+      const nextSrc = safeLocal || (bv as {url:string}).url;
+      if(videoDiv) { videoDiv.style.display="none"; }
+      if(imgEl && nextSrc !== bgImgSrcRef.current){
+        bgImgSrcRef.current = nextSrc;
+        imgEl.src = nextSrc;
+        imgEl.style.display="block";
+      }
+    } else {
+      // No bgVideo — hide both
+      if(videoDiv) videoDiv.style.display="none";
+      if(imgEl)    { imgEl.style.display="none"; bgImgSrcRef.current=""; }
+    }
+  });  // runs every render — cheap ref checks prevent unnecessary work
 
   // Ignore fadeScreen on the FIRST state received — it's stale from a previous
   // session. Fade should only activate from a live controller push this session.
@@ -271,7 +315,10 @@ export default function LiveDisplayLocalPage() {
       {/* Fade screen overlay */}
       {(()=>{
         const bg=fadeScreen??prevFadeScreenRef.current;
-        const bgUrl=(bg as {type?:string;url?:string})?.url??"";
+        // Prefer localUrl (served by local dev server) so image loads offline
+        // without hitting Firebase Storage. Fall back to firebase URL when online.
+        const bgLocalUrl=(bg as {type?:string;localUrl?:string})?.localUrl??"";
+        const bgUrl=(bgLocalUrl&&!bgLocalUrl.startsWith("blob:"))?bgLocalUrl:((bg as {type?:string;url?:string})?.url??"");
         const ytId=(bg as {type?:string;videoId?:string})?.videoId??"";
         return (
           <div style={{position:"absolute",inset:0,zIndex:90,opacity:fadeScreen?1:0,transition:"opacity 0.7s ease",pointerEvents:"none",background:bg?.type==="color"?(bg as {type:"color";color:string}).color:"#000"}}>
@@ -281,32 +328,25 @@ export default function LiveDisplayLocalPage() {
           </div>
         );
       })()}
-      {/* Video background — local/firebase (offline fallback) / youtube */}
-      {live?.bgVideo&&(()=>{
-        const bv=live.bgVideo!;
-        if(bv.type==="local"||bv.type==="firebase"){
-          // live-display-local = LOCAL mode. ALWAYS use localUrl (local server) for firebase-type
-          // videos. navigator.onLine is unreliable in OBS CEF — it returns true even when there
-          // is no internet, so we can't trust it. localUrl (/api/live-bg-video/:preset) is always
-          // served from this same dev server and never needs internet.
-          const src = bv.localUrl || bv.url;
-          return(
-            <div style={{position:"absolute",inset:0,overflow:"hidden",zIndex:0}}>
-              <video key={src} src={src} autoPlay loop muted playsInline style={{width:"100%",height:"100%",objectFit:"cover"}} />
-              <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.45)"}} />
-            </div>
-          );
-        }
-        if(bv.type==="youtube"){
-          return(
-            <div style={{position:"absolute",inset:0,overflow:"hidden",zIndex:0}}>
-              <iframe key={bv.videoId} src={`https://www.youtube.com/embed/${bv.videoId}?autoplay=1&loop=1&playlist=${bv.videoId}&mute=1&muted=1&controls=0&disablekb=1&fs=0&modestbranding=1&iv_load_policy=3&enablejsapi=1`} style={{width:"100%",height:"100%",border:"none",pointerEvents:"none"}} allow="autoplay; encrypted-media" title="video-bg" />
-              <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.45)"}} />
-            </div>
-          );
-        }
-        return null;
-      })()}
+      {/* ── Persistent background layer — video/img never remounted ─────────
+           A single <video> element lives here permanently. Its src is updated
+           imperatively via useEffect above. This prevents OBS Browser Source
+           from freezing on the first frame whenever lyrics change. */}
+      <div ref={bgVideoDivRef} style={{position:"absolute",inset:0,overflow:"hidden",zIndex:0,display:"none"}}>
+        <video ref={bgVideoRef} autoPlay loop muted playsInline style={{width:"100%",height:"100%",objectFit:"cover"}} />
+        <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.45)"}} />
+      </div>
+      <div style={{position:"absolute",inset:0,overflow:"hidden",zIndex:0,display:"contents"}}>
+        <img ref={bgImgRef} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",display:"none"}} />
+        {live?.bgVideo?.type==="image-firebase" && <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.45)",zIndex:0}} />}
+      </div>
+      {/* YouTube iframe BG — only when type is youtube (can't be persistent) */}
+      {live?.bgVideo?.type==="youtube"&&(
+        <div style={{position:"absolute",inset:0,overflow:"hidden",zIndex:0}}>
+          <iframe key={(live.bgVideo as {videoId:string}).videoId} src={`https://www.youtube.com/embed/${(live.bgVideo as {videoId:string}).videoId}?autoplay=1&loop=1&playlist=${(live.bgVideo as {videoId:string}).videoId}&mute=1&muted=1&controls=0&disablekb=1&fs=0&modestbranding=1&iv_load_policy=3&enablejsapi=1`} style={{width:"100%",height:"100%",border:"none",pointerEvents:"none"}} allow="autoplay; encrypted-media" title="video-bg" />
+          <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.45)"}} />
+        </div>
+      )}
       <div style={{position:"absolute",inset:0,background:"radial-gradient(ellipse at center, transparent 35%, rgba(0,0,0,0.7) 100%)",pointerEvents:"none",zIndex:0}} />
       <div style={{position:"absolute",inset:0,background:"radial-gradient(ellipse 70% 35% at 50% 25%, rgba(100,60,220,0.07) 0%, transparent 70%)",pointerEvents:"none",zIndex:0}} />
       {/* Echo marquee */}

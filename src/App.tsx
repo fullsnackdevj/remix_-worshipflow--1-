@@ -672,7 +672,9 @@ export default function App() {
   // ── Songs shared state — seed from cache immediately for instant dashboard counts ──
   // Parse once — reused by allSongs, isLoadingSongs, and tags initialisers
   const _songsCacheRaw = (() => { try { return JSON.parse(localStorage.getItem("wf_songs_cache") || "null"); } catch { return null; } })();
-  const _songsCacheFresh = !!_songsCacheRaw && Date.now() - (_songsCacheRaw.ts ?? 0) < 30 * 60 * 1000;
+  // 7-day TTL for songs — lyrics are rarely restructured, and stale songs beat an empty
+  // dropdown in offline mode. The fetch-on-mount will silently update when online.
+  const _songsCacheFresh = !!_songsCacheRaw && Date.now() - (_songsCacheRaw.ts ?? 0) < 7 * 24 * 60 * 60 * 1000;
 
   const [allSongs, setAllSongs] = useState<Song[]>(() =>
     _songsCacheFresh && Array.isArray(_songsCacheRaw.songs) ? _songsCacheRaw.songs : []
@@ -830,8 +832,12 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
     const lastActive = Number(localStorage.getItem("wf_last_active") ?? "0");
     const didHardReset = Date.now() - lastActive > HARD_RESET_MS;
     if (didHardReset) {
-      ["wf_songs_cache", "wf_members_cache", "wf_schedules_cache",
-       "wf_schedules_cache_ts", "wf_notes_cache"].forEach(k => {
+      // Don't evict songs cache when offline — stale lyrics are better than an empty dropdown.
+      // Songs will be refreshed on the next online session automatically.
+      const keysToReset = ["wf_members_cache", "wf_schedules_cache",
+       "wf_schedules_cache_ts", "wf_notes_cache"];
+      if (navigator.onLine) keysToReset.unshift("wf_songs_cache");
+      keysToReset.forEach(k => {
         try { localStorage.removeItem(k); } catch { /* noop */ }
       });
     }
@@ -850,23 +856,61 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
     })();
 
     // Songs + tags
+    const loadSongsFromCache = () => {
+      try {
+        const raw = localStorage.getItem("wf_songs_cache");
+        if (!raw) return false;
+        const { songs: cachedSongs, tags: cachedTags } = JSON.parse(raw);
+        if (Array.isArray(cachedSongs) && cachedSongs.length > 0) {
+          setAllSongs(cachedSongs);
+          if (Array.isArray(cachedTags)) setTags(cachedTags);
+          console.info(`[WorshipFlow] Using cached ${cachedSongs.length} songs`);
+          return true;
+        }
+      } catch { /* noop */ }
+      return false;
+    };
+
     const fetchSongs = async () => {
+      // If browser reports offline, skip network entirely — use cache immediately.
+      if (!navigator.onLine) {
+        console.info("[WorshipFlow] Offline — skipping songs fetch, loading from cache");
+        loadSongsFromCache();
+        setIsLoadingSongs(false);
+        return;
+      }
       try {
         const [songsRes, tagsRes] = await Promise.all([
           fetch("/api/songs"),
           fetch("/api/tags"),
         ]);
+        // 503 = Firestore offline on server side — fall back to cache, do NOT overwrite
+        if (!songsRes.ok) {
+          console.warn(`[WorshipFlow] /api/songs returned ${songsRes.status} — loading from cache`);
+          loadSongsFromCache();
+          setIsLoadingSongs(false);
+          return;
+        }
         const [songsData, tagsData] = await Promise.all([
           songsRes.json(),
           tagsRes.json(),
         ]);
         const songs = Array.isArray(songsData) ? songsData : [];
         const tags  = Array.isArray(tagsData)  ? tagsData  : [];
-        setAllSongs(songs);
-        setTags(tags);
-        try { localStorage.setItem("wf_songs_cache", JSON.stringify({ songs, tags, ts: Date.now() })); } catch { /* noop */ }
+        // ⚠️ Only write to cache if we got real data — never overwrite with empty results
+        if (songs.length > 0) {
+          setAllSongs(songs);
+          setTags(tags);
+          try { localStorage.setItem("wf_songs_cache", JSON.stringify({ songs, tags, ts: Date.now() })); } catch { /* noop */ }
+        } else {
+          // Firestore returned empty — suspicious. Fall back to cache to be safe.
+          console.warn("[WorshipFlow] /api/songs returned empty array — keeping cache");
+          loadSongsFromCache();
+        }
       } catch (e) {
-        console.warn("Boot song fetch failed:", e);
+        console.warn("[WorshipFlow] Boot song fetch failed (offline?):", e);
+        // Network error — use stale cache regardless of age
+        loadSongsFromCache();
       } finally {
         setIsLoadingSongs(false);
       }

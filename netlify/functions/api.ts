@@ -1439,7 +1439,7 @@ BULLET: [...]`;
         if (!userId || !articleId) return json(400, { error: "Missing fields" });
         try {
             const docId = `${userId}_${articleId}`;
-            await db.collection("help_reads").doc(docId).set({
+            await firestore?.collection("help_reads").doc(docId).set({
                 userId,
                 userName: userName || "",
                 userEmail: (userEmail || "").toLowerCase(),
@@ -1455,19 +1455,19 @@ BULLET: [...]`;
     // GET /help/reads — all reads (admin)
     if (rawPath === "/help/reads" && method === "GET") {
         try {
-            const snap = await db.collection("help_reads").get();
-            return json(200, snap.docs.map(d => d.data()));
+            const snap = await firestore?.collection("help_reads").get();
+            return json(200, (snap?.docs || []).map(d => d.data()));
         } catch { return json(200, []); }
     }
 
     // GET /help/suggestions — all suggestions
     if (rawPath === "/help/suggestions" && method === "GET") {
         try {
-            const snap = await db.collection("help_suggestions")
+            const snap = await firestore?.collection("help_suggestions")
                 .orderBy("createdAt", "desc")
                 .limit(100)
                 .get();
-            return json(200, snap.docs.map(d => ({ id: d.id, ...d.data() })));
+            return json(200, (snap?.docs || []).map(d => ({ id: d.id, ...d.data() })));
         } catch { return json(200, []); }
     }
 
@@ -1476,7 +1476,7 @@ BULLET: [...]`;
         const { userId, userName, userPhoto, text } = body;
         if (!userId || !text?.trim()) return json(400, { error: "Missing fields" });
         try {
-            const ref = await db.collection("help_suggestions").add({
+            const ref = await firestore?.collection("help_suggestions").add({
                 userId,
                 userName: userName || "",
                 userPhoto: userPhoto || "",
@@ -1484,7 +1484,7 @@ BULLET: [...]`;
                 createdAt: new Date().toISOString(),
                 status: "pending",
             });
-            return json(200, { id: ref.id, ok: true });
+            return json(200, { id: ref?.id, ok: true });
         } catch (e) { return json(500, { error: "Failed to submit suggestion" }); }
     }
 
@@ -1504,7 +1504,7 @@ BULLET: [...]`;
         }
         if (!id || Object.keys(update).length === 0) return json(400, { error: "Invalid" });
         try {
-            await db.collection("help_suggestions").doc(id).update(update);
+            await firestore?.collection("help_suggestions").doc(id).update(update);
             return json(200, { ok: true });
         } catch (e) { return json(500, { error: "Failed to update" }); }
     }
@@ -1514,7 +1514,7 @@ BULLET: [...]`;
         const id = rawPath.split("/help/suggestion/")[1];
         if (!id) return json(400, { error: "Missing id" });
         try {
-            await db.collection("help_suggestions").doc(id).delete();
+            await firestore?.collection("help_suggestions").doc(id).delete();
             return json(200, { ok: true });
         } catch (e) { return json(500, { error: "Failed to delete" }); }
     }

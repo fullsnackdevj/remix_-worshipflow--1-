@@ -20,7 +20,17 @@ export default defineConfig(({mode}) => {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modify — file watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
+      watch: {
+        // Ignore server-written runtime files — these change constantly and must NOT
+        // trigger Vite HMR page reloads (would cause infinite splash screen loop).
+        ignored: [
+          '**/liveState.json',
+          '**/live-bg-videos/**',
+          '**/node_modules/**',
+        ],
+      },
     },
+
     build: {
       target: 'es2020',           // modern target = smaller output, better tree-shaking
       cssCodeSplit: true,         // split CSS per-chunk so lazy views only load their styles

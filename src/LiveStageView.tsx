@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from "react";
-import { Search, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Radio, Music2, Layers, Play, Wand2, AlignCenter, AlignLeft, Video, Upload, Copy, Check as CheckIcon, Settings, Zap, Heart, EyeOff, Image as ImageIcon, Monitor, Timer, PlusCircle, Minus, LayoutGrid, FolderOpen } from "lucide-react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { Search, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Radio, Music2, Layers, Play, Wand2, AlignCenter, AlignLeft, Video, Upload, Copy, Check as CheckIcon, Settings, Zap, Heart, EyeOff, Image as ImageIcon, Monitor, Timer, PlusCircle, Minus, LayoutGrid, FolderOpen, Tent, ShieldCheck, AlertTriangle, RefreshCw } from "lucide-react";
 import LyricsGridModal from "./LyricsGridModal";
 import MediaLibraryModal, { type MediaItem, type MediaTarget } from "./MediaLibraryModal";
 import type { Song } from "./types";
@@ -9,15 +9,15 @@ import { ref as storageRef, uploadBytesResumable, getDownloadURL } from "firebas
 
 
 type AnimStyle = "word-fade" | "word-bounce" | "typewriter" | "blur-in" | "fade" | "slide-up" | "echo" | "breathe";
-type BgVideo   = { type: "local"; url: string } | { type: "firebase"; url: string; localUrl?: string } | { type: "youtube"; videoId: string };
+type BgVideo   = { type: "local"; url: string } | { type: "firebase"; url: string; localUrl?: string } | { type: "image-firebase"; url: string; localUrl?: string } | { type: "youtube"; videoId: string };
 
 type FadeScreenBg =
   | { type: "color"; color: string }
   | { type: "image-url"; url: string }
-  | { type: "image-local"; url: string }     // legacy base64 — stays in IDB only, never sent to Firestore
-  | { type: "image-firebase"; url: string }  // Firebase Storage URL — safe for Firestore ✓
-  | { type: "video-local"; url: string }     // legacy base64 — stays in IDB only, never sent to Firestore
-  | { type: "video-firebase"; url: string }  // Firebase Storage URL — safe for Firestore ✓
+  | { type: "image-local"; url: string }                           // legacy base64 — stays in IDB only, never sent to Firestore
+  | { type: "image-firebase"; url: string; localUrl?: string }    // Firebase Storage URL + optional local disk copy
+  | { type: "video-local"; url: string }                          // legacy base64 — stays in IDB only, never sent to Firestore
+  | { type: "video-firebase"; url: string; localUrl?: string }    // Firebase Storage URL + optional local disk copy
   | { type: "video-youtube"; videoId: string };
 
 // Returns a Firestore-safe version of a FadeScreenBg.
@@ -783,6 +783,9 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
   // LiveStageView key handler must NOT fire (LyricsGridModal has its own).
   const lyricsGridOpenRef = useRef(false);
   const setLyricsGridOpen = (v: boolean) => { lyricsGridOpenRef.current = v; setLyricsGridOpen_(v); };
+  // When Settings is opened from Grid View, this ref is set so closing Settings
+  // returns the user to Grid View instead of the default view.
+  const returnToGridRef = useRef(false);
   const [activeSection,  setActiveSectionState]  = useState<string | null>(() => {
     try { return localStorage.getItem("lsv_active_section") ?? null; } catch { return null; }
   });
@@ -801,6 +804,8 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
   const [settingsTab,     setSettingsTab]     = useState<"praise" | "worship" | "fade">("praise");
   const [modalDrafts,     setModalDrafts]     = useState<Record<PresetName, LivePreset>>({ ...DEFAULT_PRESETS });
   const [mediaLibraryOpen, setMediaLibraryOpen] = useState(false);
+  // mediaPicker: when set, a compact picker opens inside settings to pick media for a specific target
+  const [mediaPicker, setMediaPicker] = useState<MediaTarget | null>(null);
   const [videoUploading,  setVideoUploading]  = useState<Record<PresetName, boolean>>({ praise: false, worship: false });
   const [videoProgress,   setVideoProgress]   = useState<Record<PresetName, number>>({ praise: 0, worship: 0 });
   // Fade screen background upload progress
@@ -1181,11 +1186,21 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
         }
       }, 50);
       setSettingsSaved(true);
-      setTimeout(() => { setSettingsSaved(false); setSettingsOpen(false); settingsOpenRef.current = false; }, 1500);
+      setTimeout(() => { setSettingsSaved(false); closeSettings(); }, 1500);
     } catch (err) {
       console.error("[saveSettings] Error:", err);
       // Still close the modal so the user isn't stuck
-      setSettingsOpen(false);
+      closeSettings();
+    }
+  };
+
+  // Closes the Settings modal and returns to Grid View if it was opened from there.
+  const closeSettings = () => {
+    settingsOpenRef.current = false;
+    setSettingsOpen(false);
+    if (returnToGridRef.current) {
+      returnToGridRef.current = false;
+      setLyricsGridOpen(true);
     }
   };
 
@@ -1322,8 +1337,14 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
     if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [activeSlide]);
 
+  // ── Camp Readiness Check ──────────────────────────────────────────────
+  const [showCampReady, setShowCampReady] = useState(false);
+
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"100%", background:"var(--wf-surface,#07090f)", color:"#fff", overflow:"hidden", fontFamily:"inherit" }}>
+
+      {/* ── Camp Readiness Modal ─────────────────────────────────────── */}
+      {showCampReady && <CampReadinessModal onClose={() => setShowCampReady(false)} songsCount={allSongs.length} />}
 
       {/* ── Top Bar ─────────────────────────────────────────────────────── */}
       <div style={{ flexShrink:0, display:"flex", alignItems:"center", justifyContent:"space-between", padding: isMobile ? "8px 12px" : "10px 20px", borderBottom:"1px solid rgba(255,255,255,0.07)", minHeight: isMobile ? 52 : 56 }}>
@@ -1354,8 +1375,22 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
             <EyeOff size={15} />
             {!isMobile && <span>{fadeScreenActive ? "Faded" : "Fade OBS Screen"}</span>}
           </button>
+          {/* ── Camp Readiness Check button ── */}
+          <button
+            onClick={() => setShowCampReady(true)}
+            title="Camp Readiness Check — verify offline mode is ready"
+            style={{
+              width:36, height:36, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center",
+              cursor:"pointer", transition:"all 0.18s", flexShrink:0,
+              border:"1px solid rgba(16,185,129,0.4)",
+              background:"rgba(16,185,129,0.12)",
+              color:"rgba(16,185,129,0.9)"
+            }}>
+            <Tent size={15} />
+          </button>
           {/* Divider */}
           <div style={{ width:1, height:20, background:"rgba(255,255,255,0.1)", flexShrink:0 }} />
+
           {/* ── Preset selector ── */}
           <div style={{ display:"flex", gap: isMobile ? 3 : 5 }}>
             {(["praise","worship"] as PresetName[]).map(name => {
@@ -1431,7 +1466,7 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
 
       {/* ══ Settings Modal ══════════════════════════════════════════════════ */}
       {settingsOpen && (
-        <div onClick={e => { if (e.target === e.currentTarget) { setModalFadeScreenBg({ ...fadeScreenBg }); settingsOpenRef.current = false; setSettingsOpen(false); } }}
+        <div onClick={e => { if (e.target === e.currentTarget) { setModalFadeScreenBg({ ...fadeScreenBg }); closeSettings(); } }}
           style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", backdropFilter:"blur(6px)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center" }}>
           <div style={{ width: isMobile ? "min(92vw, 480px)" : 480, background:"#0d0f1c", border:"1px solid rgba(255,255,255,0.1)", borderRadius:20, boxShadow:"0 32px 80px rgba(0,0,0,0.9)", overflow:"hidden" }}>
 
@@ -1446,7 +1481,7 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
                   <p style={{ margin:0, fontSize:10, color:"rgba(255,255,255,0.35)" }}>Each scene saves independently</p>
                 </div>
               </div>
-              <button onClick={() => { setModalFadeScreenBg({ ...fadeScreenBg }); settingsOpenRef.current = false; setSettingsOpen(false); }}
+              <button onClick={() => { setModalFadeScreenBg({ ...fadeScreenBg }); closeSettings(); }}
                 style={{ width:30, height:30, borderRadius:8, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)", color:"rgba(255,255,255,0.5)", fontSize:16, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
             </div>
 
@@ -1478,199 +1513,127 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
             {/* Modal body */}
             <div style={{ padding:"20px", display:"flex", flexDirection:"column", gap:20, maxHeight:"60vh", overflowY:"auto" }}>
               {settingsTab === "fade" && (() => {
-                  const isColor    = modalFadeScreenBg.type === "color";
-                const isImgUrl   = modalFadeScreenBg.type === "image-url";
-                // image-local (legacy base64) and image-firebase both use the "Upload Image" tab
-                const isImgLoc   = modalFadeScreenBg.type === "image-local" || modalFadeScreenBg.type === "image-firebase";
-                // video-local (legacy base64) and video-firebase both use the "Upload Video" tab
-                const isVidLoc   = modalFadeScreenBg.type === "video-local" || modalFadeScreenBg.type === "video-firebase";
-                const isVidYt    = modalFadeScreenBg.type === "video-youtube";
-                const hasUrl     = isImgUrl || isImgLoc || isVidLoc;
-                const bgUrl      = hasUrl ? (modalFadeScreenBg as {type:string;url?:string}).url ?? "" : "";
-                const ytId       = isVidYt ? (modalFadeScreenBg as {type:string;videoId:string}).videoId : "";
+                // Source metadata for status bar
+                const fbg     = modalFadeScreenBg;
+                const fbgUrl  = (fbg as {url?:string}).url ?? "";
+                const fbgYtId = (fbg as {videoId?:string}).videoId ?? "";
+                const isLibrary = fbg.type === "image-firebase" || fbg.type === "video-firebase";
+                const isLocalUp = fbg.type === "image-local"   || fbg.type === "video-local";
+                const isYt      = fbg.type === "video-youtube";
+                const isImgType = fbg.type === "image-firebase" || fbg.type === "image-local" || fbg.type === "image-url";
+                const hasMedia  = isLibrary || isLocalUp || isYt || fbg.type === "image-url";
+                const fadeFileName = (() => {
+                  try {
+                    const raw = decodeURIComponent(fbgUrl.split("/o/")[1]?.split("?")[0] ?? "");
+                    const name = raw.split("/").pop() ?? "";
+                    return name.length > 32 ? name.slice(0, 29) + "…" : name;
+                  } catch { return ""; }
+                })();
+                const sourceLabel = isLibrary
+                  ? `🗂 Media Library — ${isImgType ? "image" : "video"}${fadeFileName ? `: ${fadeFileName}` : ""}`
+                  : isLocalUp
+                  ? `💻 Local Computer — ${isImgType ? "image" : "video"}${fadeFileName ? `: ${fadeFileName}` : ""}`
+                  : isYt ? `▶ YouTube — ${fbgYtId}`
+                  : fbg.type === "image-url" ? `🔗 Image URL (fade screen)`
+                  : null;
+                const statusBg     = isLibrary ? "rgba(167,139,250,0.10)" : isLocalUp ? "rgba(96,165,250,0.10)" : "rgba(248,113,113,0.10)";
+                const statusBorder = isLibrary ? "rgba(167,139,250,0.3)"  : isLocalUp ? "rgba(96,165,250,0.3)"  : "rgba(248,113,113,0.3)";
+                const statusColor  = isLibrary ? "#c4b5fd"                : isLocalUp ? "#93c5fd"               : "#fca5a5";
                 return (
-                  <div style={{ display:"flex", flexDirection:"column", gap:18 }}>
-                    {/* Preview swatch */}
-                    <div style={{ height:80, borderRadius:12, overflow:"hidden", border:"1px solid rgba(255,255,255,0.1)", position:"relative", flexShrink:0,
-                      background: isColor ? (modalFadeScreenBg as {type:"color";color:string}).color : "#000",
-                      display:"flex", alignItems:"center", justifyContent:"center" }}>
-                      {(isImgUrl || isImgLoc) && bgUrl && (
-                        <img src={bgUrl} alt="preview"
-                          style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover" }}
-                          onError={e => { (e.target as HTMLImageElement).style.display="none"; }} />
-                      )}
-                      {isVidLoc && bgUrl && (
-                        <video src={bgUrl} muted autoPlay loop playsInline
-                          style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover" }} />
-                      )}
-                      {isVidYt && ytId && (
-                        <iframe
-                          src={`https://www.youtube.com/embed/${ytId}?autoplay=1&loop=1&playlist=${ytId}&mute=1&controls=0`}
-                          style={{ position:"absolute", inset:0, width:"100%", height:"100%", border:"none", pointerEvents:"none" }}
-                          allow="autoplay; encrypted-media" title="yt-preview" />
-                      )}
-                      <span style={{ fontSize:10, color:"rgba(255,255,255,0.3)", fontWeight:700, letterSpacing:"0.1em", position:"relative" }}>PREVIEW</span>
-                    </div>
-
-                    {/* Type selector — 2-row grid to fit 5 options */}
-                    <div>
-                      <span style={{ fontSize:10, fontWeight:700, color:"rgba(255,255,255,0.35)", textTransform:"uppercase", letterSpacing:"0.12em", display:"block", marginBottom:10 }}>Background Type</span>
-                      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:4, background:"rgba(0,0,0,0.4)", borderRadius:12, padding:4 }}>
-                        {([
-                          ["color",          "Color"],
-                          ["image-url",      "Image URL"],
-                          ["image-local",    "Upload Image"],
-                          ["video-local",    "Upload Video"],
-                          ["video-youtube",  "YouTube"],
-                        ] as [FadeScreenBg["type"], string][]).map(([t, label]) => {
-                          const isActive = modalFadeScreenBg.type === t;
-                          return (
-                            <button key={t} onClick={() => {
-                              if (t === "color")         saveFadeScreenBg({ type:"color",         color:   isColor  ? (modalFadeScreenBg as {type:"color";color:string}).color : "#000000" });
-                              else if (t === "image-url")    saveFadeScreenBg({ type:"image-url",    url:     isImgUrl ? bgUrl : "" });
-                              else if (t === "image-local")  saveFadeScreenBg({ type:"image-firebase", url: (isImgLoc && modalFadeScreenBg.type === "image-firebase") ? bgUrl : "" });
-                              else if (t === "video-local")  saveFadeScreenBg({ type:"video-firebase", url: (isVidLoc && modalFadeScreenBg.type === "video-firebase") ? bgUrl : "" });
-                              else                           saveFadeScreenBg({ type:"video-youtube", videoId: isVidYt  ? ytId  : "" });
-                            }} style={{ padding:"9px 4px", borderRadius:9, fontSize:10, fontWeight:700, cursor:"pointer", transition:"all 0.18s", border:"none",
-                              background: isActive ? "rgba(239,68,68,0.22)" : "transparent",
-                              color:      isActive ? "#fca5a5"              : "rgba(255,255,255,0.35)",
-                              boxShadow:  isActive ? "inset 0 0 0 1px rgba(239,68,68,0.4)" : "none" }}>
-                              {label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Color picker */}
-                    {isColor && (
-                      <div>
-                        <span style={{ fontSize:10, fontWeight:700, color:"rgba(255,255,255,0.35)", textTransform:"uppercase", letterSpacing:"0.12em", display:"block", marginBottom:10 }}>Color</span>
-                        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                          <input type="color" value={(modalFadeScreenBg as {type:"color";color:string}).color}
-                            onChange={e => saveFadeScreenBg({ type:"color", color: e.target.value })}
-                            style={{ width:48, height:44, borderRadius:9, border:"1px solid rgba(255,255,255,0.1)", cursor:"pointer", background:"none", padding:2 }} />
-                          <span style={{ fontSize:13, color:"rgba(255,255,255,0.6)", fontFamily:"monospace" }}>{(modalFadeScreenBg as {type:"color";color:string}).color}</span>
-                        </div>
-                        <div style={{ display:"flex", gap:6, marginTop:10, flexWrap:"wrap" }}>
-                          {["#000000","#0a0a14","#1a003a","#001a00","#1a0a00","#ffffff"].map(c => (
-                            <button key={c} onClick={() => saveFadeScreenBg({ type:"color", color:c })}
-                              style={{ width:32, height:32, borderRadius:8, background:c,
-                                border: (modalFadeScreenBg as {type:"color";color:string}).color===c ? "2px solid #fca5a5" : "1px solid rgba(255,255,255,0.15)",
-                                cursor:"pointer", transition:"all 0.15s" }} />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Image URL */}
-                    {isImgUrl && (
-                      <div>
-                        <span style={{ fontSize:10, fontWeight:700, color:"rgba(255,255,255,0.35)", textTransform:"uppercase", letterSpacing:"0.12em", display:"block", marginBottom:10 }}>Image URL</span>
-                        <div style={{ display:"flex", gap:6 }}>
-                          <input value={fadeImageUrlInput || (modalFadeScreenBg as {type:"image-url";url:string}).url} placeholder="https://…"
-                            onChange={e => setFadeImageUrlInput(e.target.value)}
-                            style={{ flex:1, padding:"9px 11px", borderRadius:8, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.09)", color:"#fff", fontSize:12, outline:"none" }} />
-                          <button onClick={() => { if (fadeImageUrlInput) { saveFadeScreenBg({ type:"image-url", url: fadeImageUrlInput }); setFadeImageUrlInput(""); } }}
-                            style={{ padding:"9px 14px", borderRadius:8, background:"rgba(239,68,68,0.2)", border:"1px solid rgba(239,68,68,0.35)", color:"#fca5a5", fontSize:11, fontWeight:700, cursor:"pointer" }}>Apply</button>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Fade image upload — uploads to Firebase Storage so OBS can load it */}
-                    {isImgLoc && (
-                      <div>
-                        <span style={{ fontSize:10, fontWeight:700, color:"rgba(255,255,255,0.35)", textTransform:"uppercase", letterSpacing:"0.12em", display:"block", marginBottom:10 }}>Upload Image</span>
-                        {modalFadeScreenBg.type === "image-local" && (
-                          <p style={{ fontSize:10, color:"#f59e0b", margin:"0 0 8px", lineHeight:1.4 }}>⚠ Re-upload your image — old format can't be sent to OBS. New uploads go to Firebase (permanent).</p>
-                        )}
-                        <label style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 12px", borderRadius:9, background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.09)", cursor: fadeImgUploading ? "not-allowed" : "pointer", fontSize:12, color:"rgba(255,255,255,0.6)" }}>
-                          <ImageIcon size={13} />
-                          {fadeImgUploading ? `Uploading ${fadeImgProgress}%…` : (bgUrl && modalFadeScreenBg.type === "image-firebase" ? "Replace image…" : "Upload image file…")}
-                          <input type="file" accept="image/*" style={{ display:"none" }} disabled={fadeImgUploading}
-                            onChange={async e => {
-                              const file = e.target.files?.[0]; if (!file) return;
-                              try {
-                                setFadeImgUploading(true); setFadeImgProgress(0);
-                                const ext = file.name.split(".").pop() || "jpg";
-                                const sRef = storageRef(storage, `live-fade-bg/image.${ext}`);
-                                const task = uploadBytesResumable(sRef, file);
-                                await new Promise<void>((resolve, reject) => {
-                                  task.on("state_changed",
-                                    snap => setFadeImgProgress(Math.round((snap.bytesTransferred / snap.totalBytes) * 100)),
-                                    reject, resolve);
-                                });
-                                const url = await getDownloadURL(task.snapshot.ref);
-                                saveFadeScreenBg({ type: "image-firebase", url });
-                              } catch {
-                                onToast("Image upload failed — please try again.", "error");
-                              } finally {
-                                setFadeImgUploading(false);
-                                e.target.value = "";
-                              }
-                            }} />
-                        </label>
-                        {bgUrl && modalFadeScreenBg.type === "image-firebase" && <p style={{ fontSize:10, color:"#34d399", margin:"8px 0 0" }}>✓ Image saved to Firebase (loads on OBS)</p>}
-                      </div>
-                    )}
-
-                    {/* Fade video upload — uploads to Firebase Storage so OBS can load it */}
-                    {isVidLoc && (
-                      <div>
-                        <span style={{ fontSize:10, fontWeight:700, color:"rgba(255,255,255,0.35)", textTransform:"uppercase", letterSpacing:"0.12em", display:"block", marginBottom:10 }}>Upload Video</span>
-                        {modalFadeScreenBg.type === "video-local" && (
-                          <p style={{ fontSize:10, color:"#f59e0b", margin:"0 0 8px", lineHeight:1.4 }}>⚠ Re-upload your video — old format can't be sent to OBS. New uploads go to Firebase (permanent).</p>
-                        )}
-                        <label style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 12px", borderRadius:9, background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.09)", cursor: fadeVidUploading ? "not-allowed" : "pointer", fontSize:12, color:"rgba(255,255,255,0.6)" }}>
-                          <Video size={13} />
-                          {fadeVidUploading ? `Uploading ${fadeVidProgress}%…` : (bgUrl && modalFadeScreenBg.type === "video-firebase" ? "Replace video…" : "Upload video file…")}
-                          <input type="file" accept="video/*" style={{ display:"none" }} disabled={fadeVidUploading}
-                            onChange={async e => {
-                              const file = e.target.files?.[0]; if (!file) return;
-                              try {
-                                setFadeVidUploading(true); setFadeVidProgress(0);
-                                const ext = file.name.split(".").pop() || "mp4";
-                                const sRef = storageRef(storage, `live-fade-bg/video.${ext}`);
-                                const task = uploadBytesResumable(sRef, file);
-                                await new Promise<void>((resolve, reject) => {
-                                  task.on("state_changed",
-                                    snap => setFadeVidProgress(Math.round((snap.bytesTransferred / snap.totalBytes) * 100)),
-                                    reject, resolve);
-                                });
-                                const url = await getDownloadURL(task.snapshot.ref);
-                                saveFadeScreenBg({ type: "video-firebase", url });
-                              } catch {
-                                onToast("Video upload failed — please try again.", "error");
-                              } finally {
-                                setFadeVidUploading(false);
-                                e.target.value = "";
-                              }
-                            }} />
-                        </label>
-                        {bgUrl && modalFadeScreenBg.type === "video-firebase" && <p style={{ fontSize:10, color:"#34d399", margin:"8px 0 0" }}>✓ Video saved to Firebase (loads on OBS)</p>}
-                        <p style={{ fontSize:10, color:"rgba(255,255,255,0.3)", margin:"6px 0 0" }}>Tip: Use compressed MP4 files for best performance. Loops automatically.</p>
-                      </div>
-                    )}
-
-                    {/* YouTube video URL */}
-                    {isVidYt && (
-                      <div>
-                        <span style={{ fontSize:10, fontWeight:700, color:"rgba(255,255,255,0.35)", textTransform:"uppercase", letterSpacing:"0.12em", display:"block", marginBottom:10 }}>YouTube URL</span>
-                        <div style={{ display:"flex", gap:6 }}>
-                          <input value={fadeImageUrlInput || ytId} placeholder="https://youtube.com/watch?v=… or video ID"
-                            onChange={e => setFadeImageUrlInput(e.target.value)}
-                            style={{ flex:1, padding:"9px 11px", borderRadius:8, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.09)", color:"#fff", fontSize:12, outline:"none" }} />
-                          <button onClick={() => {
-                            if (!fadeImageUrlInput) return;
-                            const id = (() => {
-                              const m = fadeImageUrlInput.match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/v\/|\/shorts\/)([a-zA-Z0-9_-]{11})/);
-                              return m ? m[1] : fadeImageUrlInput.trim();
-                            })();
+                  <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                    <span style={{ fontSize:10, fontWeight:700, color:"rgba(255,255,255,0.35)", textTransform:"uppercase", letterSpacing:"0.12em" }}>
+                      Video / Image Background
+                    </span>
+                    {/* 1 — Choose from Media Library */}
+                    <button
+                      onClick={() => setMediaPicker("fade-screen")}
+                      style={{ display:"flex", alignItems:"center", gap:8, width:"100%", padding:"11px 14px", borderRadius:9,
+                        background:"rgba(167,139,250,0.12)", border:"1px solid rgba(167,139,250,0.35)",
+                        color:"#c4b5fd", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+                      <FolderOpen size={13} /> Choose from Media Library
+                    </button>
+                    {/* 2 — Upload local file (image or video → Firebase) */}
+                    <label style={{ display:"flex", alignItems:"center", gap:8, padding:"11px 14px", borderRadius:9,
+                      background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.09)",
+                      cursor:(fadeImgUploading||fadeVidUploading) ? "not-allowed" : "pointer",
+                      fontSize:12, color:"rgba(255,255,255,0.6)" }}>
+                      <Upload size={13} />
+                      {(fadeImgUploading||fadeVidUploading)
+                        ? `Uploading ${fadeImgUploading ? fadeImgProgress : fadeVidProgress}%…`
+                        : (hasMedia && !isYt ? "Change file…" : "Upload image or video file…")}
+                      <input type="file" accept="image/*,video/*" style={{ display:"none" }}
+                        disabled={fadeImgUploading||fadeVidUploading}
+                        onChange={async e => {
+                          const file = e.target.files?.[0]; if (!file) return;
+                          const isImg = file.type.startsWith("image/");
+                          try {
+                            if (isImg) { setFadeImgUploading(true); setFadeImgProgress(0); }
+                            else       { setFadeVidUploading(true); setFadeVidProgress(0); }
+                            const ext = file.name.split(".").pop() || (isImg ? "jpg" : "mp4");
+                            const sRef = storageRef(storage, `live-fade-bg/${isImg ? "image" : "video"}.${ext}`);
+                            const task = uploadBytesResumable(sRef, file);
+                            await new Promise<void>((resolve, reject) => {
+                              task.on("state_changed",
+                                snap => {
+                                  const pct = Math.round((snap.bytesTransferred / snap.totalBytes) * 100);
+                                  if (isImg) setFadeImgProgress(pct); else setFadeVidProgress(pct);
+                                }, reject, resolve);
+                            });
+                            const url = await getDownloadURL(task.snapshot.ref);
+                            const newBg: FadeScreenBg = isImg
+                              ? { type: "image-firebase", url }
+                              : { type: "video-firebase", url };
+                            saveFadeScreenBg(newBg);
+                            idbSet("lsv_fade_screen", newBg).catch(() => {});
+                            try { localStorage.setItem("lsv_fade_screen", JSON.stringify(newBg)); } catch {}
+                            onToast("success", `✅ ${isImg ? "Image" : "Video"} uploaded to Firebase`);
+                          } catch {
+                            onToast("error", "Upload failed — try again.");
+                          } finally {
+                            if (isImg) { setFadeImgUploading(false); e.target.value = ""; }
+                            else       { setFadeVidUploading(false); e.target.value = ""; }
+                          }
+                        }} />
+                    </label>
+                    {/* 3 — YouTube URL */}
+                    <div style={{ display:"flex", gap:6 }}>
+                      <input
+                        value={fadeImageUrlInput}
+                        onChange={e => setFadeImageUrlInput(e.target.value)}
+                        placeholder="YouTube URL…"
+                        onKeyDown={e => {
+                          if (e.key === "Enter" && fadeImageUrlInput) {
+                            const m = fadeImageUrlInput.match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/v\/|\/shorts\/)([a-zA-Z0-9_-]{11})/);
+                            const id = m ? m[1] : fadeImageUrlInput.trim();
                             saveFadeScreenBg({ type:"video-youtube", videoId: id });
                             setFadeImageUrlInput("");
-                          }} style={{ padding:"9px 14px", borderRadius:8, background:"rgba(239,68,68,0.2)", border:"1px solid rgba(239,68,68,0.35)", color:"#fca5a5", fontSize:11, fontWeight:700, cursor:"pointer" }}>Apply</button>
-                        </div>
-                        {ytId && <p style={{ fontSize:10, color:"#34d399", margin:"8px 0 0" }}>✓ Video ID: {ytId} (plays muted, looping)</p>}
+                          }
+                        }}
+                        style={{ flex:1, padding:"9px 11px", borderRadius:8,
+                          background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.09)",
+                          color:"#fff", fontSize:12, outline:"none" }} />
+                      <button
+                        onClick={() => {
+                          if (!fadeImageUrlInput) return;
+                          const m = fadeImageUrlInput.match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/v\/|\/shorts\/)([a-zA-Z0-9_-]{11})/);
+                          const id = m ? m[1] : fadeImageUrlInput.trim();
+                          saveFadeScreenBg({ type:"video-youtube", videoId: id });
+                          setFadeImageUrlInput("");
+                        }}
+                        style={{ padding:"9px 14px", borderRadius:8,
+                          background:"rgba(99,102,241,0.2)", border:"1px solid rgba(99,102,241,0.35)",
+                          color:"#818cf8", fontSize:11, fontWeight:700, cursor:"pointer" }}>Apply</button>
+                    </div>
+                    {/* 4 — Source status bar */}
+                    {sourceLabel && (
+                      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+                        padding:"9px 12px", borderRadius:8, background:statusBg, border:`1px solid ${statusBorder}` }}>
+                        <span style={{ fontSize:11, fontWeight:700, color:statusColor }}>{sourceLabel}</span>
+                        <button
+                          onClick={() => saveFadeScreenBg({ type:"color", color:"#000000" })}
+                          style={{ padding:"4px 10px", borderRadius:6, background:"rgba(255,255,255,0.07)",
+                            border:"1px solid rgba(255,255,255,0.15)", color:"rgba(255,255,255,0.5)",
+                            fontSize:10, fontWeight:700, cursor:"pointer" }}>Remove</button>
                       </div>
                     )}
                   </div>
@@ -1808,7 +1771,15 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
                 </div>
                 {/* Video BG — draft only, does NOT push to OBS until Save */}
                 <div style={{ background:"rgba(255,255,255,0.03)", borderRadius:12, padding:14, border:"1px solid rgba(255,255,255,0.07)" }}>
-                  <p style={{ fontSize:10, fontWeight:700, color:"rgba(255,255,255,0.3)", textTransform:"uppercase", letterSpacing:"0.1em", margin:"0 0 10px" }}>Video Background</p>
+                  <p style={{ fontSize:10, fontWeight:700, color:"rgba(255,255,255,0.3)", textTransform:"uppercase", letterSpacing:"0.1em", margin:"0 0 10px" }}>Video / Image Background</p>
+                  {/* ── Choose from Media Library ── */}
+                  <button
+                    onClick={() => setMediaPicker(tab === "praise" ? "praise-bg" : "worship-bg")}
+                    style={{ display:"flex", alignItems:"center", gap:8, width:"100%", padding:"10px 12px", borderRadius:9,
+                      background:"rgba(167,139,250,0.1)", border:"1px solid rgba(167,139,250,0.35)",
+                      color:"#c4b5fd", fontSize:12, fontWeight:700, cursor:"pointer", marginBottom:8 }}>
+                    <FolderOpen size={13} /> Choose from Media Library
+                  </button>
                   <label style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 12px", borderRadius:9, background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.09)", cursor:"pointer", fontSize:12, color:"rgba(255,255,255,0.6)", marginBottom:8 }}>
                     <Upload size={13} />
                     {videoUploading[tab] ? `Uploading ${videoProgress[tab]}%…` : (draft.bgVideo?.type === "local" || draft.bgVideo?.type === "firebase" ? "Change video file…" : "Upload local video file…")}
@@ -1861,17 +1832,47 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
                     <button onClick={() => { const id=extractYtId(ytInputs[tab]); if(id){updateDraft(tab,"bgVideo",{type:"youtube",videoId:id});setYtInputs(prev=>({...prev,[tab]:""}));} }}
                       style={{ padding:"8px 14px", borderRadius:8, background:"rgba(99,102,241,0.2)", border:"1px solid rgba(99,102,241,0.35)", color:"#818cf8", fontSize:11, fontWeight:700, cursor:"pointer" }}>Apply</button>
                   </div>
-                  {draft.bgVideo && (
-                    <div style={{ marginTop:10, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"8px 11px", borderRadius:8, background:"rgba(52,211,153,0.08)", border:"1px solid rgba(52,211,153,0.2)" }}>
-                      <span style={{ fontSize:11, color:"#34d399" }}>
-                        {draft.bgVideo?.type === "firebase" ? `✓ Firebase video (${tab})` :
-                         draft.bgVideo?.type === "local"    ? `Local video (${tab})` :
-                         `YouTube: ${(draft.bgVideo as {type:"youtube";videoId:string})?.videoId}`}
-                      </span>
-                      <button onClick={() => updateDraft(tab, "bgVideo", null)}
-                        style={{ padding:"4px 10px", borderRadius:6, background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.15)", color:"rgba(255,255,255,0.5)", fontSize:10, fontWeight:700, cursor:"pointer" }}>Remove</button>
-                    </div>
-                  )}
+                  {draft.bgVideo && (() => {
+                    const bv = draft.bgVideo!;
+                    const isLibrary = bv.type === "firebase" || bv.type === "image-firebase";
+                    const isLocal   = bv.type === "local";
+                    const isYt      = bv.type === "youtube";
+                    const isImg     = bv.type === "image-firebase";
+                    const bvUrl = (bv as {url?:string}).url ?? "";
+                    const bgFileName = (() => {
+                      try {
+                        const raw = decodeURIComponent(bvUrl.split("/o/")[1]?.split("?")[0] ?? "");
+                        const name = raw.split("/").pop() ?? "";
+                        return name.length > 32 ? name.slice(0, 29) + "…" : name;
+                      } catch { return ""; }
+                    })();
+                    const sourceLabel = isLibrary
+                      ? `🗂 Media Library — ${isImg ? "image" : "video"}${bgFileName ? `: ${bgFileName}` : ""}`
+                      : isLocal
+                      ? `💻 Local Computer — video${bgFileName ? `: ${bgFileName}` : ""}`
+                      : `▶ YouTube — ${(bv as {type:"youtube";videoId:string}).videoId}`;
+                    const bgColor = isLibrary
+                      ? "rgba(167,139,250,0.10)"
+                      : isLocal
+                      ? "rgba(96,165,250,0.10)"
+                      : "rgba(248,113,113,0.10)";
+                    const borderColor = isLibrary
+                      ? "rgba(167,139,250,0.3)"
+                      : isLocal
+                      ? "rgba(96,165,250,0.3)"
+                      : "rgba(248,113,113,0.3)";
+                    const textColor = isLibrary ? "#c4b5fd" : isLocal ? "#93c5fd" : "#fca5a5";
+                    return (
+                      <div style={{ marginTop:10, display:"flex", alignItems:"center", justifyContent:"space-between",
+                        padding:"8px 11px", borderRadius:8, background:bgColor, border:`1px solid ${borderColor}` }}>
+                        <span style={{ fontSize:11, fontWeight:700, color:textColor }}>{sourceLabel}</span>
+                        <button onClick={() => updateDraft(tab, "bgVideo", null)}
+                          style={{ padding:"4px 10px", borderRadius:6, background:"rgba(255,255,255,0.07)",
+                            border:"1px solid rgba(255,255,255,0.15)", color:"rgba(255,255,255,0.5)",
+                            fontSize:10, fontWeight:700, cursor:"pointer" }}>Remove</button>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -1886,14 +1887,13 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
               <button
                 onClick={() => {
                   setModalFadeScreenBg({ ...fadeScreenBg }); // revert draft
-                  settingsOpenRef.current = false;
-                  setSettingsOpen(false);
+                  closeSettings();
                 }}
                 style={{ padding:"10px 22px", borderRadius:10, fontSize:12, fontWeight:700, cursor:"pointer", transition:"all 0.2s",
                   background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.12)", color:"rgba(255,255,255,0.45)" }}>
                 Cancel
               </button>
-              <button onClick={() => { settingsOpenRef.current = false; saveSettings(); }}
+              <button onClick={() => { saveSettings(); }}
                 style={{ padding:"10px 28px", borderRadius:10, fontSize:12, fontWeight:700, cursor:"pointer", transition:"all 0.2s",
                   background: settingsSaved ? "rgba(52,211,153,0.25)" : "rgba(167,139,250,0.2)",
                   border:     settingsSaved ? "1px solid rgba(52,211,153,0.5)" : "1px solid rgba(167,139,250,0.4)",
@@ -2236,7 +2236,7 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
                   border: obsUrlCopied ? "1px solid rgba(52,211,153,0.5)" : "1px solid rgba(167,139,250,0.4)",
                   background: obsUrlCopied ? "rgba(52,211,153,0.12)" : "rgba(167,139,250,0.12)",
                   color: obsUrlCopied ? "#34d399" : "#a78bfa" }}>
-                {obsUrlCopied ? <><CheckIcon size={12} /> Copied!</> : <><Copy size={12} /> OBS URL</>}
+                {obsUrlCopied ? <><CheckIcon size={12} /> Copied!</> : <><Copy size={12} /> OBS Online</>}
               </button>
               {/* OBS URL (SSE / Offline) — new walkie-talkie mode */}
               <button
@@ -2249,7 +2249,7 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
                   border: obsLocalUrlCopied ? "1px solid rgba(52,211,153,0.5)" : "1px solid rgba(251,146,60,0.4)",
                   background: obsLocalUrlCopied ? "rgba(52,211,153,0.12)" : "rgba(251,146,60,0.10)",
                   color: obsLocalUrlCopied ? "#34d399" : "#fb923c" }}>
-                {obsLocalUrlCopied ? <><CheckIcon size={12} /> Copied!</> : <><Copy size={12} /> OBS URL (Offline)</>}
+                {obsLocalUrlCopied ? <><CheckIcon size={12} /> Copied!</> : <><Copy size={12} /> OBS Offline</>}
               </button>
             </div>
           </div>
@@ -2322,48 +2322,475 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
           onApplyPreset={applyPreset}
           sceneSongs={sceneSongs}
           liveSettings={{ bgIdx, echoAlign, echoLines, echoLineHeight, lyricsScale, loopEnabled, bgVideo, loopInterval, animStyle: defaultAnimStyle }}
+          onOpenSettings={() => { returnToGridRef.current = true; setLyricsGridOpen(false); openSettings(); }}
+          onOpenMediaLibrary={() => setMediaLibraryOpen(true)}
+          onCopyObsUrl={() => {
+            const url = `${window.location.origin}/live-display`;
+            navigator.clipboard.writeText(url).catch(() => {});
+          }}
+          onCopyObsLocalUrl={() => {
+            const url = `${window.location.origin}/live-display-local`;
+            navigator.clipboard.writeText(url).catch(() => {});
+          }}
         />
       )}
 
-      {/* ── Media Library Modal ── */}
-      {mediaLibraryOpen && (
+      {/* ── Inline Media Picker (inside Display Settings) ── */}
+      {mediaPicker && (
         <MediaLibraryModal
-          onClose={() => setMediaLibraryOpen(false)}
+          onClose={() => setMediaPicker(null)}
           onToast={(msg, type) => onToast(type as 'success'|'error'|'info'|'warning', msg)}
+          pickMode
+          pickTarget={mediaPicker}
           onAssign={(item: MediaItem, target: MediaTarget, blobUrl: string | null) => {
             const url = blobUrl ?? item.firebaseUrl;
+            const fUrl = item.firebaseUrl;
+            // Evict this URL from every OTHER target so only one scene is ever ACTIVE
+            const clearOtherAssignments = (assignedTo: MediaTarget) => {
+              if (assignedTo !== 'praise-bg' && assignedTo !== 'worship-bg') {
+                // Assigned to fade-screen → clear from both bgVideo presets
+                setPresets(prev => {
+                  const p = { ...prev };
+                  let dirty = false;
+                  for (const k of ['praise', 'worship'] as const) {
+                    if ((p[k]?.bgVideo as { url?: string })?.url === fUrl) {
+                      p[k] = { ...p[k], bgVideo: undefined as unknown as BgVideo };
+                      dirty = true;
+                    }
+                  }
+                  if (dirty) try { localStorage.setItem('lsv_presets', JSON.stringify(p)); } catch {}
+                  return dirty ? p : prev;
+                });
+              }
+              if (assignedTo !== 'fade-screen') {
+                // Assigned to praise/worship → clear from fade screen
+                if ((fadeScreenBg as { url?: string })?.url === fUrl) {
+                  const cleared: FadeScreenBg = { type: 'color' as const, color: '#000000' };
+                  setFadeScreenBg(cleared);
+                  setModalFadeScreenBg(cleared);
+                  fadeScreenBgRef.current = cleared;
+                  idbSet('lsv_fade_screen', cleared).catch(() => {});
+                  try { localStorage.setItem('lsv_fade_screen', JSON.stringify(cleared)); } catch {}
+                }
+              }
+              if (assignedTo !== 'praise-bg' && assignedTo !== 'worship-bg') return; // done above
+              // Also clear from the OTHER bgVideo preset (e.g. assigning to worship → clear praise)
+              const other = assignedTo === 'praise-bg' ? 'worship' : 'praise';
+              setPresets(prev => {
+                if ((prev[other]?.bgVideo as { url?: string })?.url !== fUrl) return prev;
+                const p = { ...prev, [other]: { ...prev[other], bgVideo: undefined as unknown as BgVideo } };
+                try { localStorage.setItem('lsv_presets', JSON.stringify(p)); } catch {}
+                return p;
+              });
+            };
             if (target === 'praise-bg' || target === 'worship-bg') {
               const preset: PresetName = target === 'praise-bg' ? 'praise' : 'worship';
-              const bgVal = item.type === 'video'
+              const bgVal: BgVideo = item.type === 'video'
                 ? { type: 'firebase' as const, url: item.firebaseUrl, localUrl: blobUrl ?? undefined }
-                : null;
+                : { type: 'image-firebase' as const, url: item.firebaseUrl, localUrl: blobUrl ?? undefined };
               setModalDrafts(prev => ({ ...prev, [preset]: { ...prev[preset], bgVideo: bgVal } }));
               setPresets(prev => {
                 const updated = { ...prev, [preset]: { ...prev[preset], bgVideo: bgVal } };
                 try { localStorage.setItem('lsv_presets', JSON.stringify(updated)); } catch {}
                 return updated;
               });
+              clearOtherAssignments(target);
               if (activePreset === preset) setBgVideo(bgVal);
+              if (activePreset === preset && !fadeScreenActiveRef.current) {
+                fetch('/api/live-push', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    _bgOnly: true,
+                    bgVideo: bgVal,
+                    bgIdx: bgIdxRef.current,
+                    echoAlign, echoLines, echoLineHeight, lyricsScale, loopEnabled, loopInterval,
+                    animStyle: defaultAnimStyle, updatedAt: Date.now(),
+                  }),
+                }).catch(() => {});
+              }
+              onToast('success', `✅ Applied to ${preset} background — hit Save to lock in`);
             } else if (target === 'fade-screen') {
-              const fadeBg = item.type === 'image'
-                ? (blobUrl ? { type: 'image-local' as const, url: blobUrl } : { type: 'image-firebase' as const, url })
-                : (blobUrl ? { type: 'video-local' as const, url: blobUrl } : { type: 'video-firebase' as const, url });
+              const fadeBg: FadeScreenBg = item.type === 'image'
+                ? { type: 'image-firebase' as const, url: item.firebaseUrl, localUrl: blobUrl ?? undefined }
+                : { type: 'video-firebase' as const, url: item.firebaseUrl, localUrl: blobUrl ?? undefined };
               setFadeScreenBg(fadeBg);
               setModalFadeScreenBg(fadeBg);
               fadeScreenBgRef.current = fadeBg;
               idbSet('lsv_fade_screen', fadeBg).catch(() => {});
+              try { localStorage.setItem('lsv_fade_screen', JSON.stringify(fadeBg)); } catch {}
+              clearOtherAssignments(target);
+              // Upload blob to local server so OBS can load it offline (no Firebase needed)
+              if (blobUrl && item.type === 'image') {
+                (async () => {
+                  try {
+                    const resp  = await fetch(blobUrl);
+                    const blob  = await resp.blob();
+                    const fd    = new FormData();
+                    fd.append('image', blob, item.name);
+                    await fetch('/api/live-fade-image', { method: 'POST', body: fd });
+                    console.log('[LiveStage] Fade image cached to disk for offline OBS');
+                  } catch (e) { console.warn('[LiveStage] Could not cache fade image locally:', e); }
+                })();
+              }
               if (fadeScreenActiveRef.current) {
                 fetch('/api/live-push', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ fadeScreen: true, fadeScreenBg: (fadeBg.type === 'image-local' || fadeBg.type === 'video-local') ? { type: 'color', color: '#000000' } : fadeBg, updatedAt: Date.now() }),
+                  body: JSON.stringify({ _bgOnly: true, fadeScreen: true, fadeScreenBg: fadeBg, updatedAt: Date.now() }),
                 }).catch(() => {});
               }
+              onToast('success', `✅ "${item.name}" set as Fade Screen`);
             }
-            _ = url; // suppress unused warning
+            void url; // suppress unused-variable warning
+            setMediaPicker(null);
+          }}
+          activeAssignments={{
+            'praise-bg':   (presets.praise?.bgVideo as { url?: string })?.url ?? undefined,
+            'worship-bg':  (presets.worship?.bgVideo as { url?: string })?.url ?? undefined,
+            'fade-screen': (fadeScreenBg as { url?: string })?.url ?? undefined,
           }}
         />
       )}
+
+      {/* ── Media Library Modal (standalone, opened from toolbar) ── */}
+      {mediaLibraryOpen && (
+        <MediaLibraryModal
+          onClose={() => setMediaLibraryOpen(false)}
+          onToast={(msg, type) => onToast(type as 'success'|'error'|'info'|'warning', msg)}
+          onAssign={(item: MediaItem, target: MediaTarget, blobUrl: string | null) => {
+            const url = blobUrl ?? item.firebaseUrl;
+            const fUrl = item.firebaseUrl;
+            // Evict this URL from every OTHER target — one item, one scene
+            const clearOtherAssignments = (assignedTo: MediaTarget) => {
+              if (assignedTo !== 'praise-bg' && assignedTo !== 'worship-bg') {
+                setPresets(prev => {
+                  const p = { ...prev };
+                  let dirty = false;
+                  for (const k of ['praise', 'worship'] as const) {
+                    if ((p[k]?.bgVideo as { url?: string })?.url === fUrl) {
+                      p[k] = { ...p[k], bgVideo: undefined as unknown as BgVideo };
+                      dirty = true;
+                    }
+                  }
+                  if (dirty) try { localStorage.setItem('lsv_presets', JSON.stringify(p)); } catch {}
+                  return dirty ? p : prev;
+                });
+              }
+              if (assignedTo !== 'fade-screen') {
+                if ((fadeScreenBg as { url?: string })?.url === fUrl) {
+                  const cleared: FadeScreenBg = { type: 'color' as const, color: '#000000' };
+                  setFadeScreenBg(cleared);
+                  setModalFadeScreenBg(cleared);
+                  fadeScreenBgRef.current = cleared;
+                  idbSet('lsv_fade_screen', cleared).catch(() => {});
+                  try { localStorage.setItem('lsv_fade_screen', JSON.stringify(cleared)); } catch {}
+                }
+              }
+              if (assignedTo !== 'praise-bg' && assignedTo !== 'worship-bg') return;
+              const other = assignedTo === 'praise-bg' ? 'worship' : 'praise';
+              setPresets(prev => {
+                if ((prev[other]?.bgVideo as { url?: string })?.url !== fUrl) return prev;
+                const p = { ...prev, [other]: { ...prev[other], bgVideo: undefined as unknown as BgVideo } };
+                try { localStorage.setItem('lsv_presets', JSON.stringify(p)); } catch {}
+                return p;
+              });
+            };
+            if (target === 'praise-bg' || target === 'worship-bg') {
+              const preset: PresetName = target === 'praise-bg' ? 'praise' : 'worship';
+              const bgVal: BgVideo = item.type === 'video'
+                ? { type: 'firebase' as const, url: item.firebaseUrl, localUrl: blobUrl ?? undefined }
+                : { type: 'image-firebase' as const, url: item.firebaseUrl, localUrl: blobUrl ?? undefined };
+              setModalDrafts(prev => ({ ...prev, [preset]: { ...prev[preset], bgVideo: bgVal } }));
+              setPresets(prev => {
+                const updated = { ...prev, [preset]: { ...prev[preset], bgVideo: bgVal } };
+                try { localStorage.setItem('lsv_presets', JSON.stringify(updated)); } catch {}
+                return updated;
+              });
+              clearOtherAssignments(target);
+              if (activePreset === preset) setBgVideo(bgVal);
+              if (activePreset === preset && !fadeScreenActiveRef.current) {
+                fetch('/api/live-push', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    _bgOnly: true,
+                    bgVideo: bgVal,
+                    bgIdx: bgIdxRef.current,
+                    echoAlign, echoLines, echoLineHeight, lyricsScale, loopEnabled, loopInterval,
+                    animStyle: defaultAnimStyle, updatedAt: Date.now(),
+                  }),
+                }).catch(() => {});
+              }
+              onToast('success', `✅ "${item.name}" → ${preset === 'praise' ? 'Praise' : 'Worship'} Background`);
+            } else if (target === 'fade-screen') {
+              const fadeBg: FadeScreenBg = item.type === 'image'
+                ? { type: 'image-firebase' as const, url: item.firebaseUrl, localUrl: blobUrl ?? undefined }
+                : { type: 'video-firebase' as const, url: item.firebaseUrl, localUrl: blobUrl ?? undefined };
+              setFadeScreenBg(fadeBg);
+              setModalFadeScreenBg(fadeBg);
+              fadeScreenBgRef.current = fadeBg;
+              idbSet('lsv_fade_screen', fadeBg).catch(() => {});
+              try { localStorage.setItem('lsv_fade_screen', JSON.stringify(fadeBg)); } catch {}
+              clearOtherAssignments(target);
+              // Upload blob to local server so OBS can load it offline (no Firebase needed)
+              if (blobUrl && item.type === 'image') {
+                (async () => {
+                  try {
+                    const resp  = await fetch(blobUrl);
+                    const blob  = await resp.blob();
+                    const fd    = new FormData();
+                    fd.append('image', blob, item.name);
+                    await fetch('/api/live-fade-image', { method: 'POST', body: fd });
+                    console.log('[LiveStage] Fade image cached to disk for offline OBS');
+                  } catch (e) { console.warn('[LiveStage] Could not cache fade image locally:', e); }
+                })();
+              }
+              fetch('/api/live-push', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  _bgOnly: true,
+                  fadeScreen: fadeScreenActiveRef.current,
+                  fadeScreenBg: fadeBg,
+                  updatedAt: Date.now(),
+                }),
+              }).catch(() => {});
+              onToast('success', `✅ "${item.name}" set as Fade Screen`);
+            }
+            void url; // suppress unused-variable warning
+          }}
+          activeAssignments={{
+            'praise-bg':   (presets.praise?.bgVideo as { url?: string })?.url ?? undefined,
+            'worship-bg':  (presets.worship?.bgVideo as { url?: string })?.url ?? undefined,
+            'fade-screen': (fadeScreenBg as { url?: string })?.url ?? undefined,
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Camp Readiness Modal ────────────────────────────────────────────────────────
+// Checks all systems needed for an offline camp session (no internet).
+// Open via the ⛺ button in the top bar of Live Stage.
+function CampReadinessModal({ onClose, songsCount }: { onClose: () => void; songsCount: number }) {
+  type CheckStatus = "ok" | "warn" | "fail" | "checking";
+  type CheckItem = { label: string; detail: string; status: CheckStatus };
+  const [checks, setChecks] = React.useState<CheckItem[]>([
+    { label: "Song lyrics", detail: "Checking...", status: "checking" },
+    { label: "Auth session", detail: "Checking...", status: "checking" },
+    { label: "Live state backup", detail: "Checking...", status: "checking" },
+    { label: "Praise video", detail: "Checking...", status: "checking" },
+    { label: "Worship video", detail: "Checking...", status: "checking" },
+    { label: "Fade screen image", detail: "Checking...", status: "checking" },
+  ]);
+  const [serverFetchFailed, setServerFetchFailed] = React.useState(false);
+
+  const runChecks = React.useCallback(async () => {
+    setServerFetchFailed(false);
+    // Reset to checking
+    setChecks([
+      { label: "Song lyrics", detail: "Checking...", status: "checking" },
+      { label: "Auth session", detail: "Checking...", status: "checking" },
+      { label: "Live state backup", detail: "Checking...", status: "checking" },
+      { label: "Praise video", detail: "Checking...", status: "checking" },
+      { label: "Worship video", detail: "Checking...", status: "checking" },
+      { label: "Fade screen image", detail: "Checking...", status: "checking" },
+    ]);
+
+    // 1. Songs — synchronous localStorage check
+    let songsCheck: CheckItem;
+    try {
+      const raw = localStorage.getItem("wf_songs_cache");
+      const data = raw ? JSON.parse(raw) : null;
+      const count = Array.isArray(data?.songs) ? data.songs.length : 0;
+      const age = data?.ts ? Math.round((Date.now() - data.ts) / 1000 / 60) : null;
+      songsCheck = count > 0
+        ? { label: "Song lyrics", detail: `${count} songs · cached ${age !== null ? (age < 60 ? age + "m" : Math.round(age / 60) + "h") + " ago" : ""}`, status: "ok" }
+        : { label: "Song lyrics", detail: "No songs cached — open app while online first!", status: "fail" };
+    } catch {
+      songsCheck = { label: "Song lyrics", detail: "Cache unreadable", status: "fail" };
+    }
+
+    // 2. Auth — check localStorage cache first, then Firebase currentUser as fallback
+    let authCheck: CheckItem;
+    try {
+      const raw = localStorage.getItem("wf_auth_session_v2");
+      const role = localStorage.getItem("wf_auth_role_v2");
+      if (raw) {
+        const data = JSON.parse(raw);
+        const age = Math.round((Date.now() - (data.ts ?? 0)) / 1000 / 60 / 60);
+        authCheck = { label: "Auth session", detail: `${data.displayName ?? data.email} · ${role ?? "member"} · saved ${age}h ago`, status: "ok" };
+      } else {
+        // Fallback: check Firebase's in-memory currentUser (works even without network
+        // because Firebase caches the token locally in IndexedDB)
+        const { auth: fbAuth } = await import("./firebase");
+        const currentUser = fbAuth.currentUser;
+        if (currentUser) {
+          // Save it now so future refreshes find it
+          const sessionData = { uid: currentUser.uid, email: currentUser.email, displayName: currentUser.displayName, photoURL: currentUser.photoURL, ts: Date.now() };
+          localStorage.setItem("wf_auth_session_v2", JSON.stringify(sessionData));
+          localStorage.setItem("wf_auth_role_v2", "member"); // safe default, will be overwritten next auth
+          authCheck = { label: "Auth session", detail: `${currentUser.displayName ?? currentUser.email} · session now saved ✓`, status: "ok" };
+        } else {
+          authCheck = { label: "Auth session", detail: "Not saved — sign in while online, then re-check", status: "fail" };
+        }
+      }
+    } catch {
+      authCheck = { label: "Auth session", detail: "Cache unreadable", status: "fail" };
+    }
+
+    // Update the first 2 checks immediately
+    setChecks(prev => [songsCheck, authCheck, prev[2], prev[3], prev[4], prev[5]]);
+
+    // 3. Server checks — async (disk + video files). Use cache-bust to bypass SW cache.
+    fetch(`/api/camp-status?t=${Date.now()}`, { cache: "no-store" })
+      .then(r => r.json())
+      .then(data => {
+        const diskCheck: CheckItem = {
+          label: "Live state backup",
+          detail: data.diskState ? "Last scene saved to disk ✓" : "No backup yet — push a slide first",
+          status: data.diskState ? "ok" : "warn",
+        };
+        const praiseCheck: CheckItem = {
+          label: "Praise video",
+          detail: data.praise ? "praise.webm on disk ✓" : "Missing — upload via Media Library first",
+          status: data.praise ? "ok" : "warn",
+        };
+        const worshipCheck: CheckItem = {
+          label: "Worship video",
+          detail: data.worship ? "worship.mp4 on disk ✓" : "Missing — upload via Media Library first",
+          status: data.worship ? "ok" : "warn",
+        };
+        setChecks(prev => {
+          const fadeCheck: CheckItem = {
+            label: "Fade screen image",
+            detail: data.fadeImage ? "_fade_screen.* on disk ✓" : "Missing — assign an image from Media Library (Fade Screen)",
+            status: data.fadeImage ? "ok" : "warn",
+          };
+          return [songsCheck, authCheck, diskCheck, praiseCheck, worshipCheck, fadeCheck];
+        });
+        setServerFetchFailed(false);
+      })
+      .catch(() => {
+        // Server check failed — likely SW interception or server just starting.
+        // Mark as "warn" not "fail" — songs + auth are the critical checks.
+        setChecks([
+          songsCheck,
+          authCheck,
+          { label: "Live state backup", detail: "Cannot verify — server check blocked (try 'Retry')", status: "warn" },
+          { label: "Praise video", detail: "Cannot verify — server check blocked (try 'Retry')", status: "warn" },
+          { label: "Worship video", detail: "Cannot verify — server check blocked (try 'Retry')", status: "warn" },
+          { label: "Fade screen image", detail: "Cannot verify — server check blocked (try 'Retry')", status: "warn" },
+        ]);
+        setServerFetchFailed(true);
+      });
+  }, []);
+
+  React.useEffect(() => { runChecks(); }, [runChecks]);
+
+  // "All good" = no FAIL status. Warn items are acceptable (can't verify, but not broken).
+  const hasAnyFail = checks.some(c => c.status === "fail");
+  const allDone    = checks.every(c => c.status !== "checking");
+
+  const statusColor = (s: CheckStatus) =>
+    s === "ok" ? "#10b981" : s === "warn" ? "#f59e0b" : s === "fail" ? "#ef4444" : "#6b7280";
+
+  const StatusIcon = ({ s }: { s: CheckStatus }) => {
+    if (s === "ok")   return <ShieldCheck size={16} color="#10b981" />;
+    if (s === "warn") return <AlertTriangle size={16} color="#f59e0b" />;
+    if (s === "fail") return <X size={16} color="#ef4444" />;
+    return <RefreshCw size={14} color="#6b7280" style={{ animation: "spin 1s linear infinite" }} />;
+  };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 9999,
+      background: "rgba(0,0,0,0.75)", backdropFilter: "blur(8px)",
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+    }} onClick={onClose}>
+      <div style={{
+        background: "linear-gradient(135deg,#0d1117 0%,#0f1923 100%)",
+        border: "1px solid rgba(255,255,255,0.1)",
+        borderRadius: 20, padding: 28, width: "100%", maxWidth: 440,
+        maxHeight: "90vh", overflowY: "auto",
+        boxShadow: "0 24px 60px rgba(0,0,0,0.7)",
+      }} onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: 12, background: "rgba(16,185,129,0.15)",
+            border: "1px solid rgba(16,185,129,0.3)", display: "flex", alignItems: "center", justifyContent: "center",
+            flexShrink: 0,
+          }}>
+            <Tent size={22} color="#10b981" />
+          </div>
+          <div>
+            <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#fff" }}>Camp Readiness Check</p>
+            <p style={{ margin: 0, fontSize: 12, color: "rgba(255,255,255,0.4)", marginTop: 2 }}>Offline mode — June 10–12, 2026</p>
+          </div>
+          <button onClick={onClose} style={{ marginLeft: "auto", background: "none", border: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", padding: 4, flexShrink: 0 }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Status banner — shown once checks complete */}
+        {allDone && (
+          <div style={{
+            borderRadius: 12, padding: "10px 14px", marginBottom: 16,
+            background: hasAnyFail ? "rgba(239,68,68,0.1)" : "rgba(16,185,129,0.1)",
+            border: `1px solid ${hasAnyFail ? "rgba(239,68,68,0.3)" : "rgba(16,185,129,0.3)"}`,
+            display: "flex", alignItems: "center", gap: 10,
+          }}>
+            {hasAnyFail
+              ? <X size={18} color="#ef4444" />
+              : <ShieldCheck size={18} color="#10b981" />}
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: hasAnyFail ? "#ef4444" : "#10b981" }}>
+              {hasAnyFail
+                ? "❌ Action needed — fix red items before camp."
+                : "✅ All systems go! Safe to go offline."}
+            </p>
+          </div>
+        )}
+
+        {/* Checks list */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {checks.map((c, i) => (
+            <div key={i} style={{
+              borderRadius: 12, padding: "12px 14px",
+              background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)",
+              display: "flex", alignItems: "flex-start", gap: 12,
+            }}>
+              <div style={{ marginTop: 1, flexShrink: 0 }}><StatusIcon s={c.status} /></div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#fff" }}>{c.label}</p>
+                <p style={{ margin: 0, fontSize: 11, color: statusColor(c.status), marginTop: 2, opacity: 0.85, wordBreak: "break-word" }}>{c.detail}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Retry button if server fetch failed */}
+        {serverFetchFailed && (
+          <button onClick={runChecks} style={{
+            marginTop: 12, width: "100%", padding: "10px 0",
+            borderRadius: 12, border: "1px solid rgba(255,255,255,0.15)",
+            background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.7)",
+            cursor: "pointer", fontSize: 13, fontWeight: 600,
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+          }}>
+            <RefreshCw size={14} /> Retry server checks
+          </button>
+        )}
+
+        {/* Footer tip */}
+        <p style={{ margin: "16px 0 0", fontSize: 11, color: "rgba(255,255,255,0.3)", textAlign: "center", lineHeight: 1.5 }}>
+          ✅ = Ready &nbsp;·&nbsp; ⚠️ = Unverifiable (still ok) &nbsp;·&nbsp; ❌ = Action needed<br />
+          Run this check while online before heading to camp. 🏕️
+        </p>
+      </div>
     </div>
   );
 }

@@ -737,7 +737,7 @@ export default function SongsView({
   // ── Songs cache helpers + fetch ───────────────────────────────────────────
   // ── Cache helpers ───────────────────────────────────────────────────────────
   const CACHE_KEY = "wf_songs_cache";
-  const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes — matches App.tsx boot TTL
+  const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — matches App.tsx; stale songs beat empty dropdown offline
 
   const readCache = (): { songs: any[]; tags: any[] } | null => {
     try {
@@ -791,6 +791,21 @@ export default function SongsView({
         fetch("/api/tags", { signal: controller.signal }),
       ]);
 
+      // 503 = Firestore offline on server — do NOT parse/overwrite cache
+      if (!songsRes.ok) {
+        console.warn(`[SongsView] /api/songs returned ${songsRes.status} (offline?) — keeping existing songs`);
+        // If background refresh fails, silently do nothing — foreground songs are fine
+        if (!background) {
+          // Only load from cache if we have no songs at all
+          const raw = localStorage.getItem(CACHE_KEY);
+          if (raw) {
+            const { songs: cs, tags: ct } = JSON.parse(raw);
+            if (Array.isArray(cs) && cs.length > 0) { setAllSongs(cs); if (Array.isArray(ct)) setTags(ct); }
+          }
+        }
+        return;
+      }
+
       const [songsData, tagsData] = await Promise.all([
         songsRes.json(),
         tagsRes.json(),
@@ -799,21 +814,39 @@ export default function SongsView({
       const songs = Array.isArray(songsData) ? songsData : [];
       const tags = Array.isArray(tagsData) ? tagsData : [];
 
-      setAllSongs(songs);
-      setTags(tags);
-      writeCache(songs, tags);
+      // Never overwrite cache with empty — Firestore might have returned [] on error
+      if (songs.length > 0) {
+        setAllSongs(songs);
+        setTags(tags);
+        writeCache(songs, tags);
+      } else if (!background) {
+        // Empty result is suspicious — keep existing songs, try cache
+        console.warn("[SongsView] /api/songs returned [] — keeping existing songs");
+        const raw = localStorage.getItem(CACHE_KEY);
+        if (raw) {
+          const { songs: cs, tags: ct } = JSON.parse(raw);
+          if (Array.isArray(cs) && cs.length > 0) { setAllSongs(cs); if (Array.isArray(ct)) setTags(ct); }
+        }
+      }
     } catch (error: any) {
       if (error?.name !== "AbortError") {
-        console.error("Failed to load songs/tags", error);
-showToast("error", "Failed to load songs. Please refresh.");
-        if (!background) {
-          setAllSongs([]);
-          setTags([]);
+        console.warn("[SongsView] Songs fetch failed (offline?):", error?.message);
+        // On error, keep existing songs — do NOT clear them
+        if (!background && allSongs.length === 0) {
+          // Only show error if we have truly nothing to show
+          const raw = localStorage.getItem(CACHE_KEY);
+          if (raw) {
+            try {
+              const { songs: cs, tags: ct } = JSON.parse(raw);
+              if (Array.isArray(cs) && cs.length > 0) { setAllSongs(cs); if (Array.isArray(ct)) setTags(ct); }
+            } catch { /* noop */ }
+          }
         }
       }
     } finally {
       if (!controller.signal.aborted) setIsLoadingSongs(false);
     }
+
   }, []);
 
   // ── Fetch songs on mount ─────────────────────────────────────────────────

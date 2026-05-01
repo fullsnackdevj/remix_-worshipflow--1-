@@ -308,6 +308,152 @@ async function writeNotification(firestore: admin.firestore.Firestore, payload: 
 
 let liveState: Record<string, unknown> = { visible: false, lines: [], songTitle: "", animStyle: "word-fade", updatedAt: 0 };
 const sseClients = new Set<import("express").Response>();
+// Fade screen image disk cache — declared here so injectLocalUrls() can reference them at startup
+const FADE_IMAGE_DIR = path.join(__dirname, "live-bg-videos");
+let fadeBgFilePath: string | null = null;
+let fadeBgMime: string = "image/jpeg";
+
+// ── liveState disk persistence ────────────────────────────────────────────────
+// Saves liveState to a JSON file after every push so OBS backgrounds survive
+// server restarts WITHOUT internet (Firestore unreachable at campsite).
+// Priority on startup: Firestore (fresh) > disk file (stale-ok) > default.
+// Stored in .wf-cache/ (hidden dir) so Vite's HMR watcher never picks it up
+// and triggers infinite page reloads.
+const CACHE_DIR      = path.join(__dirname, ".wf-cache");
+const LIVE_STATE_FILE = path.join(CACHE_DIR, "liveState.json");
+// Ensure the cache dir exists
+try { if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true }); } catch { /* noop */ }
+
+function saveLiveStateToDisk() {
+  try { fs.writeFileSync(LIVE_STATE_FILE, JSON.stringify(liveState), "utf-8"); } catch { /* noop */ }
+}
+function loadLiveStateFromDisk(): Record<string, unknown> | null {
+  try {
+    if (!fs.existsSync(LIVE_STATE_FILE)) return null;
+    const raw = fs.readFileSync(LIVE_STATE_FILE, "utf-8");
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    // Only load if saved within 7 days (one week — covers camp scenarios)
+    const age = Date.now() - ((parsed.updatedAt as number) ?? 0);
+    if (age > 7 * 24 * 60 * 60 * 1000) { console.log("[LiveStage] Disk state too old (>7d), ignoring"); return null; }
+    return parsed;
+  } catch { return null; }
+}
+
+// ── Hydrate liveState from Firestore on startup ───────────────────────────────
+// Without this, offline OBS (/live-display-local) always starts with an empty
+// liveState and shows a black screen until the operator pushes a slide.
+// With this, the last saved scene (bgVideo, bgIdx, fadeScreenBg, etc.) is
+// pre-loaded as soon as the dev server starts — no operator action needed.
+
+// Helper: inject localUrl into bgVideo AND fadeScreenBg so OBS can serve
+// media from local disk in offline mode without hitting Firebase Storage.
+function injectLocalUrls(state: Record<string, unknown>): Record<string, unknown> {
+  let result = { ...state };
+
+  // ── bgVideo injection ────────────────────────────────────────────────────────
+  const bv = result.bgVideo as Record<string, unknown> | null | undefined;
+  if (bv && (bv.type === "firebase" || bv.type === "local")) {
+    const alreadyOk = bv.localUrl && !(bv.localUrl as string).startsWith("blob:");
+    if (!alreadyOk) {
+      const firebaseUrl = (bv.url as string) ?? "";
+      let injected = false;
+      for (const preset of Object.keys(liveBgMeta)) {
+        const meta = liveBgMeta[preset];
+        if (!meta || !fs.existsSync(meta.filePath)) continue;
+        if (firebaseUrl.toLowerCase().includes(preset.toLowerCase())) {
+          result = { ...result, bgVideo: { ...bv, localUrl: `/api/live-bg-video/${preset}` } };
+          injected = true;
+          break;
+        }
+      }
+      if (!injected) {
+        // Fallback: if only one preset file exists, use it
+        const presets = Object.keys(liveBgMeta).filter(p => liveBgMeta[p] && fs.existsSync(liveBgMeta[p]!.filePath));
+        if (presets.length === 1) {
+          result = { ...result, bgVideo: { ...bv, localUrl: `/api/live-bg-video/${presets[0]}` } };
+        }
+      }
+    }
+  }
+
+  // ── fadeScreenBg injection — inject localUrl if a local disk copy exists ─────
+  const fb = result.fadeScreenBg as Record<string, unknown> | null | undefined;
+  if (fb && (fb.type === "image-firebase" || fb.type === "video-firebase")) {
+    // Only inject if no valid localUrl already present (not a blob: URL)
+    const alreadyOk = fb.localUrl && !(fb.localUrl as string).startsWith("blob:");
+    if (!alreadyOk && fadeBgFilePath && fs.existsSync(fadeBgFilePath)) {
+      result = { ...result, fadeScreenBg: { ...fb, localUrl: "/api/live-fade-image" } };
+    }
+  }
+
+  return result;
+}
+
+(async () => {
+  try {
+    const firestore = getDb();
+    if (!firestore) return;
+    const doc = await firestore.collection("live_state").doc("current").get();
+    if (doc.exists) {
+      const saved = doc.data() as Record<string, unknown>;
+      const STALE_MS = 24 * 60 * 60 * 1000;
+      const age = Date.now() - ((saved.updatedAt as number) ?? 0);
+      if (age < STALE_MS) {
+        liveState = { ...saved, visible: false, lines: [], _fadeOnly: false };
+        liveState = injectLocalUrls(liveState);
+        console.log("[LiveStage] liveState hydrated from Firestore (background pre-loaded for offline OBS)");
+        // ── Auto-download fade screen image if not yet on disk ────────────────
+        // This one-time backfill ensures the image is ready for offline use
+        // the next time the dev server starts without internet.
+        const fb = saved.fadeScreenBg as Record<string, unknown> | null | undefined;
+        if (fb && fb.type === "image-firebase" && fb.url && !fadeBgFilePath) {
+          const fbUrl = fb.url as string;
+          try {
+            const { default: https } = await import("https");
+            const { default: http  } = await import("http");
+            const protocol = fbUrl.startsWith("https") ? https : http;
+            await new Promise<void>((resolve, reject) => {
+              protocol.get(fbUrl, (res2) => {
+                if (res2.statusCode !== 200) { reject(new Error(`HTTP ${res2.statusCode}`)); return; }
+                const mime2 = res2.headers["content-type"] ?? "image/jpeg";
+                const ext2  = mime2.includes("png") ? "png" : mime2.includes("webp") ? "webp" : "jpg";
+                const chunks: Buffer[] = [];
+                res2.on("data", (c: Buffer) => chunks.push(c));
+                res2.on("end", () => {
+                  const buf = Buffer.concat(chunks);
+                  if (fadeBgFilePath) { try { fs.unlinkSync(fadeBgFilePath); } catch {} }
+                  const fp  = path.join(FADE_IMAGE_DIR, `_fade_screen.${ext2}`);
+                  fs.writeFileSync(fp, buf);
+                  fadeBgFilePath = fp;
+                  fadeBgMime     = mime2;
+                  // Re-inject so the already-hydrated liveState also gets localUrl
+                  liveState = injectLocalUrls(liveState);
+                  console.log(`[FadeBG] Auto-downloaded from Firebase → ${fp} (${(buf.length/1024).toFixed(0)} KB)`);
+                  resolve();
+                });
+                res2.on("error", reject);
+              }).on("error", reject);
+            });
+          } catch (dlErr: unknown) {
+            const m = dlErr instanceof Error ? dlErr.message : String(dlErr);
+            console.warn(`[FadeBG] Auto-download skipped (offline?): ${m.slice(0, 80)}`);
+          }
+        }
+      }
+    }
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message.split("\n")[0] : String(e);
+    console.warn(`[LiveStage] Firestore hydration skipped (offline?): ${msg.slice(0, 80)}`);
+    // ✅ OFFLINE FALLBACK: load from disk file saved by previous session
+    const diskState = loadLiveStateFromDisk();
+    if (diskState) {
+      liveState = { ...diskState, visible: false, lines: [], _fadeOnly: false };
+      liveState = injectLocalUrls(liveState);
+      console.log("[LiveStage] liveState restored from disk (offline mode — campsite ready ✅)");
+    }
+  }
+})();
+
 
 // Monotonic push counter — guarantees every push gets a unique updatedAt key even
 // when multiple pushes arrive in the same millisecond (rapid song switching offline).
@@ -325,9 +471,18 @@ function uniqueNow(): number {
 // POST /api/live-push — controller writes the active slide
 // Writes to Firestore (triggers onSnapshot in LiveDisplayPage) AND broadcasts SSE
 app.post("/api/live-push", async (req, res) => {
-  liveState = { ...req.body, updatedAt: uniqueNow() };
+  // _bgOnly flag: only background-related fields are being updated (e.g. Media Library assign).
+  // Merge into existing state so song/lyrics/visible are NOT wiped out.
+  // Normal slide/clear pushes do NOT set _bgOnly and fully replace state (old behaviour).
+  const { _bgOnly, ...body } = req.body as Record<string, unknown>;
+  if (_bgOnly) {
+    liveState = { ...liveState, ...body, updatedAt: uniqueNow() };
+  } else {
+    liveState = { ...body, updatedAt: uniqueNow() };
+  }
   // 1. Broadcast to SSE clients (instant local push — walkie-talkie mode)
-  const payload = `data: ${JSON.stringify(liveState)}\n\n`;
+  const broadcastState = injectLocalUrls(liveState);
+  const payload = `data: ${JSON.stringify(broadcastState)}\n\n`;
   sseClients.forEach(client => {
     try {
       client.write(payload);
@@ -335,7 +490,9 @@ app.post("/api/live-push", async (req, res) => {
       if (typeof (client as any).flush === "function") (client as any).flush();
     } catch { sseClients.delete(client); }
   });
-  // 2. Write to Firestore — triggers onSnapshot in LiveDisplayPage (online mode)
+  // 2. Persist to disk immediately — guarantees OBS backgrounds survive server restart offline
+  saveLiveStateToDisk();
+  // 3. Write to Firestore — triggers onSnapshot in LiveDisplayPage (online mode)
   try {
     const firestore = getDb();
     if (firestore) {
@@ -349,6 +506,23 @@ app.post("/api/live-push", async (req, res) => {
   res.json({ ok: true, clients: sseClients.size });
 });
 
+// GET /api/camp-status — Camp Readiness check (used by the ⛺ modal in LiveStageView)
+// Returns whether each required offline resource exists on disk.
+app.get("/api/camp-status", (_req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Cache-Control", "no-cache");
+  const diskStateExists = fs.existsSync(LIVE_STATE_FILE);
+  const praiseFile  = liveBgMeta["praise"]?.filePath;
+  const worshipFile = liveBgMeta["worship"]?.filePath;
+  res.json({
+    diskState:  diskStateExists,
+    praise:     praiseFile  ? fs.existsSync(praiseFile)  : false,
+    worship:    worshipFile ? fs.existsSync(worshipFile) : false,
+    fadeImage:  fadeBgFilePath ? fs.existsSync(fadeBgFilePath) : false,
+  });
+
+});
+
 // GET /api/live-sse — OBS Browser Source subscribes here
 app.get("/api/live-sse", (req, res) => {
   res.setHeader("Content-Type",  "text/event-stream");
@@ -359,7 +533,8 @@ app.get("/api/live-sse", (req, res) => {
   res.flushHeaders(); // send headers immediately before any data
 
   // Send current state immediately so OBS has something on connect
-  const initPayload = `data: ${JSON.stringify(liveState)}\n\n`;
+  const initState = injectLocalUrls(liveState);
+  const initPayload = `data: ${JSON.stringify(initState)}\n\n`;
   res.write(initPayload);
   // Force-flush: compression middleware (and nginx) may buffer otherwise
   if (typeof (res as any).flush === "function") (res as any).flush();
@@ -380,7 +555,7 @@ app.get("/api/live-sse", (req, res) => {
 app.get("/api/live-state", (_req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Cache-Control", "no-cache, no-store");
-  res.json(liveState);
+  res.json(injectLocalUrls(liveState));
 });
 
 // ── Live background video — per-preset DISK storage ─────────────────────────────
@@ -453,6 +628,59 @@ app.delete("/api/live-bg-video/:preset", (req, res) => {
 app.post("/api/live-bg-video", (_req, res) => res.status(410).json({ error: "Use /api/live-bg-video/:preset" }));
 app.get("/api/live-bg-video",  (_req, res) => res.status(410).json({ error: "Use /api/live-bg-video/:preset" }));
 app.delete("/api/live-bg-video", (_req, res) => res.json({ ok: true }));
+
+// ── Fade Screen image — local disk storage ────────────────────────────────────
+// Saves the fade screen image to disk so OBS can load it offline.
+// POST /api/live-fade-image — controller uploads the blob; server saves to disk
+// GET  /api/live-fade-image — OBS/live-display-local reads it offline
+// DELETE /api/live-fade-image — clears the cached image
+// (FADE_IMAGE_DIR, fadeBgFilePath, fadeBgMime are declared above near liveState so injectLocalUrls can use them)
+// Load any existing fade image on startup
+(() => {
+  try {
+    const files = fs.readdirSync(FADE_IMAGE_DIR);
+    for (const file of files) {
+      const m = file.match(/^_fade_screen\.(jpg|jpeg|png|webp|gif)$/i);
+      if (!m) continue;
+      fadeBgFilePath = path.join(FADE_IMAGE_DIR, file);
+      const ext = m[1].toLowerCase();
+      fadeBgMime = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : ext === "gif" ? "image/gif" : "image/jpeg";
+      console.log(`[FadeBG] Loaded from disk: ${file}`);
+      break;
+    }
+  } catch { /* ignore */ }
+})();
+
+app.post("/api/live-fade-image", multer({ storage: multer.memoryStorage(), limits: { fileSize: 30 * 1024 * 1024 } }).single("image"), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No file" });
+  const mime = req.file.mimetype || "image/jpeg";
+  const ext  = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : mime.includes("gif") ? "gif" : "jpg";
+  // Remove old fade image if present
+  if (fadeBgFilePath) { try { fs.unlinkSync(fadeBgFilePath); } catch { /* ignore */ } }
+  const filePath = path.join(FADE_IMAGE_DIR, `_fade_screen.${ext}`);
+  fs.writeFileSync(filePath, req.file.buffer);
+  fadeBgFilePath = filePath;
+  fadeBgMime     = mime;
+  console.log(`[FadeBG] Saved to disk: ${req.file.originalname} (${(req.file.size / 1024).toFixed(0)} KB) → ${filePath}`);
+  res.json({ ok: true, url: "/api/live-fade-image" });
+});
+
+app.get("/api/live-fade-image", (_req, res) => {
+  if (!fadeBgFilePath || !fs.existsSync(fadeBgFilePath)) {
+    return res.status(404).json({ error: "No fade screen image cached on disk" });
+  }
+  const stat = fs.statSync(fadeBgFilePath);
+  res.setHeader("Content-Type", fadeBgMime);
+  res.setHeader("Content-Length", stat.size);
+  res.setHeader("Cache-Control", "public, max-age=86400");
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  fs.createReadStream(fadeBgFilePath).pipe(res);
+});
+
+app.delete("/api/live-fade-image", (_req, res) => {
+  if (fadeBgFilePath) { try { fs.unlinkSync(fadeBgFilePath); } catch { /* ignore */ } fadeBgFilePath = null; }
+  res.json({ ok: true });
+});
 
 // GET /api/playlist-manifest/:slug — dynamic PWA manifest for public playlist pages
 // iOS Safari rejects blob: URLs for manifests; this real endpoint returns a manifest
@@ -1260,10 +1488,13 @@ app.get("/api/songs", async (req, res) => {
 
     res.json(songs);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Failed to fetch songs" });
+    // Return 503 so the client knows this is a transient/offline error and can
+    // fall back to its localStorage cache instead of overwriting with empty results.
+    console.warn("[GET /api/songs] Firestore unavailable (offline?):", (error as Error).message);
+    res.status(503).json({ error: "Firestore unavailable — offline?", offline: true });
   }
 });
+
 
 app.get("/api/songs/:id", async (req, res) => {
   const firestore = getDb();
@@ -1541,10 +1772,11 @@ app.get("/api/tags", async (req, res) => {
 
     res.json(tags);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Failed to fetch tags" });
+    console.warn("[GET /api/tags] Firestore unavailable (offline?):", (error as Error).message);
+    res.status(503).json({ error: "Firestore unavailable — offline?", offline: true });
   }
 });
+
 
 app.post("/api/tags", async (req, res) => {
   const firestore = getDb();

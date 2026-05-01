@@ -32,6 +32,12 @@ try { sessionStorage.setItem('wf_visited', '1'); } catch { /* noop */ }
 if ('serviceWorker' in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
 
+  // Debounce guard: prevent reload loop when multiple Vite rebuilds happen in rapid
+  // succession (e.g. after saving several files). Only reload once per 30 seconds.
+  const SW_RELOAD_KEY = 'wf_sw_last_reload';
+  const lastReload = parseInt(sessionStorage.getItem(SW_RELOAD_KEY) ?? '0', 10);
+  const reloadTooRecent = Date.now() - lastReload < 30_000; // 30 second cooldown
+
   navigator.serviceWorker.register('/sw.js').then(reg => {
     // Already a new SW waiting — activate it now
     if (reg.waiting) {
@@ -50,14 +56,18 @@ if ('serviceWorker' in navigator) {
     });
   }).catch(() => { /* SW registration failed silently */ });
 
-  // Reload to pick up new assets — but ONLY if a previous SW was already active.
-  // First-ever install: hadController=false → skip reload (app already has latest assets).
-  // Version update: hadController=true → reload to flush old cached chunks.
+  // Reload to pick up new assets — but ONLY if a previous SW was already active
+  // AND we haven't reloaded too recently (prevents infinite splash loop).
   let refreshing = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (hadController && !refreshing) { refreshing = true; window.location.reload(); }
+    if (hadController && !refreshing && !reloadTooRecent) {
+      refreshing = true;
+      try { sessionStorage.setItem(SW_RELOAD_KEY, String(Date.now())); } catch { /* noop */ }
+      window.location.reload();
+    }
   });
 }
+
 
 
 function Root() {
