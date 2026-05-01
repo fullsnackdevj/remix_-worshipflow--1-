@@ -2,35 +2,21 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ── Chat channels ──────────────────────────────────────────────────────────
-    // Allow authenticated users to read messages directly via onSnapshot.
-    // All writes (send, edit, delete, pin, react) go through the server
-    // Admin SDK which bypasses these rules entirely.
     match /chat_channels/{channelId}/messages/{msgId} {
       allow read: if request.auth != null;
       allow write: if false;
     }
 
-    // ── Events module ──────────────────────────────────────────────────────────
-    // Admin creates events (client-side), public reads for registration page.
     match /events/{eventId} {
       allow read:  if true;
       allow write: if request.auth != null;
     }
-    // Registrants: public create (no login needed), auth'd read & update (admin).
-    // allow list (query) without auth so the public registration page can do
-    // the duplicate-phone check via getDocs + where("phone", "==", ...)
     match /events/{eventId}/registrants/{registrantId} {
-      allow get:    if request.auth != null;   // individual doc — admin only
-      allow list:   if true;                   // query — needed by public dup-check
+      allow get:    if request.auth != null;
+      allow list:   if true;
       allow create: if true;
       allow update: if request.auth != null;
     }
-    // Contributions (internal events):
-    // - read:   true — collector & member form need to read
-    // - create: true — members self-register via public form link (no login required)
-    // - update: true — collector marks paid/unpaid via the secure collector link
-    // - delete: auth only — admin only
     match /events/{eventId}/contributions/{memberId} {
       allow read:   if true;
       allow create: if true;
@@ -38,42 +24,33 @@ service cloud.firestore {
       allow delete: if request.auth != null;
     }
 
-    // ── Bible module — user-owned data ────────────────────────────────────────
-    // My Verses (single aggregated doc per user)
     match /users/{userId}/bibleCollection/{docId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
-    // My Devotions (one doc per devotion entry)
     match /users/{userId}/bibleDevotions/{devotionId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // ── Shared Org Playlists — visible to all authenticated members ────────────
-    // All members see the same playlists. App-level RBAC controls write access.
     match /wfPlaylists/{playlistId} {
       allow read, write: if request.auth != null;
     }
 
-    // ── Shared Playlists — public read, auth'd write (via server only) ─────────
-    // Anyone with the slug link can read the playlist data.
-    // All writes go through the Netlify Admin SDK — client write is denied.
     match /sharedPlaylists/{slug} {
       allow read:  if true;
       allow write: if false;
     }
 
-    // ── Live Stage display state — public read, server-only write ──────────────
-    // OBS Browser Source (/live-display) has no auth session and uses an
-    // onSnapshot listener for zero-latency real-time updates.
-    // Writes go through /api/live-push (Netlify Admin SDK) — client write denied.
     match /live_state/{doc} {
       allow read:  if true;
       allow write: if false;
     }
 
-    // ── All other collections ──────────────────────────────────────────────────
-    // All other reads/writes go through Netlify serverless functions
-    // (server-side Admin SDK) — deny direct client access.
+    // ── Media Library — auth users read/write, OBS can read (no auth) ──────────
+    match /media_library/{itemId} {
+      allow read:  if true;
+      allow write: if request.auth != null;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

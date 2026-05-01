@@ -18,6 +18,7 @@ const InternalContributionPage = lazy(() => import('./InternalContributionPage.t
 const InternalMemberFormPage   = lazy(() => import('./InternalMemberFormPage.tsx'));
 const PublicPlaylistPage       = lazy(() => import('./PublicPlaylistPage.tsx'));
 const LiveDisplayPage          = lazy(() => import('./LiveDisplayPage.tsx'));
+const LiveDisplayLocalPage     = lazy(() => import('./LiveDisplayLocalPage.tsx'));
 
 // Returning users skip the full splash — first visit gets brand impression, repeat visits feel instant
 const isReturning = (() => { try { return !!sessionStorage.getItem('wf_visited'); } catch { return false; } })();
@@ -102,7 +103,15 @@ function Root() {
   const publicPlaylistSlug = pathPlayMatch?.[1] ?? null;
 
   // ── Public live-display: /live-display (no auth required, used by OBS) ──
-  const isLiveDisplay = pathname === '/live-display';
+  const isLiveDisplay      = pathname === '/live-display';
+  const isLiveDisplayLocal = pathname === '/live-display-local';
+  if (isLiveDisplayLocal) {
+    return (
+      <Suspense fallback={<div style={{ background: 'transparent', width: '100vw', height: '100vh' }} />}>
+        <LiveDisplayLocalPage />
+      </Suspense>
+    );
+  }
   if (isLiveDisplay) {
     return (
       <Suspense fallback={<div style={{ background: 'transparent', width: '100vw', height: '100vh' }} />}>

@@ -35,7 +35,7 @@ interface LiveState {
   lyricsScale?: number;
   loopEnabled?: boolean;
   loopInterval?: number;
-  bgVideo?: { type: "local"; url: string } | { type: "firebase"; url: string } | { type: "youtube"; videoId: string } | null;
+  bgVideo?: { type: "local"; url: string } | { type: "firebase"; url: string; localUrl?: string } | { type: "youtube"; videoId: string } | null;
   transitioning?: boolean;
   fadeScreen?: boolean;
   fadeScreenBg?: { type: "color"; color: string } | { type: "image-url"; url: string } | { type: "image-local"; url: string } | { type: "image-firebase"; url: string } | { type: "video-local"; url: string } | { type: "video-firebase"; url: string } | { type: "video-youtube"; videoId: string };
@@ -43,11 +43,12 @@ interface LiveState {
 }
 
 // ── Background presets — mirrors BG_PRESETS in LiveStageView ─────────────────
+// ⚠️ MUST match BG_PRESETS in LiveStageView.tsx exactly — index maps to bgIdx in payload
 const BG_PRESETS = [
-  "linear-gradient(135deg,#0a0a14 0%,#1a1a2e 50%,#0d1a2e 100%)",
-  "linear-gradient(135deg,#0d0014 0%,#1a003a 60%,#000814 100%)",
-  "linear-gradient(135deg,#140a00 0%,#2e1500 60%,#0a0a00 100%)",
-  "#000",
+  "linear-gradient(135deg,#0a0a14 0%,#1a0a2e 50%,#0d1a2e 100%)", // Stage Dark
+  "linear-gradient(135deg,#0d0014 0%,#1a003a 60%,#000814 100%)", // Deep Purple
+  "linear-gradient(135deg,#140a00 0%,#2e1500 60%,#0a0a00 100%)", // Warm Night
+  "#000",                                                          // Pure Black
 ];
 
 // ── Sacred words — always render bigger (because it's God) ─────────────────
@@ -167,6 +168,9 @@ export default function LiveDisplayPage() {
   // Keep last non-null bg so the image stays mounted during the CSS fade-out transition.
   // Without this the <img> unmounts instantly when fadeScreen becomes null, showing a black flash.
   const prevFadeScreenRef = useRef<LiveState["fadeScreenBg"] | null>(null);
+  // Ignore fadeScreen on the FIRST state received — it's stale from a previous
+  // session. Fade should only activate from a live controller push this session.
+  const isFirstStateRef = useRef(true);
 
   const wrapperRef  = useRef<HTMLDivElement>(null);
   const lyricsRef   = useRef<HTMLDivElement>(null);
@@ -193,76 +197,154 @@ export default function LiveDisplayPage() {
   // Font size: exactly 10% of box width — matches controller formula
   const fs = box.w > 0 ? Math.round(box.w * 0.10) : 192; // 192 ≈ 10% of 1920
 
-  // ── Real-time Firestore listener — replaces 250ms HTTP polling ─────────────
-  // onSnapshot uses a persistent WebSocket — updates arrive in ~50ms.
-  // Firestore rules allow public read on live_state/* (no auth needed for OBS).
+  // ── Real-time Firestore listener + offline polling fallback ───────────────
+  // PRIMARY:  Firestore onSnapshot (online — instant push, ~50ms latency).
+  // FALLBACK: Poll /api/live-state every 300ms (reads server.ts in-memory state).
+  //           Works 100% offline — no internet needed, just localhost:3000.
+  //
+  // ⚠️ ROOT CAUSE FIX: Firebase SDK with persistentLocalCache NEVER calls the
+  //   onSnapshot error callback when internet is cut — it silently reads from
+  //   IndexedDB and waits. We MUST use navigator.onLine + window events instead.
   useEffect(() => {
+    let fallbackInterval: ReturnType<typeof setInterval> | null = null;
+    let firestoreOnline = navigator.onLine; // start with current real network status
+
+    // Shared handler — both Firestore and the fallback call this
+    const applyState = (data: LiveState) => {
+      const key = `${data.updatedAt}`;
+      if (key === lastKeyRef.current) return;
+      lastKeyRef.current = key;
+
+      if (data.transitioning) { setFadeBlack(true); return; }
+      setFadeBlack(false);
+
+      // Strip fadeScreen on first state — prevents stale overlay from blocking OBS on load
+      const suppressFade = isFirstStateRef.current;
+      isFirstStateRef.current = false;
+
+      if (!suppressFade && data.fadeScreen) {
+        const bg = data.fadeScreenBg ?? { type: "color", color: "#000" };
+        prevFadeScreenRef.current = bg;
+        setFadeScreen(bg);
+      } else {
+        setFadeScreen(null);
+      }
+
+      if (data._fadeOnly) return;
+
+      const lyricsEl = lyricsRef.current;
+      if (!lyricsEl) { setLive(data); return; }
+
+      if (loopCleanupRef.current) { loopCleanupRef.current(); loopCleanupRef.current = null; }
+      if (rafRef.current !== null) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+      gsap.killTweensOf(lyricsEl);
+      const allChildren = Array.from(lyricsEl.querySelectorAll("*"));
+      gsap.killTweensOf(allChildren);
+      gsap.set(allChildren, { clearProps: "opacity,transform,filter,scale" });
+
+      if (data.visible && data.lines.length > 0) {
+        animatingRef.current = true;
+        gsap.to(lyricsEl, {
+          opacity: 0, duration: 0.2, ease: "power2.in",
+          onComplete: () => {
+            setLive(data);
+            rafRef.current = requestAnimationFrame(() =>
+              requestAnimationFrame(() => {
+                rafRef.current = null;
+                gsap.set(lyricsEl, { opacity: 1 });
+                gsap.set(Array.from(lyricsEl.querySelectorAll("*")), { clearProps: "opacity,transform,filter,scale" });
+                animIn(lyricsEl, data.animStyle);
+                animatingRef.current = false;
+                if (data.loopEnabled !== false)
+                  loopCleanupRef.current = idleLoop(lyricsEl, data.animStyle, data.loopInterval ?? 3500);
+              })
+            );
+          },
+        });
+      } else {
+        animatingRef.current = false;
+        gsap.to(lyricsEl, {
+          opacity: 0, duration: 0.35, ease: "power2.in",
+          onComplete: () => setLive(data),
+        });
+      }
+    };
+
+    // ── Fallback: poll /api/live-state (server.ts in-memory, 100% local) ──
+    const startFallback = () => {
+      if (fallbackInterval) return; // already running
+      firestoreOnline = false;
+      setConnected(false);
+      console.log("[LiveDisplay] Offline — switching to local /api/live-state polling");
+      fallbackInterval = setInterval(async () => {
+        try {
+          const res = await fetch("/api/live-state", { cache: "no-store" });
+          if (!res.ok) return;
+          const data: LiveState = await res.json();
+          applyState(data);
+          setConnected(true);
+        } catch {
+          setConnected(false);
+        }
+      }, 300);
+    };
+
+    const stopFallback = () => {
+      if (fallbackInterval) { clearInterval(fallbackInterval); fallbackInterval = null; }
+    };
+
+    // ── Reliable offline detection via browser events ──────────────────────
+    // Firebase SDK with persistentLocalCache NEVER calls onSnapshot's error
+    // callback when offline — it just reads cache silently. Browser events are
+    // the only reliable signal that internet connectivity has changed.
+    const handleOffline = () => {
+      console.warn("[LiveDisplay] navigator went offline — forcing polling fallback");
+      startFallback();
+    };
+    const handleOnline = () => {
+      console.log("[LiveDisplay] navigator back online — resuming Firestore onSnapshot");
+      firestoreOnline = true;
+      stopFallback();
+      setConnected(true);
+      // Reset dedup key so the next Firestore snapshot is always applied
+      lastKeyRef.current = "";
+    };
+
+    window.addEventListener("offline", handleOffline);
+    window.addEventListener("online",  handleOnline);
+
+    // If already offline when the OBS page first loads, skip Firestore entirely
+    if (!navigator.onLine) {
+      console.warn("[LiveDisplay] Started offline — using polling from the start");
+      startFallback();
+    }
+
+    // ── Primary: Firestore onSnapshot (only used when online) ─────────────
     const unsubscribe = onSnapshot(
       doc(db, "live_state", "current"),
       (snap) => {
+        if (!firestoreOnline) return; // offline guard — ignore stale cache callbacks
         setConnected(true);
         const data: LiveState = snap.exists()
           ? (snap.data() as LiveState)
           : { visible: false, lines: [], songTitle: "", animStyle: "word-fade", updatedAt: 0 };
-
-        const key = `${data.updatedAt}`;
-        if (key === lastKeyRef.current) return;
-        lastKeyRef.current = key;
-
-        if (data.transitioning) { setFadeBlack(true); return; }
-        setFadeBlack(false);
-
-        if (data.fadeScreen) {
-          const bg = data.fadeScreenBg ?? { type: "color", color: "#000" };
-          prevFadeScreenRef.current = bg;
-          setFadeScreen(bg);
-        } else {
-          setFadeScreen(null);
-        }
-
-        if (data._fadeOnly) return;
-
-        const lyricsEl = lyricsRef.current;
-        if (!lyricsEl) { setLive(data); return; }
-
-        if (loopCleanupRef.current) { loopCleanupRef.current(); loopCleanupRef.current = null; }
-        if (rafRef.current !== null) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
-        gsap.killTweensOf(lyricsEl);
-        const allChildren = Array.from(lyricsEl.querySelectorAll("*"));
-        gsap.killTweensOf(allChildren);
-        gsap.set(allChildren, { clearProps: "opacity,transform,filter,scale" });
-
-        if (data.visible && data.lines.length > 0) {
-          animatingRef.current = true;
-          gsap.to(lyricsEl, {
-            opacity: 0, duration: 0.2, ease: "power2.in",
-            onComplete: () => {
-              setLive(data);
-              rafRef.current = requestAnimationFrame(() =>
-                requestAnimationFrame(() => {
-                  rafRef.current = null;
-                  gsap.set(lyricsEl, { opacity: 1 });
-                  gsap.set(Array.from(lyricsEl.querySelectorAll("*")), { clearProps: "opacity,transform,filter,scale" });
-                  animIn(lyricsEl, data.animStyle);
-                  animatingRef.current = false;
-                  if (data.loopEnabled !== false)
-                    loopCleanupRef.current = idleLoop(lyricsEl, data.animStyle, data.loopInterval ?? 3500);
-                })
-              );
-            },
-          });
-        } else {
-          animatingRef.current = false;
-          gsap.to(lyricsEl, {
-            opacity: 0, duration: 0.35, ease: "power2.in",
-            onComplete: () => setLive(data),
-          });
-        }
+        applyState(data);
       },
-      () => setConnected(false)
+      (_err) => {
+        // Fallback for any explicit Firestore error (permission denied, etc.)
+        console.warn("[LiveDisplay] Firestore error — starting polling fallback");
+        startFallback();
+      }
     );
-    return () => unsubscribe();
+
+    return () => {
+      unsubscribe();
+      stopFallback();
+      window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("online",  handleOnline);
+    };
   }, []); // eslint-disable-line
+
 
   // ── Echo marquee — exact mirror of the useEffect in Screen ───────────────
   // Track ALL marquee tweens so repeat:-1 tweens started in onComplete can be killed
@@ -474,29 +556,43 @@ export default function LiveDisplayPage() {
           </div>
         );
       })()}
-      {/* Video background — same as Screen component */}
-      {live?.bgVideo && (
-        <div style={{ position:"absolute", inset:0, overflow:"hidden", zIndex:0 }}>
-          {(live.bgVideo.type === "local" || live.bgVideo.type === "firebase") ? (
-            <video
-              key={live.bgVideo.url}
-              src={live.bgVideo.url}
-              autoPlay loop muted playsInline
-              style={{ width:"100%", height:"100%", objectFit:"cover" }}
-            />
-          ) : (
-            <iframe
-              key={live.bgVideo.videoId}
-              src={`https://www.youtube.com/embed/${live.bgVideo.videoId}?autoplay=1&loop=1&playlist=${live.bgVideo.videoId}&mute=1&muted=1&controls=0&disablekb=1&fs=0&modestbranding=1&iv_load_policy=3&enablejsapi=1`}
-              style={{ width:"100%", height:"100%", border:"none", pointerEvents:"none" }}
-              allow="autoplay; encrypted-media"
-              title="video-bg"
-            />
-          )}
-          {/* Dark scrim — keeps lyrics readable over video */}
-          <div style={{ position:"absolute", inset:0, background:"rgba(0,0,0,0.45)" }} />
-        </div>
-      )}
+      {/* Video background — local/firebase/youtube */}
+      {live?.bgVideo && (() => {
+        const bv = live.bgVideo!;
+        if (bv.type === "local" || bv.type === "firebase") {
+          // Prefer localUrl when offline so video plays without internet
+          const src = (bv.type === "firebase" && !navigator.onLine && bv.localUrl)
+            ? bv.localUrl
+            : bv.url;
+          return (
+            <div style={{ position:"absolute", inset:0, overflow:"hidden", zIndex:0 }}>
+              <video
+                key={src}
+                src={src}
+                autoPlay loop muted playsInline
+                style={{ width:"100%", height:"100%", objectFit:"cover" }}
+              />
+              {/* Dark scrim — keeps lyrics readable over video */}
+              <div style={{ position:"absolute", inset:0, background:"rgba(0,0,0,0.45)" }} />
+            </div>
+          );
+        }
+        if (bv.type === "youtube") {
+          return (
+            <div style={{ position:"absolute", inset:0, overflow:"hidden", zIndex:0 }}>
+              <iframe
+                key={bv.videoId}
+                src={`https://www.youtube.com/embed/${bv.videoId}?autoplay=1&loop=1&playlist=${bv.videoId}&mute=1&muted=1&controls=0&disablekb=1&fs=0&modestbranding=1&iv_load_policy=3&enablejsapi=1`}
+                style={{ width:"100%", height:"100%", border:"none", pointerEvents:"none" }}
+                allow="autoplay; encrypted-media"
+                title="video-bg"
+              />
+              <div style={{ position:"absolute", inset:0, background:"rgba(0,0,0,0.45)" }} />
+            </div>
+          );
+        }
+        return null;
+      })()}
 
       {/* Vignette */}
       <div style={{ position:"absolute", inset:0, background:"radial-gradient(ellipse at center, transparent 35%, rgba(0,0,0,0.7) 100%)", pointerEvents:"none", zIndex:0 }} />

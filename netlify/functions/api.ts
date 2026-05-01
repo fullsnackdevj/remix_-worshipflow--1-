@@ -997,7 +997,9 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
     if (rawPath === "/live-push" && method === "POST") {
         if (!firestore) return json(500, { error: "DB unavailable" });
         try {
-            const state = { ...body, updatedAt: Date.now() };
+            // Use sub-millisecond precision so rapid song switches (clear → Song B)
+            // never share the same updatedAt key and OBS dedup never skips correct lyrics.
+            const state = { ...body, updatedAt: Date.now() * 1000 + Math.floor(Math.random() * 1000) };
             await firestore.collection("live_state").doc("current").set(state);
             return json(200, { ok: true });
         } catch (e) {

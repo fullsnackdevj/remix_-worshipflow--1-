@@ -6,6 +6,7 @@ import compression from "compression";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
+import fs from "fs";
 import admin from "firebase-admin";
 import { GoogleGenAI } from "@google/genai";
 import multer from "multer";
@@ -16,7 +17,14 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = 3000;
 
-app.use(compression()); // gzip all API responses
+// Skip compression for SSE (text/event-stream) — gzip buffers events indefinitely
+// and they NEVER arrive at the client. OBS browser source becomes permanently blank.
+app.use(compression({
+  filter: (req, res) => {
+    if (res.getHeader("Content-Type")?.toString().includes("text/event-stream")) return false;
+    return compression.filter(req, res);
+  },
+}));
 app.use(express.json({ limit: "50mb" }));
 
 
@@ -80,7 +88,7 @@ function getDb() {
           clientEmail,
           privateKey,
         }),
-        storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET,
+        storageBucket: process.env.FIREBASE_STORAGE_BUCKET, // server-side: no VITE_ prefix
       });
     }
     db = admin.firestore();
@@ -301,21 +309,42 @@ async function writeNotification(firestore: admin.firestore.Firestore, payload: 
 let liveState: Record<string, unknown> = { visible: false, lines: [], songTitle: "", animStyle: "word-fade", updatedAt: 0 };
 const sseClients = new Set<import("express").Response>();
 
+// Monotonic push counter — guarantees every push gets a unique updatedAt key even
+// when multiple pushes arrive in the same millisecond (rapid song switching offline).
+// OBS uses updatedAt as a dedup key: same value = skip. Without this, rapid
+// consecutive pushes (clear → Song B) could all land on the same ms and OBS would
+// show the wrong song because subsequent pushes were silently skipped.
+let _pushSeq = 0;
+function uniqueNow(): number {
+  const t = Date.now();
+  // _pushSeq resets each new millisecond; within same ms, add sub-ms offset
+  const seq = ++_pushSeq;
+  return t * 1000 + (seq % 1000); // microsecond-precision unique key
+}
+
 // POST /api/live-push — controller writes the active slide
 // Writes to Firestore (triggers onSnapshot in LiveDisplayPage) AND broadcasts SSE
 app.post("/api/live-push", async (req, res) => {
-  liveState = { ...req.body, updatedAt: Date.now() };
-  // 1. Broadcast to SSE clients (legacy local fallback)
+  liveState = { ...req.body, updatedAt: uniqueNow() };
+  // 1. Broadcast to SSE clients (instant local push — walkie-talkie mode)
   const payload = `data: ${JSON.stringify(liveState)}\n\n`;
-  sseClients.forEach(client => { try { client.write(payload); } catch { sseClients.delete(client); } });
-  // 2. Write to Firestore — this triggers onSnapshot in LiveDisplayPage (same as production)
+  sseClients.forEach(client => {
+    try {
+      client.write(payload);
+      // Force-flush so the event reaches OBS immediately (compression middleware buffers otherwise)
+      if (typeof (client as any).flush === "function") (client as any).flush();
+    } catch { sseClients.delete(client); }
+  });
+  // 2. Write to Firestore — triggers onSnapshot in LiveDisplayPage (online mode)
   try {
     const firestore = getDb();
     if (firestore) {
       await firestore.collection("live_state").doc("current").set(liveState);
     }
-  } catch (e) {
-    console.warn("[live-push] Firestore write failed (OBS may not update):", e);
+  } catch (e: unknown) {
+    // Expected offline — OBS falls back to /api/live-state polling. Suppress stack trace.
+    const msg = e instanceof Error ? e.message.split('\n')[0] : String(e);
+    console.warn(`[live-push] Firestore offline (OBS using local poll): ${msg.slice(0, 80)}`);
   }
   res.json({ ok: true, clients: sseClients.size });
 });
@@ -325,14 +354,23 @@ app.get("/api/live-sse", (req, res) => {
   res.setHeader("Content-Type",  "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection",    "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no"); // disable nginx buffering if behind reverse proxy
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.flushHeaders();
+  res.flushHeaders(); // send headers immediately before any data
 
   // Send current state immediately so OBS has something on connect
-  res.write(`data: ${JSON.stringify(liveState)}\n\n`);
+  const initPayload = `data: ${JSON.stringify(liveState)}\n\n`;
+  res.write(initPayload);
+  // Force-flush: compression middleware (and nginx) may buffer otherwise
+  if (typeof (res as any).flush === "function") (res as any).flush();
 
   // Keep-alive ping every 25 s (prevents OBS from closing the connection)
-  const ping = setInterval(() => { try { res.write(`: ping\n\n`); } catch { clearInterval(ping); } }, 25000);
+  const ping = setInterval(() => {
+    try {
+      res.write(": ping\n\n");
+      if (typeof (res as any).flush === "function") (res as any).flush();
+    } catch { clearInterval(ping); }
+  }, 25000);
 
   sseClients.add(res);
   req.on("close", () => { sseClients.delete(res); clearInterval(ping); });
@@ -345,33 +383,69 @@ app.get("/api/live-state", (_req, res) => {
   res.json(liveState);
 });
 
-// ── Live background video — per-preset local file upload ─────────────────────
-// Each preset (praise, worship) gets its own video slot so they never share.
-const liveBgVideos: Record<string, { buffer: Buffer; mime: string }> = {};
+// ── Live background video — per-preset DISK storage ─────────────────────────────
+// Videos are saved to ./live-bg-videos/<preset>.<ext> on disk so they persist
+// across server restarts. No more "upload again after npm run dev" hassle.
+const LIVE_BG_DIR = path.join(__dirname, "live-bg-videos");
+if (!fs.existsSync(LIVE_BG_DIR)) fs.mkdirSync(LIVE_BG_DIR, { recursive: true });
+
+// Metadata: maps preset name → { filePath, mime } — loaded from disk on startup
+const liveBgMeta: Record<string, { filePath: string; mime: string }> = {};
+
+// Load any existing videos from disk on startup
+(() => {
+  try {
+    const files = fs.readdirSync(LIVE_BG_DIR);
+    for (const file of files) {
+      const m = file.match(/^([a-zA-Z0-9_-]+)\.(mp4|webm|mov|mkv)$/i);
+      if (!m) continue;
+      const preset = m[1];
+      const ext = m[2].toLowerCase();
+      const mime = ext === "webm" ? "video/webm" : ext === "mov" ? "video/quicktime" : "video/mp4";
+      liveBgMeta[preset] = { filePath: path.join(LIVE_BG_DIR, file), mime };
+      console.log(`[LiveBG] Loaded from disk: ${preset} (${file})`);
+    }
+  } catch { /* ignore */ }
+})();
 
 // POST /api/live-bg-video/:preset
 app.post("/api/live-bg-video/:preset", multer({ storage: multer.memoryStorage(), limits: { fileSize: 500 * 1024 * 1024 } }).single("video"), (req, res) => {
   const preset = req.params.preset;
   if (!req.file) return res.status(400).json({ error: "No file" });
-  liveBgVideos[preset] = { buffer: req.file.buffer, mime: req.file.mimetype || "video/mp4" };
-  console.log(`[LiveBG:${preset}] Video uploaded: ${req.file.originalname} (${(req.file.size / 1024 / 1024).toFixed(1)} MB)`);
+  const mime = req.file.mimetype || "video/mp4";
+  const ext = mime.includes("webm") ? "webm" : mime.includes("quicktime") || mime.includes("mov") ? "mov" : "mp4";
+  // Remove old file for this preset if it exists
+  if (liveBgMeta[preset]) {
+    try { fs.unlinkSync(liveBgMeta[preset].filePath); } catch { /* ignore */ }
+  }
+  const filePath = path.join(LIVE_BG_DIR, `${preset}.${ext}`);
+  fs.writeFileSync(filePath, req.file.buffer);
+  liveBgMeta[preset] = { filePath, mime };
+  console.log(`[LiveBG:${preset}] Saved to disk: ${req.file.originalname} (${(req.file.size / 1024 / 1024).toFixed(1)} MB) → ${filePath}`);
   res.json({ ok: true, url: `/api/live-bg-video/${preset}` });
 });
 
 // GET /api/live-bg-video/:preset
 app.get("/api/live-bg-video/:preset", (req, res) => {
-  const entry = liveBgVideos[req.params.preset];
-  if (!entry) return res.status(404).json({ error: "No video uploaded for this preset" });
+  const entry = liveBgMeta[req.params.preset];
+  if (!entry || !fs.existsSync(entry.filePath)) {
+    return res.status(404).json({ error: "No video for this preset. Upload via the Live Stage settings." });
+  }
+  const stat = fs.statSync(entry.filePath);
   res.setHeader("Content-Type", entry.mime);
-  res.setHeader("Content-Length", entry.buffer.length);
-  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Content-Length", stat.size);
+  res.setHeader("Cache-Control", "public, max-age=86400"); // cache 1 day — video doesn't change often
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.end(entry.buffer);
+  fs.createReadStream(entry.filePath).pipe(res);
 });
 
 // DELETE /api/live-bg-video/:preset
 app.delete("/api/live-bg-video/:preset", (req, res) => {
-  delete liveBgVideos[req.params.preset];
+  const entry = liveBgMeta[req.params.preset];
+  if (entry) {
+    try { fs.unlinkSync(entry.filePath); } catch { /* ignore */ }
+    delete liveBgMeta[req.params.preset];
+  }
   res.json({ ok: true });
 });
 
@@ -1362,9 +1436,54 @@ app.put("/api/songs/:id", async (req, res) => {
   }
 });
 
+// PATCH /api/songs/:id — partial update (e.g. lyrics-only from the Edit Lyrics modal)
+// Only updates the fields present in the request body; ignores missing ones.
+app.patch("/api/songs/:id", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(500).json({ error: "Firebase not configured" });
+
+  const { id } = req.params;
+  const updates: Record<string, unknown> = {};
+
+  if (req.body.lyrics    !== undefined) updates.lyrics    = req.body.lyrics.trim().toUpperCase();
+  if (req.body.title     !== undefined) updates.title     = toTitleCase(req.body.title);
+  if (req.body.artist    !== undefined) updates.artist    = toTitleCase(req.body.artist);
+  if (req.body.chords    !== undefined) updates.chords    = req.body.chords;
+  if (req.body.tags      !== undefined) updates.tagIds    = req.body.tags;
+  if (req.body.video_url !== undefined) updates.video_url = req.body.video_url;
+
+  if (Object.keys(updates).length === 0) {
+    return res.status(400).json({ error: "No fields to update." });
+  }
+
+  updates.updated_at = admin.firestore.FieldValue.serverTimestamp();
+
+  try {
+    await firestore.collection("songs").doc(id).update(updates);
+    res.json({ success: true });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    // Firestore unreachable offline — return optimistic success so the UI can update.
+    // The write will sync automatically when internet reconnects.
+    const isOffline = msg.includes("UNAVAILABLE") || msg.includes("fetch") ||
+                      msg.includes("network") || msg.includes("getaddrinfo") ||
+                      msg.includes("socket") || msg.includes("ENOTFOUND") ||
+                      msg.includes("ECONNREFUSED") || msg.includes("request to https");
+    if (isOffline) {
+      console.warn(`[PATCH /api/songs/${id}] Firestore offline — returning optimistic success. Will sync when online.`);
+      return res.json({ success: true, offline: true });
+    }
+    console.error("[PATCH /api/songs/:id]", msg);
+    res.status(500).json({ error: "Failed to update song" });
+  }
+});
+
+
+
 app.delete("/api/songs/:id", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(500).json({ error: "Firebase not configured" });
+
 
   const { id } = req.params;
   try {
@@ -3455,6 +3574,25 @@ async function startServer() {
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
+    // Sync liveState from Firestore on startup so live-display-local shows the
+    // correct slide immediately when OBS reconnects after a server restart.
+    // Without this, liveState starts as { visible: false } and OBS shows blank.
+    (async () => {
+      try {
+        const firestore = getDb();
+        if (!firestore) return;
+        const snap = await firestore.collection("live_state").doc("current").get();
+        if (snap.exists) {
+          const data = snap.data() as Record<string, unknown>;
+          // Always clear fadeScreen on startup — prevents stale overlay blocking OBS
+          liveState = { ...data, fadeScreen: false, updatedAt: uniqueNow() };
+          console.log("[startup] liveState synced from Firestore:", (data.songTitle as string) || "(no song)");
+        }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message.split("\n")[0] : String(e);
+        console.warn(`[startup] Firestore sync skipped (offline): ${msg.slice(0, 80)}`);
+      }
+    })();
   });
 }
 

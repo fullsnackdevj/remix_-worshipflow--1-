@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Search, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Radio, Music2, Layers, Play, Wand2, AlignCenter, AlignLeft, Video, Upload, Copy, Check as CheckIcon, Settings, Zap, Heart, EyeOff, Image as ImageIcon, Monitor, Timer, PlusCircle, Minus, LayoutGrid } from "lucide-react";
+import { Search, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Radio, Music2, Layers, Play, Wand2, AlignCenter, AlignLeft, Video, Upload, Copy, Check as CheckIcon, Settings, Zap, Heart, EyeOff, Image as ImageIcon, Monitor, Timer, PlusCircle, Minus, LayoutGrid, FolderOpen } from "lucide-react";
 import LyricsGridModal from "./LyricsGridModal";
+import MediaLibraryModal, { type MediaItem, type MediaTarget } from "./MediaLibraryModal";
 import type { Song } from "./types";
 import gsap from "gsap";
 import { storage } from "./firebase";
@@ -8,7 +9,7 @@ import { ref as storageRef, uploadBytesResumable, getDownloadURL } from "firebas
 
 
 type AnimStyle = "word-fade" | "word-bounce" | "typewriter" | "blur-in" | "fade" | "slide-up" | "echo" | "breathe";
-type BgVideo   = { type: "local"; url: string } | { type: "firebase"; url: string } | { type: "youtube"; videoId: string };
+type BgVideo   = { type: "local"; url: string } | { type: "firebase"; url: string; localUrl?: string } | { type: "youtube"; videoId: string };
 
 type FadeScreenBg =
   | { type: "color"; color: string }
@@ -447,7 +448,7 @@ function Screen({ slide, bgStyle, echoAlign, echoLines, echoLineHeight, lyricsSc
           {bgVideo && (
             <div style={{ position:"absolute", inset:0, overflow:"hidden" }}>
               {(bgVideo.type === "local" || bgVideo.type === "firebase") ? (
-                <video key={bgVideo.url} src={bgVideo.url} autoPlay loop muted playsInline
+                <video key={bgVideo.localUrl || bgVideo.url} src={bgVideo.localUrl || bgVideo.url} autoPlay loop muted playsInline
                   style={{ width:"100%", height:"100%", objectFit:"cover" }} />
               ) : (
                 <iframe key={bgVideo.videoId}
@@ -684,18 +685,45 @@ const DEFAULT_PRESETS: Record<PresetName, LivePreset> = {
   worship: { name:"Worship", animStyle:"breathe",   loopInterval:5000, loopEnabled:true, bgIdx:3, echoAlign:"center", echoLines:"auto", echoLineHeight:1.3, lyricsScale:1.0, bgVideo:null },
 };
 
-interface Props { allSongs: Song[]; isAdmin: boolean; onToast: (t:string, m:string) => void; }
+interface Props { allSongs: Song[]; isAdmin: boolean; onToast: (t:string, m:string) => void; onSongUpdated?: (song: Song) => void; }
 
-export default function LiveStageView({ allSongs, onToast }: Props) {
+export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Props) {
 
   const [query, setQuery]               = useState("");
   const [sceneSongIds, setSceneSongIds] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem("lsv_scene_songs") ?? "[]") ?? []; } catch { return []; }
   });
   const [songDropdownOpen, setSongDropdownOpen] = useState(false);
-  const [selectedSong, setSelectedSong] = useState<Song | null>(null);
-  const [sections, setSections]         = useState<LyricSection[]>([]);
-  const [activeSlide, setActiveSlide]   = useState<LyricSlide | null>(null);
+  const [selectedSong, setSelectedSong_] = useState<Song | null>(null);
+  // Ref mirrors state — pushToFirestore must always read the CURRENT song even when
+  // called from a stale closure (e.g. arrow-key effect fires before React re-render).
+  const selectedSongRef = useRef<Song | null>(null);
+  const setSelectedSong = (song: Song | null) => { selectedSongRef.current = song; setSelectedSong_(song); };
+  // In-session lyrics overrides: when the user edits lyrics from the modal,
+  // we keep the new text here so reopening the modal shows the updated version
+  // even before Firestore syncs (which may not happen when offline).
+  const [lyricOverrides, setLyricOverrides] = useState<Record<string, string>>({});
+  const [sections, setSections_]         = useState<LyricSection[]>([]);
+  // Ref mirrors sections — keyboard handler must always use current sections even
+  // when it fires between React renders (stale closure window).
+  const sectionsRef = useRef<LyricSection[]>([]);
+  const setSections = (v: LyricSection[] | ((prev: LyricSection[]) => LyricSection[])) => {
+    setSections_(prev => {
+      const next = typeof v === "function" ? v(prev) : v;
+      sectionsRef.current = next;
+      return next;
+    });
+  };
+  const [activeSlide, setActiveSlide_]   = useState<LyricSlide | null>(null);
+  // Ref mirrors activeSlide — keyboard handler reads this to avoid stale globalIdx
+  const activeSlideRef = useRef<LyricSlide | null>(null);
+  const setActiveSlide = (v: LyricSlide | null | ((prev: LyricSlide | null) => LyricSlide | null)) => {
+    setActiveSlide_(prev => {
+      const next = typeof v === "function" ? v(prev) : v;
+      activeSlideRef.current = next;
+      return next;
+    });
+  };
   // Restore last selected song and section after mount (allSongs is async)
   const _restoredSelectedRef = useRef(false);
   // \u2500\u2500 Preset state \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
@@ -747,8 +775,14 @@ export default function LiveStageView({ allSongs, onToast }: Props) {
   const settingsOpenRef = useRef(false);
   const [echoApplied,   setEchoApplied]  = useState(() => _cur.animStyle === "echo");
   const [showVideoPanel, setShowVideoPanel] = useState(false);
-  const [obsUrlCopied,   setObsUrlCopied]   = useState(false);
-  const [lyricsGridOpen, setLyricsGridOpen] = useState(false);
+  const [obsUrlCopied,      setObsUrlCopied]      = useState(false);
+  const [obsLocalUrlCopied, setObsLocalUrlCopied] = useState(false);
+  const [lyricsGridOpen, setLyricsGridOpen_] = useState(false);
+  // Ref mirrors lyricsGridOpen — lets the keyboard handler check this
+  // synchronously without a stale closure. When Grid View is open, the
+  // LiveStageView key handler must NOT fire (LyricsGridModal has its own).
+  const lyricsGridOpenRef = useRef(false);
+  const setLyricsGridOpen = (v: boolean) => { lyricsGridOpenRef.current = v; setLyricsGridOpen_(v); };
   const [activeSection,  setActiveSectionState]  = useState<string | null>(() => {
     try { return localStorage.getItem("lsv_active_section") ?? null; } catch { return null; }
   });
@@ -766,6 +800,7 @@ export default function LiveStageView({ allSongs, onToast }: Props) {
   // ── Modal draft state — edits both presets before committing on Save ────────
   const [settingsTab,     setSettingsTab]     = useState<"praise" | "worship" | "fade">("praise");
   const [modalDrafts,     setModalDrafts]     = useState<Record<PresetName, LivePreset>>({ ...DEFAULT_PRESETS });
+  const [mediaLibraryOpen, setMediaLibraryOpen] = useState(false);
   const [videoUploading,  setVideoUploading]  = useState<Record<PresetName, boolean>>({ praise: false, worship: false });
   const [videoProgress,   setVideoProgress]   = useState<Record<PresetName, number>>({ praise: 0, worship: 0 });
   // Fade screen background upload progress
@@ -879,13 +914,13 @@ export default function LiveStageView({ allSongs, onToast }: Props) {
   };
 
   // ── Resolve preset from song tags ───────────────────────────────────
-  // Rules: any tag whose name contains 'joyful'  → praise
-  //        any tag whose name contains 'solemn'  → worship
+  // Rules: any tag whose name contains 'joyful' or 'praise'  → praise scene
+  //        any tag whose name contains 'solemn' or 'worship' → worship scene
   //        otherwise → null (no auto-switch)
   const resolvePresetFromSong = (song: Song): PresetName | null => {
     const names = (song.tags ?? []).map(t => t.name.toLowerCase());
-    if (names.some(n => n.includes("joyful")))  return "praise";
-    if (names.some(n => n.includes("solemn")))  return "worship";
+    if (names.some(n => n.includes("joyful") || n.includes("praise")))  return "praise";
+    if (names.some(n => n.includes("solemn") || n.includes("worship"))) return "worship";
     return null;
   };
 
@@ -917,14 +952,39 @@ export default function LiveStageView({ allSongs, onToast }: Props) {
     _restoredSelectedRef.current = true;
     try {
       const savedId = localStorage.getItem("lsv_selected_song_id");
-      if (!savedId) return;
-      const song = allSongs.find(s => s.id === savedId);
+      // Use saved song, or fall back to first song in the list
+      const song = (savedId ? allSongs.find(s => s.id === savedId) : null) ?? allSongs[0] ?? null;
       if (song) {
-        // Restore silently — no OBS push, no preset auto-switch on restore
         setSelectedSong(song);
+        // Auto-apply preset based on restored song's tags
+        const resolved = resolvePresetFromSong(song);
+        if (resolved) applyPreset(resolved);
       }
     } catch { /* noop */ }
   }, [allSongs]); // eslint-disable-line
+
+  // ── Force fade screen ON every time the Live Stage module is first loaded ───
+  // This ensures OBS always starts in a safe faded/black state on each session.
+  useEffect(() => {
+    // Always force fade ON regardless of localStorage
+    setFadeScreenActive(true);
+    fadeScreenActiveRef.current = true;
+    localStorage.setItem("lsv_fade_active", "1");
+    // Push fade-on to OBS immediately (blank scene, fade overlay active)
+    fetch("/api/live-push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        songTitle: "", lines: [], animStyle: "word-fade", visible: false,
+        bgIdx: bgIdxRef.current,
+        echoAlign: _cur.echoAlign, echoLines: _cur.echoLines, echoLineHeight: _cur.echoLineHeight,
+        lyricsScale: _cur.lyricsScale ?? 1.0, loopEnabled: _cur.loopEnabled ?? true,
+        bgVideo: bgVideoRef.current, loopInterval: _cur.loopInterval,
+        fadeScreen: true, fadeScreenBg: toFiresafeFadeBg(fadeScreenBgRef.current),
+        updatedAt: Date.now(),
+      }),
+    }).catch(() => {});
+  }, []); // mount-only — runs once when Live Stage opens
 
   // Restore fade screen background from IndexedDB on mount.
   // IDB is async so we can't read it in useState initializer — this effect patches
@@ -1018,20 +1078,36 @@ export default function LiveStageView({ allSongs, onToast }: Props) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          fadeScreen: true, fadeScreenBg: toFiresafeFadeBg(fadeScreenBg),
+          fadeScreen: true, fadeScreenBg: toFiresafeFadeBg(fadeScreenBgRef.current),
           bgIdx: p.bgIdx, echoAlign: p.echoAlign, echoLines: p.echoLines,
           echoLineHeight: p.echoLineHeight, bgVideo: p.bgVideo ?? null,
+          lyricsScale: p.lyricsScale ?? 1.0,
           loopInterval: p.loopInterval, loopEnabled: p.loopEnabled ?? true, visible: false, lines: [], animStyle: p.animStyle,
           updatedAt: Date.now(),
         }),
       }).catch(() => {});
     } else {
-      // Fade is off — trigger normal scene transition
+      // Fade is off — flash black then immediately push the full new scene
       fetch("/api/live-push", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ transitioning: true, updatedAt: Date.now() }),
       }).catch(() => {});
+      // Follow up with full new scene so OBS gets all updated settings
+      setTimeout(() => {
+        fetch("/api/live-push", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            bgIdx: p.bgIdx, echoAlign: p.echoAlign, echoLines: p.echoLines,
+            echoLineHeight: p.echoLineHeight, bgVideo: p.bgVideo ?? null,
+            lyricsScale: p.lyricsScale ?? 1.0,
+            loopInterval: p.loopInterval, loopEnabled: p.loopEnabled ?? true,
+            visible: false, lines: [], animStyle: p.animStyle,
+            updatedAt: Date.now(),
+          }),
+        }).catch(() => {});
+      }, 550); // after the 0.5s fade-to-black completes
     }
   };
 
@@ -1083,8 +1159,29 @@ export default function LiveStageView({ allSongs, onToast }: Props) {
           body: JSON.stringify({ fadeScreen: true, fadeScreenBg: toFiresafeFadeBg(modalFadeScreenBg), updatedAt: Date.now() }),
         }).catch(() => {});
       }
+      // Explicitly re-push full scene to OBS so ALL settings (lyricsScale, loopInterval, etc.) take effect
+      // Do it inside a timeout so all the above setState calls have settled
+      setTimeout(() => {
+        const activeSlideSnap = activeSlide ? { ...activeSlide, animStyle: live.animStyle } : null;
+        const fullPayload = activeSlideSnap
+          ? { songTitle: selectedSong?.title ?? "", lines: activeSlideSnap.lines, animStyle: live.animStyle, visible: true,
+              bgIdx: live.bgIdx, echoAlign: live.echoAlign, echoLines: live.echoLines, echoLineHeight: live.echoLineHeight,
+              lyricsScale: live.lyricsScale ?? 1.0, loopEnabled: live.loopEnabled ?? true,
+              bgVideo: live.bgVideo ?? null, loopInterval: live.loopInterval, updatedAt: Date.now() }
+          : { songTitle: "", lines: [], animStyle: live.animStyle, visible: false,
+              bgIdx: live.bgIdx, echoAlign: live.echoAlign, echoLines: live.echoLines, echoLineHeight: live.echoLineHeight,
+              lyricsScale: live.lyricsScale ?? 1.0, loopEnabled: live.loopEnabled ?? true,
+              bgVideo: live.bgVideo ?? null, loopInterval: live.loopInterval, updatedAt: Date.now() };
+        if (fadeScreenActiveRef.current) {
+          fetch("/api/live-push", { method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...fullPayload, fadeScreen: true, fadeScreenBg: toFiresafeFadeBg(modalFadeScreenBg) }) }).catch(() => {});
+        } else {
+          fetch("/api/live-push", { method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(fullPayload) }).catch(() => {});
+        }
+      }, 50);
       setSettingsSaved(true);
-      setTimeout(() => { setSettingsSaved(false); setSettingsOpen(false); }, 1500);
+      setTimeout(() => { setSettingsSaved(false); setSettingsOpen(false); settingsOpenRef.current = false; }, 1500);
     } catch (err) {
       console.error("[saveSettings] Error:", err);
       // Still close the modal so the user isn't stuck
@@ -1095,24 +1192,29 @@ export default function LiveStageView({ allSongs, onToast }: Props) {
   // ── No global bgVideo localStorage persistence — bgVideo lives in lsv_presets per-preset ──
 
   const pushToFirestore = (slide: LyricSlide | null) => {
+    // ⚠️ Always read from selectedSongRef (not selectedSong state) — arrow-key
+    // handler can fire before React re-renders after a song switch, so the state
+    // closure would still hold the OLD song. The ref is always current.
+    const currentSong = selectedSongRef.current;
     const payload = slide
-      ? { songTitle: selectedSong?.title ?? "", lines: slide.lines, animStyle: slide.animStyle, visible: true,  bgIdx, echoAlign, echoLines, echoLineHeight, lyricsScale, loopEnabled, bgVideo, loopInterval }
+      ? { songTitle: currentSong?.title ?? "", lines: slide.lines, animStyle: slide.animStyle, visible: true,  bgIdx, echoAlign, echoLines, echoLineHeight, lyricsScale, loopEnabled, bgVideo, loopInterval }
       : { songTitle: "",                        lines: [],          animStyle: "word-fade",     visible: false, bgIdx, echoAlign, echoLines, echoLineHeight, lyricsScale, loopEnabled, bgVideo, loopInterval };
     if (fadeScreenActiveRef.current) {
       // Fade is active — pre-load scene data behind overlay, keep fadeScreen:true so overlay stays
+      // Use fadeScreenBgRef.current (not state) to avoid stale closure captures
       fetch("/api/live-push", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...payload, fadeScreen: true, fadeScreenBg, updatedAt: Date.now() }),
+        body: JSON.stringify({ ...payload, fadeScreen: true, fadeScreenBg: toFiresafeFadeBg(fadeScreenBgRef.current), updatedAt: Date.now() }),
       }).catch(() => {});
     } else {
-      fetch("/api/live-push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }).catch(() => {});
+      fetch("/api/live-push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...payload, updatedAt: Date.now() }) }).catch(() => {});
     }
   };
 
 
 
-  useEffect(() => { pushToFirestore(activeSlide); }, [activeSlide, bgIdx, echoAlign, echoLines, echoLineHeight, bgVideo]); // eslint-disable-line
+  useEffect(() => { pushToFirestore(activeSlide); }, [activeSlide, bgIdx, echoAlign, echoLines, echoLineHeight, bgVideo, lyricsScale, loopEnabled, loopInterval]); // eslint-disable-line
 
   useEffect(() => {
     // Always wipe sections first so old song slides are never visible during the parse
@@ -1124,6 +1226,20 @@ export default function LiveStageView({ allSongs, onToast }: Props) {
     const withStyle = parsed.map(sec => ({ ...sec, slides: sec.slides.map(s => ({ ...s, animStyle: defaultAnimStyle })) }));
     setSections(withStyle);
   }, [selectedSong]); // eslint-disable-line
+
+  // When lyrics are edited from the grid modal, update sections in-place
+  // WITHOUT clearing activeSlide or going through selectedSong state.
+  // This is the single source of truth for in-session lyric edits.
+  useEffect(() => {
+    if (!selectedSong) return;
+    const override = lyricOverrides[selectedSong.id];
+    if (!override) return;
+    const parsed = parseSections(override);
+    const withStyle = parsed.map(sec => ({ ...sec, slides: sec.slides.map(s => ({ ...s, animStyle: defaultAnimStyle })) }));
+    setSections(withStyle);
+    // Keep selectedSong.lyrics in sync so other code (OBS push, etc.) reads correct text
+    selectedSongRef.current = { ...selectedSongRef.current!, lyrics: override };
+  }, [lyricOverrides, selectedSong?.id]); // eslint-disable-line
 
   const setSlideAnim = (slideId: string, anim: AnimStyle) => {
     setSections(prev => prev.map(sec => ({ ...sec, slides: sec.slides.map(s => s.id===slideId ? { ...s, animStyle: anim } : s) })));
@@ -1168,22 +1284,28 @@ export default function LiveStageView({ allSongs, onToast }: Props) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).tagName === "INPUT") return;
-      if (!allSectionSlides.length) return;
-      const globalIdx = activeSlide ? allSectionSlides.findIndex(s => s.id === activeSlide.id) : -1;
-      if (e.key === "ArrowDown" || e.key === "ArrowRight" || e.key === " " || e.key === "Enter") {
+      const target = e.target as HTMLElement;
+      // Skip if user is typing in any text input, textarea, select, or contenteditable
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT") return;
+      if (target.isContentEditable) return;
+      // ⚠️ Grid View has its own keyboard handler — bail out to avoid competing OBS pushes
+      if (lyricsGridOpenRef.current) return;
+      const currentSlides = sectionsRef.current.flatMap(sec => sec.slides);
+      if (!currentSlides.length) return;
+      const currentActiveSlide = activeSlideRef.current;
+      const globalIdx = currentActiveSlide ? currentSlides.findIndex(s => s.id === currentActiveSlide.id) : -1;
+      if (e.key === "ArrowDown" || e.key === "ArrowRight") {
         e.preventDefault();
-        if (globalIdx < allSectionSlides.length - 1) {
-          const next = allSectionSlides[globalIdx + 1];
-          // If crossing into a new section, switch the active tab
-          if (next.sectionLabel !== activeSlide?.sectionLabel) setActiveSection(next.sectionLabel);
+        if (globalIdx < currentSlides.length - 1) {
+          const next = currentSlides[globalIdx + 1];
+          if (next.sectionLabel !== currentActiveSlide?.sectionLabel) setActiveSection(next.sectionLabel);
           setActiveSlide(next);
         }
       } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
         e.preventDefault();
         if (globalIdx <= 0) { setActiveSlide(null); return; }
-        const prev = allSectionSlides[globalIdx - 1];
-        if (prev.sectionLabel !== activeSlide?.sectionLabel) setActiveSection(prev.sectionLabel);
+        const prev = currentSlides[globalIdx - 1];
+        if (prev.sectionLabel !== currentActiveSlide?.sectionLabel) setActiveSection(prev.sectionLabel);
         setActiveSlide(prev);
       } else if (e.key === "Escape") {
         setActiveSlide(null);
@@ -1191,7 +1313,7 @@ export default function LiveStageView({ allSongs, onToast }: Props) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [allSectionSlides, activeSlide, activeSection]); // eslint-disable-line
+  }, []); // ← empty deps: handler registered ONCE, always reads live data via refs
 
   // Auto-scroll active slide card into view when changed by keyboard
   useEffect(() => {
@@ -1270,6 +1392,15 @@ export default function LiveStageView({ allSongs, onToast }: Props) {
             onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="rgba(99,102,241,0.1)"}>
             <LayoutGrid size={isMobile ? 18 : 14} />
             {!isMobile && "Grid View"}
+          </button>
+          {/* ── Media Library button ── */}
+          <button onClick={() => setMediaLibraryOpen(true)}
+            title="Media Library"
+            style={{ display:"flex", alignItems:"center", gap:6, padding: isMobile ? "9px" : "8px 14px", borderRadius:10, background:"rgba(52,211,153,0.08)", border:"1px solid rgba(52,211,153,0.22)", color:"#34d399", fontSize:12, fontWeight:700, cursor:"pointer", transition:"all 0.15s" }}
+            onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background="rgba(52,211,153,0.18)"}
+            onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="rgba(52,211,153,0.08)"}>
+            <FolderOpen size={isMobile ? 18 : 14} />
+            {!isMobile && "Media"}
           </button>
           <button onClick={openSettings}
             style={{ display:"flex", alignItems:"center", gap:6, padding: isMobile ? "9px" : "8px 14px", borderRadius:10, background:"rgba(167,139,250,0.1)", border:"1px solid rgba(167,139,250,0.25)", color:"#a78bfa", fontSize:12, fontWeight:700, cursor:"pointer", transition:"all 0.15s" }}
@@ -1688,6 +1819,20 @@ export default function LiveStageView({ allSongs, onToast }: Props) {
                           setVideoUploading(prev => ({ ...prev, [tab]: true }));
                           setVideoProgress(prev => ({ ...prev, [tab]: 0 }));
                           const ext = file.name.split(".").pop() || "mp4";
+
+                          // ── Step 1: Upload to local server for offline playback ────
+                          let localUrl: string | undefined;
+                          try {
+                            const fd = new FormData();
+                            fd.append("video", file);
+                            const localRes = await fetch(`/api/live-bg-video/${tab}`, { method: "POST", body: fd });
+                            if (localRes.ok) {
+                              const localJson = await localRes.json();
+                              localUrl = localJson.url as string; // e.g. /api/live-bg-video/praise
+                            }
+                          } catch { /* local upload failed — ok, firebase only */ }
+
+                          // ── Step 2: Upload to Firebase Storage for cloud/prod ──────
                           const sRef = storageRef(storage, `live-bg-videos/${tab}.${ext}`);
                           const task = uploadBytesResumable(sRef, file);
                           await new Promise<void>((resolve, reject) => {
@@ -1699,7 +1844,8 @@ export default function LiveStageView({ allSongs, onToast }: Props) {
                             );
                           });
                           const url = await getDownloadURL(task.snapshot.ref);
-                          updateDraft(tab, "bgVideo", { type: "firebase", url });
+                          // Store both: firebase URL for cloud, localUrl for offline fallback
+                          updateDraft(tab, "bgVideo", { type: "firebase", url, ...(localUrl ? { localUrl } : {}) });
                         } catch {
                           onToast("Video upload failed — please try again.", "error");
                         } finally {
@@ -2078,18 +2224,34 @@ export default function LiveStageView({ allSongs, onToast }: Props) {
             <p style={{ margin:0, fontSize:11, color:"rgba(255,255,255,0.18)", letterSpacing:"0.01em" }}>
               Click a slide to display · <kbd style={{ background:"rgba(255,255,255,0.07)", borderRadius:4, padding:"1px 5px", fontSize:10 }}>Space</kbd> / <kbd style={{ background:"rgba(255,255,255,0.07)", borderRadius:4, padding:"1px 5px", fontSize:10 }}>↓</kbd> next · <kbd style={{ background:"rgba(255,255,255,0.07)", borderRadius:4, padding:"1px 5px", fontSize:10 }}>↑</kbd> prev · <kbd style={{ background:"rgba(255,255,255,0.07)", borderRadius:4, padding:"1px 5px", fontSize:10 }}>Esc</kbd> clear
             </p>
-            <button
-              onClick={() => {
-                const url = `${window.location.origin}/live-display`;
-                navigator.clipboard.writeText(url).then(() => { setObsUrlCopied(true); setTimeout(() => setObsUrlCopied(false), 2000); });
-              }}
-              title="Copy OBS Browser Source URL"
-              style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px", borderRadius:8, cursor:"pointer", fontSize:11, fontWeight:700, whiteSpace:"nowrap", flexShrink:0, transition:"all 0.15s ease",
-                border: obsUrlCopied ? "1px solid rgba(52,211,153,0.5)" : "1px solid rgba(167,139,250,0.4)",
-                background: obsUrlCopied ? "rgba(52,211,153,0.12)" : "rgba(167,139,250,0.12)",
-                color: obsUrlCopied ? "#34d399" : "#a78bfa" }}>
-              {obsUrlCopied ? <><CheckIcon size={12} /> Copied!</> : <><Copy size={12} /> OBS URL</>}
-            </button>
+            <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
+              {/* OBS URL (Firestore / Online) — existing */}
+              <button
+                onClick={() => {
+                  const url = `${window.location.origin}/live-display`;
+                  navigator.clipboard.writeText(url).then(() => { setObsUrlCopied(true); setTimeout(() => setObsUrlCopied(false), 2000); });
+                }}
+                title="Copy OBS Browser Source URL (Online — Firestore)"
+                style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px", borderRadius:8, cursor:"pointer", fontSize:11, fontWeight:700, whiteSpace:"nowrap", transition:"all 0.15s ease",
+                  border: obsUrlCopied ? "1px solid rgba(52,211,153,0.5)" : "1px solid rgba(167,139,250,0.4)",
+                  background: obsUrlCopied ? "rgba(52,211,153,0.12)" : "rgba(167,139,250,0.12)",
+                  color: obsUrlCopied ? "#34d399" : "#a78bfa" }}>
+                {obsUrlCopied ? <><CheckIcon size={12} /> Copied!</> : <><Copy size={12} /> OBS URL</>}
+              </button>
+              {/* OBS URL (SSE / Offline) — new walkie-talkie mode */}
+              <button
+                onClick={() => {
+                  const url = `${window.location.origin}/live-display-local`;
+                  navigator.clipboard.writeText(url).then(() => { setObsLocalUrlCopied(true); setTimeout(() => setObsLocalUrlCopied(false), 2000); });
+                }}
+                title="Copy OBS Browser Source URL (Offline / Local — SSE walkie-talkie mode)"
+                style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px", borderRadius:8, cursor:"pointer", fontSize:11, fontWeight:700, whiteSpace:"nowrap", transition:"all 0.15s ease",
+                  border: obsLocalUrlCopied ? "1px solid rgba(52,211,153,0.5)" : "1px solid rgba(251,146,60,0.4)",
+                  background: obsLocalUrlCopied ? "rgba(52,211,153,0.12)" : "rgba(251,146,60,0.10)",
+                  color: obsLocalUrlCopied ? "#34d399" : "#fb923c" }}>
+                {obsLocalUrlCopied ? <><CheckIcon size={12} /> Copied!</> : <><Copy size={12} /> OBS URL (Offline)</>}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -2113,9 +2275,45 @@ export default function LiveStageView({ allSongs, onToast }: Props) {
       {/* ── Lyrics Grid Facility Modal ─────────────────────────── */}
       {lyricsGridOpen && (
         <LyricsGridModal
-          songs={allSongs}
+          songs={allSongs.map(s => lyricOverrides[s.id] ? { ...s, lyrics: lyricOverrides[s.id] } : s)}
           onClose={() => setLyricsGridOpen(false)}
           initialSongTitle={selectedSong?.title}
+          onToast={onToast}
+          onSongLyricsUpdate={(songId, newLyrics) => {
+            // 1. Store override — lyricOverrides effect re-parses sections for default view
+            setLyricOverrides(prev => ({ ...prev, [songId]: newLyrics }));
+            // 2. Patch allSongs in App.tsx so grid shows correct lyrics when reopened
+            const songToUpdate = allSongs.find(s => s.id === songId);
+            if (songToUpdate) {
+              onSongUpdated?.({ ...songToUpdate, lyrics: newLyrics });
+            }
+            // Re-push active slide to OBS if the edited song is currently displayed
+            const curSlide = activeSlideRef.current;
+            const currentSong = selectedSongRef.current as Song | null;
+            if (curSlide && currentSong?.id === songId) {
+              const newSections = parseSections(newLyrics);
+              const newAllSlides = newSections.flatMap(sec => sec.slides);
+              const oldAllSlides = sectionsRef.current.flatMap(sec => sec.slides);
+              const oldIdx = oldAllSlides.findIndex(s => s.id === curSlide.id);
+              const updatedSlide = oldIdx >= 0 && oldIdx < newAllSlides.length
+                ? { ...newAllSlides[oldIdx], animStyle: curSlide.animStyle }
+                : curSlide;
+              fetch("/api/live-push", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  songTitle: currentSong?.title ?? "",
+                  lines: updatedSlide.lines,
+                  animStyle: updatedSlide.animStyle,
+                  visible: true,
+                  bgIdx: bgIdxRef.current,
+                  echoAlign, echoLines, echoLineHeight, lyricsScale, loopEnabled,
+                  bgVideo: bgVideoRef.current,
+                  loopInterval,
+                }),
+              }).catch(() => {});
+            }
+          }}
           fadeScreenActive={fadeScreenActive}
           fadeScreenBg={fadeScreenBg}
           onToggleFade={toggleFadeScreen}
@@ -2124,6 +2322,46 @@ export default function LiveStageView({ allSongs, onToast }: Props) {
           onApplyPreset={applyPreset}
           sceneSongs={sceneSongs}
           liveSettings={{ bgIdx, echoAlign, echoLines, echoLineHeight, lyricsScale, loopEnabled, bgVideo, loopInterval, animStyle: defaultAnimStyle }}
+        />
+      )}
+
+      {/* ── Media Library Modal ── */}
+      {mediaLibraryOpen && (
+        <MediaLibraryModal
+          onClose={() => setMediaLibraryOpen(false)}
+          onToast={(msg, type) => onToast(type as 'success'|'error'|'info'|'warning', msg)}
+          onAssign={(item: MediaItem, target: MediaTarget, blobUrl: string | null) => {
+            const url = blobUrl ?? item.firebaseUrl;
+            if (target === 'praise-bg' || target === 'worship-bg') {
+              const preset: PresetName = target === 'praise-bg' ? 'praise' : 'worship';
+              const bgVal = item.type === 'video'
+                ? { type: 'firebase' as const, url: item.firebaseUrl, localUrl: blobUrl ?? undefined }
+                : null;
+              setModalDrafts(prev => ({ ...prev, [preset]: { ...prev[preset], bgVideo: bgVal } }));
+              setPresets(prev => {
+                const updated = { ...prev, [preset]: { ...prev[preset], bgVideo: bgVal } };
+                try { localStorage.setItem('lsv_presets', JSON.stringify(updated)); } catch {}
+                return updated;
+              });
+              if (activePreset === preset) setBgVideo(bgVal);
+            } else if (target === 'fade-screen') {
+              const fadeBg = item.type === 'image'
+                ? (blobUrl ? { type: 'image-local' as const, url: blobUrl } : { type: 'image-firebase' as const, url })
+                : (blobUrl ? { type: 'video-local' as const, url: blobUrl } : { type: 'video-firebase' as const, url });
+              setFadeScreenBg(fadeBg);
+              setModalFadeScreenBg(fadeBg);
+              fadeScreenBgRef.current = fadeBg;
+              idbSet('lsv_fade_screen', fadeBg).catch(() => {});
+              if (fadeScreenActiveRef.current) {
+                fetch('/api/live-push', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ fadeScreen: true, fadeScreenBg: (fadeBg.type === 'image-local' || fadeBg.type === 'video-local') ? { type: 'color', color: '#000000' } : fadeBg, updatedAt: Date.now() }),
+                }).catch(() => {});
+              }
+            }
+            _ = url; // suppress unused warning
+          }}
         />
       )}
     </div>

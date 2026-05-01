@@ -1830,7 +1830,17 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                 <LiveStageView
                   allSongs={allSongs}
                   isAdmin={isRoleAdmin}
-                  onToast={showToast}
+                  onToast={(msg, type) => showToast(type as "success"|"error"|"info"|"warning", msg)}
+                  onSongUpdated={(updated) => {
+                    setAllSongs(prev => prev.map(s => s.id === updated.id ? updated : s));
+                    try {
+                      const cache = JSON.parse(localStorage.getItem('wf_songs_cache') ?? '{}');
+                      if (cache.songs) {
+                        cache.songs = cache.songs.map((s) => s.id === updated.id ? updated : s);
+                        localStorage.setItem('wf_songs_cache', JSON.stringify(cache));
+                      }
+                    } catch { /* noop */ }
+                  }}
                 />
               </div>
             )}
@@ -2091,14 +2101,15 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
       </div>
 
       {/* ── Toast Notification Stack ──────────────────────────────────────── */}
-      <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none">
+      <div className="fixed top-4 right-4 z-[99999] flex flex-col gap-2 pointer-events-none">
         {toasts.map(toast => {
-          const styles = {
+          const styles = ({
             success: { bar: "bg-emerald-500", icon: "✓", text: "text-emerald-400" },
-            error: { bar: "bg-red-500", icon: "✕", text: "text-red-400" },
-            warning: { bar: "bg-amber-500", icon: "!", text: "text-amber-400" },
-            info: { bar: "bg-indigo-500", icon: "i", text: "text-indigo-400" },
-          }[toast.type];
+            error:   { bar: "bg-red-500",     icon: "✕", text: "text-red-400" },
+            warning: { bar: "bg-amber-500",   icon: "!", text: "text-amber-400" },
+            info:    { bar: "bg-indigo-500",  icon: "i", text: "text-indigo-400" },
+          } as Record<string, { bar: string; icon: string; text: string }>)[toast.type]
+            ?? { bar: "bg-indigo-500", icon: "i", text: "text-indigo-400" };
           return (
             <div
               key={toast.id}
