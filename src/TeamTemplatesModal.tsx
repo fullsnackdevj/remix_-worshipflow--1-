@@ -308,8 +308,8 @@ export default function TeamTemplatesModal({ onClose, allMembers, onToast }: Pro
                           </div>
                         </div>
 
-                        {/* Actions */}
-                        <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {/* Actions — always visible */}
+                        <div className="flex items-center gap-1 shrink-0">
                           <button
                             onClick={() => openEdit(t)}
                             className="w-7 h-7 flex items-center justify-center rounded-lg bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-800/50 text-indigo-500 transition-all"
@@ -318,14 +318,10 @@ export default function TeamTemplatesModal({ onClose, allMembers, onToast }: Pro
                             <Pencil size={13} />
                           </button>
                           <button
-                            onClick={() => setConfirmDeleteId(confirmDeleteId === t.id ? null : t.id)}
+                            onClick={() => setConfirmDeleteId(t.id)}
                             disabled={deleting === t.id}
-                            className={`w-7 h-7 flex items-center justify-center rounded-lg transition-all disabled:opacity-50 ${
-                              confirmDeleteId === t.id
-                                ? "bg-red-500 text-white"
-                                : "bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-400"
-                            }`}
-                            title="Delete"
+                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-400 transition-all disabled:opacity-50"
+                            title="Delete template"
                           >
                             {deleting === t.id
                               ? <Loader2 size={13} className="animate-spin" />
@@ -341,40 +337,6 @@ export default function TeamTemplatesModal({ onClose, allMembers, onToast }: Pro
                           onClick={() => openEdit(t)}
                         />
                       </div>
-
-                      {/* ── Inline delete confirmation banner ── */}
-                      {confirmDeleteId === t.id && (
-                        <div className="border-t border-red-100 dark:border-red-900/40 bg-red-50 dark:bg-red-950/40 px-4 py-3 flex items-center justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="text-xs font-bold text-red-700 dark:text-red-400 flex items-center gap-1.5">
-                              <Trash2 size={11} />
-                              Delete this template?
-                            </p>
-                            <p className="text-[10px] text-red-500/80 dark:text-red-400/60 mt-0.5 truncate">
-                              "{t.name}" will be permanently removed.
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <button
-                              onClick={() => setConfirmDeleteId(null)}
-                              className="px-3 py-1.5 rounded-lg text-[11px] font-semibold text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all"
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              onClick={() => handleDelete(t)}
-                              disabled={deleting === t.id}
-                              className="px-3 py-1.5 rounded-lg text-[11px] font-bold text-white bg-red-500 hover:bg-red-600 active:scale-95 transition-all flex items-center gap-1.5 disabled:opacity-60 shadow-sm shadow-red-500/30"
-                            >
-                              {deleting === t.id
-                                ? <Loader2 size={11} className="animate-spin" />
-                                : <Trash2 size={11} />
-                              }
-                              Confirm Delete
-                            </button>
-                          </div>
-                        </div>
-                      )}
                     </div>
                   ))}
                 </div>
@@ -547,12 +509,68 @@ export default function TeamTemplatesModal({ onClose, allMembers, onToast }: Pro
             >
               {saving
                 ? <><Loader2 size={15} className="animate-spin" /> Saving…</>
-                : <><Check size={15} /> {editingId ? "Update Template" : "Save Template"}</>
+                : editingId ? "Update" : "Save Template"
               }
             </button>
           </div>
         )}
       </div>
+
+      {/* ── Delete Confirmation Overlay ────────────────────────────────────── */}
+      {confirmDeleteId && (() => {
+        const target = templates.find(t => t.id === confirmDeleteId);
+        if (!target) return null;
+        return (
+          <div
+            className="absolute inset-0 z-10 flex items-center justify-center rounded-3xl"
+            style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)" }}
+            onClick={() => setConfirmDeleteId(null)}
+          >
+            <div
+              className="w-[calc(100%-2.5rem)] max-w-xs bg-white dark:bg-gray-900 rounded-2xl shadow-2xl overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Warning stripe */}
+              <div className="bg-gradient-to-r from-red-500 to-rose-600 px-5 py-4 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                  <Trash2 size={18} className="text-white" />
+                </div>
+                <div>
+                  <p className="text-white font-extrabold text-sm leading-tight">Delete Template?</p>
+                  <p className="text-red-100 text-[11px] mt-0.5">This action cannot be undone</p>
+                </div>
+              </div>
+              {/* Body */}
+              <div className="px-5 py-4">
+                <p className="text-sm text-gray-600 dark:text-gray-300">
+                  You are about to permanently delete{" "}
+                  <span className="font-bold text-gray-900 dark:text-white">&ldquo;{target.name}&rdquo;</span>.
+                  All {target.musicians.length} musician{target.musicians.length !== 1 ? "s" : ""} in this lineup will be removed.
+                </p>
+              </div>
+              {/* Actions */}
+              <div className="px-5 pb-5 flex gap-3">
+                <button
+                  onClick={() => setConfirmDeleteId(null)}
+                  className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleDelete(target)}
+                  disabled={deleting === target.id}
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-red-500 to-rose-600 text-white text-sm font-bold hover:from-red-400 hover:to-rose-500 transition-all shadow-lg shadow-red-500/20 flex items-center justify-center gap-2 disabled:opacity-60"
+                >
+                  {deleting === target.id
+                    ? <><Loader2 size={14} className="animate-spin" /> Deleting…</>
+                    : "Delete"
+                  }
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

@@ -2132,7 +2132,7 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
       const jSong = allSongs.find(sg => sg.id === editSchedSongLineup.joyful);
       const sSong = allSongs.find(sg => sg.id === editSchedSongLineup.solemn);
       return (
-        <div className="fixed inset-0 z-[700] flex items-center justify-center bg-black/60 backdrop-blur-md px-4 py-8" onClick={() => setShowPreviewBeforeSave(false)}>
+        <div className="fixed inset-0 z-[700] flex items-center justify-center bg-black/60 backdrop-blur-md px-4 py-8" style={{ touchAction: "none", overscrollBehavior: "none" }} onClick={() => setShowPreviewBeforeSave(false)}>
           <div
             className="relative w-full max-w-[460px] flex flex-col bg-white dark:bg-gray-900 rounded-2xl overflow-hidden shadow-2xl ring-1 ring-black/20"
             onClick={e => e.stopPropagation()}
@@ -2375,9 +2375,8 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
             <div className="shrink-0 border-t border-gray-100 dark:border-white/[0.08] bg-white dark:bg-gray-900 px-4 py-3 flex gap-3">
               <button
                 onClick={() => setShowPreviewBeforeSave(false)}
-                className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all flex items-center justify-center gap-2"
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all"
               >
-                <Pencil size={14} />
                 Back to Edit
               </button>
               <button
@@ -2387,7 +2386,7 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
               >
                 {isSavingSchedule
                   ? <><Loader2 size={15} className="animate-spin" /> Saving…</>
-                  : <><Check size={15} /> {editingExisting ? "Confirm Update" : "Confirm & Save"}</>
+                  : editingExisting ? "Confirm Update" : "Confirm & Save"
                 }
               </button>
             </div>
