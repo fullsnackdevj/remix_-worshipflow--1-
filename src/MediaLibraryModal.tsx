@@ -71,7 +71,18 @@ const TARGET_LABELS: Record<MediaTarget, { label: string; color: string; glow: s
   "fade-screen": { label: "Fade Screen", color: "#34d399", glow: "rgba(52,211,153,0.25)" },
 };
 
+function useIsMobile() {
+  const [mobile, setMobile] = React.useState(() => window.innerWidth < 640);
+  React.useEffect(() => {
+    const fn = () => setMobile(window.innerWidth < 640);
+    window.addEventListener("resize", fn);
+    return () => window.removeEventListener("resize", fn);
+  }, []);
+  return mobile;
+}
+
 export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode, pickTarget, activeAssignments }: Props) {
+  const isMobile = useIsMobile();
   const [items, setItems] = useState<MediaItem[]>([]);
   const [selected, setSelected] = useState<MediaItem | null>(null);
   const [cachedIds, setCachedIds] = useState<Set<string>>(new Set());
@@ -311,21 +322,23 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
         position: "fixed", inset: 0, zIndex: 10000,
         background: "rgba(0,0,0,0.75)", backdropFilter: "blur(16px)",
         display: "flex", alignItems: "center", justifyContent: "center",
-        padding: 20, fontFamily: "'Inter','Segoe UI',sans-serif",
+        padding: isMobile ? 0 : 20, fontFamily: "'Inter','Segoe UI',sans-serif",
       }}
     >
       <div style={{
-        width: "100%", maxWidth: 880, height: "min(640px, 90vh)",
+        width: "100%", maxWidth: isMobile ? "100%" : 880,
+        height: isMobile ? "100dvh" : "min(640px, 90vh)",
         background: "linear-gradient(145deg, rgba(15,12,28,0.98) 0%, rgba(10,10,20,0.98) 100%)",
-        border: "1px solid rgba(167,139,250,0.18)",
-        borderRadius: 20, display: "flex", flexDirection: "column",
+        border: isMobile ? "none" : "1px solid rgba(167,139,250,0.18)",
+        borderRadius: isMobile ? 0 : 20, display: "flex", flexDirection: "column",
         overflow: "hidden", boxShadow: "0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.04) inset",
       }}>
 
         {/* ── Header ── */}
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.07)",
+          padding: isMobile ? "12px 14px" : "16px 20px",
+          borderBottom: "1px solid rgba(255,255,255,0.07)",
           background: "rgba(255,255,255,0.02)", flexShrink: 0,
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -374,10 +387,10 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
         </div>
 
         {/* ── Body ── */}
-        <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: isMobile ? "column" : "row", overflow: "hidden" }}>
 
           {/* Left: upload + grid */}
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", borderRight: "1px solid rgba(255,255,255,0.06)" }}>
+          <div style={{ flex: isMobile && selected ? "0 0 45%" : 1, display: "flex", flexDirection: "column", overflow: "hidden", borderRight: isMobile ? "none" : "1px solid rgba(255,255,255,0.06)", borderBottom: isMobile && selected ? "1px solid rgba(255,255,255,0.07)" : "none" }}>
 
             {/* Upload zone */}
             <div
@@ -452,7 +465,7 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
                     )}
                   </div>
                 )}
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(130px,1fr))", gap: 8 }}>
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(auto-fill,minmax(90px,1fr))" : "repeat(auto-fill,minmax(130px,1fr))", gap: isMobile ? 6 : 8 }}>
                   {items.map(item => {
                     const thumbUrl = blobUrls[item.id] ?? item.firebaseUrl;
                     const isSelected = selected?.id === item.id;
@@ -520,7 +533,15 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
           </div>
 
           {/* Right: Detail panel — hidden in select mode */}
-          <div style={{ width: selectMode ? 0 : 260, flexShrink: 0, display: selectMode ? "none" : "flex", flexDirection: "column", overflow: "hidden", background: "rgba(0,0,0,0.2)", transition: "width 0.2s" }}>
+          <div style={{
+            width: isMobile ? "100%" : (selectMode ? 0 : 260),
+            flex: isMobile ? (selected ? "1 1 55%" : "0 0 0px") : undefined,
+            flexShrink: 0,
+            display: (selectMode || (isMobile && !selected)) ? "none" : "flex",
+            flexDirection: "column", overflow: "hidden",
+            background: "rgba(0,0,0,0.2)",
+            transition: "flex 0.2s",
+          }}>
             {!selected ? (
               <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 10, color: "rgba(255,255,255,0.18)", padding: 24, textAlign: "center" }}>
                 <div style={{ width: 52, height: 52, borderRadius: 14, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -530,6 +551,12 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
               </div>
             ) : (
               <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+                {/* Mobile back strip */}
+                {isMobile && (
+                  <button onClick={() => setSelected(null)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 14px", background: "rgba(255,255,255,0.04)", border: "none", borderBottom: "1px solid rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.5)", fontSize: 12, fontWeight: 600, cursor: "pointer", flexShrink: 0 }}>
+                    ← Back to library
+                  </button>
+                )}
                 {/* Preview */}
                 <div style={{ background: "#000", aspectRatio: "16/9", flexShrink: 0, overflow: "hidden", position: "relative" }}>
                   {selected.type === "image"
