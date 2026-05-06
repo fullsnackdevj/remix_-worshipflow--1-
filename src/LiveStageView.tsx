@@ -764,6 +764,10 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
       };
     } catch { return { ...DEFAULT_PRESETS }; }
   });
+  // Always-current ref — used by auto-sync useEffect (empty-dep closure) to avoid
+  // reading stale presets state when the online event fires after a long session.
+  const presetsRef = React.useRef(presets);
+  presetsRef.current = presets;
   // Derive initial settings from the active preset (always valid)
   const _cur = (() => {
     try {
@@ -1150,7 +1154,8 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
         if (!file || !meta) continue;
 
         // Check the preset's current bgVideo — only sync if it's still type:"local"
-        const currentBgVideo = presets[preset]?.bgVideo;
+        // Use presetsRef (always-current) instead of presets (stale closure from mount)
+        const currentBgVideo = presetsRef.current[preset]?.bgVideo;
         if (!currentBgVideo || currentBgVideo.type !== "local") {
           // Already upgraded or removed — clear the queue entries
           await idbSet(`lsv_pending_sync_blob_${preset}`, null).catch(() => {});

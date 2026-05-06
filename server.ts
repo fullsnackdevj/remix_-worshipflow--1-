@@ -325,7 +325,14 @@ const LIVE_STATE_FILE = path.join(CACHE_DIR, "liveState.json");
 try { if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true }); } catch { /* noop */ }
 
 function saveLiveStateToDisk() {
-  try { fs.writeFileSync(LIVE_STATE_FILE, JSON.stringify(liveState), "utf-8"); } catch { /* noop */ }
+  try {
+    // Re-create cache dir on every write — guards against first-run and dir deletion
+    if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
+    fs.writeFileSync(LIVE_STATE_FILE, JSON.stringify(liveState), "utf-8");
+    console.log(`[LiveStage] liveState saved to disk (${Object.keys(liveState).length} keys)`);
+  } catch (e) {
+    console.warn("[LiveStage] Failed to save liveState to disk:", e);
+  }
 }
 function loadLiveStateFromDisk(): Record<string, unknown> | null {
   try {
