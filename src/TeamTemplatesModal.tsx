@@ -73,17 +73,17 @@ export default function TeamTemplatesModal({ onClose, allMembers, onToast }: Pro
 
   useEffect(() => { fetchTemplates(); }, [fetchTemplates]);
 
-  // Lock ALL scrollable containers while this modal is open
-  // CSS rule in index.css: body[data-modal-open] * { overflow: hidden }
+  // Lock background scroll while modal is open — use overscrollBehavior instead
+  // of overflow:hidden so inner scrollable containers still work on iOS.
   useEffect(() => {
     document.body.setAttribute("data-modal-open", "1");
-    document.body.style.overflow = "hidden";
+    document.body.style.overscrollBehavior = "none";
     const mainEl = document.querySelector("main") as HTMLElement | null;
-    if (mainEl) mainEl.style.overflow = "hidden";
+    if (mainEl) mainEl.style.overscrollBehavior = "none";
     return () => {
       document.body.removeAttribute("data-modal-open");
-      document.body.style.overflow = "";
-      if (mainEl) mainEl.style.overflow = "";
+      document.body.style.overscrollBehavior = "";
+      if (mainEl) mainEl.style.overscrollBehavior = "";
     };
   }, []);
 
@@ -231,7 +231,7 @@ export default function TeamTemplatesModal({ onClose, allMembers, onToast }: Pro
         </div>
 
         {/* ── Body ───────────────────────────────────────────────────────── */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto" style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}>
 
           {/* ── LIST VIEW ────────────────────────────────────────────────── */}
           {view === "list" && (
@@ -454,7 +454,15 @@ export default function TeamTemplatesModal({ onClose, allMembers, onToast }: Pro
                   className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder-gray-400 mb-2"
                 />
 
-                <div className="space-y-0.5 max-h-52 overflow-y-auto pr-1">
+                <div
+                  className="space-y-0.5 overflow-y-auto pr-1"
+                  style={{
+                    maxHeight: window.innerWidth < 640 ? "40vh" : "13rem",
+                    WebkitOverflowScrolling: "touch",
+                    touchAction: "pan-y",
+                    overscrollBehavior: "contain",
+                  }}
+                >
                   {muCandidates.map(m => {
                     const allRoles: string[] = ((m as any).roles || []).filter((r: string) => r.trim());
                     const instrumentRoles = allRoles.filter(r => INSTRUMENTALIST_ROLES.includes(r));
