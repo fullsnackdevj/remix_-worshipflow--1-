@@ -244,7 +244,12 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
   widgetId = "main", customChannels, fabIcon, fabGradient, fabBottomOffset = 24,
 }: ChatWidgetProps) {
 
-  const CH = customChannels ?? DEFAULT_CHANNELS;
+  // Guest role: restrict to Audio-Tech only (hide Chit-Chats and Music Team)
+  const GUEST_HIDDEN_CHANNELS = ["chit-chats", "music-team"];
+  const baseChannels = customChannels ?? DEFAULT_CHANNELS;
+  const CH = userRole === "guest"
+    ? baseChannels.filter(ch => !GUEST_HIDDEN_CHANNELS.includes(ch.id))
+    : baseChannels;
 
   const cacheKey = (ch: string) => `wf_${widgetId}_cache_${ch}`;
   const loadCache = useCallback((ch: string): ChatMessage[] => {

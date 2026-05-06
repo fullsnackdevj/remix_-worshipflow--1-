@@ -14,10 +14,11 @@
  *   initialSongId? — pre-select a song (e.g. the one currently on Live Stage)
  */
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { X, LayoutGrid, Music2, ChevronDown, EyeOff, Zap, Heart, Monitor, Pencil, Check, AlertCircle, Settings, Link, FolderOpen } from "lucide-react";
+import { X, LayoutGrid, Radio, Music2, ChevronDown, EyeOff, Zap, Heart, Monitor, Pencil, Check, AlertCircle, Settings, Link, FolderOpen, Plus, Minus, Search, Tent, GripVertical } from "lucide-react";
 import type { Song } from "./types";
 import { db } from "./firebase";
 import { doc, onSnapshot } from "firebase/firestore";
+import CampReadinessModal from "./CampReadinessModal";
 
 // ── Types (mirrors LiveStageView exactly) ─────────────────────────────────────
 type AnimStyle = "word-fade" | "word-bounce" | "typewriter" | "blur-in" | "fade" | "slide-up" | "echo" | "breathe";
@@ -437,19 +438,32 @@ interface LiveSettings {
   echoLineHeight: number;
   lyricsScale: number;
   loopEnabled: boolean;
-  bgVideo: string | null;
+  bgVideo: unknown | null; // BgVideo object — typed as unknown to avoid importing the full type
   loopInterval: number;
-  animStyle: string; // overrides the slide's baked-in animStyle with the current preset's
+  animStyle: string;
+  // Echo advanced + font format — MUST be included or slide clicks wipe them from OBS state
+  echoMarquee: boolean;
+  bigSmallFont: boolean;
+  echoSacredScale: number;
+  echoContentScale: number;
+  echoFuncScale: number;
+  echoAnimDuration: number;
+  echoBounce: number;
 }
 
 interface Props {
   songs: Song[];           // all songs (for auto-select lookup)
   sceneSongs: Song[];     // only the Scene Playlist songs (for dropdown)
+  sceneSongIds?: string[]; // raw IDs — for in-scene check without re-deriving
   onClose: () => void;
   initialSongTitle?: string;
   // Called when lyrics are saved so parent (LiveStageView) can update its selectedSong
   onSongLyricsUpdate?: (songId: string, newLyrics: string) => void;
   onToast?: (message: string, type: string) => void;
+  // Scene playlist mutations — wired to LiveStageView's addToScene / removeFromScene
+  onAddToScene?: (song: Song) => void;
+  onRemoveFromScene?: (songId: string) => void;
+  onReorderScene?: (newIds: string[]) => void;
   // Fade / Preset controls mirrored from LiveStageView
   fadeScreenActive?: boolean;
   fadeScreenBg?: unknown;
@@ -462,12 +476,17 @@ interface Props {
   onCopyObsUrl?: () => void;    // copies online OBS URL (Firestore mode)
   onCopyObsLocalUrl?: () => void; // copies offline OBS URL (SSE / local mode)
   onOpenMediaLibrary?: () => void; // opens the Media Library modal from grid view
+  onOpenCampReadiness?: () => void; // opens the Camp Readiness Check modal
+  isInline?: boolean; // when true: renders inline filling container instead of fixed overlay
 }
 
 export default function LyricsGridModal({
-  songs, sceneSongs, onClose, initialSongTitle,
+  songs, sceneSongs, sceneSongIds: sceneSongIdsProp = [], onClose, initialSongTitle,
   onSongLyricsUpdate,
   onToast,
+  onAddToScene,
+  onRemoveFromScene,
+  onReorderScene,
   fadeScreenActive, fadeScreenBg, onToggleFade,
   activePreset, presetActivated, onApplyPreset,
   liveSettings,
@@ -475,9 +494,72 @@ export default function LyricsGridModal({
   onCopyObsUrl,
   onCopyObsLocalUrl,
   onOpenMediaLibrary,
+  onOpenCampReadiness,
+  isInline = false,
 }: Props) {
   const [obsUrlCopied,      setObsUrlCopied]      = useState(false);
   const [obsLocalUrlCopied, setObsLocalUrlCopied] = useState(false);
+  const [showCampReady,     setShowCampReady]     = useState(false);
+
+  // ── Left Song Panel state ─────────────────────────────────────────────────
+  // Desktop: open by default. Mobile: hidden by default (user can toggle via + button).
+  const [showSongPanel,    setShowSongPanel]    = useState(() => window.innerWidth > 1024);
+  const [songPanelWidth,   setSongPanelWidth]   = useState(280);
+  const [songPanelQuery,   setSongPanelQuery]   = useState("");
+  const isSongPanelDraggingRef = useRef(false);
+  const songPanelDragStartXRef = useRef(0);
+  const songPanelDragStartWRef = useRef(280);
+
+  const handleSongPanelResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isSongPanelDraggingRef.current  = true;
+    songPanelDragStartXRef.current  = e.clientX;
+    songPanelDragStartWRef.current  = songPanelWidth;
+    document.body.style.cursor      = "col-resize";
+    document.body.style.userSelect  = "none";
+  }, [songPanelWidth]);
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!isSongPanelDraggingRef.current) return;
+      const delta = e.clientX - songPanelDragStartXRef.current;
+      const next  = Math.min(520, Math.max(220, songPanelDragStartWRef.current + delta));
+      setSongPanelWidth(next);
+    };
+    const onUp = () => {
+      if (!isSongPanelDraggingRef.current) return;
+      isSongPanelDraggingRef.current = false;
+      document.body.style.cursor     = "";
+      document.body.style.userSelect = "";
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup",   onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup",   onUp);
+    };
+  }, []);
+
+  // Filtered songs for the panel search
+  const songPanelFiltered = songs.filter(s =>
+    s.title.toLowerCase().includes(songPanelQuery.toLowerCase()) ||
+    (s.artist ?? "").toLowerCase().includes(songPanelQuery.toLowerCase())
+  );
+  // When no query: show scene songs first (sorted by position), then all others
+  const songPanelDisplay = songPanelQuery.trim()
+    ? songPanelFiltered
+    : songs;
+
+  // ── "Thinking" state: tracks which song id is mid-add (shows spinner) ───────
+  const [addingId, setAddingId] = useState<string | null>(null);
+  const handleAddToScene = useCallback((song: Song) => {
+    if (addingId === song.id) return; // prevent double-click
+    setAddingId(song.id);
+    setTimeout(() => {
+      onAddToScene?.(song);
+      setAddingId(null);
+    }, 450);
+  }, [addingId, onAddToScene]);
 
   const handleCopyObsUrl = () => {
     onCopyObsUrl?.();
@@ -505,7 +587,7 @@ export default function LyricsGridModal({
   const [liveFadeActive, setLiveFadeActive] = useState(false);
   const [liveFadeBg, setLiveFadeBg]         = useState<Record<string, unknown> | null>(null);
   const [pushFeedback, setPushFeedback] = useState<string | null>(null);
-  const [showPreview, setShowPreview]   = useState(false);
+  const [showPreview, setShowPreview]   = useState(true);
   const [previewWidth, setPreviewWidth] = useState(300);
   const [isMobile, setIsMobile]         = useState(() => window.innerWidth <= 640);
   const [editSong, setEditSong]         = useState<Song | null>(null);
@@ -710,16 +792,15 @@ export default function LyricsGridModal({
 
   useEffect(() => {
     if (userPickedRef.current) return;          // user already made a choice — don't override
-    if (!initialSongTitle || songs.length === 0) return;
-    // Prefer scene playlist match so the dropdown shows it as active
-    const match =
-      sceneSongs.find(s => s.title.toLowerCase() === initialSongTitle.toLowerCase()) ??
-      songs.find(s => s.title.toLowerCase() === initialSongTitle.toLowerCase());
+    // Only auto-select if there's a match inside the Scene Playlist.
+    // If the Scene Playlist is empty, stay blank so the user adds songs first.
+    if (!initialSongTitle || sceneSongs.length === 0) return;
+    const match = sceneSongs.find(s => s.title.toLowerCase() === initialSongTitle.toLowerCase());
     if (match) {
       setSelectedSong(match);
       userPickedRef.current = true;  // lock: once the song is resolved, never override again
     }
-  }, [initialSongTitle, songs, sceneSongs]);
+  }, [initialSongTitle, sceneSongs]);
 
   // ── Parse lyrics whenever song changes ──────────────────────────────────────
   useEffect(() => {
@@ -850,24 +931,29 @@ export default function LyricsGridModal({
 
 
   return (
-    /* Backdrop */
+    /* Outer wrapper — fixed overlay when modal, flex-fill when inline */
     <div
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-      style={{
+      onClick={isInline ? undefined : e => { if (e.target === e.currentTarget) onClose(); }}
+      style={isInline ? {
+        flex: 1, display: "flex", flexDirection: "column",
+        overflow: "hidden", minHeight: 0,
+        background: "var(--wf-surface, #07090f)",
+      } : {
         position: "fixed", inset: 0, zIndex: 9999,
         background: "rgba(0,0,0,0.82)",
         backdropFilter: "blur(6px)",
         display: "flex",
         flexDirection: "column",
-        // Note: do NOT set overflow:hidden here — it would clip the song dropdown
       }}
     >
+      {/* Camp Readiness Modal — rendered INSIDE grid overlay so it appears on top */}
+      {showCampReady && <CampReadinessModal onClose={() => setShowCampReady(false)} />}
       {/* ── Top toolbar ──────────────────────────────────────────────────────── */}
       <div style={{
         background: "#111",
         borderBottom: "1px solid #222",
-        padding: "0 16px",
-        minHeight: 40,
+        padding: "0 20px",
+        minHeight: 52,
         display: "flex",
         alignItems: "center",
         gap: 12,
@@ -877,40 +963,63 @@ export default function LyricsGridModal({
         overflow: "visible",
       }} className="lgm-toolbar">
         {/* Icon + Title */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginRight: 4 }}>
-          <LayoutGrid size={16} color="#818cf8" />
-          <span style={{ fontSize: 13, fontWeight: 700, color: "#e5e7eb", letterSpacing: "0.02em" }}>
-            Lyrics Facility <span style={{ fontWeight: 400, color: "rgba(255,255,255,0.35)", fontSize: 11 }}>( Grid View )</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginRight: 4 }}>
+          <Radio size={20} color="rgba(255,255,255,0.85)" />
+          <span style={{ fontSize: 15, fontWeight: 700, color: "#e5e7eb", letterSpacing: "-0.01em" }}>
+            Live Stage
           </span>
         </div>
+
+        {/* Camp Readiness Check — right next to title */}
+        {onOpenCampReadiness && (
+          <button
+            onClick={() => setShowCampReady(true)}
+            title="Camp Readiness Check — verify offline mode is ready"
+            style={{
+              height: 34, borderRadius: 8, flexShrink: 0,
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+              padding: "0 13px",
+              cursor: "pointer", transition: "all 0.15s",
+              background: "rgba(16,185,129,0.10)",
+              border: "1px solid rgba(16,185,129,0.35)",
+              color: "rgba(16,185,129,0.9)",
+              fontSize: 12, fontWeight: 600,
+            }}
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "rgba(16,185,129,0.22)"}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "rgba(16,185,129,0.10)"}
+          >
+            <Tent size={14} />
+            <span>Camp Ready</span>
+          </button>
+        )}
 
         {/* Spacer */}
         <div style={{ flex: 1 }} />
 
         {/* Slide count */}
         {allSlides.length > 0 && (
-          <span className="lgm-slide-count" style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", fontWeight: 500, flexShrink: 0 }}>
+          <span className="lgm-slide-count" style={{ fontSize: 13, color: "rgba(255,255,255,0.3)", fontWeight: 500, flexShrink: 0 }}>
             {allSlides.length} slides
           </span>
         )}
 
 
-        {/* Close */}
-        <button
+        {/* Close — hidden in inline mode (no default view to return to) */}
+        {!isInline && <button
           onClick={onClose}
           className="lgm-close-btn"
           style={{
-            width: 32, height: 32,
+            width: 36, height: 36,
             display: "flex", alignItems: "center", justifyContent: "center",
             background: "rgba(255,255,255,0.06)",
             border: "1px solid rgba(255,255,255,0.1)",
-            borderRadius: 6,
+            borderRadius: 8,
             cursor: "pointer",
             flexShrink: 0,
           }}
         >
-          <X size={14} color="rgba(255,255,255,0.7)" />
-        </button>
+          <X size={16} color="rgba(255,255,255,0.7)" />
+        </button>}
       </div>
 
       {/* ── Fade / Preset control strip — mirrors LiveStageView exactly ──────── */}
@@ -920,8 +1029,8 @@ export default function LyricsGridModal({
           style={{
             background: "#0d0d0d",
             borderBottom: "1px solid #1e1e1e",
-            padding: "0 16px",
-            height: 44,
+            padding: "0 20px",
+            height: 52,
             display: "flex",
             alignItems: "center",
             gap: 8,
@@ -932,6 +1041,23 @@ export default function LyricsGridModal({
           {/* Base style matches Monitor: borderRadius 8, same inactive muted state  */}
           {/* Active accent: Fade=white, Praise=amber, Worship=violet, Monitor=indigo */}
 
+          {/* '+' Song Panel toggle — leftmost icon button */}
+          <button
+            onClick={() => setShowSongPanel(v => !v)}
+            className="lgm-icon-btn"
+            title={showSongPanel ? "Hide Scene Playlist" : "Add Songs to Scene Playlist"}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: 36, height: 36, borderRadius: 8, flexShrink: 0,
+              cursor: "pointer", transition: "all 0.15s",
+              background: showSongPanel ? "rgba(52,211,153,0.18)" : "rgba(255,255,255,0.04)",
+              border: showSongPanel ? "1px solid rgba(52,211,153,0.55)" : "1px solid rgba(255,255,255,0.09)",
+              color: showSongPanel ? "#34d399" : "rgba(255,255,255,0.5)",
+            }}
+          >
+            <Plus size={16} />
+          </button>
+
           {onToggleFade && (
             <button
               onClick={onToggleFade}
@@ -939,14 +1065,14 @@ export default function LyricsGridModal({
               title={fadeScreenActive ? "OBS Faded — click to reveal" : "Fade OBS Screen"}
               style={{
                 display: "flex", alignItems: "center", justifyContent: "center",
-                width: 30, height: 30, borderRadius: 8, flexShrink: 0,
+                width: 36, height: 36, borderRadius: 8, flexShrink: 0,
                 cursor: "pointer", transition: "all 0.15s",
                 background: fadeScreenActive ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.04)",
                 border: fadeScreenActive ? "1px solid rgba(255,255,255,0.45)" : "1px solid rgba(255,255,255,0.09)",
                 color: fadeScreenActive ? "#fff" : "rgba(255,255,255,0.5)",
               }}
             >
-              <EyeOff size={13} />
+              <EyeOff size={16} />
             </button>
           )}
 
@@ -964,14 +1090,14 @@ export default function LyricsGridModal({
                 title={label}
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  width: 30, height: 30, borderRadius: 8, flexShrink: 0,
+                  width: 36, height: 36, borderRadius: 8, flexShrink: 0,
                   cursor: "pointer", transition: "all 0.15s",
                   background: isActive ? accent.bg  : "rgba(255,255,255,0.04)",
                   border:     isActive ? `1px solid ${accent.border}` : "1px solid rgba(255,255,255,0.09)",
                   color:      isActive ? accent.color : "rgba(255,255,255,0.5)",
                 }}
               >
-                <Icon size={13} />
+                <Icon size={16} />
               </button>
             );
           })}
@@ -982,7 +1108,7 @@ export default function LyricsGridModal({
               onClick={() => setDropdownOpen(v => !v)}
               style={{
                 display: "flex", alignItems: "center", justifyContent: "space-between",
-                height: 30, padding: "0 10px",
+                height: 36, padding: "0 12px",
                 borderRadius: 8,
                 background: dropdownOpen ? "rgba(99,102,241,0.12)" : "rgba(255,255,255,0.04)",
                 border: dropdownOpen ? "1px solid rgba(99,102,241,0.5)" : "1px solid rgba(255,255,255,0.09)",
@@ -991,11 +1117,11 @@ export default function LyricsGridModal({
               }}
             >
               <div style={{ minWidth: 0, display: "flex", alignItems: "baseline", gap: 6, overflow: "hidden" }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: selectedSong ? "#fff" : "rgba(255,255,255,0.35)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flexShrink: 1 }}>
-                  {selectedSong ? selectedSong.title : "Select a song…"}
+                <span style={{ fontSize: 13, fontWeight: 700, color: selectedSong ? "#fff" : "rgba(255,255,255,0.35)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flexShrink: 1 }}>
+                  {selectedSong ? selectedSong.title : sceneSongs.length === 0 ? "Add songs to Scene Playlist first" : "Select a song…"}
                 </span>
                 {selectedSong?.artist && (
-                  <span className="lgm-dropdown-artist" style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", whiteSpace: "nowrap", flexShrink: 0 }}>
+                  <span className="lgm-dropdown-artist" style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", whiteSpace: "nowrap", flexShrink: 0 }}>
                     {selectedSong.artist}
                   </span>
                 )}
@@ -1051,21 +1177,21 @@ export default function LyricsGridModal({
           {onOpenMediaLibrary && (
             <button
               onClick={onOpenMediaLibrary}
-              className="lgm-icon-btn"
+            className="lgm-labeled-btn"
               title="Media Library"
               style={{
-                display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
-                height: 30, padding: "0 10px", borderRadius: 8, flexShrink: 0,
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                height: 36, padding: "0 13px", borderRadius: 8, flexShrink: 0,
                 cursor: "pointer", transition: "all 0.15s",
                 background: "rgba(52,211,153,0.08)",
                 border: "1px solid rgba(52,211,153,0.28)",
                 color: "#34d399",
-                fontSize: 11, fontWeight: 600,
+                fontSize: 12, fontWeight: 600,
               }}
               onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "rgba(52,211,153,0.18)"}
               onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "rgba(52,211,153,0.08)"}
             >
-              <FolderOpen size={13} />
+              <FolderOpen size={15} />
               <span className="lgm-btn-label">Media Library</span>
             </button>
           )}
@@ -1075,39 +1201,39 @@ export default function LyricsGridModal({
             <>
               <button
                 onClick={handleCopyObsUrl}
-                className="lgm-icon-btn"
+                className="lgm-labeled-btn"
                 title="Copy OBS Browser Source URL (Online — Firestore)"
                 style={{
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
-                  height: 30, padding: "0 10px", borderRadius: 8, flexShrink: 0,
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                  height: 36, padding: "0 13px", borderRadius: 8, flexShrink: 0,
                   cursor: "pointer", transition: "all 0.15s",
                   background: obsUrlCopied ? "rgba(52,211,153,0.12)" : "rgba(167,139,250,0.10)",
                   border: obsUrlCopied ? "1px solid rgba(52,211,153,0.5)" : "1px solid rgba(167,139,250,0.30)",
                   color: obsUrlCopied ? "#34d399" : "#c4b5fd",
-                  fontSize: 11, fontWeight: 600,
+                  fontSize: 12, fontWeight: 600,
                 }}
                 onMouseEnter={e => !obsUrlCopied && ((e.currentTarget as HTMLElement).style.background = "rgba(167,139,250,0.22)")}
                 onMouseLeave={e => !obsUrlCopied && ((e.currentTarget as HTMLElement).style.background = "rgba(167,139,250,0.10)")}
               >
-                {obsUrlCopied ? <><Check size={13} /> <span className="lgm-btn-label">Copied!</span></> : <><Link size={13} /> <span className="lgm-btn-label">OBS Online</span></>}
+                {obsUrlCopied ? <><Check size={15} /> <span className="lgm-btn-label">Copied!</span></> : <><Link size={15} /> <span className="lgm-btn-label">OBS Online</span></>}
               </button>
               <button
                 onClick={handleCopyObsLocalUrl}
-                className="lgm-icon-btn"
+                className="lgm-labeled-btn"
                 title="Copy OBS Browser Source URL (Offline / Local — SSE mode)"
                 style={{
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
-                  height: 30, padding: "0 10px", borderRadius: 8, flexShrink: 0,
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                  height: 36, padding: "0 13px", borderRadius: 8, flexShrink: 0,
                   cursor: "pointer", transition: "all 0.15s",
                   background: obsLocalUrlCopied ? "rgba(52,211,153,0.12)" : "rgba(251,146,60,0.10)",
                   border: obsLocalUrlCopied ? "1px solid rgba(52,211,153,0.5)" : "1px solid rgba(251,146,60,0.35)",
                   color: obsLocalUrlCopied ? "#34d399" : "#fb923c",
-                  fontSize: 11, fontWeight: 600,
+                  fontSize: 12, fontWeight: 600,
                 }}
                 onMouseEnter={e => !obsLocalUrlCopied && ((e.currentTarget as HTMLElement).style.background = "rgba(251,146,60,0.20)")}
                 onMouseLeave={e => !obsLocalUrlCopied && ((e.currentTarget as HTMLElement).style.background = "rgba(251,146,60,0.10)")}
               >
-                {obsLocalUrlCopied ? <><Check size={13} /> <span className="lgm-btn-label">Copied!</span></> : <><Link size={13} /> <span className="lgm-btn-label">OBS Offline</span></>}
+                {obsLocalUrlCopied ? <><Check size={15} /> <span className="lgm-btn-label">Copied!</span></> : <><Link size={15} /> <span className="lgm-btn-label">OBS Offline</span></>}
               </button>
             </>
           )}
@@ -1115,19 +1241,19 @@ export default function LyricsGridModal({
           {/* Live Preview toggle */}
           <button
             onClick={() => setShowPreview(v => !v)}
-            className="lgm-icon-btn"
+            className="lgm-labeled-btn"
             title={showPreview ? "Hide live preview" : "Show live screen"}
             style={{
-              display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
-              height: 30, padding: "0 10px", borderRadius: 8, flexShrink: 0,
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+              height: 36, padding: "0 13px", borderRadius: 8, flexShrink: 0,
               cursor: "pointer", transition: "all 0.15s",
               background: showPreview ? "rgba(99,102,241,0.18)" : "rgba(255,255,255,0.04)",
               border: showPreview ? "1px solid rgba(99,102,241,0.5)" : "1px solid rgba(255,255,255,0.09)",
               color: showPreview ? "#a5b4fc" : "rgba(255,255,255,0.5)",
-              fontSize: 11, fontWeight: 600,
+              fontSize: 12, fontWeight: 600,
             }}
           >
-            <Monitor size={13} />
+            <Monitor size={15} />
             <span className="lgm-btn-label">Live Preview</span>
           </button>
 
@@ -1135,21 +1261,21 @@ export default function LyricsGridModal({
           {onOpenSettings && (
             <button
               onClick={onOpenSettings}
-              className="lgm-icon-btn"
+              className="lgm-labeled-btn"
               title="Display Settings"
               style={{
-                display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
-                height: 30, padding: "0 10px", borderRadius: 8, flexShrink: 0,
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                height: 36, padding: "0 13px", borderRadius: 8, flexShrink: 0,
                 cursor: "pointer", transition: "all 0.15s",
                 background: "rgba(167,139,250,0.10)",
                 border: "1px solid rgba(167,139,250,0.30)",
                 color: "#c4b5fd",
-                fontSize: 11, fontWeight: 600,
+                fontSize: 12, fontWeight: 600,
               }}
               onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "rgba(167,139,250,0.22)"}
               onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "rgba(167,139,250,0.10)"}
             >
-              <Settings size={13} />
+              <Settings size={15} />
               <span className="lgm-btn-label">Settings</span>
             </button>
           )}
@@ -1272,8 +1398,346 @@ export default function LyricsGridModal({
         </div>
       )}
 
-      {/* ── Body: slide grid + optional live preview panel ──────────────────── */}
+      {/* ── Body: slide grid + optional panels ──────────────────────────────── */}
       <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
+
+        {/* ── LEFT Song Panel ──────────────────────────────────────────────── */}
+        {showSongPanel && (
+          <>
+            <div style={isMobile ? {
+              /* Mobile: full-screen overlay so grid stays usable */
+              position: "absolute", inset: 0, zIndex: 50,
+              background: "#080810",
+              display: "flex", flexDirection: "column", overflow: "hidden",
+            } : {
+              /* Desktop: side panel */
+              width: songPanelWidth, flexShrink: 0,
+              background: "#080810",
+              borderRight: "1px solid #1e1e2e",
+              display: "flex", flexDirection: "column", overflow: "hidden",
+            }}>
+              {/* Mobile close row */}
+              {isMobile && (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px 8px", borderBottom: "1px solid #1a1a2e", flexShrink: 0 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "rgba(255,255,255,0.7)" }}>Scene Playlist</span>
+                  <button onClick={() => setShowSongPanel(false)} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "rgba(255,255,255,0.5)" }}>
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+              {/* Panel Header / Search */}
+              <div style={{
+                padding: isMobile ? "14px 16px 12px" : "10px 14px 8px",
+                borderBottom: "1px solid #1a1a2e",
+                flexShrink: 0,
+              }}>
+                <div style={{ position: "relative" }}>
+                  <Search size={isMobile ? 16 : 12} style={{ position: "absolute", left: isMobile ? 14 : 10, top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.3)", pointerEvents: "none" }} />
+                  <input
+                    value={songPanelQuery}
+                    onChange={e => setSongPanelQuery(e.target.value)}
+                    placeholder="Search songs…"
+                    style={{
+                      width: "100%", boxSizing: "border-box",
+                      paddingLeft: isMobile ? 42 : 30,
+                      paddingRight: songPanelQuery ? (isMobile ? 40 : 28) : 10,
+                      paddingTop: isMobile ? 13 : 8, paddingBottom: isMobile ? 13 : 8,
+                      borderRadius: isMobile ? 14 : 10,
+                      background: "rgba(255,255,255,0.05)",
+                      border: "1px solid rgba(255,255,255,0.09)",
+                      color: "#fff", fontSize: isMobile ? 15 : 12, outline: "none",
+                      transition: "border 0.15s",
+                    }}
+                    onFocus={e => (e.target as HTMLInputElement).style.border = "1px solid rgba(52,211,153,0.4)"}
+                    onBlur={e => (e.target as HTMLInputElement).style.border = "1px solid rgba(255,255,255,0.09)"}
+                  />
+                  {songPanelQuery && (
+                    <button onClick={() => setSongPanelQuery("")}
+                      style={{ position: "absolute", right: isMobile ? 12 : 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.3)", padding: 0, display: "flex" }}>
+                      <X size={isMobile ? 16 : 12} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Scene Playlist sub-header — hidden on mobile (already shown in close row) */}
+              {!songPanelQuery.trim() && !isMobile && (
+                <div style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  padding: "8px 14px 6px",
+                  flexShrink: 0,
+                }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "rgba(255,255,255,0.3)", textTransform: "uppercase" }}>Scene Playlist</span>
+                  {sceneSongs.length > 0 && (
+                    <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: "rgba(99,102,241,0.18)", border: "1px solid rgba(99,102,241,0.35)", color: "#818cf8" }}>
+                      {sceneSongs.length} song{sceneSongs.length !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                </div>
+              )}
+              {/* Mobile: show song count under search */}
+              {!songPanelQuery.trim() && isMobile && sceneSongs.length > 0 && (
+                <div style={{ padding: "8px 16px 4px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: "rgba(255,255,255,0.25)", textTransform: "uppercase" }}>Scene Playlist</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 20, background: "rgba(99,102,241,0.18)", border: "1px solid rgba(99,102,241,0.35)", color: "#818cf8" }}>
+                    {sceneSongs.length} song{sceneSongs.length !== 1 ? "s" : ""}
+                  </span>
+                </div>
+              )}
+              {songPanelQuery.trim() && (
+                <div style={{ padding: "8px 14px 4px", flexShrink: 0 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", color: "rgba(255,255,255,0.3)", textTransform: "uppercase" }}>
+                    {songPanelFiltered.length} result{songPanelFiltered.length !== 1 ? "s" : ""}
+                  </span>
+                </div>
+              )}
+
+              {/* Song list */}
+              <div style={{ flex: 1, overflowY: "auto", padding: "4px 10px 10px" }}>
+                {/* Empty scene state */}
+                {!songPanelQuery.trim() && sceneSongs.length === 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "32px 16px", borderRadius: 12, border: "1px dashed rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)", margin: "4px 0" }}>
+                    <Music2 size={22} color="rgba(255,255,255,0.1)" />
+                    <p style={{ margin: 0, fontSize: 11, color: "rgba(255,255,255,0.2)", textAlign: "center", lineHeight: 1.5 }}>
+                      Search songs above<br />and tap <strong style={{ color: "rgba(52,211,153,0.7)" }}>+</strong> to add them
+                    </p>
+                  </div>
+                )}
+
+                {/* Scene songs (shown when no query) — drag-and-drop reorderable */}
+                {!songPanelQuery.trim() && (() => {
+                  // ── Drag-and-drop refs (stable across renders, no useState re-renders) ──
+                  // We use a module-level ref object keyed per list render.
+                  const dragIdxRef = { current: -1 }; // index being dragged
+                  const overIdxRef = { current: -1 };  // index hovered over
+
+                  return sceneSongs.map((song, idx) => {
+                    const names = (song.tags ?? []).map((t: { name: string }) => t.name.toLowerCase());
+                    const isPraise = names.some((n: string) => n.includes("joyful"));
+                    const isWorship = names.some((n: string) => n.includes("solemn"));
+                    const iconSize = isMobile ? 44 : 30;
+                    const iconInner = isMobile ? 16 : 12;
+
+                    return (
+                      <div
+                        key={song.id}
+                        draggable
+                        onDragStart={e => {
+                          dragIdxRef.current = idx;
+                          e.dataTransfer.effectAllowed = "move";
+                          // Ghost: clone the row so native ghost looks clean
+                          const el = e.currentTarget as HTMLElement;
+                          e.dataTransfer.setDragImage(el, el.offsetWidth / 2, el.offsetHeight / 2);
+                          // Slight opacity on source
+                          setTimeout(() => { el.style.opacity = "0.45"; }, 0);
+                        }}
+                        onDragEnd={e => {
+                          (e.currentTarget as HTMLElement).style.opacity = "1";
+                          // Clear any lingering drop-line on all items
+                          document.querySelectorAll(".lgm-scene-item").forEach(el => {
+                            (el as HTMLElement).style.borderTop = "";
+                            (el as HTMLElement).style.borderBottom = "";
+                          });
+                          dragIdxRef.current = -1;
+                          overIdxRef.current = -1;
+                        }}
+                        onDragOver={e => {
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = "move";
+                          const el = e.currentTarget as HTMLElement;
+                          const rect = el.getBoundingClientRect();
+                          const isTop = e.clientY < rect.top + rect.height / 2;
+                          overIdxRef.current = isTop ? idx : idx + 1;
+                          // Visual drop indicator
+                          document.querySelectorAll(".lgm-scene-item").forEach(item => {
+                            (item as HTMLElement).style.borderTop = "";
+                            (item as HTMLElement).style.borderBottom = "";
+                          });
+                          if (isTop) {
+                            el.style.borderTop = "2px solid rgba(99,102,241,0.8)";
+                          } else {
+                            el.style.borderBottom = "2px solid rgba(99,102,241,0.8)";
+                          }
+                        }}
+                        onDragLeave={e => {
+                          const el = e.currentTarget as HTMLElement;
+                          el.style.borderTop = "";
+                          el.style.borderBottom = "";
+                        }}
+                        onDrop={e => {
+                          e.preventDefault();
+                          const el = e.currentTarget as HTMLElement;
+                          el.style.borderTop = "";
+                          el.style.borderBottom = "";
+                          const from = dragIdxRef.current;
+                          const to   = overIdxRef.current;
+                          if (from < 0 || from === to || from === to - 1) return;
+                          // Build new order
+                          const ids = sceneSongs.map(s => s.id);
+                          const [moved] = ids.splice(from, 1);
+                          // Adjust target index after splice
+                          const insertAt = to > from ? to - 1 : to;
+                          ids.splice(insertAt, 0, moved);
+                          onReorderScene?.(ids);
+                        }}
+                        className="lgm-scene-item"
+                        style={{
+                          display: "flex", alignItems: "center",
+                          gap: isMobile ? 12 : 8,
+                          padding: isMobile ? "14px 16px" : "9px 10px",
+                          borderRadius: isMobile ? 14 : 10,
+                          background: "rgba(255,255,255,0.03)",
+                          border: "1px solid rgba(255,255,255,0.06)",
+                          marginBottom: isMobile ? 8 : 4,
+                          transition: "background 0.12s, opacity 0.15s",
+                          cursor: "grab",
+                          userSelect: "none",
+                        }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.055)"; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.03)"; }}
+                      >
+                        {/* Drag handle */}
+                        <div
+                          title="Drag to reorder"
+                          style={{
+                            flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                            width: isMobile ? 24 : 16, color: "rgba(255,255,255,0.18)",
+                            cursor: "grab",
+                          }}
+                        >
+                          <GripVertical size={isMobile ? 18 : 14} />
+                        </div>
+
+                        {/* Song icon */}
+                        <div style={{
+                          width: iconSize, height: iconSize, borderRadius: isMobile ? 12 : 8,
+                          flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                          background: isPraise ? "rgba(250,204,21,0.12)" : isWorship ? "rgba(167,139,250,0.12)" : "rgba(99,102,241,0.10)",
+                          border: isPraise ? "1px solid rgba(250,204,21,0.22)" : isWorship ? "1px solid rgba(167,139,250,0.22)" : "1px solid rgba(99,102,241,0.16)",
+                        }}>
+                          {isPraise ? <Zap size={iconInner} color="#fbbf24" /> : isWorship ? <Heart size={iconInner} color="#a78bfa" /> : <Music2 size={iconInner} color="#818cf8" />}
+                        </div>
+
+                        {/* Title + artist */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ margin: 0, fontSize: isMobile ? 14 : 12, fontWeight: 600, color: "rgba(255,255,255,0.88)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {song.title}
+                          </p>
+                          {song.artist && (
+                            <p style={{ margin: 0, fontSize: isMobile ? 12 : 10, color: "rgba(255,255,255,0.3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {song.artist}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Remove button */}
+                        <button
+                          onClick={e => { e.stopPropagation(); onRemoveFromScene?.(song.id); }}
+                          title="Remove from scene"
+                          style={{
+                            flexShrink: 0,
+                            width: isMobile ? 34 : 26, height: isMobile ? 34 : 26,
+                            borderRadius: isMobile ? 10 : 8,
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            background: "rgba(239,68,68,0.08)",
+                            border: "1px solid rgba(239,68,68,0.18)",
+                            cursor: "pointer", transition: "all 0.15s",
+                          }}
+                          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(239,68,68,0.22)"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(239,68,68,0.4)"; }}
+                          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "rgba(239,68,68,0.08)"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(239,68,68,0.18)"; }}
+                        >
+                          <Minus size={isMobile ? 14 : 12} color="#f87171" />
+                        </button>
+                      </div>
+                    );
+                  });
+                })()}
+
+                {/* Search results — only shown when user has typed a query */}
+                {songPanelQuery.trim() && songPanelFiltered.length === 0 && (
+                  <p style={{ textAlign: "center", fontSize: 12, color: "rgba(255,255,255,0.15)", padding: "32px 0" }}>No songs found</p>
+                )}
+
+                {/* All songs shown ONLY in search mode */}
+                {songPanelQuery.trim() && songPanelFiltered.map(song => {
+                  const names = (song.tags ?? []).map((t: { name: string }) => t.name.toLowerCase());
+                  const isPraise = names.some((n: string) => n.includes("joyful"));
+                  const isWorship = names.some((n: string) => n.includes("solemn"));
+                  const inScene = sceneSongIdsProp.includes(song.id);
+                  return (
+                    <div key={song.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 10px", borderRadius: 10, marginBottom: 4,
+                      background: inScene ? "rgba(99,102,241,0.07)" : "rgba(255,255,255,0.03)",
+                      border: inScene ? "1px solid rgba(99,102,241,0.22)" : "1px solid rgba(255,255,255,0.05)",
+                      transition: "all 0.15s" }}>
+                      <div style={{ width: 30, height: 30, borderRadius: 8, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                        background: isPraise ? "rgba(250,204,21,0.12)" : isWorship ? "rgba(167,139,250,0.12)" : "rgba(99,102,241,0.10)",
+                        border: isPraise ? "1px solid rgba(250,204,21,0.22)" : isWorship ? "1px solid rgba(167,139,250,0.22)" : "1px solid rgba(99,102,241,0.16)" }}>
+                        {isPraise ? <Zap size={12} color="#fbbf24" /> : isWorship ? <Heart size={12} color="#a78bfa" /> : <Music2 size={12} color="#818cf8" />}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: inScene ? "rgba(165,180,252,0.9)" : "rgba(255,255,255,0.8)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{song.title}</p>
+                        {song.artist && <p style={{ margin: 0, fontSize: 10, color: "rgba(255,255,255,0.28)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{song.artist}</p>}
+                      </div>
+                      {inScene ? (
+                        <button onClick={() => onRemoveFromScene?.(song.id)} title="Remove from scene"
+                          style={{ flexShrink: 0, width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(99,102,241,0.2)", border: "1px solid rgba(99,102,241,0.4)", cursor: "pointer", transition: "all 0.15s" }}
+                          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(239,68,68,0.22)"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(239,68,68,0.4)"; }}
+                          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "rgba(99,102,241,0.2)"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(99,102,241,0.4)"; }}>
+                          <Check size={12} color="#a5b4fc" />
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleAddToScene(song)}
+                          title="Add to scene playlist"
+                          disabled={addingId === song.id}
+                          style={{
+                            flexShrink: 0, width: 26, height: 26, borderRadius: 8,
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            background: addingId === song.id ? "rgba(251,191,36,0.15)" : "rgba(52,211,153,0.08)",
+                            border: addingId === song.id ? "1px solid rgba(251,191,36,0.4)" : "1px solid rgba(52,211,153,0.25)",
+                            cursor: addingId === song.id ? "wait" : "pointer",
+                            transition: "all 0.15s",
+                          }}
+                          onMouseEnter={e => { if (addingId !== song.id) { (e.currentTarget as HTMLElement).style.background = "rgba(52,211,153,0.22)"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(52,211,153,0.5)"; } }}
+                          onMouseLeave={e => { if (addingId !== song.id) { (e.currentTarget as HTMLElement).style.background = "rgba(52,211,153,0.08)"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(52,211,153,0.25)"; } }}
+                        >
+                          {addingId === song.id ? (
+                            /* Thinking spinner */
+                            <svg width="12" height="12" viewBox="0 0 12 12" style={{ animation: "lgm-spin 0.7s linear infinite" }}>
+                              <circle cx="6" cy="6" r="4.5" fill="none" stroke="rgba(251,191,36,0.25)" strokeWidth="1.5" />
+                              <path d="M6 1.5 A4.5 4.5 0 0 1 10.5 6" fill="none" stroke="#fbbf24" strokeWidth="1.5" strokeLinecap="round" />
+                            </svg>
+                          ) : (
+                            <Plus size={12} color="#34d399" />
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Right-side drag handle — desktop only */}
+            {!isMobile && (
+              <div
+                onMouseDown={handleSongPanelResizeMouseDown}
+                style={{
+                  width: 5, flexShrink: 0, cursor: "col-resize",
+                  background: "#1e1e2e", transition: "background 0.15s",
+                  position: "relative", zIndex: 5,
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "#34d399"; }}
+                onMouseLeave={e => { if (!isSongPanelDraggingRef.current) (e.currentTarget as HTMLElement).style.background = "#1e1e2e"; }}
+              >
+                <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", display: "flex", flexDirection: "column", gap: 3 }}>
+                  {[0,1,2].map(i => (<div key={i} style={{ width: 3, height: 3, borderRadius: "50%", background: "rgba(255,255,255,0.25)" }} />))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
 
       {/* ── Main slide grid ─────────────────────────────────────────────── */}
       <div style={{
@@ -1494,6 +1958,11 @@ export default function LyricsGridModal({
         }
         [data-lgm-pulse] { animation: lgm-pulse 1.5s ease-in-out infinite; }
 
+        @keyframes lgm-spin {
+          from { transform: rotate(0deg); }
+          to   { transform: rotate(360deg); }
+        }
+
         /* ── Tablet + Mobile: icon-only toolbar ────────────────── */
         @media (max-width: 1024px) {
           .lgm-btn-label { display: none !important; }
@@ -1518,24 +1987,56 @@ export default function LyricsGridModal({
           }
           .lgm-close-btn svg { color: #f87171 !important; stroke: #f87171 !important; }
 
-          /* Bigger second row for finger-friendly touch targets */
+          /* Row 2: wrap so dropdown falls to its own row */
           .lgm-toolbar-row2 {
-            height: 56px !important;
-            padding: 0 12px !important;
-            gap: 10px !important;
+            height: auto !important;
+            min-height: 44px !important;
+            padding: 6px 10px 6px !important;
+            gap: 0px !important;
+            row-gap: 6px !important;
+            flex-wrap: wrap !important;
+            align-content: flex-start !important;
+            justify-content: space-between !important;
           }
-          /* Bigger icon buttons inside row 2 on mobile — only the icon buttons, NOT dropdown items */
+
+          /* Icon-only buttons: fixed 36×36 squares */
           .lgm-icon-btn {
-            width: 40px !important; height: 40px !important;
+            flex: 0 0 36px !important;
+            width: 36px !important;
+            height: 36px !important;
+            padding: 0 !important;
+            flex-shrink: 0 !important;
+            order: 1 !important;
           }
-          /* Taller dropdown trigger in row 2 */
+
+          /* Labeled buttons: auto width, icon-only on mobile (label hidden by ≤1024px rule) */
+          .lgm-labeled-btn {
+            flex: 0 0 auto !important;
+            width: 36px !important;
+            height: 36px !important;
+            padding: 0 !important;
+            flex-shrink: 0 !important;
+            order: 1 !important;
+          }
+
+          /* Song dropdown: drop to its OWN second row, full width */
+          .lgm-dropdown {
+            order: 2 !important;
+            flex: 0 0 100% !important;
+            width: 100% !important;
+            min-width: 0 !important;
+          }
           .lgm-dropdown > button {
-            height: 40px !important;
+            width: 100% !important;
+            height: 36px !important;
+            padding: 0 12px !important;
           }
 
           /* Hide artist in dropdown trigger — title only */
           .lgm-dropdown-artist { display: none !important; }
         }
+
+
         @media (min-width: 641px) and (max-width: 1024px) {
           .lgm-slide-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)) !important; }
         }

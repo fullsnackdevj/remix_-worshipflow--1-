@@ -956,13 +956,19 @@ export default function AdminDashboard({
                 </div>
             )}
 
-            {/* ── Top section — 3-col desktop: [Verse | Tasks | 2×2 stats] ── */}
-            <div className="grid grid-cols-1 lg:grid-cols-[2fr_1.5fr_1.5fr] gap-4">
-                {/* LEFT — Daily Bible Verse: spans 2 cols when tasks are hidden */}
-                <div className={hasActiveTasks ? "" : "lg:col-span-2"}>
-                  <VerseOfTheDay userId={userId} userName={userName.split(" ")[0] || userName} userPhoto="" />
+            {/* ── Top section ── */}
+            {/* Mobile/Tablet: VotD full-width, then Tasks (if any) full-width, then stats 2×2 */}
+            {/* Large: [VotD (2fr) | Tasks (1.5fr) | 2×2 stats (1.5fr)] — tasks col collapses when empty */}
+            <div className={`grid gap-4 ${
+              hasActiveTasks
+                ? "grid-cols-1 lg:grid-cols-[2fr_1.5fr_1.5fr]"
+                : "grid-cols-1 lg:grid-cols-[1fr_1.5fr]"
+            }`}>
+                {/* Verse of the Day — always in left slot */}
+                <div className={hasActiveTasks ? "" : "lg:col-span-1"}>
+                  <VerseOfTheDay userId={userId} userName={userName.split(" ")[0] || userName} userPhoto="" compact={hasActiveTasks} />
                 </div>
-                {/* CENTER — My Tasks */}
+                {/* My Tasks — center col; renders null internally when no tasks */}
                 <MyTasksCard userName={userName} userEmail={userEmail} members={members} onNavigate={onNavigate} onVisibilityChange={setHasActiveTasks} />
                 {/* RIGHT — 2×2 metric tiles */}
                 <div className="grid grid-cols-2 gap-4">

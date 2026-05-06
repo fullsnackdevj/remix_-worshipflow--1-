@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { X, Upload, Trash2, Image as ImageIcon, Video, Check, Wifi, WifiOff, FolderOpen, Film, Loader, Zap } from "lucide-react";
+import { X, Upload, Trash2, Image as ImageIcon, Video, Check, Wifi, WifiOff, FolderOpen, Film, Loader, Zap, CheckSquare, Square } from "lucide-react";
 import { db, storage } from "./firebase";
 import { collection, addDoc, onSnapshot, deleteDoc, doc, query, orderBy } from "firebase/firestore";
 import { ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
@@ -78,12 +78,114 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [multiSelected, setMultiSelected] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkConfirm, setBulkConfirm] = useState(false);
+
   const [blobUrls, setBlobUrls] = useState<Record<string, string>>({});
+  const [videoThumbs, setVideoThumbs] = useState<Record<string, string>>({}); // id → dataURL thumbnail
   const [dragOver, setDragOver] = useState(false);
   const [assignedTarget, setAssignedTarget] = useState<MediaTarget | null>(null);
   const [confirming, setConfirming]         = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const toast = (msg: string, type = "success") => onToast?.(msg, type);
+
+  const exitSelectMode = () => { setSelectMode(false); setMultiSelected(new Set()); setBulkConfirm(false); };
+  const toggleItemSelect = (id: string) => setMultiSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const selectAll = () => setMultiSelected(new Set(items.map(i => i.id)));
+
+  const handleBulkDelete = async () => {
+    if (!bulkConfirm) { setBulkConfirm(true); return; }
+    setBulkConfirm(false);
+    setBulkDeleting(true);
+    const ids = [...multiSelected];
+    const toDelete = items.filter(i => ids.includes(i.id));
+    let failed = 0;
+    for (const item of toDelete) {
+      try {
+        try { await deleteObject(storageRef(storage, item.storagePath)); }
+        catch (e: any) { if (e?.code !== "storage/object-not-found") console.warn("[MediaLib] Storage:", e); }
+        await deleteDoc(doc(db, "media_library", item.id));
+        await idbDelete(`media_blob_${item.id}`);
+        if (blobUrls[item.id]) URL.revokeObjectURL(blobUrls[item.id]);
+        idbDelete(`media_thumb_${item.id}`).catch(() => {});
+        setBlobUrls(p => { const n={...p}; delete n[item.id]; return n; });
+        setVideoThumbs(p => { const n={...p}; delete n[item.id]; return n; });
+        setCachedIds(p => { const n=new Set(p); n.delete(item.id); return n; });
+        if (selected?.id === item.id) setSelected(null);
+      } catch { failed++; }
+    }
+    setBulkDeleting(false);
+    exitSelectMode();
+    if (failed) toast(`${failed} item(s) failed to delete`, "error");
+    else toast(`🗑️ ${toDelete.length} item${toDelete.length !== 1 ? "s" : ""} deleted`);
+  };
+
+  const generateVideoThumb = useCallback(async (id: string, videoSrc: string): Promise<void> => {
+    // Check IDB cache first — avoid re-generating on every open
+    // Only use cached value if it's a real thumbnail (> 2000 chars means non-blank)
+    const cached = await idbGet<string>(`media_thumb_${id}`);
+    if (cached && cached.length > 2000) { setVideoThumbs(p => ({ ...p, [id]: cached })); return; }
+    return new Promise(resolve => {
+      const vid = document.createElement("video");
+      vid.muted = true;
+      vid.playsInline = true;
+      vid.preload = "metadata";
+      // CRITICAL: must be set BEFORE src to avoid canvas tainting SecurityError
+      // on cross-origin Firebase Storage URLs
+      vid.crossOrigin = "anonymous";
+
+      // Abort after 15s — prevents hanging forever on bad URLs
+      const giveUpTimer = setTimeout(() => { vid.src = ""; resolve(); }, 15000);
+      const cleanup = () => { clearTimeout(giveUpTimer); vid.src = ""; resolve(); };
+
+      // Try multiple seek positions to find a non-black frame
+      const seekAttempts = [1.0, 2.0, 0.5, 0.1];
+      let attemptIdx = 0;
+
+      const tryCapture = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = 320; canvas.height = 180;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) { cleanup(); return; }
+          ctx.drawImage(vid, 0, 0, 320, 180);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.75);
+          // Only store if canvas has real content (not a plain black frame)
+          // Threshold lowered to 2000 — some compressed webm frames are small but valid
+          if (dataUrl.length > 2000) {
+            setVideoThumbs(p => ({ ...p, [id]: dataUrl }));
+            idbSet(`media_thumb_${id}`, dataUrl).catch(() => {});
+            cleanup();
+          } else {
+            // Frame looks blank — try next seek position
+            attemptIdx++;
+            if (attemptIdx < seekAttempts.length) {
+              vid.currentTime = Math.min(seekAttempts[attemptIdx], Math.max(0.1, vid.duration * 0.5));
+            } else {
+              cleanup(); // gave up — leave placeholder
+            }
+          }
+        } catch (err) {
+          // SecurityError from canvas tainting (CORS) — try without crossOrigin as last resort
+          console.warn(`[MediaLib] Thumbnail canvas error for ${id}:`, err);
+          cleanup();
+        }
+      };
+
+      vid.onloadedmetadata = () => {
+        // Seek to 1s or 10% of duration, whichever is less
+        vid.currentTime = Math.min(seekAttempts[0], Math.max(0.1, vid.duration * 0.1));
+      };
+
+      vid.onseeked = tryCapture;
+      vid.onerror = (e) => { console.warn(`[MediaLib] Video load error for thumb ${id}:`, e); cleanup(); };
+      // Set src AFTER crossOrigin is configured
+      vid.src = videoSrc;
+    });
+  }, []);
 
   useEffect(() => {
     const q = query(collection(db, "media_library"), orderBy("uploadedAt", "desc"));
@@ -102,7 +204,22 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
     items.forEach(async item => {
       if (blobUrls[item.id]) return;
       const blob = await idbGet<Blob>(`media_blob_${item.id}`);
-      if (blob) setBlobUrls(prev => ({ ...prev, [item.id]: URL.createObjectURL(blob) }));
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        setBlobUrls(prev => ({ ...prev, [item.id]: url }));
+        // For videos, generate/load thumbnail after blob URL is ready
+        if (item.type === "video") generateVideoThumb(item.id, url);
+      } else if (item.type === "video") {
+        // No blob cached — try loading thumb from IDB (may exist from a previous session)
+        // Only use cached thumb if it looks valid (> 2000 chars = non-blank JPEG data URL)
+        const cached = await idbGet<string>(`media_thumb_${item.id}`);
+        if (cached && cached.length > 2000) {
+          setVideoThumbs(p => ({ ...p, [item.id]: cached }));
+        } else {
+          // IDB miss or stale blank entry — generate fresh from Firebase URL (crossOrigin fix applied)
+          generateVideoThumb(item.id, item.firebaseUrl);
+        }
+      }
     });
     return () => { Object.values(blobUrls).forEach(URL.revokeObjectURL); };
   }, [items]); // eslint-disable-line
@@ -125,6 +242,8 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
         await idbSet(`media_blob_${docRef.id}`, file);
         const blobUrl = URL.createObjectURL(file);
         setBlobUrls(prev => ({ ...prev, [docRef.id]: blobUrl }));
+        // Generate thumbnail immediately after upload for videos
+        if (file.type.startsWith("video/")) generateVideoThumb(docRef.id, blobUrl);
         setCachedIds(prev => new Set([...prev, docRef.id]));
         toast(`✅ "${file.name}" uploaded & cached`);
       } catch { toast(`Upload failed: ${file.name}`, "error"); }
@@ -133,25 +252,40 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
   }, []); // eslint-disable-line
 
   const handleDelete = async (item: MediaItem) => {
-    if (!confirm(`Delete "${item.name}"?`)) return;
+    // First click: enter confirmation mode
+    if (deleteConfirm !== item.id) { setDeleteConfirm(item.id); return; }
+    // Second click (confirmed): proceed with deletion
+    setDeleteConfirm(null);
     setDeleting(item.id);
     try {
-      try { await deleteObject(storageRef(storage, item.storagePath)); } catch {}
+      // Delete from Firebase Storage — ignore "not found" (object may already be gone)
+      try { await deleteObject(storageRef(storage, item.storagePath)); }
+      catch (storageErr: any) {
+        if (storageErr?.code !== "storage/object-not-found") {
+          console.warn("[MediaLib] Storage delete error:", storageErr);
+        }
+      }
+      // Delete Firestore document
       await deleteDoc(doc(db, "media_library", item.id));
+      // Clean up local caches
       await idbDelete(`media_blob_${item.id}`);
       if (blobUrls[item.id]) URL.revokeObjectURL(blobUrls[item.id]);
       setBlobUrls(prev => { const n = { ...prev }; delete n[item.id]; return n; });
+      setVideoThumbs(prev => { const n = { ...prev }; delete n[item.id]; return n; });
+      idbDelete(`media_thumb_${item.id}`).catch(() => {});
       setCachedIds(prev => { const n = new Set(prev); n.delete(item.id); return n; });
       if (selected?.id === item.id) setSelected(null);
       toast(`🗑️ "${item.name}" deleted`);
-    } catch { toast("Delete failed", "error"); }
+    } catch (err) {
+      console.error("[MediaLib] Delete failed:", err);
+      toast(`Delete failed — check console for details`, "error");
+    }
     setDeleting(null);
   };
 
   const handleAssign = (target: MediaTarget) => {
     if (!selected || confirming) return;
     onAssign(selected, target, blobUrls[selected.id] ?? null);
-    // Show confirmed state on button for 1.2s, then close
     setAssignedTarget(target);
     setConfirming(true);
     setTimeout(() => {
@@ -163,8 +297,7 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
 
   const previewUrl = selected ? (blobUrls[selected.id] ?? selected.firebaseUrl) : null;
   const isCached = selected ? cachedIds.has(selected.id) : false;
-  // Find the ONE scene this item belongs to — mutually exclusive.
-  // If the same URL somehow ends up in multiple scenes, first match wins.
+  // Find which scene (if any) owns this media
   const ALL_TARGETS: MediaTarget[] = ["praise-bg", "worship-bg", "fade-screen"];
   const ownerTarget: MediaTarget | null = selected
     ? ALL_TARGETS.find(t => !!activeAssignments?.[t] && activeAssignments[t] === selected.firebaseUrl) ?? null
@@ -210,10 +343,22 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
                   : "Media Library"}
               </div>
               <div style={{ color: "rgba(255,255,255,0.35)", fontSize: 11, marginTop: 1 }}>
-                {items.length} item{items.length !== 1 ? "s" : ""}
+                {selectMode ? `${multiSelected.size} of ${items.length} selected` : `${items.length} item${items.length !== 1 ? "s" : ""}`}
               </div>
             </div>
           </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {!pickMode && items.length > 0 && (
+              <button
+                onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)}
+                style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", transition: "all 0.15s",
+                  border: selectMode ? "1px solid rgba(239,68,68,0.4)" : "1px solid rgba(255,255,255,0.12)",
+                  background: selectMode ? "rgba(239,68,68,0.12)" : "rgba(255,255,255,0.05)",
+                  color: selectMode ? "#f87171" : "rgba(255,255,255,0.55)" }}
+              >
+                {selectMode ? <><X size={11}/> Cancel</> : <><CheckSquare size={11}/> Select</>}
+              </button>
+            )}
           <button onClick={onClose} style={{
             width: 30, height: 30, borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)",
             background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.5)",
@@ -225,6 +370,7 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
           >
             <X size={15} />
           </button>
+          </div>
         </div>
 
         {/* ── Body ── */}
@@ -282,49 +428,82 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
                   <span style={{ fontSize: 13 }}>No media yet — upload something above</span>
                 </div>
               ) : (
+                <>
+                {/* Select-mode toolbar */}
+                {selectMode && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                    <button onClick={multiSelected.size === items.length ? () => setMultiSelected(new Set()) : selectAll}
+                      style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer",
+                        border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.6)" }}>
+                      {multiSelected.size === items.length ? <><Square size={10}/> Deselect All</> : <><CheckSquare size={10}/> Select All</>}
+                    </button>
+                    {bulkConfirm ? (
+                      <>
+                        <span style={{ fontSize: 10, color: "#f87171", fontWeight: 700 }}>Sure? This can't be undone!</span>
+                        <button onClick={() => setBulkConfirm(false)} style={{ padding: "4px 8px", borderRadius: 6, fontSize: 10, fontWeight: 600, cursor: "pointer", border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.5)" }}>Cancel</button>
+                        <button onClick={handleBulkDelete} style={{ padding: "4px 10px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer", border: "1px solid rgba(239,68,68,0.5)", background: "rgba(239,68,68,0.2)", color: "#f87171" }}>Yes, Delete {multiSelected.size}</button>
+                      </>
+                    ) : multiSelected.size > 0 && (
+                      <button onClick={handleBulkDelete} disabled={bulkDeleting}
+                        style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer", marginLeft: "auto",
+                          border: "1px solid rgba(239,68,68,0.4)", background: "rgba(239,68,68,0.14)", color: "#f87171" }}>
+                        {bulkDeleting ? <><Loader size={10} style={{ animation: "spin 1s linear infinite" }}/> Deleting…</> : <><Trash2 size={10}/> Delete {multiSelected.size} item{multiSelected.size !== 1 ? "s" : ""}</>}
+                      </button>
+                    )}
+                  </div>
+                )}
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(130px,1fr))", gap: 8 }}>
                   {items.map(item => {
                     const thumbUrl = blobUrls[item.id] ?? item.firebaseUrl;
                     const isSelected = selected?.id === item.id;
+                    const isMultiChecked = multiSelected.has(item.id);
                     const cached = cachedIds.has(item.id);
+                    const borderCol = selectMode
+                      ? isMultiChecked ? "2px solid #ef4444" : "2px solid rgba(255,255,255,0.06)"
+                      : isSelected ? "2px solid #a78bfa" : "2px solid rgba(255,255,255,0.06)";
                     return (
                       <div
                         key={item.id}
-                        onClick={() => setSelected(isSelected ? null : item)}
+                        onClick={() => {
+                          if (selectMode) { toggleItemSelect(item.id); return; }
+                          setSelected(isSelected ? null : item); setDeleteConfirm(null);
+                        }}
                         style={{
                           position: "relative", borderRadius: 10, overflow: "hidden",
                           aspectRatio: "16/9", cursor: "pointer",
-                          border: isSelected ? "2px solid #a78bfa" : "2px solid rgba(255,255,255,0.06)",
-                          background: "#0a0a0f", transition: "all 0.15s",
-                          boxShadow: isSelected ? "0 0 0 3px rgba(167,139,250,0.25), 0 8px 24px rgba(0,0,0,0.5)" : "0 4px 12px rgba(0,0,0,0.4)",
-                          transform: isSelected ? "scale(1.02)" : "scale(1)",
+                          border: borderCol, background: "#0a0a0f", transition: "all 0.15s",
+                          boxShadow: (selectMode ? isMultiChecked : isSelected) ? "0 0 0 3px rgba(239,68,68,0.2), 0 8px 24px rgba(0,0,0,0.5)" : "0 4px 12px rgba(0,0,0,0.4)",
+                          transform: (selectMode ? isMultiChecked : isSelected) ? "scale(1.02)" : "scale(1)",
                         }}
-                        onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.2)"; }}
-                        onMouseLeave={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.06)"; }}
                       >
                         {item.type === "image"
                           ? <img src={thumbUrl} alt={item.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} loading="lazy" />
-                          : <video src={thumbUrl} style={{ width: "100%", height: "100%", objectFit: "cover" }} muted preload="metadata" />
+                          : videoThumbs[item.id]
+                            ? <img src={videoThumbs[item.id]} alt={item.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                            : (
+                              <div style={{ width: "100%", height: "100%", background: "linear-gradient(135deg, #0d0522 0%, #1a0a3d 50%, #0a0d1a 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                <Film size={22} color="rgba(167,139,250,0.35)" strokeWidth={1.5} />
+                              </div>
+                            )
                         }
-                        {/* Gradient overlay */}
                         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 50%)" }} />
-                        {/* Type badge */}
                         <div style={{ position: "absolute", top: 5, left: 5, background: "rgba(0,0,0,0.7)", borderRadius: 5, padding: "2px 6px", display: "flex", alignItems: "center", gap: 3, backdropFilter: "blur(4px)" }}>
                           {item.type === "video" ? <Film size={9} color="#a78bfa" /> : <ImageIcon size={9} color="#34d399" />}
                           <span style={{ fontSize: 9, fontWeight: 700, color: item.type === "video" ? "#a78bfa" : "#34d399" }}>{item.type === "video" ? "VID" : "IMG"}</span>
                         </div>
-                        {/* Cache badge */}
                         <div style={{ position: "absolute", top: 5, right: 5 }}>
-                          {cached
-                            ? <div style={{ background: "rgba(52,211,153,0.2)", borderRadius: 4, padding: "2px 4px", display: "flex" }}><Wifi size={9} color="#34d399" /></div>
-                            : <div style={{ background: "rgba(0,0,0,0.5)", borderRadius: 4, padding: "2px 4px", display: "flex" }}><WifiOff size={9} color="rgba(255,255,255,0.3)" /></div>}
+                          {selectMode
+                            ? <div style={{ width: 18, height: 18, borderRadius: 5, border: isMultiChecked ? "2px solid #ef4444" : "2px solid rgba(255,255,255,0.35)", background: isMultiChecked ? "rgba(239,68,68,0.85)" : "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                {isMultiChecked && <Check size={11} color="#fff" strokeWidth={3} />}
+                              </div>
+                            : cached
+                              ? <div style={{ background: "rgba(52,211,153,0.2)", borderRadius: 4, padding: "2px 4px", display: "flex" }}><Wifi size={9} color="#34d399" /></div>
+                              : <div style={{ background: "rgba(0,0,0,0.5)", borderRadius: 4, padding: "2px 4px", display: "flex" }}><WifiOff size={9} color="rgba(255,255,255,0.3)" /></div>}
                         </div>
-                        {/* File name */}
                         <div style={{ position: "absolute", bottom: 5, left: 6, right: 6, fontSize: 9, fontWeight: 600, color: "rgba(255,255,255,0.85)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           {item.name}
                         </div>
-                        {/* Selected overlay */}
-                        {isSelected && (
+                        {!selectMode && isSelected && (
                           <div style={{ position: "absolute", inset: 0, background: "rgba(167,139,250,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                             <div style={{ background: "#a78bfa", borderRadius: "50%", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(167,139,250,0.6)" }}>
                               <Check size={15} color="#fff" />
@@ -335,12 +514,13 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
                     );
                   })}
                 </div>
+                </>
               )}
             </div>
           </div>
 
-          {/* Right: Detail panel */}
-          <div style={{ width: 260, flexShrink: 0, display: "flex", flexDirection: "column", overflow: "hidden", background: "rgba(0,0,0,0.2)" }}>
+          {/* Right: Detail panel — hidden in select mode */}
+          <div style={{ width: selectMode ? 0 : 260, flexShrink: 0, display: selectMode ? "none" : "flex", flexDirection: "column", overflow: "hidden", background: "rgba(0,0,0,0.2)", transition: "width 0.2s" }}>
             {!selected ? (
               <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 10, color: "rgba(255,255,255,0.18)", padding: 24, textAlign: "center" }}>
                 <div style={{ width: 52, height: 52, borderRadius: 14, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -401,15 +581,36 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
                   )}
 
                   <div style={{ flex: 1 }} />
-                  <button
-                    onClick={() => handleDelete(selected!)}
-                    disabled={deleting === selected?.id}
-                    style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(239,68,68,0.25)", background: "rgba(239,68,68,0.06)", color: "#f87171", fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "all 0.15s", width: "100%" }}
-                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "rgba(239,68,68,0.14)"}
-                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "rgba(239,68,68,0.06)"}
-                  >
-                    {deleting === selected?.id ? <Loader size={13} /> : <Trash2 size={13} />} Delete from Library
-                  </button>
+                  {deleting === selected?.id
+                    ? (
+                      <button disabled style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(239,68,68,0.25)", background: "rgba(239,68,68,0.06)", color: "#f87171", fontSize: 11, fontWeight: 600, cursor: "not-allowed", width: "100%", opacity: 0.7 }}>
+                        <Loader size={13} style={{ animation: "spin 1s linear infinite" }} /> Deleting…
+                      </button>
+                    ) : deleteConfirm === selected?.id
+                    ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                        <div style={{ fontSize: 10, color: "rgba(239,68,68,0.85)", textAlign: "center", fontWeight: 600 }}>This cannot be undone!</div>
+                        <div style={{ display: "flex", gap: 5 }}>
+                          <button
+                            onClick={() => setDeleteConfirm(null)}
+                            style={{ flex: 1, padding: "7px 8px", borderRadius: 7, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.5)", fontSize: 11, fontWeight: 600, cursor: "pointer" }}
+                          >Cancel</button>
+                          <button
+                            onClick={() => handleDelete(selected!)}
+                            style={{ flex: 1, padding: "7px 8px", borderRadius: 7, border: "1px solid rgba(239,68,68,0.5)", background: "rgba(239,68,68,0.18)", color: "#f87171", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+                          >Yes, Delete</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => handleDelete(selected!)}
+                        style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(239,68,68,0.25)", background: "rgba(239,68,68,0.06)", color: "#f87171", fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "all 0.15s", width: "100%" }}
+                        onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "rgba(239,68,68,0.14)"}
+                        onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "rgba(239,68,68,0.06)"}
+                      >
+                        <Trash2 size={13} /> Delete from Library
+                      </button>
+                    )}
                 </div>
               </div>
             )}

@@ -473,6 +473,7 @@ export interface SongsViewProps {
   canAddSong: boolean;
   canEditSong: boolean;
   canDeleteSong: boolean;
+  canAddToPlaylist?: boolean;
   canSelectSongs?: boolean;
   user: any;
   showToast: (type: string, msg: string) => void;
@@ -505,6 +506,7 @@ export default function SongsView({
   canAddSong,
   canEditSong,
   canDeleteSong,
+  canAddToPlaylist = true,
   canSelectSongs,
   user,
   showToast,
@@ -2261,7 +2263,7 @@ showToast("error", "Failed to extract text from image. Please try again.");
                           <div className="w-px bg-white/[0.06] self-stretch" />
                         </>
                       )}
-                      <AddToPlaylistBarBtn song={song} showToast={showToast} />
+                      {canAddToPlaylist && <AddToPlaylistBarBtn song={song} showToast={showToast} />}
                     </div>
                   )}
                   {isSelectionMode && (
@@ -2343,7 +2345,7 @@ showToast("error", "Failed to extract text from image. Please try again.");
                   )}
 
                   {/* Col 1: Icon chip + Title + Artist */}
-                  <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
                     <div className="w-9 h-9 shrink-0 rounded-xl flex items-center justify-center"
                       style={{ background: "rgba(99,102,241,0.18)", boxShadow: "0 0 0 1px rgba(99,102,241,0.2)" }}
                     >
@@ -2394,8 +2396,8 @@ showToast("error", "Failed to extract text from image. Please try again.");
                   </p>
 
                   {/* Col 4: Actions */}
-                  <div className="flex items-center justify-end gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
-                    {!isSelectionMode && <AddToPlaylistBtn song={song} showToast={showToast} />}
+                  <div className="flex items-center justify-end gap-1.5 w-16 shrink-0" onClick={e => e.stopPropagation()}>
+                    {!isSelectionMode && canAddToPlaylist && <AddToPlaylistBtn song={song} showToast={showToast} />}
                     {song.video_url && !isSelectionMode && (
                       <button
                         onClick={(e) => { e.stopPropagation(); onOpenVideo?.(song.video_url!); }}

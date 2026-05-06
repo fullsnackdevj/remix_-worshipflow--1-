@@ -1450,18 +1450,41 @@ if (file.size > 5 * 1024 * 1024) { onToast('error', 'File too large — max 5 MB
                       </div>
                     ) : (
                       <div className="w-full bg-[#282f35] rounded-lg px-3 py-2 text-[13px] leading-relaxed">
-                        {cm.text && <p className="text-sm text-gray-200 break-words leading-relaxed">
+                        {cm.text && <p className="text-sm text-gray-200 break-words leading-relaxed whitespace-pre-wrap">
                           {(() => {
-                            if (!c.members.length) return cm.text;
-                            const sorted = [...c.members].sort((a, b) => b.length - a.length);
-                            const escaped = sorted.map(m => m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-                            const re = new RegExp(`(@(?:${escaped.join('|')}))`, 'g');
-                            const parts = cm.text.split(re);
-                            return parts.map((part, i) =>
-                              sorted.some(m => part === `@${m}`) ? (
-                                <span key={i} className="inline-flex items-center bg-blue-500/20 text-blue-300 text-xs font-semibold px-1.5 py-0.5 rounded-md">{part}</span>
-                              ) : <span key={i}>{part}</span>
+                            const mentionNames = c.members.length
+                              ? [...c.members].sort((a, b) => b.length - a.length)
+                              : [];
+                            const mentionPattern = mentionNames.length
+                              ? `(@(?:${mentionNames.map(m => m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')}))`
+                              : null;
+                            const combinedRe = new RegExp(
+                              [mentionPattern, `(https?:\\/\\/[^\\s<>"']+)`].filter(Boolean).join('|'),
+                              'g'
                             );
+                            const parts: string[] = [];
+                            let last = 0;
+                            let match: RegExpExecArray | null;
+                            while ((match = combinedRe.exec(cm.text)) !== null) {
+                              if (match.index > last) parts.push(cm.text.slice(last, match.index));
+                              parts.push(match[0]);
+                              last = combinedRe.lastIndex;
+                            }
+                            if (last < cm.text.length) parts.push(cm.text.slice(last));
+                            return parts.map((part, i) => {
+                              if (mentionNames.some(m => part === `@${m}`)) {
+                                return <span key={i} className="inline-flex items-center bg-blue-500/20 text-blue-300 text-xs font-semibold px-1.5 py-0.5 rounded-md">{part}</span>;
+                              }
+                              if (/^https?:\/\//.test(part)) {
+                                return (
+                                  <a key={i} href={part} target="_blank" rel="noopener noreferrer"
+                                    onClick={e => e.stopPropagation()}
+                                    className="text-sky-400 hover:text-sky-300 underline decoration-sky-500/40 hover:decoration-sky-400 transition-colors break-all"
+                                  >{part}</a>
+                                );
+                              }
+                              return <span key={i}>{part}</span>;
+                            });
                           })()}
                         </p>}
                         {/* Inline attachment preview inside comment bubble */}

@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Search, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Radio, Music2, Layers, Play, Wand2, AlignCenter, AlignLeft, Video, Upload, Copy, Check as CheckIcon, Settings, Zap, Heart, EyeOff, Image as ImageIcon, Monitor, Timer, PlusCircle, Minus, LayoutGrid, FolderOpen, Tent, ShieldCheck, AlertTriangle, RefreshCw } from "lucide-react";
+import { Search, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Music2, Layers, Play, Wand2, AlignCenter, AlignLeft, Video, Upload, Copy, Check as CheckIcon, Settings, Zap, Heart, EyeOff, Image as ImageIcon, Timer, PlusCircle, Minus, FolderOpen, Tent, ShieldCheck, AlertTriangle, RefreshCw } from "lucide-react";
 import LyricsGridModal from "./LyricsGridModal";
+import CampReadinessModal from "./CampReadinessModal";
 import MediaLibraryModal, { type MediaItem, type MediaTarget } from "./MediaLibraryModal";
 import type { Song } from "./types";
 import gsap from "gsap";
-import { storage } from "./firebase";
+import { storage, db } from "./firebase";
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { collection, addDoc } from "firebase/firestore";
 
 
 type AnimStyle = "word-fade" | "word-bounce" | "typewriter" | "blur-in" | "fade" | "slide-up" | "echo" | "breathe";
@@ -448,21 +450,30 @@ function Screen({ slide, bgStyle, echoAlign, echoLines, echoLineHeight, lyricsSc
           {bgVideo && (
             <div style={{ position:"absolute", inset:0, overflow:"hidden" }}>
               {(bgVideo.type === "local" || bgVideo.type === "firebase") ? (
-                <video key={bgVideo.localUrl || bgVideo.url} src={bgVideo.localUrl || bgVideo.url} autoPlay loop muted playsInline
+                <video
+                  key={(bgVideo.type === "firebase" && bgVideo.localUrl) ? bgVideo.localUrl : bgVideo.url}
+                  src={(bgVideo.type === "firebase" && bgVideo.localUrl) ? bgVideo.localUrl : bgVideo.url}
+                  autoPlay loop muted playsInline
                   style={{ width:"100%", height:"100%", objectFit:"cover" }} />
-              ) : (
+              ) : bgVideo.type === "youtube" ? (
                 <iframe key={bgVideo.videoId}
                   src={`https://www.youtube.com/embed/${bgVideo.videoId}?autoplay=1&loop=1&playlist=${bgVideo.videoId}&mute=1&muted=1&controls=0&disablekb=1&fs=0&modestbranding=1&iv_load_policy=3&enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}`}
                   style={{ width:"100%", height:"100%", border:"none", pointerEvents:"none" }}
                   allow="autoplay; encrypted-media" title="video-bg"
                   onLoad={e => {
-                    // Belt-and-suspenders: force mute via postMessage regardless of URL param
                     const fw = (e.target as HTMLIFrameElement).contentWindow;
                     if (fw) {
                       fw.postMessage('{"event":"command","func":"mute","args":""}', '*');
                       fw.postMessage('{"event":"command","func":"setVolume","args":[0]}', '*');
                     }
                   }} />
+              ) : (
+                /* image-firebase — render as <img> or <video> based on url extension */
+                <video
+                  key={(bgVideo as {localUrl?: string}).localUrl || (bgVideo as {url?: string}).url}
+                  src={(bgVideo as {localUrl?: string}).localUrl || (bgVideo as {url?: string}).url}
+                  autoPlay loop muted playsInline
+                  style={{ width:"100%", height:"100%", objectFit:"cover" }} />
               )}
               {/* Dark scrim — keeps lyrics readable over any video */}
               <div style={{ position:"absolute", inset:0, background:"rgba(0,0,0,0.45)" }} />
@@ -679,21 +690,31 @@ interface LivePreset {
   echoLines: "auto"|"2"|"3"; echoLineHeight: number;
   lyricsScale: number;
   bgVideo: BgVideo | null;
+  // ── Echo advanced settings ───────────────────────────────────────────────
+  echoSacredScale:  number;  // size multiplier for sacred words  (default 1.75)
+  echoContentScale: number;  // size multiplier for content words (default 1.30)
+  echoFuncScale:    number;  // size multiplier for function words(default 0.62)
+  echoAnimDuration: number;  // entry animation duration ms       (default 400)
+  echoBounce:       number;  // back.out overshoot factor          (default 2.8)
+  echoMarquee:      boolean; // show/hide background scrolling text
+  bigSmallFont:     boolean; // alternate big/small word sizes across all anim styles
 }
 const DEFAULT_PRESETS: Record<PresetName, LivePreset> = {
-  praise:  { name:"Praise",  animStyle:"word-fade", loopInterval:3500, loopEnabled:true, bgIdx:1, echoAlign:"center", echoLines:"auto", echoLineHeight:1.0, lyricsScale:1.0, bgVideo:null },
-  worship: { name:"Worship", animStyle:"breathe",   loopInterval:5000, loopEnabled:true, bgIdx:3, echoAlign:"center", echoLines:"auto", echoLineHeight:1.3, lyricsScale:1.0, bgVideo:null },
+  praise:  { name:"Praise",  animStyle:"word-fade", loopInterval:3500, loopEnabled:true, bgIdx:1, echoAlign:"center", echoLines:"auto", echoLineHeight:1.0, lyricsScale:1.0, bgVideo:null, echoSacredScale:1.75, echoContentScale:1.30, echoFuncScale:0.62, echoAnimDuration:400, echoBounce:2.8, echoMarquee:true, bigSmallFont:false },
+  worship: { name:"Worship", animStyle:"breathe",   loopInterval:5000, loopEnabled:true, bgIdx:3, echoAlign:"center", echoLines:"auto", echoLineHeight:1.3, lyricsScale:1.0, bgVideo:null, echoSacredScale:1.75, echoContentScale:1.30, echoFuncScale:0.62, echoAnimDuration:400, echoBounce:2.8, echoMarquee:true, bigSmallFont:false },
 };
 
 interface Props { allSongs: Song[]; isAdmin: boolean; onToast: (t:string, m:string) => void; onSongUpdated?: (song: Song) => void; }
 
 export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Props) {
 
-  const [query, setQuery]               = useState("");
   const [sceneSongIds, setSceneSongIds] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem("lsv_scene_songs") ?? "[]") ?? []; } catch { return []; }
   });
-  const [songDropdownOpen, setSongDropdownOpen] = useState(false);
+  // Cache of full song objects — used as fallback when allSongs hasn't loaded yet (async)
+  const [cachedSceneSongObjects, setCachedSceneSongObjects] = useState<Song[]>(() => {
+    try { return JSON.parse(localStorage.getItem("lsv_scene_song_objects") ?? "[]") ?? []; } catch { return []; }
+  });
   const [selectedSong, setSelectedSong_] = useState<Song | null>(null);
   // Ref mirrors state — pushToFirestore must always read the CURRENT song even when
   // called from a stale closure (e.g. arrow-key effect fires before React re-render).
@@ -761,43 +782,117 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
   const [loopInterval,    setLoopInterval]    = useState<number>(_cur.loopInterval);
   // bgVideo is now per-preset — live value comes from the active preset on save
   const [bgVideo,         setBgVideoState]    = useState<BgVideo | null>(_cur.bgVideo ?? null);
+  // ── Echo advanced settings state ───────────────────────────────────────────────
+  const [echoSacredScale,  setEchoSacredScale]  = useState<number>(_cur.echoSacredScale  ?? 1.75);
+  const [echoContentScale, setEchoContentScale] = useState<number>(_cur.echoContentScale ?? 1.30);
+  const [echoFuncScale,    setEchoFuncScale]    = useState<number>(_cur.echoFuncScale    ?? 0.62);
+  const [echoAnimDuration, setEchoAnimDuration] = useState<number>(_cur.echoAnimDuration ?? 400);
+  const [echoBounce,       setEchoBounce]       = useState<number>(_cur.echoBounce       ?? 2.8);
+  const [echoMarquee,      setEchoMarquee]      = useState<boolean>(_cur.echoMarquee     ?? true);
+  const [bigSmallFont,     setBigSmallFont]     = useState<boolean>(_cur.bigSmallFont    ?? false);
   // Refs that always hold the latest values — used by toggleFadeScreen to avoid stale closures
   const bgIdxRef   = useRef<number>(_cur.bgIdx);
   const bgVideoRef = useRef<BgVideo | null>(_cur.bgVideo ?? null);
   const setBgIdx   = (v: number)           => { bgIdxRef.current   = v; setBgIdxState(v); };
   const setBgVideo = (v: BgVideo | null)   => { bgVideoRef.current = v; setBgVideoState(v); };
-  // Per-preset YouTube URL input (draft only, cleared when modal opens)
+
+  // ── Song-specific background meta ───────────────────────────────────────────
+  // Declared early so applySongBackground (called by handleSongSelect) can reference them.
+  type SongBgMeta = { firebaseUrl: string; mediaId: string; mediaType: 'image' | 'video' };
+  const [songBgMeta, setSongBgMeta] = useState<Record<string, SongBgMeta>>(() => {
+    try { return JSON.parse(localStorage.getItem("lsv_song_bgs") ?? "{}") ?? {}; } catch { return {}; }
+  });
+  const songBgMetaRef = useRef<Record<string, SongBgMeta>>({});
+  songBgMetaRef.current = songBgMeta;
+  const songBgBlobUrlRef = useRef<string | null>(null);
+
+
+  /** Apply the song-specific background (or restore preset BG if none assigned).
+   *  Pulls IDB blob for offline-safe localUrl, then pushes bgVideo to OBS. */
+  const applySongBackground = async (song: Song) => {
+    if (songBgBlobUrlRef.current) {
+      URL.revokeObjectURL(songBgBlobUrlRef.current);
+      songBgBlobUrlRef.current = null;
+    }
+    const meta = songBgMetaRef.current[song.id];
+    if (!meta) return; // no song BG assigned — leave current preset BG unchanged
+
+    // Step 1 — push immediately with Firebase URL so display updates NOW
+    const bgValImmediate: BgVideo = meta.mediaType === 'video'
+      ? { type: 'firebase' as const, url: meta.firebaseUrl }
+      : { type: 'image-firebase' as const, url: meta.firebaseUrl };
+    setBgVideo(bgValImmediate);
+    fetch('/api/live-push', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ _bgOnly: true, bgVideo: bgValImmediate, bgIdx: bgIdxRef.current, updatedAt: Date.now() }),
+    }).catch(() => {});
+
+    // Step 1b — re-push at 600ms to WIN over applyPreset's 550ms setTimeout that may overwrite us
+    // applyPreset (triggered by auto-preset switch on song tags) fires its bgVideo push at 550ms.
+    // Our 600ms push fires 50ms later and guarantees the song-specific background always wins.
+    setTimeout(() => {
+      if (selectedSongRef.current?.id !== song.id) return; // user switched song — don't overwrite
+      const curBg = bgVideoRef.current;
+      if (curBg) {
+        setBgVideo(curBg); // re-assert current song bg in React state
+        fetch('/api/live-push', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ _bgOnly: true, bgVideo: curBg, bgIdx: bgIdxRef.current, updatedAt: Date.now() }),
+        }).catch(() => {});
+      }
+    }, 600);
+
+    // Step 2 — check if server-disk copy exists (uploaded during assignment)
+    // Use /api/live-bg-video/song_<id> as localUrl — real HTTP URL, not blob:
+    const presetKey = `song_${song.id}`;
+    const serverLocalUrl = `/api/live-bg-video/${presetKey}`;
+    try {
+      const check = await fetch(serverLocalUrl, { method: 'HEAD' });
+      if (check.ok) {
+        const bgValLocal: BgVideo = meta.mediaType === 'video'
+          ? { type: 'firebase' as const, url: meta.firebaseUrl, localUrl: serverLocalUrl }
+          : { type: 'image-firebase' as const, url: meta.firebaseUrl, localUrl: serverLocalUrl };
+        setBgVideo(bgValLocal);
+        fetch('/api/live-push', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ _bgOnly: true, bgVideo: bgValLocal, bgIdx: bgIdxRef.current, updatedAt: Date.now() }),
+        }).catch(() => {});
+        return; // done — server disk has it
+      }
+    } catch { /* server not running offline — firebase URL already pushed */ }
+
+    // Step 3 — server doesn't have it yet: upload from IDB blob now
+    try {
+      const blob = await idbGet<Blob>(`media_blob_${meta.mediaId}`);
+      if (blob instanceof Blob) {
+        const fd = new FormData();
+        const ext = meta.mediaType === 'video' ? 'mp4' : 'jpg';
+        fd.append('video', blob, `${presetKey}.${ext}`);
+        const uploadRes = await fetch(`/api/live-bg-video/${presetKey}`, { method: 'POST', body: fd });
+        if (uploadRes.ok) {
+          const bgValLocal: BgVideo = meta.mediaType === 'video'
+            ? { type: 'firebase' as const, url: meta.firebaseUrl, localUrl: serverLocalUrl }
+            : { type: 'image-firebase' as const, url: meta.firebaseUrl, localUrl: serverLocalUrl };
+          setBgVideo(bgValLocal);
+          fetch('/api/live-push', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ _bgOnly: true, bgVideo: bgValLocal, bgIdx: bgIdxRef.current, updatedAt: Date.now() }),
+          }).catch(() => {});
+        }
+      }
+    } catch { /* IDB miss — Firebase URL already pushed above */ }
+  };
+
+
+
   const [ytInputs, setYtInputs] = useState<Record<PresetName, string>>({ praise:"", worship:"" });
 
   const [settingsOpen,  setSettingsOpen]  = useState(false);
   const [settingsSaved, setSettingsSaved] = useState(false);
   // Ref so saveFadeScreenBg closure can read settingsOpen without stale capture
   const settingsOpenRef = useRef(false);
-  const [echoApplied,   setEchoApplied]  = useState(() => _cur.animStyle === "echo");
-  const [showVideoPanel, setShowVideoPanel] = useState(false);
-  const [obsUrlCopied,      setObsUrlCopied]      = useState(false);
-  const [obsLocalUrlCopied, setObsLocalUrlCopied] = useState(false);
-  const [lyricsGridOpen, setLyricsGridOpen_] = useState(false);
-  // Ref mirrors lyricsGridOpen — lets the keyboard handler check this
-  // synchronously without a stale closure. When Grid View is open, the
-  // LiveStageView key handler must NOT fire (LyricsGridModal has its own).
-  const lyricsGridOpenRef = useRef(false);
-  const setLyricsGridOpen = (v: boolean) => { lyricsGridOpenRef.current = v; setLyricsGridOpen_(v); };
-  // When Settings is opened from Grid View, this ref is set so closing Settings
-  // returns the user to Grid View instead of the default view.
-  const returnToGridRef = useRef(false);
-  const [activeSection,  setActiveSectionState]  = useState<string | null>(() => {
-    try { return localStorage.getItem("lsv_active_section") ?? null; } catch { return null; }
-  });
-  const setActiveSection = (v: string | null) => {
-    setActiveSectionState(v);
-    try {
-      if (v) localStorage.setItem("lsv_active_section", v);
-      else localStorage.removeItem("lsv_active_section");
-    } catch {}
-  };
-  const [mobileTab,      setMobileTab]       = useState<"slides"|"preview">("slides");
-  const [autoPresetToast, setAutoPresetToast] = useState<string | null>(null);
+  // Default View has been removed — Grid View (LyricsGridModal) is now the sole view.
+  const [echoApplied, setEchoApplied]  = useState(() => _cur.animStyle === "echo");
   const isMobile = useWindowWidth() <= 700;
 
   // ── Modal draft state — edits both presets before committing on Save ────────
@@ -808,6 +903,9 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
   const [mediaPicker, setMediaPicker] = useState<MediaTarget | null>(null);
   const [videoUploading,  setVideoUploading]  = useState<Record<PresetName, boolean>>({ praise: false, worship: false });
   const [videoProgress,   setVideoProgress]   = useState<Record<PresetName, number>>({ praise: 0, worship: 0 });
+  // Local-only video upload (no Firebase) — for fully offline use
+  const [localOnlyUploading, setLocalOnlyUploading] = useState<Record<PresetName, boolean>>({ praise: false, worship: false });
+  const [localOnlyProgress,  setLocalOnlyProgress]  = useState<Record<PresetName, number>>({ praise: 0, worship: 0 });
   // Fade screen background upload progress
   const [fadeImgUploading, setFadeImgUploading] = useState(false);
   const [fadeImgProgress,  setFadeImgProgress]  = useState(0);
@@ -854,8 +952,8 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
     const curBgVideo = bgVideoRef.current;
     const slide = activeSlide;
     const sceneBase = slide
-      ? { songTitle: selectedSong?.title ?? "", lines: slide.lines, animStyle: slide.animStyle, visible: true,  bgIdx: curBgIdx, echoAlign, echoLines, echoLineHeight, lyricsScale, loopEnabled, bgVideo: curBgVideo, loopInterval }
-      : { songTitle: "",                        lines: [],          animStyle: "word-fade",     visible: false, bgIdx: curBgIdx, echoAlign, echoLines, echoLineHeight, lyricsScale, loopEnabled, bgVideo: curBgVideo, loopInterval };
+      ? { songTitle: selectedSong?.title ?? "", lines: slide.lines, animStyle: slide.animStyle, visible: true,  bgIdx: curBgIdx, echoAlign, echoLines, echoLineHeight, lyricsScale, loopEnabled, bgVideo: curBgVideo, loopInterval, echoSacredScale, echoContentScale, echoFuncScale, echoAnimDuration, echoBounce, echoMarquee, bigSmallFont }
+      : { songTitle: "",                        lines: [],          animStyle: "word-fade",     visible: false, bgIdx: curBgIdx, echoAlign, echoLines, echoLineHeight, lyricsScale, loopEnabled, bgVideo: curBgVideo, loopInterval, echoSacredScale, echoContentScale, echoFuncScale, echoAnimDuration, echoBounce, echoMarquee, bigSmallFont };
 
     if (next) {
       // ── ACTIVATE fade ────────────────────────────────────────────────────────
@@ -932,21 +1030,20 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
   // Song click handler — selects song, clears previous slide immediately, auto-applies preset from tags
   const handleSongSelect = (song: Song) => {
     // Wipe ALL previous-song state in the same React batch:
-    // sections + activeSlide + activeSection must be cleared here — NOT left to the
-    // selectedSong useEffect — so old slides never appear on top of the new song.
     setSections([]);
     setActiveSlide(null);
-    setActiveSectionState(null); // raw setter: skip the localStorage write for this transient clear
     setSelectedSong(song);
     // Persist selected song ID so it survives server restarts
     try { localStorage.setItem("lsv_selected_song_id", song.id); } catch {}
+    // Auto-switch preset from song tags (praise/worship)
     const resolved = resolvePresetFromSong(song);
     if (resolved && resolved !== activePreset) {
       applyPreset(resolved);
       const label = resolved === "praise" ? "Praise" : "Worship";
-      setAutoPresetToast(`⚡ Auto-switched to ${label} scene`);
-      setTimeout(() => setAutoPresetToast(null), 3000);
+      onToast('info', `⚡ Auto-switched to ${label} scene`);
     }
+    // Apply song-specific background (async — pulls IDB blob for offline)
+    applySongBackground(song);
   };
 
   // Restore last selected song from allSongs once they are available (async load)
@@ -957,13 +1054,28 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
     _restoredSelectedRef.current = true;
     try {
       const savedId = localStorage.getItem("lsv_selected_song_id");
-      // Use saved song, or fall back to first song in the list
-      const song = (savedId ? allSongs.find(s => s.id === savedId) : null) ?? allSongs[0] ?? null;
+      // Only restore if the user explicitly saved a song — never auto-select allSongs[0]
+      // (that would make the Praise button glow before the user picks anything this session)
+      const song = savedId ? (allSongs.find(s => s.id === savedId) ?? null) : null;
       if (song) {
         setSelectedSong(song);
-        // Auto-apply preset based on restored song's tags
+        // Restore preset settings silently — intentionally NOT calling applyPreset()
+        // so setPresetActivated stays false. Buttons only highlight when the user
+        // explicitly clicks them (or selects a song) this session.
         const resolved = resolvePresetFromSong(song);
-        if (resolved) applyPreset(resolved);
+        if (resolved) {
+          const p = presets[resolved];
+          setActivePreset(resolved);
+          setBgIdx(p.bgIdx);
+          setEchoAlign(p.echoAlign);
+          setEchoLines(p.echoLines);
+          setEchoLineHeight(p.echoLineHeight);
+          setLyricsScale(p.lyricsScale ?? 1.0);
+          setLoopEnabled(p.loopEnabled ?? true);
+          setDefaultAnimStyle(p.animStyle);
+          setLoopInterval(p.loopInterval);
+          setBgVideo(p.bgVideo ?? null);
+        }
       }
     } catch { /* noop */ }
   }, [allSongs]); // eslint-disable-line
@@ -1022,6 +1134,80 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
     }).catch(() => {});
   }, []); // eslint-disable-line
 
+  // ── Auto-sync: upload pending local-only videos to Firebase when internet returns ──
+  // When the user uploads a video offline via "Use Local Video (No Internet)…", the
+  // raw File blob is saved in IDB under lsv_pending_sync_blob_<preset> and the
+  // metadata in lsv_pending_sync_meta_<preset>.
+  // This effect picks those up and uploads to Firebase Storage + Firestore media_library,
+  // then upgrades the preset bgVideo from { type:"local" } → { type:"firebase" } automatically.
+  useEffect(() => {
+    const attemptSync = async () => {
+      if (!navigator.onLine) return;
+      const PRESETS: PresetName[] = ["praise", "worship"];
+      for (const preset of PRESETS) {
+        const file = await idbGet<File>(`lsv_pending_sync_blob_${preset}`);
+        const meta = await idbGet<{ name: string; mimeType: string; sizeBytes: number; localUrl: string }>(`lsv_pending_sync_meta_${preset}`);
+        if (!file || !meta) continue;
+
+        // Check the preset's current bgVideo — only sync if it's still type:"local"
+        const currentBgVideo = presets[preset]?.bgVideo;
+        if (!currentBgVideo || currentBgVideo.type !== "local") {
+          // Already upgraded or removed — clear the queue entries
+          await idbSet(`lsv_pending_sync_blob_${preset}`, null).catch(() => {});
+          await idbSet(`lsv_pending_sync_meta_${preset}`, null).catch(() => {});
+          continue;
+        }
+
+        console.log(`[AutoSync] Pending local-only video for "${preset}" — syncing to Firebase…`);
+        try {
+          const { name, mimeType, sizeBytes, localUrl } = meta;
+          const ext = name.split(".").pop() || "mp4";
+          const path = `live-bg-videos/${preset}.${ext}`;
+
+          // Upload to Firebase Storage
+          const sRef = storageRef(storage, path);
+          const task = uploadBytesResumable(sRef, file);
+          const firebaseUrl = await new Promise<string>((resolve, reject) => {
+            task.on("state_changed", undefined, reject, async () => {
+              resolve(await getDownloadURL(task.snapshot.ref));
+            });
+          });
+
+          // Add to Firestore media_library so it appears in the Media Library modal
+          await addDoc(collection(db, "media_library"), {
+            name, type: "video",
+            firebaseUrl, storagePath: path,
+            uploadedAt: Date.now(), sizeBytes, mimeType,
+          });
+
+          // Upgrade preset bgVideo: local → firebase (keep localUrl as offline fallback)
+          const upgradedBg: BgVideo = { type: "firebase", url: firebaseUrl, localUrl };
+          setPresets(prev => {
+            const updated = { ...prev, [preset]: { ...prev[preset], bgVideo: upgradedBg } };
+            try { localStorage.setItem("lsv_presets", JSON.stringify(updated)); } catch {}
+            return updated;
+          });
+          // Apply to live state if this is the active preset
+          if (activePreset === preset) setBgVideo(upgradedBg);
+
+          // Clear IDB queue — sync complete
+          await idbSet(`lsv_pending_sync_blob_${preset}`, null).catch(() => {});
+          await idbSet(`lsv_pending_sync_meta_${preset}`, null).catch(() => {});
+          onToast("success", `☁️ "${name}" auto-synced to cloud for "${preset}" preset!`);
+          console.log(`[AutoSync] ✅ "${preset}" video synced → ${firebaseUrl}`);
+        } catch (err) {
+          console.warn(`[AutoSync] Failed to sync "${preset}" video:`, err);
+          // Don't clear IDB — will retry on the next online event
+        }
+      }
+    };
+
+    // Run immediately in case we're already online when the component mounts
+    attemptSync();
+    window.addEventListener("online", attemptSync);
+    return () => window.removeEventListener("online", attemptSync);
+  }, []); // eslint-disable-line
+
 
   const openSettings = () => {
     settingsOpenRef.current = true;
@@ -1033,15 +1219,15 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
     const legacyVideo = (() => { try { return JSON.parse(localStorage.getItem("lsv_bg_video") ?? "null"); } catch { return null; } })();
     if (legacyVideo && !normalizedPraise.bgVideo && activePreset === "praise")   normalizedPraise.bgVideo  = legacyVideo;
     if (legacyVideo && !normalizedWorship.bgVideo && activePreset === "worship") normalizedWorship.bgVideo = legacyVideo;
-    // Clear stale legacy local video URLs that pointed to the old shared endpoint
-    // Clear stale server-side local video URLs — the Netlify function has no
-    // persistent filesystem, so /api/live-bg-video/* files are gone after any
-    // cold start. Firebase Storage URLs (type:"firebase") are always permanent.
-    const isStaleLocalUrl = (v: LivePreset["bgVideo"]) => v?.type === "local";
-    if (isStaleLocalUrl(normalizedPraise.bgVideo))  normalizedPraise.bgVideo  = null;
-    if (isStaleLocalUrl(normalizedWorship.bgVideo)) normalizedWorship.bgVideo = null;
+    // Note: we intentionally do NOT strip type:"local" bgVideos here.
+    // The auto-sync useEffect will upgrade them to type:"firebase" when internet returns.
+    // Stripping them would cause the user to lose their offline-uploaded video
+    // if they reopen settings while online.
 
-    setModalDrafts({ praise: normalizedPraise, worship: normalizedWorship });
+    setModalDrafts({
+      praise:  { ...DEFAULT_PRESETS.praise,  ...normalizedPraise  },
+      worship: { ...DEFAULT_PRESETS.worship, ...normalizedWorship },
+    });
     setModalFadeScreenBg({ ...fadeScreenBg }); // snapshot current fade bg into draft
     setFadeImageUrlInput("");
     setYtInputs({ praise:"", worship:"" }); // clear YouTube inputs
@@ -1073,12 +1259,18 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
     setLoopInterval(p.loopInterval);
     setEchoApplied(p.animStyle === "echo");
     setBgVideo(p.bgVideo ?? null); // switch per-preset video background
+    setEchoSacredScale(p.echoSacredScale   ?? 1.75);
+    setEchoContentScale(p.echoContentScale ?? 1.30);
+    setEchoFuncScale(p.echoFuncScale       ?? 0.62);
+    setEchoAnimDuration(p.echoAnimDuration ?? 400);
+    setEchoBounce(p.echoBounce             ?? 2.8);
+    setEchoMarquee(p.echoMarquee           ?? true);
+    setBigSmallFont(p.bigSmallFont          ?? false);
     setSections(prev => prev.map(sec => ({ ...sec, slides: sec.slides.map(s => ({ ...s, animStyle: p.animStyle })) })));
     setActiveSlide(prev => prev ? { ...prev, animStyle: p.animStyle } : prev);
     localStorage.setItem("lsv_active_preset", name);
     if (fadeScreenActiveRef.current) {
       // Fade is active — pre-load the new scene behind the overlay (no transition flash)
-      // Include fadeScreen:true so the overlay stays; display page updates background silently
       fetch("/api/live-push", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1088,6 +1280,9 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
           echoLineHeight: p.echoLineHeight, bgVideo: p.bgVideo ?? null,
           lyricsScale: p.lyricsScale ?? 1.0,
           loopInterval: p.loopInterval, loopEnabled: p.loopEnabled ?? true, visible: false, lines: [], animStyle: p.animStyle,
+          echoSacredScale: p.echoSacredScale ?? 1.75, echoContentScale: p.echoContentScale ?? 1.30,
+          echoFuncScale: p.echoFuncScale ?? 0.62, echoAnimDuration: p.echoAnimDuration ?? 400,
+          echoBounce: p.echoBounce ?? 2.8, echoMarquee: p.echoMarquee ?? true, bigSmallFont: p.bigSmallFont ?? false,
           updatedAt: Date.now(),
         }),
       }).catch(() => {});
@@ -1109,6 +1304,9 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
             lyricsScale: p.lyricsScale ?? 1.0,
             loopInterval: p.loopInterval, loopEnabled: p.loopEnabled ?? true,
             visible: false, lines: [], animStyle: p.animStyle,
+            echoSacredScale: p.echoSacredScale ?? 1.75, echoContentScale: p.echoContentScale ?? 1.30,
+            echoFuncScale: p.echoFuncScale ?? 0.62, echoAnimDuration: p.echoAnimDuration ?? 400,
+            echoBounce: p.echoBounce ?? 2.8, echoMarquee: p.echoMarquee ?? true, bigSmallFont: p.bigSmallFont ?? false,
             updatedAt: Date.now(),
           }),
         }).catch(() => {});
@@ -1143,6 +1341,13 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
       setLoopInterval(live.loopInterval);
       setEchoApplied(live.animStyle === "echo");
       setBgVideo(live.bgVideo ?? null); // commit per-preset video BG
+      setEchoSacredScale(live.echoSacredScale   ?? 1.75);
+      setEchoContentScale(live.echoContentScale ?? 1.30);
+      setEchoFuncScale(live.echoFuncScale       ?? 0.62);
+      setEchoAnimDuration(live.echoAnimDuration ?? 400);
+      setEchoBounce(live.echoBounce             ?? 2.8);
+      setEchoMarquee(live.echoMarquee           ?? true);
+      setBigSmallFont(live.bigSmallFont          ?? false);
       setSections(prev => prev.map(sec => ({ ...sec, slides: sec.slides.map(s => ({ ...s, animStyle: live.animStyle })) })));
       setActiveSlide(prev => prev ? { ...prev, animStyle: live.animStyle } : prev);
       localStorage.setItem("lsv_settings", JSON.stringify({ bgIdx: live.bgIdx, echoAlign: live.echoAlign, echoLines: live.echoLines, echoLineHeight: live.echoLineHeight, animStyle: live.animStyle }));
@@ -1172,11 +1377,19 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
           ? { songTitle: selectedSong?.title ?? "", lines: activeSlideSnap.lines, animStyle: live.animStyle, visible: true,
               bgIdx: live.bgIdx, echoAlign: live.echoAlign, echoLines: live.echoLines, echoLineHeight: live.echoLineHeight,
               lyricsScale: live.lyricsScale ?? 1.0, loopEnabled: live.loopEnabled ?? true,
-              bgVideo: live.bgVideo ?? null, loopInterval: live.loopInterval, updatedAt: Date.now() }
+              bgVideo: live.bgVideo ?? null, loopInterval: live.loopInterval,
+              echoSacredScale: live.echoSacredScale ?? 1.75, echoContentScale: live.echoContentScale ?? 1.30,
+              echoFuncScale: live.echoFuncScale ?? 0.62, echoAnimDuration: live.echoAnimDuration ?? 400,
+              echoBounce: live.echoBounce ?? 2.8, echoMarquee: live.echoMarquee ?? true, bigSmallFont: live.bigSmallFont ?? false,
+              updatedAt: Date.now() }
           : { songTitle: "", lines: [], animStyle: live.animStyle, visible: false,
               bgIdx: live.bgIdx, echoAlign: live.echoAlign, echoLines: live.echoLines, echoLineHeight: live.echoLineHeight,
               lyricsScale: live.lyricsScale ?? 1.0, loopEnabled: live.loopEnabled ?? true,
-              bgVideo: live.bgVideo ?? null, loopInterval: live.loopInterval, updatedAt: Date.now() };
+              bgVideo: live.bgVideo ?? null, loopInterval: live.loopInterval,
+              echoSacredScale: live.echoSacredScale ?? 1.75, echoContentScale: live.echoContentScale ?? 1.30,
+              echoFuncScale: live.echoFuncScale ?? 0.62, echoAnimDuration: live.echoAnimDuration ?? 400,
+              echoBounce: live.echoBounce ?? 2.8, echoMarquee: live.echoMarquee ?? true, bigSmallFont: live.bigSmallFont ?? false,
+              updatedAt: Date.now() };
         if (fadeScreenActiveRef.current) {
           fetch("/api/live-push", { method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ ...fullPayload, fadeScreen: true, fadeScreenBg: toFiresafeFadeBg(modalFadeScreenBg) }) }).catch(() => {});
@@ -1194,14 +1407,12 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
     }
   };
 
-  // Closes the Settings modal and returns to Grid View if it was opened from there.
+  // Closes the Settings modal.
+  // Note: LyricsGridModal is always mounted (keep-alive via CSS display:none),
+  // so we never need to re-open it here \u2014 it was never closed.
   const closeSettings = () => {
     settingsOpenRef.current = false;
     setSettingsOpen(false);
-    if (returnToGridRef.current) {
-      returnToGridRef.current = false;
-      setLyricsGridOpen(true);
-    }
   };
 
   // ── No global bgVideo localStorage persistence — bgVideo lives in lsv_presets per-preset ──
@@ -1212,8 +1423,8 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
     // closure would still hold the OLD song. The ref is always current.
     const currentSong = selectedSongRef.current;
     const payload = slide
-      ? { songTitle: currentSong?.title ?? "", lines: slide.lines, animStyle: slide.animStyle, visible: true,  bgIdx, echoAlign, echoLines, echoLineHeight, lyricsScale, loopEnabled, bgVideo, loopInterval }
-      : { songTitle: "",                        lines: [],          animStyle: "word-fade",     visible: false, bgIdx, echoAlign, echoLines, echoLineHeight, lyricsScale, loopEnabled, bgVideo, loopInterval };
+      ? { songTitle: currentSong?.title ?? "", lines: slide.lines, animStyle: slide.animStyle, visible: true,  bgIdx, echoAlign, echoLines, echoLineHeight, lyricsScale, loopEnabled, bgVideo, loopInterval, echoSacredScale, echoContentScale, echoFuncScale, echoAnimDuration, echoBounce, echoMarquee, bigSmallFont }
+      : { songTitle: "",                        lines: [],          animStyle: "word-fade",     visible: false, bgIdx, echoAlign, echoLines, echoLineHeight, lyricsScale, loopEnabled, bgVideo, loopInterval, echoSacredScale, echoContentScale, echoFuncScale, echoAnimDuration, echoBounce, echoMarquee, bigSmallFont };
     if (fadeScreenActiveRef.current) {
       // Fade is active — pre-load scene data behind overlay, keep fadeScreen:true so overlay stays
       // Use fadeScreenBgRef.current (not state) to avoid stale closure captures
@@ -1229,13 +1440,12 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
 
 
 
-  useEffect(() => { pushToFirestore(activeSlide); }, [activeSlide, bgIdx, echoAlign, echoLines, echoLineHeight, bgVideo, lyricsScale, loopEnabled, loopInterval]); // eslint-disable-line
+  useEffect(() => { pushToFirestore(activeSlide); }, [activeSlide, bgIdx, echoAlign, echoLines, echoLineHeight, bgVideo, lyricsScale, loopEnabled, loopInterval, echoSacredScale, echoContentScale, echoFuncScale, echoAnimDuration, echoBounce, echoMarquee, bigSmallFont]); // eslint-disable-line
 
   useEffect(() => {
     // Always wipe sections first so old song slides are never visible during the parse
     setSections([]);
     setActiveSlide(null);
-    setActiveSectionState(null);
     if (!selectedSong) return;
     const parsed = parseSections(selectedSong.lyrics);
     const withStyle = parsed.map(sec => ({ ...sec, slides: sec.slides.map(s => ({ ...s, animStyle: defaultAnimStyle })) }));
@@ -1275,6 +1485,13 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
       try { localStorage.setItem("lsv_scene_songs", JSON.stringify(next)); } catch {}
       return next;
     });
+    // Also persist the full song object so dropdown works on next load before allSongs arrives
+    setCachedSceneSongObjects(prev => {
+      if (prev.some(s => s.id === song.id)) return prev;
+      const next = [...prev, song];
+      try { localStorage.setItem("lsv_scene_song_objects", JSON.stringify(next)); } catch {}
+      return next;
+    });
   };
   const removeFromScene = (songId: string) => {
     setSceneSongIds(prev => {
@@ -1282,187 +1499,99 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
       try { localStorage.setItem("lsv_scene_songs", JSON.stringify(next)); } catch {}
       return next;
     });
+    setCachedSceneSongObjects(prev => {
+      const next = prev.filter(s => s.id !== songId);
+      try { localStorage.setItem("lsv_scene_song_objects", JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+  const reorderScene = (newIds: string[]) => {
+    setSceneSongIds(newIds);
+    try { localStorage.setItem("lsv_scene_songs", JSON.stringify(newIds)); } catch {}
+    // Reorder cachedSceneSongObjects to match new order
+    setCachedSceneSongObjects(prev => {
+      const byId = new Map(prev.map(s => [s.id, s]));
+      const next = newIds.map(id => byId.get(id)).filter(Boolean) as typeof prev;
+      try { localStorage.setItem("lsv_scene_song_objects", JSON.stringify(next)); } catch {}
+      return next;
+    });
   };
 
-  const sceneSongs = sceneSongIds.map(id => allSongs.find(s => s.id === id)).filter(Boolean) as Song[];
+  // Derive sceneSongs: use allSongs when loaded, fall back to cached objects on initial render
+  const sceneSongs = sceneSongIds
+    .map(id => allSongs.find(s => s.id === id) ?? cachedSceneSongObjects.find(s => s.id === id))
+    .filter(Boolean) as Song[];
+  // Keep cachedSceneSongObjects in sync once allSongs arrives
+  // (updates stale cached data with fresh Firestore data)
+  React.useEffect(() => {
+    if (allSongs.length === 0) return;
+    const updated = sceneSongIds
+      .map(id => allSongs.find(s => s.id === id))
+      .filter(Boolean) as Song[];
+    if (updated.length === 0) return;
+    setCachedSceneSongObjects(updated);
+    try { localStorage.setItem("lsv_scene_song_objects", JSON.stringify(updated)); } catch {}
+  }, [allSongs, sceneSongIds]); // eslint-disable-line
 
-  const filtered = query.trim()
-    ? allSongs.filter(s => s.title.toLowerCase().includes(query.toLowerCase()) || (s.artist??"").toLowerCase().includes(query.toLowerCase()))
-    : allSongs;
+  // ── Auto-upload song backgrounds when playlist changes ────────────────────
+  // Ensures every song background is cached on local disk even before the song
+  // is selected, so OBS has local fallback at camp when offline.
+  useEffect(() => {
+    const bgs = songBgMetaRef.current;
+    for (const songId of sceneSongIds) {
+      const meta = bgs[songId];
+      if (!meta) continue;
+      const presetKey = `song_${songId}`;
+      const serverUrl = `/api/live-bg-video/${presetKey}`;
+      // Check if already on disk — skip if so
+      fetch(serverUrl, { method: "HEAD" })
+        .then(r => {
+          if (r.ok) return; // already cached
+          // Not on disk — upload from IDB blob (non-blocking, fire-and-forget)
+          idbGet<Blob>(`media_blob_${meta.mediaId}`).then(blob => {
+            if (!(blob instanceof Blob)) return;
+            const fd = new FormData();
+            const ext = meta.mediaType === "video" ? "mp4" : "jpg";
+            fd.append("video", blob, `${presetKey}.${ext}`);
+            fetch(serverUrl, { method: "POST", body: fd }).catch(() => {});
+          }).catch(() => {});
+        })
+        .catch(() => {}); // server offline — skip
+    }
+  }, [sceneSongIds]); // eslint-disable-line
+
+
 
   // Keyboard nav — cross-section aware
   // All slides flattened in section order for seamless up/down navigation
-  const allSectionSlides = sections.flatMap(sec => sec.slides);
-  const sectionSlides = activeSection
-    ? (sections.find(s => s.label === activeSection)?.slides ?? [])
-    : (sections[0]?.slides ?? []);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      // Skip if user is typing in any text input, textarea, select, or contenteditable
-      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT") return;
-      if (target.isContentEditable) return;
-      // ⚠️ Grid View has its own keyboard handler — bail out to avoid competing OBS pushes
-      if (lyricsGridOpenRef.current) return;
-      const currentSlides = sectionsRef.current.flatMap(sec => sec.slides);
-      if (!currentSlides.length) return;
-      const currentActiveSlide = activeSlideRef.current;
-      const globalIdx = currentActiveSlide ? currentSlides.findIndex(s => s.id === currentActiveSlide.id) : -1;
-      if (e.key === "ArrowDown" || e.key === "ArrowRight") {
-        e.preventDefault();
-        if (globalIdx < currentSlides.length - 1) {
-          const next = currentSlides[globalIdx + 1];
-          if (next.sectionLabel !== currentActiveSlide?.sectionLabel) setActiveSection(next.sectionLabel);
-          setActiveSlide(next);
-        }
-      } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
-        e.preventDefault();
-        if (globalIdx <= 0) { setActiveSlide(null); return; }
-        const prev = currentSlides[globalIdx - 1];
-        if (prev.sectionLabel !== currentActiveSlide?.sectionLabel) setActiveSection(prev.sectionLabel);
-        setActiveSlide(prev);
-      } else if (e.key === "Escape") {
-        setActiveSlide(null);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []); // ← empty deps: handler registered ONCE, always reads live data via refs
-
-  // Auto-scroll active slide card into view when changed by keyboard
-  useEffect(() => {
-    if (!activeSlide) return;
-    const el = document.querySelector<HTMLElement>(`[data-slide-id="${activeSlide.id}"]`);
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [activeSlide]);
+  // Keyboard navigation is handled internally by LyricsGridModal.
 
   // ── Camp Readiness Check ──────────────────────────────────────────────
   const [showCampReady, setShowCampReady] = useState(false);
+
+  // ── Network / OBS status tracking ────────────────────────────────────────
+  // Tracks whether the local SSE connection is live (confirms OBS is receiving)
+  const [obsStatus, setObsStatus] = useState<"connecting"|"live"|"lost">("connecting");
+  const obsLastPingRef = useRef<number>(Date.now());
+  useEffect(() => {
+    const es = new EventSource("/api/live-sse");
+    const onMsg = () => { obsLastPingRef.current = Date.now(); setObsStatus("live"); };
+    es.addEventListener("message", onMsg);
+    es.onerror = () => setObsStatus("lost");
+    es.onopen  = () => setObsStatus("live");
+    // Watchdog: if no message for 8s, mark as lost
+    const watchdog = setInterval(() => {
+      if (Date.now() - obsLastPingRef.current > 8000) setObsStatus("lost");
+      else setObsStatus("live");
+    }, 3000);
+    return () => { es.close(); clearInterval(watchdog); };
+  }, []); // eslint-disable-line
 
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"100%", background:"var(--wf-surface,#07090f)", color:"#fff", overflow:"hidden", fontFamily:"inherit" }}>
 
       {/* ── Camp Readiness Modal ─────────────────────────────────────── */}
-      {showCampReady && <CampReadinessModal onClose={() => setShowCampReady(false)} songsCount={allSongs.length} />}
-
-      {/* ── Top Bar ─────────────────────────────────────────────────────── */}
-      <div style={{ flexShrink:0, display:"flex", alignItems:"center", justifyContent:"space-between", padding: isMobile ? "8px 12px" : "10px 20px", borderBottom:"1px solid rgba(255,255,255,0.07)", minHeight: isMobile ? 52 : 56 }}>
-        <div style={{ display:"flex", alignItems:"center", gap: isMobile ? 9 : 12 }}>
-          <Radio size={18} color="rgba(255,255,255,0.85)" />
-          <div>
-            <p style={{ fontSize: isMobile ? 13 : 14, fontWeight:700, margin:0, letterSpacing:"-0.01em" }}>Live Stage</p>
-            {!isMobile && <p style={{ fontSize:11, color:"rgba(255,255,255,0.35)", margin:0 }}>LED wall · per-slide animation · centered lyrics</p>}
-          </div>
-        </div>
-        <div style={{ display:"flex", alignItems:"center", gap: isMobile ? 5 : 8 }}>
-          {/* ── Fade in OBS Screen toggle (FIRST) ── */}
-          <button onClick={toggleFadeScreen}
-            title={fadeScreenActive ? "OBS Faded — click to reveal" : "Fade in OBS Screen"}
-            style={isMobile ? {
-              width:36, height:36, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center",
-              cursor:"pointer", transition:"all 0.18s", flexShrink:0,
-              border: fadeScreenActive ? "1.5px solid rgba(255,255,255,0.55)" : "1px solid rgba(255,255,255,0.15)",
-              background: fadeScreenActive ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.05)",
-              color: "rgba(255,255,255,0.85)"
-            } : {
-              display:"flex", alignItems:"center", gap:6, padding:"7px 13px", borderRadius:20,
-              cursor:"pointer", transition:"all 0.18s", flexShrink:0,
-              border: fadeScreenActive ? "1.5px solid rgba(255,255,255,0.55)" : "1px solid rgba(255,255,255,0.15)",
-              background: fadeScreenActive ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.05)",
-              color: "rgba(255,255,255,0.85)", fontSize:12, fontWeight:700
-            }}>
-            <EyeOff size={15} />
-            {!isMobile && <span>{fadeScreenActive ? "Faded" : "Fade OBS Screen"}</span>}
-          </button>
-          {/* ── Camp Readiness Check button ── */}
-          <button
-            onClick={() => setShowCampReady(true)}
-            title="Camp Readiness Check — verify offline mode is ready"
-            style={{
-              width:36, height:36, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center",
-              cursor:"pointer", transition:"all 0.18s", flexShrink:0,
-              border:"1px solid rgba(16,185,129,0.4)",
-              background:"rgba(16,185,129,0.12)",
-              color:"rgba(16,185,129,0.9)"
-            }}>
-            <Tent size={15} />
-          </button>
-          {/* Divider */}
-          <div style={{ width:1, height:20, background:"rgba(255,255,255,0.1)", flexShrink:0 }} />
-
-          {/* ── Preset selector ── */}
-          <div style={{ display:"flex", gap: isMobile ? 3 : 5 }}>
-            {(["praise","worship"] as PresetName[]).map(name => {
-              const p = presets[name];
-              const isActive = presetActivated && activePreset === name;
-              const Icon = name === "praise" ? Zap : Heart;
-              return (
-                <button key={name} onClick={() => applyPreset(name)}
-                  title={p.name}
-                  style={isMobile ? {
-                    width:36, height:36, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center",
-                    cursor:"pointer", transition:"all 0.18s", flexShrink:0,
-                    border: isActive ? "1.5px solid rgba(255,255,255,0.55)" : "1px solid rgba(255,255,255,0.15)",
-                    background: isActive ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.05)",
-                    color: "rgba(255,255,255,0.85)"
-                  } : {
-                    display:"flex", alignItems:"center", gap:6, padding:"7px 14px", borderRadius:20,
-                    cursor:"pointer", transition:"all 0.18s", flexShrink:0,
-                    border: isActive ? "1.5px solid rgba(255,255,255,0.55)" : "1px solid rgba(255,255,255,0.15)",
-                    background: isActive ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.05)",
-                    color: "rgba(255,255,255,0.85)", fontSize:12, fontWeight:700
-                  }}>
-                  <Icon size={15} />
-                  {!isMobile && <span>{p.name}</span>}
-                </button>
-              );
-            })}
-          </div>
-          {/* ── Lyrics Grid Facility button ── */}
-          <button onClick={() => setLyricsGridOpen(true)}
-            title="Lyrics Grid Facility"
-            style={{ display:"flex", alignItems:"center", gap:6, padding: isMobile ? "9px" : "8px 14px", borderRadius:10, background:"rgba(99,102,241,0.1)", border:"1px solid rgba(99,102,241,0.25)", color:"#818cf8", fontSize:12, fontWeight:700, cursor:"pointer", transition:"all 0.15s" }}
-            onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background="rgba(99,102,241,0.22)"}
-            onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="rgba(99,102,241,0.1)"}>
-            <LayoutGrid size={isMobile ? 18 : 14} />
-            {!isMobile && "Grid View"}
-          </button>
-          {/* ── Media Library button ── */}
-          <button onClick={() => setMediaLibraryOpen(true)}
-            title="Media Library"
-            style={{ display:"flex", alignItems:"center", gap:6, padding: isMobile ? "9px" : "8px 14px", borderRadius:10, background:"rgba(52,211,153,0.08)", border:"1px solid rgba(52,211,153,0.22)", color:"#34d399", fontSize:12, fontWeight:700, cursor:"pointer", transition:"all 0.15s" }}
-            onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background="rgba(52,211,153,0.18)"}
-            onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="rgba(52,211,153,0.08)"}>
-            <FolderOpen size={isMobile ? 18 : 14} />
-            {!isMobile && "Media"}
-          </button>
-          <button onClick={openSettings}
-            style={{ display:"flex", alignItems:"center", gap:6, padding: isMobile ? "9px" : "8px 14px", borderRadius:10, background:"rgba(167,139,250,0.1)", border:"1px solid rgba(167,139,250,0.25)", color:"#a78bfa", fontSize:12, fontWeight:700, cursor:"pointer", transition:"all 0.15s" }}
-            onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background="rgba(167,139,250,0.2)"}
-            onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="rgba(167,139,250,0.1)"}>
-            <Settings size={isMobile ? 18 : 14} />
-            {!isMobile && "Settings"}
-          </button>
-        </div>
-      </div>
-
-      {/* ── Mobile: song status strip ──────────────────────────────── */}
-      {isMobile && selectedSong && (
-        <div style={{ flexShrink:0, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"7px 14px", borderBottom:"1px solid rgba(255,255,255,0.07)", background:"rgba(0,0,0,0.25)" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:6, minWidth:0 }}>
-            <span style={{ fontSize:12, color:"rgba(167,139,250,0.7)", flexShrink:0 }}>♪</span>
-            <span style={{ fontSize:12, fontWeight:700, color:"rgba(255,255,255,0.85)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{selectedSong.title}</span>
-            {selectedSong.artist && <span style={{ fontSize:11, color:"rgba(255,255,255,0.35)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>— {selectedSong.artist}</span>}
-          </div>
-          {activeSlide && (
-            <div style={{ display:"flex", alignItems:"center", gap:4, flexShrink:0, padding:"3px 8px", borderRadius:20, background:"rgba(239,68,68,0.15)", border:"1px solid rgba(239,68,68,0.3)" }}>
-              <div style={{ width:6, height:6, borderRadius:"50%", background:"#ef4444", boxShadow:"0 0 6px #ef4444" }} />
-              <span style={{ fontSize:10, fontWeight:700, color:"#f87171", letterSpacing:"0.08em" }}>LIVE</span>
-            </div>
-          )}
-        </div>
-      )}
+      {showCampReady && <CampReadinessModal onClose={() => setShowCampReady(false)} songsCount={allSongs.length} sceneSongs={sceneSongs} songBgMeta={songBgMeta} />}
 
       {/* ══ Settings Modal ══════════════════════════════════════════════════ */}
       {settingsOpen && (
@@ -1647,18 +1776,30 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
                 const draft = modalDrafts[tab];
                 return (<>
 
-              {/* Apply Echo Style — Praise only */}
-              {tab === "praise" && (() => { const isEcho = draft.animStyle === "echo"; return (
-              <button onClick={() => updateDraft(tab, "animStyle", "echo")}
-                style={{ width:"100%", padding:"13px 0", borderRadius:12, fontSize:13, fontWeight:700,
-                  cursor:"pointer", transition:"all 0.2s",
-                  border:   isEcho ? "1px solid rgba(52,211,153,0.6)" : "1px solid rgba(255,255,255,0.12)",
-                  background: isEcho ? "rgba(52,211,153,0.18)" : "rgba(255,255,255,0.05)",
-                  color:      isEcho ? "#6ee7b7" : "rgba(255,255,255,0.75)",
-                  display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
-                <span style={{ fontSize:16, color: isEcho ? "#6ee7b7" : "#a78bfa" }}>✦</span>
-                {isEcho ? "✓ Echo Style Activated" : "Apply Echo Style"}
-              </button>); })()}
+              {/* Animation Style Picker */}
+              <div>
+                <span style={{ fontSize:10, fontWeight:700, color:"rgba(255,255,255,0.35)", textTransform:"uppercase", letterSpacing:"0.12em", display:"block", marginBottom:10 }}>Text Animation Style</span>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:4 }}>
+                  {(["word-fade","word-bounce","blur-in","fade","slide-up","typewriter","breathe","echo"] as const).map(a => {
+                    const active = draft.animStyle === a;
+                    const isEcho = a === "echo";
+                    return (
+                      <button key={a} onClick={() => updateDraft(tab, "animStyle", a)}
+                        style={{ padding:"9px 4px", borderRadius:9, fontSize:11, fontWeight:700, cursor:"pointer", transition:"all 0.18s",
+                          border: active ? (isEcho ? "1px solid rgba(52,211,153,0.7)" : "1px solid rgba(167,139,250,0.6)") : "1px solid rgba(255,255,255,0.08)",
+                          background: active ? (isEcho ? "rgba(52,211,153,0.18)" : "rgba(167,139,250,0.16)") : "rgba(255,255,255,0.04)",
+                          color: active ? (isEcho ? "#6ee7b7" : "#c4b5fd") : "rgba(255,255,255,0.4)" }}>
+                        {isEcho ? "✦ Echo" : ANIM_LABELS[a]}
+                      </button>
+                    );
+                  })}
+                </div>
+                {draft.animStyle === "echo" && (
+                  <p style={{ fontSize:11, color:"rgba(52,211,153,0.7)", margin:"8px 0 0", textAlign:"center" }}>
+                    ✦ Echo active — control the scrolling marquee in Echo Advanced below
+                  </p>
+                )}
+              </div>
 
               <div style={{ height:1, background:"rgba(255,255,255,0.06)" }} />
 
@@ -1724,7 +1865,99 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
                 </div>
               </div>
 
+              {/* ── Text Format — Big & Small Font ───────────────────────────────── */}
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 14px", background:"rgba(139,92,246,0.06)", borderRadius:12, border:"1px solid rgba(139,92,246,0.18)" }}>
+                <div>
+                  <p style={{ margin:0, fontSize:12, fontWeight:700, color:"rgba(255,255,255,0.85)" }}>
+                    <span style={{ marginRight:6, fontSize:15 }}>Aa</span>Big &amp; Small Font
+                  </p>
+                  <p style={{ margin:0, fontSize:10, color:"rgba(255,255,255,0.4)" }}>Alternate large &amp; small words — works with any animation</p>
+                </div>
+                <button onClick={() => updateDraft(tab, "bigSmallFont", !(draft.bigSmallFont ?? false))}
+                  style={{ position:"relative", width:44, height:24, borderRadius:12, border:"none", cursor:"pointer", transition:"all 0.2s", flexShrink:0,
+                    background: (draft.bigSmallFont ?? false) ? "#a78bfa" : "rgba(255,255,255,0.1)" }}>
+                  <span style={{ position:"absolute", top:3, left: (draft.bigSmallFont ?? false) ? 23 : 3, width:18, height:18, borderRadius:"50%", background:"#fff", transition:"left 0.2s", display:"block" }} />
+                </button>
+              </div>
+
               <div style={{ height:1, background:"rgba(255,255,255,0.06)" }} />
+
+              {/* ── Echo Advanced Settings — shows when Echo style is selected ── */}
+              {tab === "praise" && draft.animStyle === "echo" && (<>
+                <div style={{ background:"rgba(52,211,153,0.05)", border:"1px solid rgba(52,211,153,0.15)", borderRadius:14, padding:"14px 14px 10px" }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:14 }}>
+                    <span style={{ fontSize:16, color:"#6ee7b7" }}>✦</span>
+                    <span style={{ fontSize:10, fontWeight:800, color:"#6ee7b7", textTransform:"uppercase", letterSpacing:"0.12em" }}>Echo Advanced</span>
+                  </div>
+
+                  {/* Scrolling Marquee toggle */}
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14, padding:"10px 12px", background:"rgba(0,0,0,0.3)", borderRadius:10, border:"1px solid rgba(255,255,255,0.07)" }}>
+                    <div>
+                      <p style={{ margin:0, fontSize:12, fontWeight:700, color:"rgba(255,255,255,0.75)" }}>Scrolling Marquee</p>
+                      <p style={{ margin:0, fontSize:10, color:"rgba(255,255,255,0.3)" }}>Moving background text behind lyrics</p>
+                    </div>
+                    <button onClick={() => updateDraft(tab, "echoMarquee", !(draft.echoMarquee ?? true))}
+                      style={{ position:"relative", width:44, height:24, borderRadius:12, border:"none", cursor:"pointer", transition:"all 0.2s", flexShrink:0,
+                        background: (draft.echoMarquee ?? true) ? "#10b981" : "rgba(255,255,255,0.1)" }}>
+                      <span style={{ position:"absolute", top:3, left: (draft.echoMarquee ?? true) ? 23 : 3, width:18, height:18, borderRadius:"50%", background:"#fff", transition:"left 0.2s", display:"block" }} />
+                    </button>
+                  </div>
+
+                  {/* Word Size Ratios */}
+                  <span style={{ fontSize:10, fontWeight:700, color:"rgba(255,255,255,0.35)", textTransform:"uppercase", letterSpacing:"0.12em", display:"block", marginBottom:8 }}>Word Size Ratios</span>
+                  {([
+                    ["✦ Sacred",   "echoSacredScale",  0.50, 3.0, 0.05, "rgba(255,220,80,0.2)",  "#facc15"],
+                    ["⬛ Content",  "echoContentScale", 0.50, 2.5, 0.05, "rgba(255,255,255,0.06)","rgba(255,255,255,0.65)"],
+                    ["· Function", "echoFuncScale",    0.20, 1.2, 0.05, "rgba(255,255,255,0.03)","rgba(255,255,255,0.35)"],
+                  ] as [string, keyof LivePreset, number, number, number, string, string][]).map(([label, key, mn, mx, step, bg, col]) => {
+                    const val = (draft[key] as number) ?? 1.0;
+                    const def = DEFAULT_PRESETS.praise[key] as number;
+                    return (
+                      <div key={key as string} style={{ display:"flex", alignItems:"center", gap:6, marginBottom:7 }}>
+                        <span style={{ fontSize:10, color:col, fontWeight:700, width:70, flexShrink:0 }}>{label}</span>
+                        <button onClick={() => updateDraft(tab, key, Math.max(mn, Math.round((val - step)*100)/100))}
+                          style={{ width:30, height:30, borderRadius:8, background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.1)", color:"#fff", fontSize:16, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>−</button>
+                        <div style={{ flex:1, textAlign:"center", fontSize:15, fontWeight:800, color:"#fff", background:bg, borderRadius:8, padding:"5px 0", border:"1px solid rgba(255,255,255,0.07)" }}>
+                          {val.toFixed(2)}×
+                        </div>
+                        <button onClick={() => updateDraft(tab, key, Math.min(mx, Math.round((val + step)*100)/100))}
+                          style={{ width:30, height:30, borderRadius:8, background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.1)", color:"#fff", fontSize:16, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>+</button>
+                        <button onClick={() => updateDraft(tab, key, def)}
+                          style={{ padding:"5px 8px", borderRadius:7, background:"transparent", border:"1px solid rgba(255,255,255,0.08)", color:"rgba(255,255,255,0.25)", fontSize:10, fontWeight:700, cursor:"pointer" }}>↺</button>
+                      </div>
+                    );
+                  })}
+
+                  {/* Animation Speed */}
+                  <span style={{ fontSize:10, fontWeight:700, color:"rgba(255,255,255,0.35)", textTransform:"uppercase", letterSpacing:"0.12em", display:"block", marginTop:10, marginBottom:8 }}>Anim Speed (ms)</span>
+                  <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
+                    <button onClick={() => updateDraft(tab, "echoAnimDuration", Math.max(100, (draft.echoAnimDuration ?? 400) - 50))}
+                      style={{ width:44, height:44, borderRadius:10, background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.1)", color:"#fff", fontSize:22, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>−</button>
+                    <div style={{ flex:1, textAlign:"center", fontSize:20, fontWeight:800, color:"#fff", background:"rgba(255,255,255,0.05)", borderRadius:10, padding:"9px 0", border:"1px solid rgba(255,255,255,0.09)" }}>
+                      {draft.echoAnimDuration ?? 400}<span style={{ fontSize:11, fontWeight:400, color:"rgba(255,255,255,0.4)" }}>ms</span>
+                    </div>
+                    <button onClick={() => updateDraft(tab, "echoAnimDuration", Math.min(2000, (draft.echoAnimDuration ?? 400) + 50))}
+                      style={{ width:44, height:44, borderRadius:10, background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.1)", color:"#fff", fontSize:22, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>+</button>
+                    <button onClick={() => updateDraft(tab, "echoAnimDuration", 400)}
+                      style={{ padding:"10px 12px", borderRadius:10, background:"transparent", border:"1px solid rgba(255,255,255,0.1)", color:"rgba(255,255,255,0.35)", fontSize:11, fontWeight:700, cursor:"pointer", textTransform:"uppercase" }}>Reset</button>
+                  </div>
+
+                  {/* Bounce Intensity */}
+                  <span style={{ fontSize:10, fontWeight:700, color:"rgba(255,255,255,0.35)", textTransform:"uppercase", letterSpacing:"0.12em", display:"block", marginBottom:8 }}>Bounce Intensity</span>
+                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                    <button onClick={() => updateDraft(tab, "echoBounce", Math.max(0, Math.round(((draft.echoBounce ?? 2.8) - 0.2)*10)/10))}
+                      style={{ width:44, height:44, borderRadius:10, background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.1)", color:"#fff", fontSize:22, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>−</button>
+                    <div style={{ flex:1, textAlign:"center", fontSize:22, fontWeight:800, color:"#fff", background:"rgba(255,255,255,0.05)", borderRadius:10, padding:"10px 0", border:"1px solid rgba(255,255,255,0.09)" }}>
+                      {(draft.echoBounce ?? 2.8).toFixed(1)}
+                    </div>
+                    <button onClick={() => updateDraft(tab, "echoBounce", Math.min(6, Math.round(((draft.echoBounce ?? 2.8) + 0.2)*10)/10))}
+                      style={{ width:44, height:44, borderRadius:10, background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.1)", color:"#fff", fontSize:22, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>+</button>
+                    <button onClick={() => updateDraft(tab, "echoBounce", 2.8)}
+                      style={{ padding:"10px 12px", borderRadius:10, background:"transparent", border:"1px solid rgba(255,255,255,0.1)", color:"rgba(255,255,255,0.35)", fontSize:11, fontWeight:700, cursor:"pointer", textTransform:"uppercase" }}>Reset</button>
+                  </div>
+                </div>
+                <div style={{ height:1, background:"rgba(255,255,255,0.06)" }} />
+              </>)}
 
               {/* Loop Speed + Enable toggle */}
               <div>
@@ -1780,9 +2013,10 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
                       color:"#c4b5fd", fontSize:12, fontWeight:700, cursor:"pointer", marginBottom:8 }}>
                     <FolderOpen size={13} /> Choose from Media Library
                   </button>
-                  <label style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 12px", borderRadius:9, background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.09)", cursor:"pointer", fontSize:12, color:"rgba(255,255,255,0.6)", marginBottom:8 }}>
+                  {/* ── Upload to Firebase + local (requires internet) ── */}
+                  <label style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 12px", borderRadius:9, background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.09)", cursor:"pointer", fontSize:12, color:"rgba(255,255,255,0.6)", marginBottom:6 }}>
                     <Upload size={13} />
-                    {videoUploading[tab] ? `Uploading ${videoProgress[tab]}%…` : (draft.bgVideo?.type === "local" || draft.bgVideo?.type === "firebase" ? "Change video file…" : "Upload local video file…")}
+                    {videoUploading[tab] ? `Uploading ${videoProgress[tab]}%…` : (draft.bgVideo?.type === "firebase" ? "Change video (Cloud + Local)…" : "Upload to Cloud + Local…")}
                     <input type="file" accept="video/webm,video/mp4,video/quicktime,video/x-msvideo,video/x-matroska,video/ogg,video/*" style={{ display:"none" }}
                       onChange={async e => {
                         const file = e.target.files?.[0]; if (!file) return;
@@ -1824,6 +2058,110 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
                           e.target.value = "";
                         }
                       }} />
+                  </label>
+
+                  {/* ── Local Only upload (NO internet required) ── */}
+                  <label
+                    title="Upload video only to this computer — works 100% offline. No Firebase needed."
+                    style={{
+                      display:"flex", alignItems:"center", gap:8, padding:"10px 12px",
+                      borderRadius:9, cursor: localOnlyUploading[tab] ? "not-allowed" : "pointer",
+                      fontSize:12, fontWeight:700, marginBottom:8,
+                      background: draft.bgVideo?.type === "local"
+                        ? "rgba(96,165,250,0.12)" : "rgba(52,211,153,0.07)",
+                      border: draft.bgVideo?.type === "local"
+                        ? "1px solid rgba(96,165,250,0.4)" : "1px solid rgba(52,211,153,0.3)",
+                      color: draft.bgVideo?.type === "local" ? "#93c5fd" : "#6ee7b7",
+                      opacity: videoUploading[tab] ? 0.45 : 1,
+                      pointerEvents: videoUploading[tab] ? "none" : "auto",
+                    }}
+                  >
+                    {/* Offline badge */}
+                    <span style={{
+                      fontSize:9, fontWeight:800, letterSpacing:"0.08em",
+                      background:"rgba(52,211,153,0.18)", border:"1px solid rgba(52,211,153,0.4)",
+                      borderRadius:4, padding:"2px 5px", color:"#34d399", flexShrink:0,
+                    }}>OFFLINE</span>
+                    {localOnlyUploading[tab]
+                      ? <><span style={{ flex:1 }}>Saving to disk… {localOnlyProgress[tab]}%</span>
+                          <span style={{ fontSize:10, color:"rgba(255,255,255,0.35)" }}>No cloud</span></>
+                      : draft.bgVideo?.type === "local"
+                        ? <><span style={{ flex:1 }}>Change Local-Only Video…</span>
+                            <span style={{ fontSize:9, color:"rgba(52,211,153,0.7)", fontWeight:600 }}>✓ Active</span></>
+                        : <span style={{ flex:1 }}>Use Local Video (No Internet)…</span>
+                    }
+                    <input
+                      type="file"
+                      accept="video/webm,video/mp4,video/quicktime,video/x-msvideo,video/x-matroska,video/ogg,video/*"
+                      style={{ display:"none" }}
+                      disabled={videoUploading[tab] || localOnlyUploading[tab]}
+                      onChange={async e => {
+                        const file = e.target.files?.[0]; if (!file) return;
+                        try {
+                          setLocalOnlyUploading(prev => ({ ...prev, [tab]: true }));
+                          setLocalOnlyProgress(prev => ({ ...prev, [tab]: 0 }));
+
+                          // XHR so we can track upload progress to local server
+                          const localUrl = await new Promise<string>((resolve, reject) => {
+                            const xhr = new XMLHttpRequest();
+                            xhr.open("POST", `/api/live-bg-video/${tab}`);
+                            xhr.upload.onprogress = ev => {
+                              if (ev.lengthComputable)
+                                setLocalOnlyProgress(prev => ({ ...prev, [tab]: Math.round(ev.loaded / ev.total * 100) }));
+                            };
+                            xhr.onload = () => {
+                              if (xhr.status >= 200 && xhr.status < 300) {
+                                try { resolve(JSON.parse(xhr.responseText).url as string); }
+                                catch { reject(new Error("Bad response")); }
+                              } else {
+                                reject(new Error(`HTTP ${xhr.status}`));
+                              }
+                            };
+                            xhr.onerror = () => reject(new Error("Network error"));
+                            const fd = new FormData();
+                            fd.append("video", file);
+                            xhr.send(fd);
+                          });
+
+                          // type:"local" — no Firebase URL at all, served from local disk only
+                          const newBgVideo: BgVideo = { type: "local", url: localUrl };
+                          updateDraft(tab, "bgVideo", newBgVideo);
+
+                          // ── Immediately apply to live preset + push to OBS ─────────
+                          // Don't wait for the user to click Save — the file is already
+                          // on disk and ready to serve. Apply it now so OBS reflects it.
+                          setPresets(prev => {
+                            const updated = { ...prev, [tab]: { ...prev[tab], bgVideo: newBgVideo } };
+                            try { localStorage.setItem("lsv_presets", JSON.stringify(updated)); } catch {}
+                            return updated;
+                          });
+                          if (tab === activePreset) {
+                            setBgVideo(newBgVideo);
+                            // setBgVideo triggers the pushToFirestore useEffect, but we also
+                            // send an explicit _bgOnly push so the video appears immediately
+                            // even if no slide is currently active.
+                            fetch("/api/live-push", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ _bgOnly: true, bgVideo: newBgVideo, bgIdx: bgIdxRef.current, updatedAt: Date.now() }),
+                            }).catch(() => {});
+                          }
+
+                          // ── Queue for auto-sync when internet returns ──────────────
+                          // Store the raw File (blob) and metadata separately in IDB.
+                          await idbSet(`lsv_pending_sync_blob_${tab}`, file);
+                          await idbSet(`lsv_pending_sync_meta_${tab}`, { name: file.name, mimeType: file.type, sizeBytes: file.size, localUrl });
+                          onToast(`✅ "${file.name}" saved locally for ${tab} — will auto-sync to cloud when online!`, "success");
+                        } catch (err) {
+                          console.error("[LocalOnly] Upload failed:", err);
+                          onToast("Local upload failed — is the dev server running?", "error");
+                        } finally {
+                          setLocalOnlyUploading(prev => ({ ...prev, [tab]: false }));
+                          setLocalOnlyProgress(prev => ({ ...prev, [tab]: 0 }));
+                          e.target.value = "";
+                        }
+                      }}
+                    />
                   </label>
                   <div style={{ display:"flex", gap:6 }}>
                     <input value={ytInputs[tab]} onChange={e => setYtInputs(prev => ({ ...prev, [tab]: e.target.value }))} placeholder="YouTube URL…"
@@ -1905,378 +2243,13 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
         </div>
       )}
 
-      {/* ── Two-Column Body ──────────────────────────────────────────────── */}
-      <div style={{ flex:1, display:"flex", overflow:"hidden", minHeight:0 }}>
 
-        {/* ── LEFT PANEL ──────────────────────────────────────────────── */}
-        <div style={{ width: isMobile ? "100%" : 300, flexShrink:0, display: isMobile && mobileTab !== "slides" ? "none" : "flex", flexDirection:"column", borderRight: isMobile ? "none" : "1px solid rgba(255,255,255,0.07)", overflow:"hidden", background:"rgba(0,0,0,0.15)" }}>
-
-          {/* Search — only shown on the initial song-browsing screen, hidden once a song is loaded */}
-          {!selectedSong && (
-            <div style={{ padding:"12px 12px 10px", borderBottom:"1px solid rgba(255,255,255,0.05)", flexShrink:0 }}>
-              <div style={{ position:"relative" }}>
-                <Search size={13} style={{ position:"absolute", left:11, top:"50%", transform:"translateY(-50%)", color:"rgba(255,255,255,0.25)", pointerEvents:"none" }} />
-                <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search songs…"
-                  style={{ width:"100%", paddingLeft:34, paddingRight:32, paddingTop:9, paddingBottom:9, borderRadius:10, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.09)", color:"#fff", fontSize:13, outline:"none", boxSizing:"border-box", transition:"border 0.15s" }}
-                  onFocus={e=>(e.target as HTMLInputElement).style.border="1px solid rgba(167,139,250,0.4)"}
-                  onBlur={e=>(e.target as HTMLInputElement).style.border="1px solid rgba(255,255,255,0.09)"} />
-                {query && (
-                  <button onClick={()=>setQuery("")} style={{ position:"absolute", right:9, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", color:"rgba(255,255,255,0.3)", padding:0, display:"flex" }}>
-                    <X size={13} />
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* ── Fixed header: back button + song dropdown ── */}
-          {selectedSong && (
-            <div style={{ flexShrink:0, borderBottom:"1px solid rgba(255,255,255,0.07)", padding:"10px", display:"flex", flexDirection:"column", gap:6 }}>
-              {/* Back to list button */}
-              <button
-                onClick={() => {
-                  setSections([]);
-                  setActiveSlide(null);
-                  setActiveSectionState(null);
-                  setSelectedSong(null);
-                  try { localStorage.removeItem("lsv_selected_song_id"); } catch {}
-                  _restoredSelectedRef.current = false; // allow restore again next time
-                }}
-                style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 10px", borderRadius:8, background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", color:"rgba(255,255,255,0.45)", fontSize:11, fontWeight:700, cursor:"pointer", transition:"all 0.15s", width:"fit-content" }}
-                onMouseEnter={e => (e.currentTarget as HTMLElement).style.background="rgba(255,255,255,0.09)"}
-                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background="rgba(255,255,255,0.04)"}>
-                <ChevronLeft size={13} />
-                Scene Playlist
-              </button>
-
-              {/* Dropdown trigger — song title box */}
-              <button
-                onClick={() => setSongDropdownOpen(prev => !prev)}
-                style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 12px", borderRadius: songDropdownOpen ? "10px 10px 0 0" : 10, background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.09)", cursor:"pointer", width:"100%", textAlign:"left", transition:"all 0.18s" }}
-                onMouseEnter={e => (e.currentTarget as HTMLElement).style.background="rgba(255,255,255,0.06)"}
-                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background="rgba(255,255,255,0.03)"}>
-                <div style={{ minWidth:0 }}>
-                  <p style={{ margin:0, fontSize:14, fontWeight:700, color:"#fff", letterSpacing:"-0.01em", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{selectedSong.title}</p>
-                  {selectedSong.artist && <p style={{ margin:"2px 0 0", fontSize:11, color:"rgba(255,255,255,0.35)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{selectedSong.artist}</p>}
-                </div>
-                <div style={{ flexShrink:0, marginLeft:10, color:"rgba(255,255,255,0.45)", transition:"transform 0.2s", transform: songDropdownOpen ? "rotate(180deg)" : "rotate(0deg)" }}>
-                  <ChevronDown size={16} />
-                </div>
-              </button>
-
-              {/* Dropdown panel — scene songs list */}
-              {songDropdownOpen && sceneSongs.length > 0 && (
-                <div style={{ background:"rgba(10,10,20,0.97)", border:"1px solid rgba(255,255,255,0.09)", borderTop:"none", borderRadius:"0 0 10px 10px", overflow:"hidden" }}>
-                  {sceneSongs.map(song => {
-                    const isActive = song.id === selectedSong.id;
-                    const resolved = resolvePresetFromSong(song);
-                    const isPraise = resolved === "praise", isWorship = resolved === "worship";
-                    return (
-                      <button key={song.id}
-                        onClick={() => { handleSongSelect(song); setSongDropdownOpen(false); }}
-                        style={{ display:"flex", alignItems:"center", gap:8, width:"100%", padding:"9px 12px", background: isActive ? "rgba(99,102,241,0.18)" : "transparent", border:"none", borderTop:"1px solid rgba(255,255,255,0.05)", cursor:"pointer", textAlign:"left", transition:"background 0.15s" }}
-                        onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background="rgba(255,255,255,0.06)"; }}
-                        onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background="transparent"; }}>
-                        <div style={{ width:24, height:24, borderRadius:6, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center",
-                          background: isPraise ? "rgba(250,204,21,0.12)" : isWorship ? "rgba(167,139,250,0.12)" : "rgba(99,102,241,0.10)",
-                          border: isPraise ? "1px solid rgba(250,204,21,0.22)" : isWorship ? "1px solid rgba(167,139,250,0.22)" : "1px solid rgba(99,102,241,0.16)" }}>
-                          {isPraise ? <Zap size={11} color="#fbbf24" /> : isWorship ? <Heart size={11} color="#a78bfa" /> : <Music2 size={11} color="#818cf8" />}
-                        </div>
-                        <div style={{ flex:1, minWidth:0 }}>
-                          <p style={{ margin:0, fontSize:12, fontWeight: isActive ? 700 : 600, color: isActive ? "#a5b4fc" : "rgba(255,255,255,0.75)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{song.title}</p>
-                          {song.artist && <p style={{ margin:0, fontSize:10, color:"rgba(255,255,255,0.28)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{song.artist}</p>}
-                        </div>
-                        {isActive && <div style={{ width:6, height:6, borderRadius:"50%", background:"#818cf8", flexShrink:0 }} />}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-
-          {/* ── Scrollable list area ── */}
-          <div style={{ flex:1, overflowY:"auto", padding:"0 10px 10px 10px", display:"flex", flexDirection:"column", gap:4 }}>
-
-            {/* Auto-preset toast */}
-            {autoPresetToast && (
-              <div style={{ padding:"9px 13px", borderRadius:10, background:"rgba(167,139,250,0.15)", border:"1px solid rgba(167,139,250,0.35)", fontSize:12, fontWeight:700, color:"#c4b5fd", textAlign:"center", marginBottom:4, letterSpacing:"0.01em", animation:"fadeIn 0.2s ease" }}>
-                {autoPresetToast}
-              </div>
-            )}
-
-            {/* ── Song selection list ── */}
-            {!selectedSong ? (
-              <>
-                {!query.trim() ? (
-                  /* Scene Playlist mode */
-                  <>
-                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
-                      <span style={{ fontSize:10, fontWeight:700, letterSpacing:"0.08em", color:"rgba(255,255,255,0.3)", textTransform:"uppercase" }}>Scene Playlist</span>
-                      {sceneSongs.length > 0 && (
-                        <span style={{ fontSize:10, fontWeight:700, padding:"2px 7px", borderRadius:20, background:"rgba(99,102,241,0.15)", border:"1px solid rgba(99,102,241,0.25)", color:"#818cf8" }}>
-                          {sceneSongs.length} song{sceneSongs.length !== 1 ? "s" : ""}
-                        </span>
-                      )}
-                    </div>
-                    {sceneSongs.length === 0 && (
-                      <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:10, padding:"36px 16px", borderRadius:12, border:"1px dashed rgba(255,255,255,0.08)", background:"rgba(255,255,255,0.02)", marginTop:4 }}>
-                        <Music2 size={24} color="rgba(255,255,255,0.12)" />
-                        <p style={{ margin:0, fontSize:12, color:"rgba(255,255,255,0.2)", textAlign:"center", lineHeight:1.5 }}>
-                          Search songs above<br/>and tap <strong style={{ color:"rgba(99,102,241,0.7)" }}>+</strong> to add them
-                        </p>
-                      </div>
-                    )}
-                    {sceneSongs.map(song => {
-                      const resolved = resolvePresetFromSong(song);
-                      const isPraise = resolved === "praise", isWorship = resolved === "worship";
-                      return (
-                        <div key={song.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"9px 10px", borderRadius:10, background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)", transition:"all 0.15s" }}>
-                          <div style={{ width:30, height:30, borderRadius:8, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center",
-                            background: isPraise ? "rgba(250,204,21,0.12)" : isWorship ? "rgba(167,139,250,0.12)" : "rgba(99,102,241,0.10)",
-                            border: isPraise ? "1px solid rgba(250,204,21,0.22)" : isWorship ? "1px solid rgba(167,139,250,0.22)" : "1px solid rgba(99,102,241,0.16)" }}>
-                            {isPraise ? <Zap size={12} color="#fbbf24" /> : isWorship ? <Heart size={12} color="#a78bfa" /> : <Music2 size={12} color="#818cf8" />}
-                          </div>
-                          <button onClick={() => handleSongSelect(song)} style={{ flex:1, minWidth:0, background:"none", border:"none", cursor:"pointer", textAlign:"left", padding:0 }}>
-                            <p style={{ margin:0, fontSize:13, fontWeight:600, color:"rgba(255,255,255,0.88)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{song.title}</p>
-                            {song.artist && <p style={{ margin:0, fontSize:11, color:"rgba(255,255,255,0.28)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{song.artist}</p>}
-                          </button>
-                          <button onClick={e => { e.stopPropagation(); removeFromScene(song.id); }} title="Remove from scene"
-                            style={{ flexShrink:0, width:26, height:26, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.18)", cursor:"pointer", transition:"all 0.15s" }}
-                            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background="rgba(239,68,68,0.22)"; (e.currentTarget as HTMLElement).style.borderColor="rgba(239,68,68,0.4)"; }}
-                            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background="rgba(239,68,68,0.08)"; (e.currentTarget as HTMLElement).style.borderColor="rgba(239,68,68,0.18)"; }}>
-                            <Minus size={12} color="#f87171" />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </>
-                ) : (
-                  /* Search results mode */
-                  <>
-                    <div style={{ marginBottom:6 }}>
-                      <span style={{ fontSize:10, fontWeight:700, letterSpacing:"0.08em", color:"rgba(255,255,255,0.3)", textTransform:"uppercase" }}>
-                        {filtered.length} result{filtered.length !== 1 ? "s" : ""}
-                      </span>
-                    </div>
-                    {filtered.length === 0 && (
-                      <p style={{ textAlign:"center", fontSize:12, color:"rgba(255,255,255,0.15)", padding:"40px 0" }}>No songs found</p>
-                    )}
-                    {filtered.map(song => {
-                      const resolved = resolvePresetFromSong(song);
-                      const isPraise = resolved === "praise", isWorship = resolved === "worship";
-                      const inScene = sceneSongIds.includes(song.id);
-                      return (
-                        <div key={song.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"9px 10px", borderRadius:10, transition:"all 0.15s",
-                          background: inScene ? "rgba(99,102,241,0.07)" : "rgba(255,255,255,0.03)",
-                          border: inScene ? "1px solid rgba(99,102,241,0.22)" : "1px solid rgba(255,255,255,0.05)" }}>
-                          <div style={{ width:30, height:30, borderRadius:8, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center",
-                            background: isPraise ? "rgba(250,204,21,0.12)" : isWorship ? "rgba(167,139,250,0.12)" : "rgba(99,102,241,0.10)",
-                            border: isPraise ? "1px solid rgba(250,204,21,0.22)" : isWorship ? "1px solid rgba(167,139,250,0.22)" : "1px solid rgba(99,102,241,0.16)" }}>
-                            {isPraise ? <Zap size={12} color="#fbbf24" /> : isWorship ? <Heart size={12} color="#a78bfa" /> : <Music2 size={12} color="#818cf8" />}
-                          </div>
-                          <button onClick={() => handleSongSelect(song)} style={{ flex:1, minWidth:0, background:"none", border:"none", cursor:"pointer", textAlign:"left", padding:0 }}>
-                            <p style={{ margin:0, fontSize:13, fontWeight:600, color:"rgba(255,255,255,0.88)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{song.title}</p>
-                            {song.artist && <p style={{ margin:0, fontSize:11, color:"rgba(255,255,255,0.28)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{song.artist}</p>}
-                          </button>
-                          {inScene ? (
-                            <button onClick={e => { e.stopPropagation(); removeFromScene(song.id); }} title="Remove from scene"
-                              style={{ flexShrink:0, width:26, height:26, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", background:"rgba(99,102,241,0.2)", border:"1px solid rgba(99,102,241,0.4)", cursor:"pointer", transition:"all 0.15s" }}
-                              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background="rgba(239,68,68,0.22)"; (e.currentTarget as HTMLElement).style.borderColor="rgba(239,68,68,0.4)"; }}
-                              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background="rgba(99,102,241,0.2)"; (e.currentTarget as HTMLElement).style.borderColor="rgba(99,102,241,0.4)"; }}>
-                              <CheckIcon size={12} color="#a5b4fc" />
-                            </button>
-                          ) : (
-                            <button onClick={e => { e.stopPropagation(); addToScene(song); }} title="Add to scene"
-                              style={{ flexShrink:0, width:26, height:26, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", background:"rgba(99,102,241,0.1)", border:"1px solid rgba(99,102,241,0.22)", cursor:"pointer", transition:"all 0.15s" }}
-                              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background="rgba(99,102,241,0.25)"; (e.currentTarget as HTMLElement).style.borderColor="rgba(99,102,241,0.5)"; }}
-                              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background="rgba(99,102,241,0.1)"; (e.currentTarget as HTMLElement).style.borderColor="rgba(99,102,241,0.22)"; }}>
-                              <PlusCircle size={13} color="#818cf8" />
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </>
-                )}
-              </>
-            ) : (
-
-              /* ── Slides only (back/song info/panel are in fixed header above) ── */
-              <>
-                {sections.length===0 && (
-                  <p style={{ textAlign:"center", fontSize:12, color:"rgba(255,255,255,0.15)", padding:"28px 0" }}>No lyrics found</p>
-                )}
-
-                {/* ── Section tabs ────────────────────────────────────── */}
-                {sections.length > 0 && (() => {
-                  const visibleSec = activeSection
-                    ? sections.filter(s => s.label === activeSection)
-                    : sections.slice(0, 1); // default to first section
-                  const tabSec = activeSection ?? sections[0]?.label;
-                  return (
-                    <>
-                      {/* Tabs row — deduplicated | sticky so it stays visible while scrolling */}
-                      <div style={{ display:"flex", gap:4, flexWrap:"wrap",
-                        paddingTop:15, paddingBottom:15, paddingLeft:22, paddingRight:22,
-                        margin:"0 -10px",
-                        borderTop:"1px solid rgba(255,255,255,0.06)",
-                        borderBottom:"1px solid rgba(255,255,255,0.06)",
-                        background:"#131520",
-
-                        position:"sticky", top:0, zIndex:10,
-                      }}>
-                        {[...new Set<string>(sections.map(s => s.label))].map((label, idx) => {
-                          const col = sectionColor(label);
-                          const isTab = tabSec === label;
-                          return (
-                            <button key={`tab-${idx}`} onClick={() => setActiveSection(label)}
-                              style={{ padding:"4px 10px", borderRadius:20, fontSize:10, fontWeight:700, cursor:"pointer", transition:"all 0.15s ease",
-                                border: isTab ? `1px solid ${col.accent}` : "1px solid rgba(255,255,255,0.08)",
-                                background: isTab ? `${col.bg}` : "transparent",
-                                color: isTab ? col.accent : "rgba(255,255,255,0.35)" }}>
-                              {label}
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      {/* Slides for active tab */}
-                      {visibleSec.map(sec => {
-                        const col = sectionColor(sec.label);
-                        return (
-                          <div key={sec.label} style={{ display:"flex", flexDirection:"column", gap:5 }}>
-                            {sec.slides.map(slide => {
-                              const isActive = activeSlide?.id===slide.id;
-                              return (
-                                <button key={slide.id} data-slide-id={slide.id}
-                                  onClick={() => setActiveSlide(isActive ? null : slide)}
-                                  style={{ width:"100%", textAlign:"left", cursor:"pointer", padding:"10px 12px", borderRadius:10,
-                                    border:`1px solid ${isActive ? col.activeBorder : col.border}`,
-                                    background: isActive ? col.active : col.bg,
-                                    transition:"all 0.18s ease" }}>
-                                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: slide.lines.length > 0 ? 5 : 0 }}>
-                                    <span style={{ fontSize:10, color:col.accent, fontWeight:700, opacity:0.85 }}>
-                                      {slide.totalSlides > 1 ? `Slide ${slide.slideNum} / ${slide.totalSlides}` : slide.sectionLabel}
-                                    </span>
-                                    {isActive && (
-                                      <span style={{ display:"flex", alignItems:"center", gap:4, fontSize:10, fontWeight:700, color:col.accent,
-                                        border:`1px solid ${col.activeBorder}`, borderRadius:20, padding:"2px 7px", background:col.active }}>
-                                        <Play size={8} fill={col.accent} color={col.accent} />LIVE
-                                      </span>
-                                    )}
-                                  </div>
-                                  {slide.lines.map((line, i) => (
-                                    <p key={i} style={{ margin:0, fontSize:12, lineHeight:1.55, color:isActive?"rgba(255,255,255,0.92)":"rgba(255,255,255,0.45)", wordBreak:"break-word", whiteSpace:"normal" }}>{line}</p>
-                                  ))}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        );
-                      })}
-                    </>
-                  );
-                })()}
-
-                {/* Clear display */}
-                {activeSlide && (
-                  <button onClick={() => { setActiveSlide(null); pushToFirestore(null); }}
-                    style={{ marginTop:6, padding:"9px", borderRadius:10, background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.07)", color:"rgba(255,255,255,0.3)", fontSize:12, fontWeight:600, cursor:"pointer", width:"100%", transition:"all 0.15s ease" }}
-                    onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background="rgba(239,68,68,0.08)"}
-                    onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="rgba(255,255,255,0.02)"}>
-                    ✕ Clear Display
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* ── RIGHT PANEL — Screen preview ────────────────────────────── */}
-        <div style={{ flex:1, display: isMobile && mobileTab !== "preview" ? "none" : "flex", flexDirection:"column", background:"#050709", overflow:"hidden" }}>
-
-
-
-          {/* Toolbar — hidden entirely on mobile (no content there) */}
-          {!isMobile && (
-            <div style={{ flexShrink:0, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 18px", borderBottom:"1px solid rgba(255,255,255,0.05)", minHeight:44 }}>
-              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                <span style={{ fontSize:10, fontWeight:700, color:"rgba(255,255,255,0.25)", textTransform:"uppercase", letterSpacing:"0.12em" }}>Output Display · 16:9</span>
-                {selectedSong && (
-                  <span style={{ fontSize:11, fontWeight:700, color:"rgba(167,139,250,0.7)", letterSpacing:"-0.01em" }}>
-                    ♪ {selectedSong.title}{selectedSong.artist ? ` — ${selectedSong.artist}` : ""}
-                  </span>
-                )}
-              </div>
-              <span style={{ fontSize:10, color:"rgba(255,255,255,0.15)", fontStyle:"italic" }}>LED wall · {ANIM_LABELS[defaultAnimStyle]}</span>
-            </div>
-          )}
-
-          {/* Canvas */}
-          <div style={{ flex:1, overflow:"hidden", padding:16 }}>
-            <Screen slide={activeSlide} bgStyle={BG_PRESETS[bgIdx].style} echoAlign={echoAlign} echoLines={echoLines} echoLineHeight={echoLineHeight} lyricsScale={lyricsScale} loopEnabled={loopEnabled} bgVideo={bgVideo} loopInterval={loopInterval} visible={!isMobile || mobileTab === "preview"} />
-          </div>
-
-          {/* Footer */}
-          <div style={{ flexShrink:0, padding:"9px 18px", borderTop:"1px solid rgba(255,255,255,0.05)", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, minHeight:44 }}>
-            <p style={{ margin:0, fontSize:11, color:"rgba(255,255,255,0.18)", letterSpacing:"0.01em" }}>
-              Click a slide to display · <kbd style={{ background:"rgba(255,255,255,0.07)", borderRadius:4, padding:"1px 5px", fontSize:10 }}>Space</kbd> / <kbd style={{ background:"rgba(255,255,255,0.07)", borderRadius:4, padding:"1px 5px", fontSize:10 }}>↓</kbd> next · <kbd style={{ background:"rgba(255,255,255,0.07)", borderRadius:4, padding:"1px 5px", fontSize:10 }}>↑</kbd> prev · <kbd style={{ background:"rgba(255,255,255,0.07)", borderRadius:4, padding:"1px 5px", fontSize:10 }}>Esc</kbd> clear
-            </p>
-            <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
-              {/* OBS URL (Firestore / Online) — existing */}
-              <button
-                onClick={() => {
-                  const url = `${window.location.origin}/live-display`;
-                  navigator.clipboard.writeText(url).then(() => { setObsUrlCopied(true); setTimeout(() => setObsUrlCopied(false), 2000); });
-                }}
-                title="Copy OBS Browser Source URL (Online — Firestore)"
-                style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px", borderRadius:8, cursor:"pointer", fontSize:11, fontWeight:700, whiteSpace:"nowrap", transition:"all 0.15s ease",
-                  border: obsUrlCopied ? "1px solid rgba(52,211,153,0.5)" : "1px solid rgba(167,139,250,0.4)",
-                  background: obsUrlCopied ? "rgba(52,211,153,0.12)" : "rgba(167,139,250,0.12)",
-                  color: obsUrlCopied ? "#34d399" : "#a78bfa" }}>
-                {obsUrlCopied ? <><CheckIcon size={12} /> Copied!</> : <><Copy size={12} /> OBS Online</>}
-              </button>
-              {/* OBS URL (SSE / Offline) — new walkie-talkie mode */}
-              <button
-                onClick={() => {
-                  const url = `${window.location.origin}/live-display-local`;
-                  navigator.clipboard.writeText(url).then(() => { setObsLocalUrlCopied(true); setTimeout(() => setObsLocalUrlCopied(false), 2000); });
-                }}
-                title="Copy OBS Browser Source URL (Offline / Local — SSE walkie-talkie mode)"
-                style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px", borderRadius:8, cursor:"pointer", fontSize:11, fontWeight:700, whiteSpace:"nowrap", transition:"all 0.15s ease",
-                  border: obsLocalUrlCopied ? "1px solid rgba(52,211,153,0.5)" : "1px solid rgba(251,146,60,0.4)",
-                  background: obsLocalUrlCopied ? "rgba(52,211,153,0.12)" : "rgba(251,146,60,0.10)",
-                  color: obsLocalUrlCopied ? "#34d399" : "#fb923c" }}>
-                {obsLocalUrlCopied ? <><CheckIcon size={12} /> Copied!</> : <><Copy size={12} /> OBS Offline</>}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Mobile Bottom Tab Bar ──────────────────────────────── */}
-      {isMobile && (
-        <div style={{ flexShrink:0, display:"flex", borderTop:"1px solid rgba(255,255,255,0.12)", background:"rgba(7,9,15,0.97)", backdropFilter:"blur(12px)", zIndex:50 }}>
-          {(["slides", "preview"] as const).map(tab => {
-            const active = mobileTab === tab;
-            return (
-              <button key={tab} onClick={() => setMobileTab(tab)}
-                style={{ flex:1, padding:"13px 0 11px", background:"none", border:"none", borderTop: active ? "2px solid #a78bfa" : "2px solid transparent", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:4, transition:"all 0.15s", color: active ? "#a78bfa" : "rgba(255,255,255,0.3)" }}>
-                {tab === "slides" ? <Music2 size={18} /> : <Monitor size={18} />}
-                <span style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em" }}>{tab === "slides" ? "Slides" : "Preview"}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {/* ── Lyrics Grid Facility Modal ─────────────────────────── */}
-      {lyricsGridOpen && (
+      {/* ── Lyrics Grid Facility — always mounted, always visible ───────────────
+           Settings and MediaLibrary use position:fixed, so they render on
+           top without needing to unmount this component. */}
         <LyricsGridModal
           songs={allSongs.map(s => lyricOverrides[s.id] ? { ...s, lyrics: lyricOverrides[s.id] } : s)}
-          onClose={() => setLyricsGridOpen(false)}
+          onClose={() => {/* Grid View is always active — no default view to return to */}}
           initialSongTitle={selectedSong?.title}
           onToast={onToast}
           onSongLyricsUpdate={(songId, newLyrics) => {
@@ -2321,8 +2294,12 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
           presetActivated={presetActivated}
           onApplyPreset={applyPreset}
           sceneSongs={sceneSongs}
-          liveSettings={{ bgIdx, echoAlign, echoLines, echoLineHeight, lyricsScale, loopEnabled, bgVideo, loopInterval, animStyle: defaultAnimStyle }}
-          onOpenSettings={() => { returnToGridRef.current = true; setLyricsGridOpen(false); openSettings(); }}
+          sceneSongIds={sceneSongIds}
+          onAddToScene={addToScene}
+          onRemoveFromScene={removeFromScene}
+          onReorderScene={reorderScene}
+          liveSettings={{ bgIdx, echoAlign, echoLines, echoLineHeight, lyricsScale, loopEnabled, bgVideo, loopInterval, animStyle: defaultAnimStyle, echoMarquee, bigSmallFont, echoSacredScale, echoContentScale, echoFuncScale, echoAnimDuration, echoBounce }}
+          onOpenSettings={() => { openSettings(); }}
           onOpenMediaLibrary={() => setMediaLibraryOpen(true)}
           onCopyObsUrl={() => {
             const url = `${window.location.origin}/live-display`;
@@ -2332,8 +2309,10 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
             const url = `${window.location.origin}/live-display-local`;
             navigator.clipboard.writeText(url).catch(() => {});
           }}
+          onOpenCampReadiness={() => setShowCampReady(true)}
+          isInline={true}
         />
-      )}
+
 
       {/* ── Inline Media Picker (inside Display Settings) ── */}
       {mediaPicker && (
@@ -2615,246 +2594,6 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
           }}
         />
       )}
-    </div>
-  );
-}
-
-// ── Camp Readiness Modal ────────────────────────────────────────────────────────
-// Checks all systems needed for an offline camp session (no internet).
-// Open via the ⛺ button in the top bar of Live Stage.
-function CampReadinessModal({ onClose, songsCount }: { onClose: () => void; songsCount: number }) {
-  type CheckStatus = "ok" | "warn" | "fail" | "checking";
-  type CheckItem = { label: string; detail: string; status: CheckStatus };
-  const [checks, setChecks] = React.useState<CheckItem[]>([
-    { label: "Song lyrics", detail: "Checking...", status: "checking" },
-    { label: "Auth session", detail: "Checking...", status: "checking" },
-    { label: "Live state backup", detail: "Checking...", status: "checking" },
-    { label: "Praise video", detail: "Checking...", status: "checking" },
-    { label: "Worship video", detail: "Checking...", status: "checking" },
-    { label: "Fade screen image", detail: "Checking...", status: "checking" },
-  ]);
-  const [serverFetchFailed, setServerFetchFailed] = React.useState(false);
-
-  const runChecks = React.useCallback(async () => {
-    setServerFetchFailed(false);
-    // Reset to checking
-    setChecks([
-      { label: "Song lyrics", detail: "Checking...", status: "checking" },
-      { label: "Auth session", detail: "Checking...", status: "checking" },
-      { label: "Live state backup", detail: "Checking...", status: "checking" },
-      { label: "Praise video", detail: "Checking...", status: "checking" },
-      { label: "Worship video", detail: "Checking...", status: "checking" },
-      { label: "Fade screen image", detail: "Checking...", status: "checking" },
-    ]);
-
-    // 1. Songs — synchronous localStorage check
-    let songsCheck: CheckItem;
-    try {
-      const raw = localStorage.getItem("wf_songs_cache");
-      const data = raw ? JSON.parse(raw) : null;
-      const count = Array.isArray(data?.songs) ? data.songs.length : 0;
-      const age = data?.ts ? Math.round((Date.now() - data.ts) / 1000 / 60) : null;
-      songsCheck = count > 0
-        ? { label: "Song lyrics", detail: `${count} songs · cached ${age !== null ? (age < 60 ? age + "m" : Math.round(age / 60) + "h") + " ago" : ""}`, status: "ok" }
-        : { label: "Song lyrics", detail: "No songs cached — open app while online first!", status: "fail" };
-    } catch {
-      songsCheck = { label: "Song lyrics", detail: "Cache unreadable", status: "fail" };
-    }
-
-    // 2. Auth — check localStorage cache first, then Firebase currentUser as fallback
-    let authCheck: CheckItem;
-    try {
-      const raw = localStorage.getItem("wf_auth_session_v2");
-      const role = localStorage.getItem("wf_auth_role_v2");
-      if (raw) {
-        const data = JSON.parse(raw);
-        const age = Math.round((Date.now() - (data.ts ?? 0)) / 1000 / 60 / 60);
-        authCheck = { label: "Auth session", detail: `${data.displayName ?? data.email} · ${role ?? "member"} · saved ${age}h ago`, status: "ok" };
-      } else {
-        // Fallback: check Firebase's in-memory currentUser (works even without network
-        // because Firebase caches the token locally in IndexedDB)
-        const { auth: fbAuth } = await import("./firebase");
-        const currentUser = fbAuth.currentUser;
-        if (currentUser) {
-          // Save it now so future refreshes find it
-          const sessionData = { uid: currentUser.uid, email: currentUser.email, displayName: currentUser.displayName, photoURL: currentUser.photoURL, ts: Date.now() };
-          localStorage.setItem("wf_auth_session_v2", JSON.stringify(sessionData));
-          localStorage.setItem("wf_auth_role_v2", "member"); // safe default, will be overwritten next auth
-          authCheck = { label: "Auth session", detail: `${currentUser.displayName ?? currentUser.email} · session now saved ✓`, status: "ok" };
-        } else {
-          authCheck = { label: "Auth session", detail: "Not saved — sign in while online, then re-check", status: "fail" };
-        }
-      }
-    } catch {
-      authCheck = { label: "Auth session", detail: "Cache unreadable", status: "fail" };
-    }
-
-    // Update the first 2 checks immediately
-    setChecks(prev => [songsCheck, authCheck, prev[2], prev[3], prev[4], prev[5]]);
-
-    // 3. Server checks — async (disk + video files). Use cache-bust to bypass SW cache.
-    fetch(`/api/camp-status?t=${Date.now()}`, { cache: "no-store" })
-      .then(r => r.json())
-      .then(data => {
-        // ── Detect Netlify / cloud deployment ──────────────────────────────────
-        // On Netlify, disk storage doesn't exist (serverless = no persistent filesystem).
-        // The endpoint returns { localServerOnly: true } as a sentinel.
-        // In that case, mark disk-based checks as "warn" (unverifiable), not "fail/missing".
-        if (data.localServerOnly) {
-          setChecks([
-            songsCheck,
-            authCheck,
-            { label: "Live state backup", detail: "Only verifiable on local server — not applicable on staging", status: "warn" },
-            { label: "Praise video", detail: "Only verifiable on local server — not applicable on staging", status: "warn" },
-            { label: "Worship video", detail: "Only verifiable on local server — not applicable on staging", status: "warn" },
-            { label: "Fade screen image", detail: "Only verifiable on local server — not applicable on staging", status: "warn" },
-          ]);
-          setServerFetchFailed(false);
-          return;
-        }
-        const diskCheck: CheckItem = {
-          label: "Live state backup",
-          detail: data.diskState ? "Last scene saved to disk ✓" : "No backup yet — push a slide first",
-          status: data.diskState ? "ok" : "warn",
-        };
-        const praiseCheck: CheckItem = {
-          label: "Praise video",
-          detail: data.praise ? "praise.* on disk ✓" : "Missing — upload via Media Library first",
-          status: data.praise ? "ok" : "warn",
-        };
-        const worshipCheck: CheckItem = {
-          label: "Worship video",
-          detail: data.worship ? "worship.* on disk ✓" : "Missing — upload via Media Library first",
-          status: data.worship ? "ok" : "warn",
-        };
-        setChecks(prev => {
-          const fadeCheck: CheckItem = {
-            label: "Fade screen image",
-            detail: data.fadeImage ? "_fade_screen.* on disk ✓" : "Missing — assign an image from Media Library (Fade Screen)",
-            status: data.fadeImage ? "ok" : "warn",
-          };
-          return [songsCheck, authCheck, diskCheck, praiseCheck, worshipCheck, fadeCheck];
-        });
-        setServerFetchFailed(false);
-      })
-      .catch(() => {
-        // Server check failed — likely SW interception or server just starting.
-        // Mark as "warn" not "fail" — songs + auth are the critical checks.
-        setChecks([
-          songsCheck,
-          authCheck,
-          { label: "Live state backup", detail: "Cannot verify — server check blocked (try 'Retry')", status: "warn" },
-          { label: "Praise video", detail: "Cannot verify — server check blocked (try 'Retry')", status: "warn" },
-          { label: "Worship video", detail: "Cannot verify — server check blocked (try 'Retry')", status: "warn" },
-          { label: "Fade screen image", detail: "Cannot verify — server check blocked (try 'Retry')", status: "warn" },
-        ]);
-        setServerFetchFailed(true);
-      });
-  }, []);
-
-  React.useEffect(() => { runChecks(); }, [runChecks]);
-
-  // "All good" = no FAIL status. Warn items are acceptable (can't verify, but not broken).
-  const hasAnyFail = checks.some(c => c.status === "fail");
-  const allDone    = checks.every(c => c.status !== "checking");
-
-  const statusColor = (s: CheckStatus) =>
-    s === "ok" ? "#10b981" : s === "warn" ? "#f59e0b" : s === "fail" ? "#ef4444" : "#6b7280";
-
-  const StatusIcon = ({ s }: { s: CheckStatus }) => {
-    if (s === "ok")   return <ShieldCheck size={16} color="#10b981" />;
-    if (s === "warn") return <AlertTriangle size={16} color="#f59e0b" />;
-    if (s === "fail") return <X size={16} color="#ef4444" />;
-    return <RefreshCw size={14} color="#6b7280" style={{ animation: "spin 1s linear infinite" }} />;
-  };
-
-  return (
-    <div style={{
-      position: "fixed", inset: 0, zIndex: 9999,
-      background: "rgba(0,0,0,0.75)", backdropFilter: "blur(8px)",
-      display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
-    }} onClick={onClose}>
-      <div style={{
-        background: "linear-gradient(135deg,#0d1117 0%,#0f1923 100%)",
-        border: "1px solid rgba(255,255,255,0.1)",
-        borderRadius: 20, padding: 28, width: "100%", maxWidth: 440,
-        maxHeight: "90vh", overflowY: "auto",
-        boxShadow: "0 24px 60px rgba(0,0,0,0.7)",
-      }} onClick={e => e.stopPropagation()}>
-
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-          <div style={{
-            width: 44, height: 44, borderRadius: 12, background: "rgba(16,185,129,0.15)",
-            border: "1px solid rgba(16,185,129,0.3)", display: "flex", alignItems: "center", justifyContent: "center",
-            flexShrink: 0,
-          }}>
-            <Tent size={22} color="#10b981" />
-          </div>
-          <div>
-            <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#fff" }}>Camp Readiness Check</p>
-            <p style={{ margin: 0, fontSize: 12, color: "rgba(255,255,255,0.4)", marginTop: 2 }}>Offline mode — June 10–12, 2026</p>
-          </div>
-          <button onClick={onClose} style={{ marginLeft: "auto", background: "none", border: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", padding: 4, flexShrink: 0 }}>
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* Status banner — shown once checks complete */}
-        {allDone && (
-          <div style={{
-            borderRadius: 12, padding: "10px 14px", marginBottom: 16,
-            background: hasAnyFail ? "rgba(239,68,68,0.1)" : "rgba(16,185,129,0.1)",
-            border: `1px solid ${hasAnyFail ? "rgba(239,68,68,0.3)" : "rgba(16,185,129,0.3)"}`,
-            display: "flex", alignItems: "center", gap: 10,
-          }}>
-            {hasAnyFail
-              ? <X size={18} color="#ef4444" />
-              : <ShieldCheck size={18} color="#10b981" />}
-            <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: hasAnyFail ? "#ef4444" : "#10b981" }}>
-              {hasAnyFail
-                ? "❌ Action needed — fix red items before camp."
-                : "✅ All systems go! Safe to go offline."}
-            </p>
-          </div>
-        )}
-
-        {/* Checks list */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {checks.map((c, i) => (
-            <div key={i} style={{
-              borderRadius: 12, padding: "12px 14px",
-              background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)",
-              display: "flex", alignItems: "flex-start", gap: 12,
-            }}>
-              <div style={{ marginTop: 1, flexShrink: 0 }}><StatusIcon s={c.status} /></div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#fff" }}>{c.label}</p>
-                <p style={{ margin: 0, fontSize: 11, color: statusColor(c.status), marginTop: 2, opacity: 0.85, wordBreak: "break-word" }}>{c.detail}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Retry button if server fetch failed */}
-        {serverFetchFailed && (
-          <button onClick={runChecks} style={{
-            marginTop: 12, width: "100%", padding: "10px 0",
-            borderRadius: 12, border: "1px solid rgba(255,255,255,0.15)",
-            background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.7)",
-            cursor: "pointer", fontSize: 13, fontWeight: 600,
-            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-          }}>
-            <RefreshCw size={14} /> Retry server checks
-          </button>
-        )}
-
-        {/* Footer tip */}
-        <p style={{ margin: "16px 0 0", fontSize: 11, color: "rgba(255,255,255,0.3)", textAlign: "center", lineHeight: 1.5 }}>
-          ✅ = Ready &nbsp;·&nbsp; ⚠️ = Unverifiable (still ok) &nbsp;·&nbsp; ❌ = Action needed<br />
-          Run this check while online before heading to camp. 🏕️
-        </p>
-      </div>
     </div>
   );
 }

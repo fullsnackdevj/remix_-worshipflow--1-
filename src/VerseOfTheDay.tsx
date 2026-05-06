@@ -3,7 +3,7 @@ import { BookOpen, Copy, Check, Loader2 } from "lucide-react";
 import { VERSES } from "./verseData";
 import { useTheme } from "./ThemeContext";
 
-interface Props { userId: string; userName: string; userPhoto: string; }
+interface Props { userId: string; userName: string; userPhoto: string; compact?: boolean; }
 
 const CARD = "bg-white dark:bg-gray-800/90 rounded-2xl border border-gray-200 dark:border-gray-700/60 shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_20px_-2px_rgba(0,0,0,0.35)]";
 
@@ -28,7 +28,7 @@ function dayOfYear() {
     return Math.floor((d.getTime() - new Date(d.getFullYear(), 0, 0).getTime()) / 86_400_000);
 }
 
-export default function VerseOfTheDay({ userId }: Props) {
+export default function VerseOfTheDay({ userId, compact = false }: Props) {
     const [dateKey, setDateKey] = useState(todayKey);
     const verse = VERSES[(dayOfYear() - 1 + VERSES.length) % VERSES.length];
     const { theme } = useTheme();
@@ -141,39 +141,44 @@ export default function VerseOfTheDay({ userId }: Props) {
                 </div>
             </div>
 
-            {/* ── Body: Stacks vertically on mobile + tablet; side-by-side only on lg+ ── */}
-            <div className="flex flex-col lg:flex-row flex-1 min-h-0">
+            {/* ── Body ──
+                Normal mode (compact=false): side-by-side on lg+ (verse left | insight right)
+                Compact mode (compact=true, My Tasks visible): always vertical stack
+            ── */}
+            <div className={`flex flex-1 min-h-0 ${compact ? "flex-col" : "flex-col lg:flex-row"}`}>
 
-                {/* LEFT — Quote + reference + reactions: always full width on mobile/tablet */}
-                <div className="flex flex-col justify-between px-6 pt-5 pb-5 flex-1 lg:border-r border-gray-100/80 dark:border-gray-700/60">
+                {/* VERSE — always full width in compact, left col otherwise */}
+                <div className={`flex flex-col justify-between px-6 pt-5 pb-5 flex-1 ${
+                    compact ? "pb-3" : "lg:border-r border-gray-100/80 dark:border-gray-700/60"
+                }`}>
                     <div>
-                        <blockquote className="text-base font-semibold leading-[1.8] text-gray-900 dark:text-white">
+                        <blockquote className={`font-semibold leading-[1.8] text-gray-900 dark:text-white ${
+                            compact ? "text-sm" : "text-base"
+                        }`}>
                             "{verse.text}"
                         </blockquote>
-                        <p className={`mt-2.5 text-sm font-bold tracking-wide ${isLuxury ? "text-blue-500 dark:text-blue-400" : "text-indigo-500 dark:text-indigo-400"}`}>
+                        <p className={`mt-2 text-sm font-bold tracking-wide ${isLuxury ? "text-blue-500 dark:text-blue-400" : "text-indigo-500 dark:text-indigo-400"}`}>
                             — {verse.ref}&nbsp;
                             <span className="text-gray-400 dark:text-gray-500 font-medium">(NIV)</span>
                         </p>
                     </div>
-
-
                 </div>
 
-                {/* RIGHT — Insight + Cross Refs: HIDDEN on mobile/tablet, flex on lg+ only */}
+                {/* INSIGHT + CROSS REFS */}
                 {verse.insight && (
-                    <div className="hidden lg:flex lg:w-[42%] px-6 pt-5 pb-5 flex-col gap-3 bg-gray-50/50 dark:bg-gray-900/30 border-l border-gray-100/80 dark:border-gray-700/60">
-                        <h4 className="text-sm font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 shrink-0">INSIGHT</h4>
-                        <p className="text-base leading-relaxed text-gray-600 dark:text-gray-300 flex-1">
-                            {verse.insight}
-                        </p>
-                        {verse.cross.length > 0 && (
-                            <div className="shrink-0 pt-2 border-t border-gray-100 dark:border-gray-700/60">
-                                <h4 className="text-sm font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1.5">CROSS REFERENCES</h4>
-                                <div className="flex flex-wrap gap-1.5">
+                    compact ? (
+                        /* Compact: inline below verse, no background panel */
+                        <div className="px-6 pb-4 pt-0 border-t border-gray-100/80 dark:border-gray-700/60 flex flex-col gap-2">
+                            <h4 className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 pt-3">Insight</h4>
+                            <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400 line-clamp-3">
+                                {verse.insight}
+                            </p>
+                            {verse.cross.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
                                     {verse.cross.map(c => (
                                         <span
                                             key={c}
-                                            className={`text-sm font-semibold px-2.5 py-0.5 rounded-full border ${
+                                            className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
                                                 isLuxury
                                                     ? "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700/40"
                                                     : "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-700/40"
@@ -183,9 +188,36 @@ export default function VerseOfTheDay({ userId }: Props) {
                                         </span>
                                     ))}
                                 </div>
-                            </div>
-                        )}
-                    </div>
+                            )}
+                        </div>
+                    ) : (
+                        /* Normal: right panel hidden on mobile, shown on lg+ */
+                        <div className="hidden lg:flex lg:w-[42%] px-6 pt-5 pb-5 flex-col gap-3 bg-gray-50/50 dark:bg-gray-900/30 border-l border-gray-100/80 dark:border-gray-700/60">
+                            <h4 className="text-sm font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 shrink-0">INSIGHT</h4>
+                            <p className="text-base leading-relaxed text-gray-600 dark:text-gray-300 flex-1">
+                                {verse.insight}
+                            </p>
+                            {verse.cross.length > 0 && (
+                                <div className="shrink-0 pt-2 border-t border-gray-100 dark:border-gray-700/60">
+                                    <h4 className="text-sm font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1.5">CROSS REFERENCES</h4>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {verse.cross.map(c => (
+                                            <span
+                                                key={c}
+                                                className={`text-sm font-semibold px-2.5 py-0.5 rounded-full border ${
+                                                    isLuxury
+                                                        ? "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700/40"
+                                                        : "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-700/40"
+                                                }`}
+                                            >
+                                                {c}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )
                 )}
             </div>
         </div>

@@ -366,6 +366,21 @@ function injectLocalUrls(state: Record<string, unknown>): Record<string, unknown
           break;
         }
       }
+      // Also check song-keyed presets (song_<songId>) uploaded via onAssignToSong
+      if (!injected) {
+        for (const preset of Object.keys(liveBgMeta)) {
+          if (!preset.startsWith('song_')) continue;
+          const meta2 = liveBgMeta[preset];
+          if (!meta2 || !fs.existsSync(meta2.filePath)) continue;
+          // Match by preset key embedded in Firebase URL OR by the songId being in the URL path
+          const presetSongId = preset.slice(5); // strip "song_"
+          if (firebaseUrl.includes(presetSongId) || firebaseUrl.toLowerCase().includes(preset.toLowerCase())) {
+            result = { ...result, bgVideo: { ...bv, localUrl: `/api/live-bg-video/${preset}` } };
+            injected = true;
+            break;
+          }
+        }
+      }
       if (!injected) {
         // Fallback: if only one preset file exists, use it
         const presets = Object.keys(liveBgMeta).filter(p => liveBgMeta[p] && fs.existsSync(liveBgMeta[p]!.filePath));
@@ -400,6 +415,12 @@ function injectLocalUrls(state: Record<string, unknown>): Record<string, unknown
       const age = Date.now() - ((saved.updatedAt as number) ?? 0);
       if (age < STALE_MS) {
         liveState = { ...saved, visible: false, lines: [], _fadeOnly: false };
+        // Inject echo advanced defaults for fields missing from old state files
+        liveState = {
+          echoSacredScale: 1.75, echoContentScale: 1.30, echoFuncScale: 0.62,
+          echoAnimDuration: 400, echoBounce: 2.8, echoMarquee: true,
+          ...liveState,
+        };
         liveState = injectLocalUrls(liveState);
         console.log("[LiveStage] liveState hydrated from Firestore (background pre-loaded for offline OBS)");
         // ── Auto-download fade screen image if not yet on disk ────────────────
@@ -448,6 +469,12 @@ function injectLocalUrls(state: Record<string, unknown>): Record<string, unknown
     const diskState = loadLiveStateFromDisk();
     if (diskState) {
       liveState = { ...diskState, visible: false, lines: [], _fadeOnly: false };
+      // Inject echo advanced defaults for fields missing from old disk files
+      liveState = {
+        echoSacredScale: 1.75, echoContentScale: 1.30, echoFuncScale: 0.62,
+        echoAnimDuration: 400, echoBounce: 2.8, echoMarquee: true,
+        ...liveState,
+      };
       liveState = injectLocalUrls(liveState);
       console.log("[LiveStage] liveState restored from disk (offline mode — campsite ready ✅)");
     }
@@ -508,20 +535,35 @@ app.post("/api/live-push", async (req, res) => {
 
 // GET /api/camp-status — Camp Readiness check (used by the ⛺ modal in LiveStageView)
 // Returns whether each required offline resource exists on disk.
-app.get("/api/camp-status", (_req, res) => {
+app.get("/api/camp-status", (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Cache-Control", "no-cache");
   const diskStateExists = fs.existsSync(LIVE_STATE_FILE);
   const praiseFile  = liveBgMeta["praise"]?.filePath;
   const worshipFile = liveBgMeta["worship"]?.filePath;
+
+  // Per-song backgrounds — collect all song_<id> keys from liveBgMeta
+  const songBgs: Record<string, boolean> = {};
+  for (const [key, meta] of Object.entries(liveBgMeta)) {
+    if (!key.startsWith("song_")) continue;
+    const songId = key.slice(5);
+    songBgs[songId] = meta ? fs.existsSync(meta.filePath) : false;
+  }
+  // Also accept ?songIds=id1,id2 to check specific songs not yet on disk
+  const qIds = typeof req.query.songIds === "string" ? req.query.songIds.split(",").filter(Boolean) : [];
+  for (const id of qIds) {
+    if (!(id in songBgs)) songBgs[id] = false;
+  }
+
   res.json({
     diskState:  diskStateExists,
     praise:     praiseFile  ? fs.existsSync(praiseFile)  : false,
     worship:    worshipFile ? fs.existsSync(worshipFile) : false,
     fadeImage:  fadeBgFilePath ? fs.existsSync(fadeBgFilePath) : false,
+    songBgs,
   });
-
 });
+
 
 // GET /api/live-sse — OBS Browser Source subscribes here
 app.get("/api/live-sse", (req, res) => {
@@ -1176,8 +1218,10 @@ app.get("/api/broadcasts/all", async (req, res) => {
   } catch (e) { res.status(500).json([]); }
 });
 
-// GET /api/release-notes — serve curated release notes from public/release-notes.json
-app.get("/api/release-notes", async (_req, res) => {
+// GET /api/release-notes — generate What's New content
+// If ?topic= is provided: keyword-search curated release notes for matching highlights
+// Otherwise: return the latest 8 highlights from public/release-notes.json
+app.get("/api/release-notes", async (req, res) => {
   try {
     const fs = await import("fs");
     const path = await import("path");
@@ -1193,7 +1237,51 @@ app.get("/api/release-notes", async (_req, res) => {
       }
     }
 
-    // Return the latest batch (up to 8 bullet points — wow moments only)
+    const rawTopic = (req.query.topic as string || "").trim();
+
+    if (rawTopic) {
+      // ── Keyword mode: search highlights that match any keyword from the typed topic ──
+      // Split typed text into individual keywords (words 3+ chars long)
+      const keywords = rawTopic
+        .toLowerCase()
+        .split(/[\s,\-\/]+/)
+        .map(k => k.replace(/[^a-z0-9]/g, ""))
+        .filter(k => k.length >= 3);
+
+      let matched: string[] = [];
+
+      if (keywords.length > 0) {
+        // Score each highlight by how many keywords it contains
+        const scored = allHighlights.map(h => {
+          const lower = h.toLowerCase();
+          const score = keywords.filter(k => lower.includes(k)).length;
+          return { h, score };
+        });
+
+        // Take highlights with score > 0, sorted by score desc
+        matched = scored
+          .filter(x => x.score > 0)
+          .sort((a, b) => b.score - a.score)
+          .map(x => x.h)
+          .slice(0, 8);
+      }
+
+      // If no matches found, fall back to all highlights
+      const bulletPoints = matched.length > 0 ? matched : allHighlights.slice(0, 8);
+
+      // Generate a title from the typed topic
+      const today = new Date().toLocaleDateString("en", { month: "long", day: "numeric", year: "numeric" });
+      const titleTopic = rawTopic.length > 45 ? rawTopic.slice(0, 45) + "…" : rawTopic;
+      const title = `What's New — ${titleTopic}`;
+
+      return res.json({
+        title,
+        message: `Here's what's new in WorshipFlow — ${rawTopic}:`,
+        bulletPoints,
+      });
+    }
+
+    // ── Curated mode: return latest 8 highlights ────────────────────────────
     const bulletPoints = allHighlights.slice(0, 8);
     const today = new Date().toLocaleDateString("en", { month: "long", day: "numeric", year: "numeric" });
 

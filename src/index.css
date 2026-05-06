@@ -178,6 +178,21 @@ body {
   overscroll-behavior: none;   /* stop iOS rubber-band horizontal bounce */
 }
 
+/* ── Global modal scroll lock ─────────────────────────────────────────────────
+   When a modal is open, ALL scrollable containers must freeze.
+   JS sets data-modal-open on <body>; this CSS handles every child.
+   ─────────────────────────────────────────────────────────────────────────── */
+body[data-modal-open] {
+  overflow: hidden !important;
+}
+body[data-modal-open] main,
+body[data-modal-open] [class*="overflow-y-auto"],
+body[data-modal-open] [class*="overflow-y-scroll"] {
+  overflow: hidden !important;
+}
+
+
+
 /* ═══════════════════════════════════════════════════════════════════════════
    OVERPAY STRUCTURAL DESIGN SYSTEM — WorshipFlow Adaptation v1.0
    ──────────────────────────────────────────────────────────────────────────

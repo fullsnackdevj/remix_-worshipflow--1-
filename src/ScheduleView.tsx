@@ -2,12 +2,13 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { toSafeTitle } from "./utils/textFormatting";
 import { getAuth } from "firebase/auth";
 import { db } from "./firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { collection, getDocs, orderBy, query, doc, getDoc } from "firebase/firestore";
 import AutoTextarea from "./AutoTextarea";
 import { Member, ScheduleMember, Schedule, Song, Tag } from "./types";
+import TeamTemplatesModal, { TeamTemplate } from "./TeamTemplatesModal";
 import {
-  ChevronLeft, ChevronRight, Plus, Calendar, List, X,
-  Copy, Pencil, Lock, Users, Sun, Music, BookOpen, Mail, Eye, Loader2, Heart, SquareKanban, ExternalLink, CheckCircle2, Trash2,
+  ChevronLeft, ChevronRight, Plus, Calendar, List, X, Settings,
+  Copy, Pencil, Lock, Users, Sun, Music, BookOpen, Mail, Eye, Loader2, Heart, SquareKanban, ExternalLink, CheckCircle2, Trash2, Check,
 } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -113,6 +114,8 @@ const [isSavingSchedule, setIsSavingSchedule] = useState(false);
 const [isNotifying, setIsNotifying] = useState(false);
 const [isAcking, setIsAcking] = useState(false);
 const [showEmailPreview, setShowEmailPreview] = useState(false);
+const [showPreviewBeforeSave, setShowPreviewBeforeSave] = useState(false);
+const [previewTab, setPreviewTab] = useState<"summary" | "email">("summary");
 const [scheduleView, setScheduleView] = useState<"month" | "list">("month");
 
   // ── Ministry Hub assigned cards ───────────────────────────────────────────
@@ -131,6 +134,42 @@ const [editSchedMusicians, setEditSchedMusicians] = useState<ScheduleMember[]>([
 const [pendingRolePick, setPendingRolePick] = useState<{ m: typeof allMembers[0]; roles: string[] } | null>(null);
 const [editSchedAssignments, setEditSchedAssignments] = useState<{ role: string; members: ScheduleMember[]; search: string }[]>([]);
 const [newRoleInput, setNewRoleInput] = useState("");
+
+// ── Team Templates state ──────────────────────────────────────────────────────
+const [showTemplateSettings, setShowTemplateSettings] = useState(false);
+const [teamTemplates, setTeamTemplates] = useState<TeamTemplate[]>([]);
+const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+const [assignMusiciansManual, setAssignMusiciansManual] = useState(false);
+
+const fetchTeamTemplates = useCallback(async () => {
+  try {
+    const q = query(collection(db, "team_templates"), orderBy("createdAt", "desc"));
+    const snap = await getDocs(q);
+    setTeamTemplates(snap.docs.map(d => ({ id: d.id, ...d.data() } as TeamTemplate)));
+  } catch { /* offline / no templates yet — silent */ }
+}, []); // eslint-disable-line
+
+useEffect(() => { fetchTeamTemplates(); }, [fetchTeamTemplates]); // eslint-disable-line
+
+// Lock body AND the app's <main> scroll container when pre-save preview is open
+useEffect(() => {
+  const mainEl = document.querySelector("main") as HTMLElement | null;
+  if (showPreviewBeforeSave) {
+    document.body.setAttribute("data-modal-open", "1");
+    document.body.style.overflow = "hidden";
+    if (mainEl) mainEl.style.overflow = "hidden";
+  } else {
+    document.body.removeAttribute("data-modal-open");
+    document.body.style.overflow = "";
+    if (mainEl) mainEl.style.overflow = "";
+  }
+  return () => {
+    document.body.removeAttribute("data-modal-open");
+    document.body.style.overflow = "";
+    if (mainEl) mainEl.style.overflow = "";
+  };
+}, [showPreviewBeforeSave]);
+
 // Leader-specific schedule derived flags (placed here, after state declarations)
 const isServiceEventType = ["sunday service", "midweek service"].includes(editSchedEventName.toLowerCase());
 const leaderCanAddOnDate = isLeader && !!selectedScheduleDate && selectedScheduleDate >= new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" }); // no past dates
@@ -348,6 +387,8 @@ showToast("error", "This date has passed. Events cannot be added.");
   setSolemnSearch("");
   setEditSchedNotes("");
   setSchedMemberSearch("");
+  setSelectedTemplateId("");
+  setAssignMusiciansManual(false);
 };
 
 const openEventById = (eventId: string, dateStr: string) => {
@@ -369,6 +410,9 @@ const openEventById = (eventId: string, dateStr: string) => {
   setSolemnSearch("");
   setEditSchedNotes(ev.notes ?? "");
   setSchedMemberSearch("");
+  // When opening an existing event, always default to manual (they already have a saved lineup)
+  setAssignMusiciansManual(true);
+  setSelectedTemplateId("");
 };
 
 const openScheduleEditor = (dateStr: string) => {
@@ -622,6 +666,17 @@ showToast("error", "Could not save acknowledgment. Try again.");
     <>
     <div className="max-w-7xl mx-auto">
 
+      {/* ── Team Templates Settings Modal ─────────────────────── */}
+      {showTemplateSettings && (
+        <TeamTemplatesModal
+          onClose={() => {
+            setShowTemplateSettings(false);
+            fetchTeamTemplates(); // refresh so new templates appear in the dropdown
+          }}
+          allMembers={allMembers}
+          onToast={(msg, type) => showToast(type ?? "success", msg)}
+        />
+      )}
       {/* ── Toolbar ─────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between gap-3 mb-5 flex-wrap">
 
@@ -663,8 +718,20 @@ showToast("error", "Could not save acknowledgment. Try again.");
           </button>
         </div>
 
-        {/* RIGHT — Add Event button */}
-        <div className="shrink-0">
+        {/* RIGHT — Settings ⚙ + Add Event */}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* ⚙ Settings — Team Templates (leaders/admins only) */}
+          {(canWriteSchedule || isLeader) && (
+            <button
+              onClick={() => setShowTemplateSettings(true)}
+              title="Scheduling Settings — Team Templates"
+              className="w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all shadow-sm"
+            >
+              <Settings size={16} />
+            </button>
+          )}
+
+          {/* Add Event button */}
           {(() => {
             const isListView = scheduleView === "list";
             const hasExisting = selectedDateEvents.length > 0;
@@ -1776,12 +1843,87 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                         {/* ── MUSICIANS / INSTRUMENTS ─────────────── */}
                         <div>
                           <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Musicians / Instruments</p>
+
+                          {/* ── Template picker row ── */}
+                          <div className="mb-3 rounded-xl overflow-hidden border border-gray-100 dark:border-white/[0.08] bg-gray-50 dark:bg-gray-800/60">
+                            {/* Header: label + Manual Assign pill */}
+                            <div className="flex items-center justify-between gap-2 px-3 pt-3 pb-2">
+                              <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Team Template</p>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const next = !assignMusiciansManual;
+                                  setAssignMusiciansManual(next);
+                                  if (next) {
+                                    setSelectedTemplateId("");
+                                  } else {
+                                    setEditSchedMusicians([]);
+                                    setSelectedTemplateId("");
+                                  }
+                                }}
+                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${
+                                  assignMusiciansManual
+                                    ? "bg-indigo-600 text-white shadow-sm"
+                                    : "bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
+                                }`}
+                              >
+                                <div className={`w-2 h-2 rounded-full ${assignMusiciansManual ? "bg-white" : "bg-gray-400 dark:bg-gray-500"}`} />
+                                Manual Assign
+                              </button>
+                            </div>
+                            {/* Template options — hidden in manual mode */}
+                            {!assignMusiciansManual && (
+                              <div className="px-3 pb-3 space-y-1">
+                                {teamTemplates.length === 0 ? (
+                                  <div className="flex items-center justify-between py-2">
+                                    <span className="text-xs text-gray-400 dark:text-gray-500 italic">No templates yet</span>
+                                    <button type="button" onClick={() => setShowTemplateSettings(true)} className="text-[11px] font-bold text-indigo-500 hover:text-indigo-400 transition-colors">+ Create one</button>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => { setSelectedTemplateId(""); setEditSchedMusicians([]); }}
+                                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left transition-all ${selectedTemplateId === "" ? "bg-indigo-600 text-white shadow-sm" : "bg-white dark:bg-gray-700/60 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-100 dark:border-gray-600/50"}`}
+                                    >
+                                      <div className={`w-3 h-3 rounded-full border-2 shrink-0 flex items-center justify-center ${selectedTemplateId === "" ? "border-white" : "border-gray-300 dark:border-gray-500"}`}>
+                                        {selectedTemplateId === "" && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                                      </div>
+                                      <span className="text-xs font-medium">No template</span>
+                                    </button>
+                                    {teamTemplates.map(t => (
+                                      <button
+                                        key={t.id}
+                                        type="button"
+                                        onClick={() => { setSelectedTemplateId(t.id); setEditSchedMusicians([...t.musicians]); }}
+                                        className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left transition-all ${selectedTemplateId === t.id ? "bg-indigo-600 text-white shadow-sm" : "bg-white dark:bg-gray-700/60 text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-100 dark:border-gray-600/50"}`}
+                                      >
+                                        <div className={`w-3 h-3 rounded-full border-2 shrink-0 flex items-center justify-center ${selectedTemplateId === t.id ? "border-white" : "border-gray-300 dark:border-gray-500"}`}>
+                                          {selectedTemplateId === t.id && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <span className="text-sm font-semibold block truncate">{t.name}</span>
+                                          <span className={`text-[10px] block ${selectedTemplateId === t.id ? "text-indigo-200" : "text-gray-400 dark:text-gray-500"}`}>{t.musicians.length} musician{t.musicians.length !== 1 ? "s" : ""}</span>
+                                        </div>
+                                      </button>
+                                    ))}
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+
+                          {/* Selected musicians (from template or manual) */}
                           {editSchedMusicians.length > 0 && (
                             <div className="space-y-1.5 mb-2">
-                              {editSchedMusicians.map((mu, i) => (
+                              {editSchedMusicians.map((mu, i) => {
+                                // Fallback: look up live photo from allMembers if template stripped it
+                                const livePhoto = mu.photo || allMembers.find(m => m.id === mu.memberId)?.photo || "";
+                                return (
                                 <div key={i} className="flex items-center gap-3 bg-indigo-600/10 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700 rounded-xl px-3 py-2">
-                                  {mu.photo
-                                    ? <img src={mu.photo} className="w-8 h-8 rounded-full object-cover shrink-0" alt="" />
+                                  {livePhoto
+                                    ? <img src={livePhoto} className="w-8 h-8 rounded-full object-cover shrink-0" alt="" />
                                     : <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-bold shrink-0">{mu.name[0]}</div>
                                   }
                                   <div className="flex-1 min-w-0">
@@ -1790,65 +1932,64 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                                   </div>
                                   <button onClick={() => setEditSchedMusicians(prev => prev.filter((_, j) => j !== i))} className="text-gray-400 hover:text-red-400 shrink-0"><X size={15} /></button>
                                 </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           )}
-                          <div className="space-y-0.5 max-h-44 overflow-y-auto pr-1">
-                          {muCandidates.map(m => {
-                              // Only show the member's INSTRUMENT roles in the picker (not ALL roles).
-                              // A member like Jamielyn may have ["Backup Singer", "Rhythm Guitar"] —
-                              // we must only offer the instrument role in the musician section.
-                              const allRoles: string[] = ((m as any).roles || []).filter((r: string) => r.trim());
-                              const instrumentRoles = allRoles.filter(r => INSTRUMENTALIST_ROLES.includes(r));
-                              // Fall back to all roles if no specific instrument role found
-                              const memberRoles = instrumentRoles.length > 0 ? instrumentRoles : allRoles;
-                              const isPending = pendingRolePick?.m.id === m.id;
-                              return (
-                                <div key={m.id}>
-                                  <button type="button"
-                                    onClick={() => {
-                                      if (memberRoles.length <= 1) {
-                                        // Single instrument role → add immediately, no picker needed
-                                        setEditSchedMusicians(prev => [...prev, { memberId: m.id, name: m.name, photo: m.photo, role: memberRoles[0] || "Musician" }]);
-                                        setPendingRolePick(null);
-                                      } else {
-                                        // Multiple instrument roles → show picker (toggle)
-                                        setPendingRolePick(isPending ? null : { m, roles: memberRoles });
+
+                          {/* Manual picker — shown only when Assign Manual is checked */}
+                          {assignMusiciansManual && (
+                            <div className="space-y-0.5 max-h-44 overflow-y-auto pr-1">
+                            {muCandidates.map(m => {
+                                const allRoles: string[] = ((m as any).roles || []).filter((r: string) => r.trim());
+                                const instrumentRoles = allRoles.filter(r => INSTRUMENTALIST_ROLES.includes(r));
+                                const memberRoles = instrumentRoles.length > 0 ? instrumentRoles : allRoles;
+                                const isPending = pendingRolePick?.m.id === m.id;
+                                return (
+                                  <div key={m.id}>
+                                    <button type="button"
+                                      onClick={() => {
+                                        if (memberRoles.length <= 1) {
+                                          setEditSchedMusicians(prev => [...prev, { memberId: m.id, name: m.name, photo: m.photo, role: memberRoles[0] || "Musician" }]);
+                                          setPendingRolePick(null);
+                                        } else {
+                                          setPendingRolePick(isPending ? null : { m, roles: memberRoles });
+                                        }
+                                      }}
+                                      className={`w-full flex items-center gap-3 px-2.5 py-2 rounded-xl transition-colors ${isPending ? "bg-indigo-50 dark:bg-indigo-900/30" : "hover:bg-gray-50 dark:hover:bg-gray-700/60"}`}>
+                                      {m.photo
+                                        ? <img src={m.photo} className="w-9 h-9 rounded-full object-cover shrink-0" alt="" />
+                                        : <div className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-400 to-indigo-600 flex items-center justify-center text-white text-sm font-bold shrink-0">{m.name[0]}</div>
                                       }
-                                    }}
-                                    className={`w-full flex items-center gap-3 px-2.5 py-2 rounded-xl transition-colors ${isPending ? "bg-indigo-50 dark:bg-indigo-900/30" : "hover:bg-gray-50 dark:hover:bg-gray-700/60"}`}>
-                                    {m.photo
-                                      ? <img src={m.photo} className="w-9 h-9 rounded-full object-cover shrink-0" alt="" />
-                                      : <div className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-400 to-indigo-600 flex items-center justify-center text-white text-sm font-bold shrink-0">{m.name[0]}</div>
-                                    }
-                                    <div className="flex-1 text-left min-w-0">
-                                      <p className="font-semibold text-sm truncate text-gray-900 dark:text-white">{m.name}</p>
-                                      <p className="text-[10px] text-gray-400 truncate">{memberRoles.join(", ") || "Musician"}</p>
-                                    </div>
-                                    {memberRoles.length > 1
-                                      ? <span className="text-[10px] text-indigo-400 shrink-0 font-medium">{isPending ? "▲ pick role" : "▼ pick role"}</span>
-                                      : <Plus size={18} className="text-gray-400 shrink-0" />
-                                    }
-                                  </button>
-                                  {isPending && (
-                                    <div className="px-2.5 pb-2 pt-1 flex flex-wrap gap-1.5">
-                                      {memberRoles.map(role => (
-                                        <button key={role} type="button"
-                                          onClick={() => {
-                                            setEditSchedMusicians(prev => [...prev, { memberId: m.id, name: m.name, photo: m.photo, role }]);
-                                            setPendingRolePick(null);
-                                          }}
-                                          className="px-2.5 py-1 text-[11px] font-medium rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-800 transition-colors border border-indigo-200 dark:border-indigo-700">
-                                          {role}
-                                        </button>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                            {muCandidates.length === 0 && editSchedMusicians.length === 0 && <p className="text-xs text-gray-400 italic px-2">No members with instrument roles found</p>}
-                          </div>
+                                      <div className="flex-1 text-left min-w-0">
+                                        <p className="font-semibold text-sm truncate text-gray-900 dark:text-white">{m.name}</p>
+                                        <p className="text-[10px] text-gray-400 truncate">{memberRoles.join(", ") || "Musician"}</p>
+                                      </div>
+                                      {memberRoles.length > 1
+                                        ? <span className="text-[10px] text-indigo-400 shrink-0 font-medium">{isPending ? "▲ pick role" : "▼ pick role"}</span>
+                                        : <Plus size={18} className="text-gray-400 shrink-0" />
+                                      }
+                                    </button>
+                                    {isPending && (
+                                      <div className="px-2.5 pb-2 pt-1 flex flex-wrap gap-1.5">
+                                        {memberRoles.map(role => (
+                                          <button key={role} type="button"
+                                            onClick={() => {
+                                              setEditSchedMusicians(prev => [...prev, { memberId: m.id, name: m.name, photo: m.photo, role }]);
+                                              setPendingRolePick(null);
+                                            }}
+                                            className="px-2.5 py-1 text-[11px] font-medium rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-800 transition-colors border border-indigo-200 dark:border-indigo-700">
+                                            {role}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                              {muCandidates.length === 0 && editSchedMusicians.length === 0 && <p className="text-xs text-gray-400 italic px-2">No members with instrument roles found</p>}
+                            </div>
+                          )}
                         </div>
 
                         {/* ── SONG LINE-UP ─────────────────────────── */}
@@ -1927,9 +2068,13 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                   {/* Save / Delete */}
                   {!isDatePast && (
                     <div className="flex flex-col gap-2 pt-2 border-t border-gray-100 dark:border-gray-700">
-                      <button onClick={handleSaveSchedule} disabled={isSavingSchedule}
-                        className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-all disabled:opacity-60 shadow-sm shadow-indigo-500/30">
-                        {isSavingSchedule ? "Saving…" : editingExisting ? "Update Event" : "Save Event"}
+                      <button
+                        onClick={() => { setPreviewTab("summary"); setShowPreviewBeforeSave(true); }}
+                        disabled={isSavingSchedule}
+                        className="w-full py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white text-sm font-semibold rounded-xl transition-all disabled:opacity-60 shadow-sm shadow-indigo-500/30 flex items-center justify-center gap-2"
+                      >
+                        <Eye size={15} />
+                        {editingExisting ? "Review & Update" : "Review & Save"}
                       </button>
                       {editingExisting && (
                         <button onClick={handleDeleteSchedule} className="w-full py-2 text-red-500 hover:text-red-600 text-sm font-semibold rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 transition-all">
@@ -1946,6 +2091,283 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
         })()}
       </div>
     </div>
+
+    {/* ── Pre-Save Event Preview Modal ───────────────────────────────────── */}
+    {showPreviewBeforeSave && (() => {
+      const _evName = editSchedEventName || "Worship Event";
+      const _date = selectedScheduleDate || "";
+      const dateLabel = _date ? new Date(_date + "T00:00:00").toLocaleDateString("en", { weekday: "long", year: "numeric", month: "long", day: "numeric" }) : "—";
+      const st = editSchedServiceType || "";
+      const _isStandardSvc = ["sunday service", "midweek service"].includes(_evName.trim().toLowerCase());
+      const serviceLabel = _isStandardSvc
+        ? (st === "sunday" ? "Sunday Service" : st === "midweek" ? "Mid-Week Service" : "Event")
+        : "Event";
+      const jSong = allSongs.find(sg => sg.id === editSchedSongLineup.joyful);
+      const sSong = allSongs.find(sg => sg.id === editSchedSongLineup.solemn);
+      return (
+        <div className="fixed inset-0 z-[700] flex items-center justify-center bg-black/60 backdrop-blur-md px-4 py-8" onClick={() => setShowPreviewBeforeSave(false)}>
+          <div
+            className="relative w-full max-w-[460px] flex flex-col bg-white dark:bg-gray-900 rounded-2xl overflow-hidden shadow-2xl ring-1 ring-black/20"
+            onClick={e => e.stopPropagation()}
+            style={{ maxHeight: "min(80dvh, 680px)" }}
+          >
+            {/* ── Header ── */}
+            <div className="shrink-0 bg-gradient-to-135 bg-gradient-to-br from-violet-600 via-indigo-600 to-blue-600 px-5 py-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                    <Eye size={15} className="text-white" />
+                  </div>
+                  <div>
+                    <p className="text-white font-extrabold text-sm tracking-tight leading-tight">Review Before Saving</p>
+                    <p className="text-indigo-200 text-[11px] mt-0.5">Check everything looks right</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowPreviewBeforeSave(false)} className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/20 hover:bg-white/30 text-white transition-all">
+                  <X size={14} />
+                </button>
+              </div>
+              {/* Tabs */}
+              <div className="flex gap-1 bg-white/10 rounded-xl p-1">
+                {(["summary", "email"] as const).map(tab => (
+                  <button
+                    key={tab}
+                    onClick={() => setPreviewTab(tab)}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      previewTab === tab ? "bg-white text-violet-700 shadow-sm" : "text-white/70 hover:text-white"
+                    }`}
+                  >
+                    {tab === "summary" ? "📋 Event Summary" : "📧 Email Preview"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* ── Scrollable Body ── */}
+            <div className="flex-1 overflow-y-auto">
+
+              {/* ── SUMMARY TAB ── */}
+              {previewTab === "summary" && (
+                <div className="p-4 space-y-3">
+                  {/* Event name + date */}
+                  <div className="rounded-2xl bg-gradient-to-br from-violet-50 to-indigo-50 dark:from-violet-900/20 dark:to-indigo-900/20 border border-violet-100 dark:border-violet-700/30 p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className="inline-block text-[10px] font-bold text-violet-600 dark:text-violet-400 uppercase tracking-widest mb-1">{serviceLabel}</span>
+                        <h3 className="font-extrabold text-lg text-gray-900 dark:text-white leading-tight">{_evName}</h3>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-1.5"><span>📅</span>{dateLabel}</p>
+                      </div>
+                      <div className="text-3xl shrink-0">{eventEmoji(_evName)}</div>
+                    </div>
+                  </div>
+
+                  {/* Worship Leader */}
+                  {editSchedWorshipLeader && (() => {
+                    const wlPhoto = editSchedWorshipLeader.photo || allMembers.find(m => m.id === editSchedWorshipLeader.memberId)?.photo || "";
+                    return (
+                      <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-white/[0.08] p-3">
+                        <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2">🎤 Worship Leader</p>
+                        <div className="flex items-center gap-3">
+                          {wlPhoto
+                            ? <img src={wlPhoto} className="w-10 h-10 rounded-full object-cover ring-2 ring-violet-300 dark:ring-violet-600" alt="" />
+                            : <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white font-bold text-sm ring-2 ring-violet-300 dark:ring-violet-600">{editSchedWorshipLeader.name[0]}</div>
+                          }
+                          <div>
+                            <span className="font-bold text-sm text-gray-900 dark:text-white block">{editSchedWorshipLeader.name}</span>
+                            <span className="text-[11px] text-violet-500 dark:text-violet-400">Worship Leader</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Backup Singers */}
+                  {editSchedBackupSingers.length > 0 && (
+                    <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-white/[0.08] p-3">
+                      <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2.5">🎙️ Backup Singers</p>
+                      <div className="space-y-2">
+                        {editSchedBackupSingers.map((m, i) => {
+                          const bsPhoto = m.photo || allMembers.find(mb => mb.id === m.memberId)?.photo || "";
+                          return (
+                            <div key={i} className="flex items-center gap-2.5">
+                              {bsPhoto
+                                ? <img src={bsPhoto} className="w-8 h-8 rounded-full object-cover shrink-0 ring-1 ring-pink-200 dark:ring-pink-700" alt="" />
+                                : <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-500 to-rose-500 text-white flex items-center justify-center text-xs font-bold shrink-0">{m.name[0]}</div>
+                              }
+                              <div className="min-w-0">
+                                <span className="text-sm font-semibold text-gray-900 dark:text-white block truncate">{m.name}</span>
+                                {m.role && <span className="text-[11px] text-pink-500 dark:text-pink-400">{m.role}</span>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Musicians */}
+                  {editSchedMusicians.length > 0 && (
+                    <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-white/[0.08] p-3">
+                      <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2.5">🎸 Musicians</p>
+                      <div className="space-y-2">
+                        {editSchedMusicians.map((m, i) => {
+                          const muPhoto = m.photo || allMembers.find(mb => mb.id === m.memberId)?.photo || "";
+                          return (
+                            <div key={i} className="flex items-center gap-2.5">
+                              {muPhoto
+                                ? <img src={muPhoto} className="w-8 h-8 rounded-full object-cover shrink-0 ring-1 ring-indigo-200 dark:ring-indigo-700" alt="" />
+                                : <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-blue-600 text-white flex items-center justify-center text-xs font-bold shrink-0">{m.name[0]}</div>
+                              }
+                              <span className="text-sm font-semibold text-gray-900 dark:text-white min-w-0 flex-1 truncate">{m.name}</span>
+                              <span className="text-[11px] font-medium text-indigo-500 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/40 px-2 py-0.5 rounded-full shrink-0">{m.role}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Other Assignments */}
+                  {editSchedAssignments.filter(a => a.members.length > 0).length > 0 && (
+                    <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-white/[0.08] p-3">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">👥 Other Roles</p>
+                      <div className="space-y-2">
+                        {editSchedAssignments.filter(a => a.members.length > 0).map((asgn, i) => (
+                          <div key={i}>
+                            <p className="text-[10px] font-bold text-violet-500 dark:text-violet-400 uppercase tracking-wide">{asgn.role}</p>
+                            <p className="text-sm text-gray-800 dark:text-gray-200">{asgn.members.map(m => m.name).join(", ")}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Song Lineup */}
+                  {(jSong || sSong) && (
+                    <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-white/[0.08] p-3">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">🎵 Song Lineup</p>
+                      <div className="space-y-1.5">
+                        {sSong && (
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 text-[10px] font-bold uppercase tracking-wide shrink-0">Solemn</span>
+                            <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">{toSafeTitle(sSong.title)}</span>
+                          </div>
+                        )}
+                        {jSong && (
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 text-[10px] font-bold uppercase tracking-wide shrink-0">Joyful</span>
+                            <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">{toSafeTitle(jSong.title)}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Notes */}
+                  {editSchedNotes?.trim() && (
+                    <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-700/30 p-3">
+                      <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-widest mb-1.5">📝 Notes</p>
+                      <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">{editSchedNotes.trim()}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── EMAIL TAB ── */}
+              {previewTab === "email" && (
+                <div style={{ background: "#f1f5f9", padding: "16px 12px", fontFamily: "'Segoe UI', Arial, sans-serif", minHeight: "100%" }}>
+                  <div style={{ background: "#ffffff", borderRadius: 14, overflow: "hidden", border: "1px solid #e2e8f0", boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
+                    <div style={{ background: "linear-gradient(135deg,#6d28d9,#4f46e5)", padding: "22px 20px", textAlign: "center" }}>
+                      <div style={{ fontSize: 32, marginBottom: 6 }}>🎵</div>
+                      <div style={{ color: "#fff", fontSize: 19, fontWeight: 800 }}>WorshipFlow</div>
+                      <div style={{ color: "#ddd6fe", fontSize: 11, marginTop: 4, letterSpacing: "0.5px", textTransform: "uppercase" }}>Team Schedule Update</div>
+                    </div>
+                    <div style={{ padding: "18px 18px 14px" }}>
+                      <p style={{ color: "#475569", fontSize: 13, margin: "0 0 14px", lineHeight: 1.6 }}>🎉 <strong style={{ color: "#1e293b" }}>A leader</strong> has scheduled a new event for your team.</p>
+                      <div style={{ background: "#f8fafc", borderRadius: 10, border: "1px solid #e2e8f0", padding: "12px 14px" }}>
+                        <div style={{ fontSize: 10, color: "#6d28d9", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 3 }}>{serviceLabel}</div>
+                        <div style={{ color: "#0f172a", fontSize: 16, fontWeight: 800, marginBottom: 12 }}>{_evName}</div>
+                        <div style={{ paddingTop: 8, paddingBottom: 8, borderTop: "1px solid #e2e8f0" }}>
+                          <div style={{ color: "#94a3b8", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>📅 Date</div>
+                          <div style={{ color: "#1e293b", fontSize: 13, fontWeight: 600, marginTop: 3 }}>{dateLabel}</div>
+                        </div>
+                        {editSchedWorshipLeader && (
+                          <div style={{ paddingTop: 8, paddingBottom: 8, borderTop: "1px solid #e2e8f0" }}>
+                            <div style={{ color: "#94a3b8", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>🎤 Worship Leader</div>
+                            <div style={{ color: "#1e293b", fontSize: 13, fontWeight: 600, marginTop: 3 }}>{editSchedWorshipLeader.name}</div>
+                          </div>
+                        )}
+                        {editSchedBackupSingers.length > 0 && (
+                          <div style={{ paddingTop: 8, paddingBottom: 8, borderTop: "1px solid #e2e8f0" }}>
+                            <div style={{ color: "#94a3b8", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>🎙️ Backup Singers</div>
+                            {editSchedBackupSingers.map((m, i) => <div key={i} style={{ color: "#1e293b", fontSize: 12, fontWeight: 500, marginTop: 3 }}>{m.name}{m.role ? <span style={{ color: "#7c3aed", fontSize: 10, marginLeft: 4 }}>({m.role})</span> : null}</div>)}
+                          </div>
+                        )}
+                        {editSchedMusicians.length > 0 && (
+                          <div style={{ paddingTop: 8, paddingBottom: 8, borderTop: "1px solid #e2e8f0" }}>
+                            <div style={{ color: "#94a3b8", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>🎸 Musicians</div>
+                            {editSchedMusicians.map((m, i) => <div key={i} style={{ color: "#1e293b", fontSize: 12, fontWeight: 500, marginTop: 3 }}>{m.name}{m.role ? <span style={{ color: "#0891b2", fontSize: 10, marginLeft: 4 }}>({m.role})</span> : null}</div>)}
+                          </div>
+                        )}
+                        {editSchedAssignments.filter(a => a.members.length > 0).length > 0 && (
+                          <div style={{ paddingTop: 8, paddingBottom: 8, borderTop: "1px solid #e2e8f0" }}>
+                            <div style={{ color: "#94a3b8", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>👥 Other Roles</div>
+                            {editSchedAssignments.filter(a => a.members.length > 0).map((asgn, gi) => (
+                              <div key={gi} style={{ marginTop: 6 }}>
+                                <div style={{ color: "#6d28d9", fontSize: 10, fontWeight: 700, textTransform: "uppercase" }}>{asgn.role}</div>
+                                {asgn.members.map((m, mi) => <div key={mi} style={{ color: "#1e293b", fontSize: 12, fontWeight: 500, marginTop: 2 }}>{m.name}</div>)}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {(sSong || jSong) && (
+                          <div style={{ paddingTop: 8, paddingBottom: 8, borderTop: "1px solid #e2e8f0" }}>
+                            <div style={{ color: "#94a3b8", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>🎵 Song Lineup</div>
+                            {sSong && <div style={{ color: "#1e293b", fontSize: 12, fontWeight: 500, marginTop: 4 }}><span style={{ background: "#ede9fe", color: "#6d28d9", fontSize: 9, fontWeight: 700, textTransform: "uppercase", padding: "2px 6px", borderRadius: 4, marginRight: 5 }}>Solemn</span>{toSafeTitle(sSong.title)}</div>}
+                            {jSong && <div style={{ color: "#1e293b", fontSize: 12, fontWeight: 500, marginTop: 4 }}><span style={{ background: "#dcfce7", color: "#166534", fontSize: 9, fontWeight: 700, textTransform: "uppercase", padding: "2px 6px", borderRadius: 4, marginRight: 5 }}>Joyful</span>{toSafeTitle(jSong.title)}</div>}
+                          </div>
+                        )}
+                        {editSchedNotes?.trim() && (
+                          <div style={{ paddingTop: 8, borderTop: "1px solid #e2e8f0" }}>
+                            <div style={{ color: "#94a3b8", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>📝 Notes</div>
+                            <div style={{ color: "#475569", fontSize: 12, lineHeight: 1.6, marginTop: 4, whiteSpace: "pre-wrap" }}>{editSchedNotes.trim()}</div>
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ textAlign: "center", marginTop: 16 }}>
+                        <div style={{ display: "inline-block", background: "linear-gradient(135deg,#6d28d9,#4f46e5)", color: "#fff", padding: "10px 26px", borderRadius: 10, fontSize: 13, fontWeight: 700 }}>View Schedule →</div>
+                      </div>
+                    </div>
+                  </div>
+                  <p style={{ textAlign: "center", color: "#94a3b8", fontSize: 10, marginTop: 12 }}>This is a preview — actual email sent after saving.</p>
+                </div>
+              )}
+            </div>
+
+            {/* ── Footer ── */}
+            <div className="shrink-0 border-t border-gray-100 dark:border-white/[0.08] bg-white dark:bg-gray-900 px-4 py-3 flex gap-3">
+              <button
+                onClick={() => setShowPreviewBeforeSave(false)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all flex items-center justify-center gap-2"
+              >
+                <Pencil size={14} />
+                Back to Edit
+              </button>
+              <button
+                onClick={() => { setShowPreviewBeforeSave(false); handleSaveSchedule(); }}
+                disabled={isSavingSchedule}
+                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-bold hover:from-violet-500 hover:to-indigo-500 transition-all shadow-lg shadow-violet-500/20 flex items-center justify-center gap-2 disabled:opacity-60"
+              >
+                {isSavingSchedule
+                  ? <><Loader2 size={15} className="animate-spin" /> Saving…</>
+                  : <><Check size={15} /> {editingExisting ? "Confirm Update" : "Confirm & Save"}</>
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    })()}
 
     {/* ── Email Preview Modal — rendered at root so it truly covers the full screen ── */}
     {showEmailPreview && editingExisting && (() => {

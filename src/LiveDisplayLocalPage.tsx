@@ -16,6 +16,14 @@ interface LiveState {
   songTitle: string; lines: string[]; animStyle: AnimStyle; visible: boolean; updatedAt: number;
   bgIdx?: number; echoAlign?: "center"|"centered-left"|"left"; echoLines?: "auto"|"2"|"3";
   echoLineHeight?: number; lyricsScale?: number; loopEnabled?: boolean; loopInterval?: number;
+  // ── Echo advanced settings ───────────────────────────────────────────────
+  echoSacredScale?:  number;
+  echoContentScale?: number;
+  echoFuncScale?:    number;
+  echoAnimDuration?: number;
+  echoBounce?:       number;
+  echoMarquee?:      boolean;
+  bigSmallFont?:     boolean; // alternate big/small word sizes
   bgVideo?: {type:"local";url:string}|{type:"firebase";url:string;localUrl?:string}|{type:"image-firebase";url:string;localUrl?:string}|{type:"youtube";videoId:string}|null;
   transitioning?: boolean; fadeScreen?: boolean;
   fadeScreenBg?: {type:"color";color:string}|{type:"image-url";url:string}|{type:"image-local";url:string}|{type:"image-firebase";url:string;localUrl?:string}|{type:"video-local";url:string}|{type:"video-firebase";url:string;localUrl?:string}|{type:"video-youtube";videoId:string};
@@ -32,13 +40,13 @@ const BG_PRESETS = [
 const SACRED_WORDS = new Set(['jesus','christ','diyos','dios','god','lord','yahweh','jehovah','emmanuel']);
 function isSacred(w: string) { return SACRED_WORDS.has(w.toLowerCase().replace(/[^a-z]/g,'')); }
 const FUNC_WORDS = new Set(['a','an','the','to','of','in','at','by','for','on','and','or','but','is','are','was','were','i','we','he','she','it','my','our','your','his','her','its']);
-function echoWordSm(word: string, gIdx: number): number {
-  if (isSacred(word)) return 1.75;
-  if (FUNC_WORDS.has(word.toLowerCase())) return 0.62;
+function echoWordSm(word: string, gIdx: number, sacredSm=1.75, contentSm=1.30, funcSm=0.62): number {
+  if (isSacred(word)) return sacredSm;
+  if (FUNC_WORDS.has(word.toLowerCase())) return funcSm;
   const hash = word.toLowerCase().split('').reduce((a,c)=>a+c.charCodeAt(0),0)+gIdx*11;
-  return (hash%3===0)?0.68:1.30;
+  return (hash%3===0)?funcSm:contentSm;
 }
-function animIn(el: HTMLElement, style: AnimStyle) {
+function animIn(el: HTMLElement, style: AnimStyle, opts?: { echoAnimDuration?: number; echoBounce?: number }) {
   const ws=Array.from(el.querySelectorAll<HTMLElement>(".pw"));
   const cs=Array.from(el.querySelectorAll<HTMLElement>(".pc"));
   const ls=Array.from(el.querySelectorAll<HTMLElement>(".pl"));
@@ -50,7 +58,7 @@ function animIn(el: HTMLElement, style: AnimStyle) {
   else if (style==="word-bounce"){ gsap.set(ls,{opacity:1}); gsap.set(ws,{opacity:0,y:22,scale:0.65}); gsap.to(ws,{opacity:1,y:0,scale:1,duration:0.5,ease:"back.out(2.2)",stagger:0.065}); }
   else if (style==="typewriter") { gsap.set(ls,{opacity:1}); gsap.set(cs,{opacity:0}); gsap.to(cs,{opacity:1,duration:0.01,stagger:0.03,ease:"none"}); }
   else if (style==="blur-in")    { gsap.set(ls,{opacity:1}); gsap.fromTo(ws,{opacity:0,filter:"blur(18px)",scale:1.06},{opacity:1,filter:"blur(0px)",scale:1,duration:0.65,ease:"power2.out",stagger:0.07}); }
-  else if (style==="echo") { gsap.set(el,{opacity:1}); gsap.set(ws,{opacity:0,scale:0.35,y:20}); gsap.to(ws,{opacity:1,scale:1,y:0,duration:0.4,ease:"back.out(2.8)",stagger:{amount:0.55}}); }
+  else if (style==="echo") { gsap.set(el,{opacity:1}); gsap.set(ws,{opacity:0,scale:0.35,y:20}); gsap.to(ws,{opacity:1,scale:1,y:0,duration:(opts?.echoAnimDuration??400)/1000,ease:`back.out(${opts?.echoBounce??2.8})`,stagger:{amount:0.55}}); }
   else if (style==="breathe") {
     gsap.set(ls,{opacity:1}); gsap.set(ws,{opacity:0,scale:1.05,filter:"blur(6px)"});
     const st=ws.length>1?Math.min(0.45,0.7/ws.length):0.45;
@@ -67,16 +75,20 @@ function idleLoop(el: HTMLElement, style: AnimStyle, interval=3500): ()=>void {
   },interval);
   return ()=>{ active=false; clearInterval(id); };
 }
-function renderLine(line: string, style: AnimStyle): React.ReactElement[] {
+function renderLine(line: string, style: AnimStyle, bigSmallFont = false): React.ReactElement[] {
   if(style==="typewriter") return line.split("").map((ch,i)=><span key={i} className="pc" style={{display:"inline"}}>{ch===" "?"\u00a0":ch}</span>);
+  let wordIdx = 0;
   return line.split(/(\s+)/).filter(Boolean).map((tok,i)=>{
     if(!tok.trim()) return <span key={i}>&nbsp;</span>;
-    if(isSacred(tok)) return <span key={i} className="pw" style={{display:"inline-block",marginRight:"0.22em",fontSize:"1.45em",fontWeight:900,textShadow:"0 0 30px rgba(255,220,80,0.55), 0 3px 40px rgba(0,0,0,0.99)",verticalAlign:"middle"}}>{tok}</span>;
-    return <span key={i} className="pw" style={{display:"inline-block",marginRight:"0.22em"}}>{tok}</span>;
+    if(isSacred(tok)) { wordIdx++; return <span key={i} className="pw" style={{display:"inline-block",marginRight:"0.22em",fontSize:"1.45em",fontWeight:900,textShadow:"0 0 30px rgba(255,220,80,0.55), 0 3px 40px rgba(0,0,0,0.99)",verticalAlign:"middle"}}>{tok}</span>; }
+    const idx = wordIdx++;
+    const isBig  = bigSmallFont && idx % 2 === 0;
+    const isSmall = bigSmallFont && idx % 2 !== 0;
+    return <span key={i} className="pw" style={{display:"inline-block",marginRight:"0.22em",...(isBig?{fontSize:"1.38em",fontWeight:900,letterSpacing:"-0.03em",verticalAlign:"middle"}:{}),...(isSmall?{fontSize:"0.68em",fontWeight:600,letterSpacing:"0.01em",verticalAlign:"middle",opacity:0.82}:{})}}>{tok}</span>;
   });
 }
-function makeSpan(word: string, gIdx: number, efs: number): React.ReactElement {
-  const sm=echoWordSm(word,gIdx); const sacred=isSacred(word);
+function makeSpan(word: string, gIdx: number, efs: number, sacredSm=1.75, contentSm=1.30, funcSm=0.62): React.ReactElement {
+  const sm=echoWordSm(word,gIdx,sacredSm,contentSm,funcSm); const sacred=isSacred(word);
   return <span key={gIdx} className="pw" style={{fontSize:Math.round(efs*sm),fontWeight:900,letterSpacing:sm>1?"-0.03em":"-0.01em",lineHeight:0.9,color:"#fff",textShadow:sacred?"0 0 40px rgba(255,220,80,0.65), 0 3px 40px rgba(0,0,0,0.99)":"0 3px 40px rgba(0,0,0,0.99)",textTransform:"uppercase",display:"inline-block",verticalAlign:"baseline"}}>{word}</span>;
 }
 
@@ -105,6 +117,11 @@ export default function LiveDisplayLocalPage() {
   const bgVideoDivRef = useRef<HTMLDivElement>(null);
   const bgImgRef      = useRef<HTMLImageElement>(null);
   const bgImgSrcRef   = useRef<string>("");
+  // ── Crossfade outgoing layer ───────────────────────────────────────────────
+  const bgOutVideoDivRef = useRef<HTMLDivElement>(null);
+  const bgOutVideoRef    = useRef<HTMLVideoElement>(null);
+  const bgOutImgRef      = useRef<HTMLImageElement>(null);
+  const crossfadeTimerRef = useRef<ReturnType<typeof setTimeout>|null>(null);
 
 
   const [box, setBox] = useState({w:0,h:0});
@@ -117,20 +134,54 @@ export default function LiveDisplayLocalPage() {
   },[]);
   const fs = box.w>0 ? Math.round(box.w*0.10) : 192;
 
-  // ── Imperatively update the persistent video/img src ─────────────────────
-  // This runs after every render so we never remount the element — just swap src.
+  // ── Imperatively update the persistent video/img src with crossfade ─────────
   useEffect(()=>{
     const bv = live?.bgVideo ?? null;
     const videoEl  = bgVideoRef.current;
     const videoDiv = bgVideoDivRef.current;
     const imgEl    = bgImgRef.current;
+    const outVideoDiv = bgOutVideoDivRef.current;
+    const outVideoEl  = bgOutVideoRef.current;
+    const outImgEl    = bgOutImgRef.current;
 
-    if(bv && (bv.type==="local"||bv.type==="firebase")){
+    const triggerCrossfade = (fromSrc: string, fromType: "video"|"image") => {
+      if (!fromSrc) return;
+      // Cancel any in-progress crossfade
+      if (crossfadeTimerRef.current) clearTimeout(crossfadeTimerRef.current);
+      // Populate outgoing layer with the old source
+      if (fromType === "video" && outVideoEl && outVideoDiv) {
+        outVideoEl.src = fromSrc;
+        outVideoEl.load();
+        outVideoEl.play().catch(()=>{});
+        outVideoDiv.style.display = "block";
+        outVideoDiv.style.opacity = "1";
+        outVideoDiv.style.transition = "none";
+        // Trigger reflow then fade out
+        void outVideoDiv.offsetHeight;
+        outVideoDiv.style.transition = "opacity 0.85s ease";
+        outVideoDiv.style.opacity = "0";
+      } else if (fromType === "image" && outImgEl && outVideoDiv) {
+        outImgEl.src = fromSrc;
+        outImgEl.style.display = "block";
+        if (outVideoDiv) { outVideoDiv.style.display = "block"; outVideoDiv.style.opacity = "1"; outVideoDiv.style.transition = "none"; }
+        void outVideoDiv?.offsetHeight;
+        if (outVideoDiv) { outVideoDiv.style.transition = "opacity 0.85s ease"; outVideoDiv.style.opacity = "0"; }
+      }
+      // Hide outgoing layer after fade completes
+      crossfadeTimerRef.current = setTimeout(() => {
+        if (outVideoDiv) outVideoDiv.style.display = "none";
+        if (outVideoEl)  { outVideoEl.src = ""; outVideoEl.load(); }
+        if (outImgEl)    outImgEl.style.display = "none";
+      }, 900);
+    };
+
+    if(bv &&(bv.type==="local"||bv.type==="firebase")){
       const safeLocal = (bv as {localUrl?:string}).localUrl && !(bv as {localUrl?:string}).localUrl!.startsWith("blob:") ? (bv as {localUrl?:string}).localUrl! : null;
       const nextSrc = safeLocal || (bv as {url:string}).url;
       if(videoDiv)  { videoDiv.style.display="block"; }
       if(imgEl)     { imgEl.style.display="none"; }
       if(videoEl && nextSrc !== bgVideoSrcRef.current){
+        triggerCrossfade(bgVideoSrcRef.current, "video");
         bgVideoSrcRef.current = nextSrc;
         videoEl.src = nextSrc;
         videoEl.load();
@@ -141,6 +192,7 @@ export default function LiveDisplayLocalPage() {
       const nextSrc = safeLocal || (bv as {url:string}).url;
       if(videoDiv) { videoDiv.style.display="none"; }
       if(imgEl && nextSrc !== bgImgSrcRef.current){
+        triggerCrossfade(bgImgSrcRef.current, "image");
         bgImgSrcRef.current = nextSrc;
         imgEl.src = nextSrc;
         imgEl.style.display="block";
@@ -152,57 +204,56 @@ export default function LiveDisplayLocalPage() {
     }
   });  // runs every render — cheap ref checks prevent unnecessary work
 
-  // Ignore fadeScreen on the FIRST state received — it's stale from a previous
-  // session. Fade should only activate from a live controller push this session.
-  const isFirstStateRef = useRef(true);
-
-  // ── Core state applier (shared by SSE + poll) ─────────────────────────────
-  const applyState = (data: LiveState) => {
-    const key=`${data.updatedAt}`;
-    if(key===lastKeyRef.current) return;
-    lastKeyRef.current=key;
-    if(data.transitioning){ setFadeBlack(true); return; }
-    setFadeBlack(false);
-    // Strip fadeScreen on first state — prevents stale overlay from blocking OBS on load
-    const suppressFade = isFirstStateRef.current;
-    isFirstStateRef.current = false;
-    if(!suppressFade && data.fadeScreen){
-      const bg=data.fadeScreenBg??{type:"color",color:"#000"};
-      prevFadeScreenRef.current=bg; setFadeScreen(bg as LiveState["fadeScreenBg"]);
-    } else { setFadeScreen(null); }
-    if(data._fadeOnly) return;
-    const lyricsEl=lyricsRef.current;
-    if(!lyricsEl){ setLive(data); return; }
-    if(loopCleanupRef.current){ loopCleanupRef.current(); loopCleanupRef.current=null; }
-    if(rafRef.current!==null){ cancelAnimationFrame(rafRef.current); rafRef.current=null; }
-    gsap.killTweensOf(lyricsEl);
-    const ac=Array.from(lyricsEl.querySelectorAll("*"));
-    gsap.killTweensOf(ac); gsap.set(ac,{clearProps:"opacity,transform,filter,scale"});
-    if(data.visible&&data.lines.length>0){
-      animatingRef.current=true;
-      gsap.to(lyricsEl,{opacity:0,duration:0.2,ease:"power2.in",onComplete:()=>{
-        setLive(data);
-        rafRef.current=requestAnimationFrame(()=>requestAnimationFrame(()=>{
-          rafRef.current=null;
-          gsap.set(lyricsEl,{opacity:1});
-          gsap.set(Array.from(lyricsEl.querySelectorAll("*")),{clearProps:"opacity,transform,filter,scale"});
-          animIn(lyricsEl,data.animStyle);
-          animatingRef.current=false;
-          if(data.loopEnabled!==false)
-            loopCleanupRef.current=idleLoop(lyricsEl,data.animStyle,data.loopInterval??3500);
-        }));
-      }});
-    } else {
-      animatingRef.current=false;
-      gsap.to(lyricsEl,{opacity:0,duration:0.35,ease:"power2.in",onComplete:()=>setLive(data)});
-    }
-  };
-
   // ── Connection: SSE primary, poll fallback ────────────────────────────────
+  // applyState is defined INSIDE the effect (mirrors LiveDisplayPage.tsx) so
+  // SSE/poll handlers always use fresh refs — eliminates stale-closure risk.
   useEffect(()=>{
     let pollInterval: ReturnType<typeof setInterval>|null=null;
     let es: EventSource|null=null;
     let sseOk=false;
+    // suppressNextFade: ignore the very first fadeScreen so stale overlay from
+    // a previous session doesn't block OBS on load.
+    let suppressNextFade = true;
+
+    const applyStateLocal = (data: LiveState) => {
+      const key=`${data.updatedAt}`;
+      if(key===lastKeyRef.current) return;
+      lastKeyRef.current=key;
+      if(data.transitioning){ setFadeBlack(true); return; }
+      setFadeBlack(false);
+      const suppressFade = suppressNextFade;
+      suppressNextFade = false;
+      if(!suppressFade && data.fadeScreen){
+        const bg=data.fadeScreenBg??{type:"color",color:"#000"};
+        prevFadeScreenRef.current=bg; setFadeScreen(bg as LiveState["fadeScreenBg"]);
+      } else { setFadeScreen(null); }
+      if(data._fadeOnly) return;
+      const lyricsEl=lyricsRef.current;
+      if(!lyricsEl){ setLive(data); return; }
+      if(loopCleanupRef.current){ loopCleanupRef.current(); loopCleanupRef.current=null; }
+      if(rafRef.current!==null){ cancelAnimationFrame(rafRef.current); rafRef.current=null; }
+      gsap.killTweensOf(lyricsEl);
+      const ac=Array.from(lyricsEl.querySelectorAll("*"));
+      gsap.killTweensOf(ac); gsap.set(ac,{clearProps:"opacity,transform,filter,scale"});
+      if(data.visible&&data.lines.length>0){
+        animatingRef.current=true;
+        gsap.to(lyricsEl,{opacity:0,duration:0.2,ease:"power2.in",onComplete:()=>{
+          setLive(data);
+          rafRef.current=requestAnimationFrame(()=>requestAnimationFrame(()=>{
+            rafRef.current=null;
+            gsap.set(lyricsEl,{opacity:1});
+            gsap.set(Array.from(lyricsEl.querySelectorAll("*")),{clearProps:"opacity,transform,filter,scale"});
+            animIn(lyricsEl,data.animStyle,{echoAnimDuration:data.echoAnimDuration,echoBounce:data.echoBounce});
+            animatingRef.current=false;
+            if(data.loopEnabled!==false)
+              loopCleanupRef.current=idleLoop(lyricsEl,data.animStyle,data.loopInterval??3500);
+          }));
+        }});
+      } else {
+        animatingRef.current=false;
+        gsap.to(lyricsEl,{opacity:0,duration:0.35,ease:"power2.in",onComplete:()=>setLive(data)});
+      }
+    };
 
     const startPoll=()=>{
       if(pollInterval) return;
@@ -211,7 +262,7 @@ export default function LiveDisplayLocalPage() {
         try{
           const r=await fetch("/api/live-state",{cache:"no-store"});
           if(!r.ok) return;
-          applyState(await r.json()); setConnected(true);
+          applyStateLocal(await r.json()); setConnected(true);
         } catch { setConnected(false); }
       },300);
     };
@@ -221,13 +272,12 @@ export default function LiveDisplayLocalPage() {
     const connectSSE=()=>{
       es=new EventSource("/api/live-sse");
       es.onopen=()=>{ sseOk=true; stopPoll(); setConnected(true); setConnMode("sse"); console.log("[LiveDisplayLocal] SSE connected"); };
-      es.onmessage=(e)=>{ try{ applyState(JSON.parse(e.data)); setConnected(true); }catch{} };
+      es.onmessage=(e)=>{ try{ applyStateLocal(JSON.parse(e.data)); setConnected(true); }catch{} };
       es.onerror=()=>{
         sseOk=false; setConnected(false);
         console.warn("[LiveDisplayLocal] SSE error — falling back to polling");
         es?.close(); es=null;
         startPoll();
-        // retry SSE after 5s
         setTimeout(()=>{ if(!sseOk){ stopPoll(); connectSSE(); } },5000);
       };
     };
@@ -238,12 +288,20 @@ export default function LiveDisplayLocalPage() {
 
   // ── Echo marquee ─────────────────────────────────────────────────────────
   useEffect(()=>{
+    // ── ALWAYS clean up previous marquee first ──────────────────────────────
     if(echoTimerRef.current){ clearTimeout(echoTimerRef.current); echoTimerRef.current=null; }
     marqueeTrackTweens.current.forEach(t=>t.kill()); marqueeTrackTweens.current=[];
-    if(marqueeRef.current){ gsap.killTweensOf(marqueeRef.current); gsap.set(marqueeRef.current,{opacity:0}); }
+    if(marqueeRef.current){
+      gsap.killTweensOf(marqueeRef.current);
+      gsap.set(marqueeRef.current,{opacity:0});
+    }
     if(lyricsRef.current){ gsap.killTweensOf(lyricsRef.current); gsap.set(lyricsRef.current,{scale:1,clearProps:"scale"}); }
     setEchoText("");
-    if(!live||!live.visible||live.animStyle!=="echo") return;
+
+    // ── Guards: only start marquee if all conditions are met ─────────────────
+    if(!live || !live.visible || live.animStyle!=="echo") return;
+    if(live.echoMarquee === false) return;   // explicit false = OFF; null/undefined = ON (default)
+
     let cancelled=false;
     setEchoText(live.lines[0]??"");
     echoTimerRef.current=setTimeout(()=>{
@@ -267,41 +325,43 @@ export default function LiveDisplayLocalPage() {
       }
     },550);
     return ()=>{ cancelled=true; if(echoTimerRef.current){ clearTimeout(echoTimerRef.current); echoTimerRef.current=null; } marqueeTrackTweens.current.forEach(t=>t.kill()); marqueeTrackTweens.current=[]; if(marqueeRef.current){ gsap.killTweensOf(marqueeRef.current); gsap.set(marqueeRef.current,{opacity:0}); } if(lyricsRef.current){ gsap.killTweensOf(lyricsRef.current); gsap.set(lyricsRef.current,{scale:1,clearProps:"scale"}); } setEchoText(""); };
-  },[live]); // eslint-disable-line
+  // Depend on updatedAt — unique per push — guarantees this runs on every state change
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[live?.updatedAt]);
 
-  // ── Echo render ───────────────────────────────────────────────────────────
   const renderEcho=(data:LiveState,fsVal:number):React.ReactElement=>{
     const allWords=data.lines.flatMap(l=>l.split(/\s+/).filter(Boolean));
     const echoAlign=data.echoAlign??"center"; const echoLinesV=data.echoLines??"auto";
     const echoLineHeight=data.echoLineHeight??1.0; const lineCount=echoLinesV==="auto"?null:parseInt(echoLinesV);
     const jc=echoAlign==="center"?"center":"flex-start"; const ml=echoAlign==="left"?"0":"0 auto";
+    const ss=data.echoSacredScale??1.75; const cs=data.echoContentScale??1.30; const fs2=data.echoFuncScale??0.62;
     const CHAR_W=0.63; const GAP_R=0.18; const maxPx=box.w*0.88; const availH=box.h*0.82;
     const safeFsForRows=(rows:string[][],desiredFs:number):number=>{
       let safe=desiredFs; let gIdx=0;
       for(const row of rows){
-        const rf=row.reduce((sum,word,wi)=>{ const sm=echoWordSm(word,gIdx+wi); return sum+word.length*CHAR_W*sm+(wi>0?GAP_R:0); },0);
+        const rf=row.reduce((sum,word,wi)=>{ const sm=echoWordSm(word,gIdx+wi,ss,cs,fs2); return sum+word.length*CHAR_W*sm+(wi>0?GAP_R:0); },0);
         gIdx+=row.length; if(rf>0) safe=Math.min(safe,maxPx/rf);
       }
       return Math.round(Math.max(safe,fsVal*0.80));
     };
     if(lineCount){
-      const rowSize=Math.ceil(allWords.length/lineCount); const rows:string[][]=[];
+      const rowSize=Math.ceil(allWords.length/lineCount); const rows:string[][]=[]; 
       for(let i=0;i<allWords.length;i+=rowSize) rows.push(allWords.slice(i,i+rowSize));
       const desired=fsVal*(lineCount===2?1.25:1.45); const widthFs=safeFsForRows(rows,desired);
       let gIdxH=0;
-      const rowMaxSms=rows.map(row=>{ const m=row.reduce((acc,w,wi)=>Math.max(acc,echoWordSm(w,gIdxH+wi)),0)||1.0; gIdxH+=row.length; return m; });
+      const rowMaxSms=rows.map(row=>{ const m=row.reduce((acc,w,wi)=>Math.max(acc,echoWordSm(w,gIdxH+wi,ss,cs,fs2)),0)||1.0; gIdxH+=row.length; return m; });
       const totalSmH=rowMaxSms.reduce((a,b)=>a+b,0); const gapH=(rows.length-1)*echoLineHeight*0.10;
       const maxFsByH=availH/(totalSmH+gapH); const echoFs=Math.min(widthFs,Math.round(maxFsByH));
       const rowGap=Math.max(4,Math.round(echoFs*echoLineHeight*0.10)); let gIdx=0;
-      return <div style={{display:"flex",flexDirection:"column",alignItems:echoAlign==="center"?"center":"flex-start",gap:`${rowGap}px`,maxWidth:`${maxPx}px`,margin:ml}}>{rows.map((rw,ri)=><div key={ri} style={{display:"flex",justifyContent:jc,alignItems:"baseline",gap:`${Math.round(echoFs*0.18)}px`}}>{rw.map(word=>makeSpan(word,gIdx++,echoFs))}</div>)}</div>;
+      return <div style={{display:"flex",flexDirection:"column",alignItems:echoAlign==="center"?"center":"flex-start",gap:`${rowGap}px`,maxWidth:`${maxPx}px`,margin:ml}}>{rows.map((rw,ri)=><div key={ri} style={{display:"flex",justifyContent:jc,alignItems:"baseline",gap:`${Math.round(echoFs*0.18)}px`}}>{rw.map(word=>makeSpan(word,gIdx++,echoFs,ss,cs,fs2))}</div>)}</div>;
     }
     const maxWordLen=allWords.reduce((m,w)=>Math.max(m,w.length),0);
-    const maxFsWord=maxWordLen>0?(maxPx*0.80)/(maxWordLen*CHAR_W*1.30):fsVal;
+    const maxFsWord=maxWordLen>0?(maxPx*0.80)/(maxWordLen*CHAR_W*cs):fsVal;
     const estRows=Math.max(1,Math.round(allWords.length/3));
     const maxFsByH=availH/(estRows*1.40+(estRows-1)*echoLineHeight*0.10);
     const autoFs=Math.round(Math.min(fsVal,maxFsWord,maxFsByH));
     const autoRowGap=Math.max(2,Math.round(autoFs*echoLineHeight*0.05));
-    return <div style={{display:"flex",flexWrap:"wrap",justifyContent:jc,alignItems:"baseline",gap:`${autoRowGap}px ${Math.round(autoFs*0.18)}px`,maxWidth:`${maxPx}px`,margin:ml}}>{allWords.map((word,i)=>makeSpan(word,i,autoFs))}</div>;
+    return <div style={{display:"flex",flexWrap:"wrap",justifyContent:jc,alignItems:"baseline",gap:`${autoRowGap}px ${Math.round(autoFs*0.18)}px`,maxWidth:`${maxPx}px`,margin:ml}}>{allWords.map((word,i)=>makeSpan(word,i,autoFs,ss,cs,fs2))}</div>;
   };
 
   const bgStyle   = BG_PRESETS[live?.bgIdx??0]??BG_PRESETS[0];
@@ -332,13 +392,19 @@ export default function LiveDisplayLocalPage() {
            A single <video> element lives here permanently. Its src is updated
            imperatively via useEffect above. This prevents OBS Browser Source
            from freezing on the first frame whenever lyrics change. */}
-      <div ref={bgVideoDivRef} style={{position:"absolute",inset:0,overflow:"hidden",zIndex:0,display:"none"}}>
+      <div ref={bgVideoDivRef} style={{position:"absolute",inset:0,overflow:"hidden",zIndex:1,display:"none"}}>
         <video ref={bgVideoRef} autoPlay loop muted playsInline style={{width:"100%",height:"100%",objectFit:"cover"}} />
         <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.45)"}} />
       </div>
-      <div style={{position:"absolute",inset:0,overflow:"hidden",zIndex:0,display:"contents"}}>
-        <img ref={bgImgRef} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",display:"none"}} />
-        {live?.bgVideo?.type==="image-firebase" && <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.45)",zIndex:0}} />}
+      <div style={{position:"absolute",inset:0,overflow:"hidden",zIndex:1,display:"contents"}}>
+        <img ref={bgImgRef} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",display:"none",zIndex:1}} />
+        {live?.bgVideo?.type==="image-firebase" && <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.45)",zIndex:1}} />}
+      </div>
+      {/* ── Crossfade outgoing layer — fades out the old bg when source changes ── */}
+      <div ref={bgOutVideoDivRef} style={{position:"absolute",inset:0,overflow:"hidden",zIndex:2,display:"none",pointerEvents:"none"}}>
+        <video ref={bgOutVideoRef} autoPlay loop muted playsInline style={{width:"100%",height:"100%",objectFit:"cover"}} />
+        <img ref={bgOutImgRef} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",display:"none"}} />
+        <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.45)"}} />
       </div>
       {/* YouTube iframe BG — only when type is youtube (can't be persistent) */}
       {live?.bgVideo?.type==="youtube"&&(
@@ -350,14 +416,13 @@ export default function LiveDisplayLocalPage() {
       <div style={{position:"absolute",inset:0,background:"radial-gradient(ellipse at center, transparent 35%, rgba(0,0,0,0.7) 100%)",pointerEvents:"none",zIndex:0}} />
       <div style={{position:"absolute",inset:0,background:"radial-gradient(ellipse 70% 35% at 50% 25%, rgba(100,60,220,0.07) 0%, transparent 70%)",pointerEvents:"none",zIndex:0}} />
       {/* Echo marquee */}
-      {echoText&&(
-        <div ref={marqueeRef} style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",overflow:"hidden",opacity:0,zIndex:0,pointerEvents:"none"}}>
-          {Array.from({length:NUM_ROWS},(_,i)=>{
-            const track=`${echoText}${GAP}${echoText}${GAP}`;
-            return <div key={i} style={{flex:1,overflow:"hidden",display:"flex",alignItems:"center"}}><div className="mqtrack" style={{whiteSpace:"nowrap",display:"inline-block",fontSize:fs*1.8,fontWeight:900,letterSpacing:"-0.02em",lineHeight:1,color:"rgba(255,255,255,0.14)",userSelect:"none"}}>{track}</div></div>;
-          })}
-        </div>
-      )}
+      {/* Echo marquee — always mounted so marqueeRef.current is never null */}
+      <div ref={marqueeRef} style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",overflow:"hidden",opacity:0,zIndex:0,pointerEvents:"none"}}>
+        {echoText&&Array.from({length:NUM_ROWS},(_,i)=>{
+          const track=`${echoText}${GAP}${echoText}${GAP}`;
+          return <div key={i} style={{flex:1,overflow:"hidden",display:"flex",alignItems:"center"}}><div className="mqtrack" style={{whiteSpace:"nowrap",display:"inline-block",fontSize:fs*1.8,fontWeight:900,letterSpacing:"-0.02em",lineHeight:1,color:"rgba(255,255,255,0.14)",userSelect:"none"}}>{track}</div></div>;
+        })}
+      </div>
       {/* Lyrics */}
       <div style={{position:"relative",zIndex:1,width:"100%",textAlign:"center",transform:`scale(${live?.lyricsScale??1})`,transformOrigin:"center center"}}>
         <div ref={lyricsRef} style={{opacity:0,width:"100%"}}>
@@ -365,8 +430,8 @@ export default function LiveDisplayLocalPage() {
             live.animStyle==="echo"
               ? renderEcho(live,fs)
               : live.lines.map((line,i)=>(
-                  <p key={`${live.updatedAt}-${i}`} className="pl" style={{margin:`0 0 ${Math.round(fs*(live.echoLineHeight??1.0)*0.18)}px`,lineHeight:live.echoLineHeight??1.0,fontSize:fs,fontWeight:900,color:"#fff",textShadow:"0 3px 40px rgba(0,0,0,0.99), 0 2px 8px rgba(0,0,0,0.95)",letterSpacing:"-0.02em",display:"block",width:"100%",whiteSpace:"normal",wordBreak:"normal",overflowWrap:"normal"}}>
-                    {renderLine(line,live.animStyle)}
+                  <p key={`${live.updatedAt}-${i}`} className="pl" style={{margin:`0 0 ${Math.round(fs*(live.echoLineHeight??1.0)*0.18)}px`,lineHeight:live.echoLineHeight??1.0,fontSize:fs,fontWeight:900,color:"#fff",textShadow:"0 3px 40px rgba(0,0,0,0.99), 0 2px 8px rgba(0,0,0,0.95)",letterSpacing:"-0.02em",display:"block",width:"100%",whiteSpace:"normal",wordBreak:live.animStyle==="typewriter"?"break-all":"normal",overflowWrap:live.animStyle==="typewriter"?"break-word":"normal"}}>
+                    {renderLine(line, live.animStyle, live.bigSmallFont ?? false)}
                   </p>
                 ))
           )}

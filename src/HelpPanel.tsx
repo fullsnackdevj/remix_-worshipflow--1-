@@ -4,7 +4,7 @@ import {
   Calendar, Users, Shield, Smartphone, Search, LayoutGrid,
   Mic2, Palette, Dumbbell, Gift, UserCircle, BarChart2,
   Lightbulb, CheckCircle2, Circle, Send, Loader2, ChevronDown,
-  Pencil, Trash2,
+  Pencil, Trash2, Radio,
 } from "lucide-react";
 import type { Member } from "./types";
 
@@ -494,6 +494,93 @@ const ARTICLES: Article[] = [
       </div>
     ),
   },
+
+  // 14. Live Stage
+  {
+    id: "live-stage",
+    icon: <Radio size={16} />,
+    title: "How Live Stage Works",
+    summary: "Add songs to your Scene Playlist, pick a slide, and it goes live on OBS instantly.",
+    content: (
+      <div className="space-y-3 text-sm leading-relaxed">
+
+        <Sh>The layout at a glance</Sh>
+        <div className="space-y-1 text-xs text-gray-500 dark:text-gray-400">
+          <p>• <B>Left panel</B> — Scene Playlist (your song lineup for tonight)</p>
+          <p>• <B>Center</B> — Lyrics slide grid (all slides for the selected song)</p>
+          <p>• <B>Right panel</B> — Live Preview (mini view of what OBS is showing)</p>
+        </div>
+
+        <Sh>Step 1 — Add songs to your Scene Playlist</Sh>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          The <B>Scene Playlist</B> on the left is your short list for tonight — separate from the full song library.
+        </p>
+        <div className="space-y-1 text-xs text-gray-500 dark:text-gray-400">
+          <p>1. Tap the <B>green + button</B> (top-left toolbar) to open the song search panel.</p>
+          <p>2. Search for a song, then tap <B>+ Add</B> to add it to the playlist.</p>
+          <p>3. To remove a song, tap the <B>red − button</B> next to it in the playlist.</p>
+        </div>
+        <Tip>Your Scene Playlist is saved automatically — it stays even after you refresh the page.</Tip>
+
+        <Sh>Step 2 — Select a song</Sh>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Tap the <B>"Select a song…" dropdown</B> in the toolbar and choose a song from your Scene Playlist.
+          The center grid fills with all the lyric slides for that song (Verse, Chorus, Bridge, etc.).
+        </p>
+        <Tip>The dropdown only shows songs from your Scene Playlist. If it's empty, add songs first.</Tip>
+
+        <Sh>Step 3 — Tap a slide to go live</Sh>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Tap any slide in the grid. The lyrics push to OBS immediately. The active slide glows with a purple border.
+        </p>
+        <div className="space-y-1 text-xs text-gray-500 dark:text-gray-400">
+          <p>• Tap the active (glowing) slide again to <B>clear the screen</B>.</p>
+          <p>• On a keyboard, use <B>← →</B> arrow keys to step through slides.</p>
+        </div>
+
+        <Sh>Toolbar buttons (left side)</Sh>
+        <div className="space-y-1 text-xs text-gray-500 dark:text-gray-400">
+          <p>• <B>+ (green)</B> — show/hide the Scene Playlist panel</p>
+          <p>• <B>👁‍🗨 (eye-off)</B> — toggle the Fade Screen on/off</p>
+          <p>• <B>⚡ (lightning)</B> — apply the Praise preset (amber)</p>
+          <p>• <B>♥ (heart)</B> — apply the Worship preset (violet)</p>
+        </div>
+
+        <Sh>Toolbar buttons (right side)</Sh>
+        <div className="space-y-1 text-xs text-gray-500 dark:text-gray-400">
+          <p>• <B>Media Library</B> — upload background images and videos for your presets</p>
+          <p>• <B>OBS Online</B> — copy the URL for OBS when you have internet (uses cloud sync)</p>
+          <p>• <B>OBS Offline</B> — copy the URL for OBS when at camp without internet (uses local server)</p>
+          <p>• <B>Live Preview</B> — toggle the mini preview panel on the right</p>
+          <p>• <B>Settings ⚙️</B> — customize Praise and Worship presets (background, animation, text size)</p>
+        </div>
+
+        <Sh>Fade Screen</Sh>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Tap the <B>eye-off icon</B> to fade the projector to black between songs. While faded, you can tap the next slide and it loads silently behind the black screen. Tap <B>Fade again</B> to reveal it.
+        </p>
+        <Tip>Always fade before switching songs — this hides the transition from the audience.</Tip>
+
+        <Sh>Presets — Praise &amp; Worship</Sh>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Tap <B>⚡</B> or <B>♥</B> to switch between presets. Each preset has its own background, text animation, and timing. Go to <B>Settings</B> to customize them. Changes only apply when you tap <B>Save</B> — Cancel discards them safely.
+        </p>
+
+        <Sh>Live Preview panel</Sh>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          The panel on the right shows a small live view of exactly what OBS is displaying right now — including the current slide, background, and fade overlay. Tap <B>× close</B> to hide it and get more grid space.
+        </p>
+
+        <Sh>Camp Readiness Check 🏕️</Sh>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          See the <B>Camp Ready</B> button at the top? Tap it before heading to camp to verify all 6 offline requirements are ready — songs cached, login saved, background videos on disk, and more. Run it while still on Wi-Fi.
+        </p>
+        <Tip>All green = safe to go offline. Red items need to be fixed before disconnecting from the internet.</Tip>
+
+        <Warn>Only one person should operate Live Stage during a service — two people pushing slides at the same time will conflict on the projector.</Warn>
+      </div>
+    ),
+  },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -510,6 +597,7 @@ type HelpTab = "guides" | "progress";
 // ── Props ─────────────────────────────────────────────────────────────────────
 interface HelpPanelProps {
   isAdmin: boolean;
+  userRole?: string;
   userId?: string;
   userName?: string;
   userEmail?: string;
@@ -520,6 +608,7 @@ interface HelpPanelProps {
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function HelpPanel({
   isAdmin,
+  userRole = "member",
   userId = "",
   userName = "",
   userEmail = "",
@@ -559,7 +648,11 @@ export default function HelpPanel({
   const [hasNewProgress, setHasNewProgress] = useState(false);
 
   // ── Visible articles ────────────────────────────────────────────────────────
-  const visibleArticles = ARTICLES.filter(a => !a.adminOnly || isAdmin);
+  // Guest users only see the Live Stage guide
+  const isGuest = userRole === "guest";
+  const visibleArticles = isGuest
+    ? ARTICLES.filter(a => a.id === "live-stage")
+    : ARTICLES.filter(a => !a.adminOnly || isAdmin);
   const publicArticles = ARTICLES.filter(a => !a.adminOnly);
   const filteredArticles = query.trim()
     ? visibleArticles.filter(a =>
@@ -868,8 +961,8 @@ export default function HelpPanel({
             </div>
           )}
 
-          {/* ── Search bar (guides tab, list view only) ───────────────────── */}
-          {!activeArticle && tab === "guides" && (
+          {/* ── Search bar (guides tab, list view only, non-guests) ─────────── */}
+          {!activeArticle && tab === "guides" && !isGuest && (
             <div className="px-3 py-2.5 border-b border-gray-200 dark:border-gray-700/60 shrink-0">
               <div className="relative">
                 <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />

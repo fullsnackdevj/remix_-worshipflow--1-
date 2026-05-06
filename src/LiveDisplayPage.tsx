@@ -39,6 +39,13 @@ interface LiveState {
   transitioning?: boolean;
   fadeScreen?: boolean;
   fadeScreenBg?: { type: "color"; color: string } | { type: "image-url"; url: string } | { type: "image-local"; url: string } | { type: "image-firebase"; url: string } | { type: "video-local"; url: string } | { type: "video-firebase"; url: string } | { type: "video-youtube"; videoId: string };
+  echoSacredScale?: number;
+  echoContentScale?: number;
+  echoFuncScale?: number;
+  echoAnimDuration?: number;
+  echoBounce?: number;
+  echoMarquee?: boolean;
+  bigSmallFont?: boolean; // alternate big/small word sizes
   _fadeOnly?: boolean; // when true: ONLY update overlay, skip lyric animation (fade toggle, not slide change)
 }
 
@@ -64,16 +71,15 @@ const FUNC_WORDS = new Set([
   'a','an','the','to','of','in','at','by','for','on','and','or','but',
   'is','are','was','were','i','we','he','she','it','my','our','your','his','her','its',
 ]);
-function echoWordSm(word: string, gIdx: number): number {
-  // Sacred words are BIGGEST — always elevated
-  if (isSacred(word)) return 1.75;
-  if (FUNC_WORDS.has(word.toLowerCase())) return 0.62;
+function echoWordSm(word: string, gIdx: number, sacredSm = 1.75, contentSm = 1.30, funcSm = 0.62): number {
+  if (isSacred(word)) return sacredSm;
+  if (FUNC_WORDS.has(word.toLowerCase())) return funcSm;
   const hash = word.toLowerCase().split('').reduce((a, c) => a + c.charCodeAt(0), 0) + gIdx * 11;
-  return (hash % 3 === 0) ? 0.68 : 1.30;
+  return (hash % 3 === 0) ? funcSm : contentSm;
 }
 
 // ── GSAP animation — exact mirror of animIn() in LiveStageView ───────────────
-function animIn(el: HTMLElement, style: AnimStyle) {
+function animIn(el: HTMLElement, style: AnimStyle, opts?: { echoAnimDuration?: number; echoBounce?: number }) {
   const ws = Array.from(el.querySelectorAll<HTMLElement>(".pw"));
   const cs = Array.from(el.querySelectorAll<HTMLElement>(".pc"));
   const ls = Array.from(el.querySelectorAll<HTMLElement>(".pl"));
@@ -89,7 +95,7 @@ function animIn(el: HTMLElement, style: AnimStyle) {
   else if (style === "echo") {
     gsap.set(el,{opacity:1});
     gsap.set(ws,{opacity:0,scale:0.35,y:20});
-    gsap.to(ws,{opacity:1,scale:1,y:0,duration:0.4,ease:"back.out(2.8)",stagger:{amount:0.55}});
+    gsap.to(ws,{opacity:1,scale:1,y:0,duration:(opts?.echoAnimDuration??400)/1000,ease:`back.out(${opts?.echoBounce??2.8})`,stagger:{amount:0.55}});
   }
   else if (style === "breathe") {
     gsap.set(ls, { opacity:1 });
@@ -117,12 +123,14 @@ function idleLoop(el: HTMLElement, style: AnimStyle, interval = 3500): () => voi
 }
 
 // ── Standard line renderer — sacred words get larger + golden glow ────────────────
-function renderLine(line: string, style: AnimStyle): React.ReactElement[] {
+function renderLine(line: string, style: AnimStyle, bigSmallFont = false): React.ReactElement[] {
   if (style === "typewriter")
     return line.split("").map((ch, i) => <span key={i} className="pc" style={{display:"inline"}}>{ch==" "?"\u00a0":ch}</span>);
+  let wordIdx = 0;
   return line.split(/(\s+)/).filter(Boolean).map((tok, i) => {
     if (!tok.trim()) return <span key={i}>&nbsp;</span>;
     if (isSacred(tok)) {
+      wordIdx++;
       return (
         <span key={i} className="pw" style={{
           display: "inline-block", marginRight: "0.22em",
@@ -133,13 +141,21 @@ function renderLine(line: string, style: AnimStyle): React.ReactElement[] {
         }}>{tok}</span>
       );
     }
-    return <span key={i} className="pw" style={{display:"inline-block",marginRight:"0.22em"}}>{tok}</span>;
+    const idx = wordIdx++;
+    const isBig   = bigSmallFont && idx % 2 === 0;
+    const isSmall  = bigSmallFont && idx % 2 !== 0;
+    return <span key={i} className="pw" style={{
+      display: "inline-block",
+      marginRight: "0.22em",
+      ...(isBig  ? { fontSize: "1.38em", fontWeight: 900, letterSpacing: "-0.03em", verticalAlign: "middle" } : {}),
+      ...(isSmall ? { fontSize: "0.68em", fontWeight: 600, letterSpacing: "0.01em",  verticalAlign: "middle", opacity: 0.82 } : {}),
+    }}>{tok}</span>;
   });
 }
 
 // ── Echo word span maker — sacred words glow gold, others use standard sizing ──
-function makeSpan(word: string, gIdx: number, efs: number): React.ReactElement {
-  const sm      = echoWordSm(word, gIdx);
+function makeSpan(word: string, gIdx: number, efs: number, sacredSm = 1.75, contentSm = 1.30, funcSm = 0.62): React.ReactElement {
+  const sm      = echoWordSm(word, gIdx, sacredSm, contentSm, funcSm);
   const sacred  = isSacred(word);
   return (
     <span key={gIdx} className="pw" style={{
@@ -255,7 +271,7 @@ export default function LiveDisplayPage() {
                 rafRef.current = null;
                 gsap.set(lyricsEl, { opacity: 1 });
                 gsap.set(Array.from(lyricsEl.querySelectorAll("*")), { clearProps: "opacity,transform,filter,scale" });
-                animIn(lyricsEl, data.animStyle);
+                animIn(lyricsEl, data.animStyle, { echoAnimDuration: data.echoAnimDuration, echoBounce: data.echoBounce });
                 animatingRef.current = false;
                 if (data.loopEnabled !== false)
                   loopCleanupRef.current = idleLoop(lyricsEl, data.animStyle, data.loopInterval ?? 3500);
@@ -362,6 +378,8 @@ export default function LiveDisplayPage() {
 
     if (!live || !live.visible || live.animStyle !== "echo") return;
 
+    if (live.echoMarquee === false) return;   // explicit false = OFF; null/undefined = ON (default)
+
     let cancelled = false;
     setEchoText(live.lines[0] ?? "");
     echoTimerRef.current = setTimeout(() => {
@@ -415,7 +433,9 @@ export default function LiveDisplayPage() {
       if (lyricsRef.current)  { gsap.killTweensOf(lyricsRef.current); gsap.set(lyricsRef.current, { scale: 1, clearProps: "scale" }); }
       setEchoText("");
     };
-  }, [live]); // eslint-disable-line
+  // Depend on updatedAt — unique per push — guarantees this runs on every state change
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live?.updatedAt]);
 
   // ── Echo content rendering — exact mirror of Screen's IIFE ───────────────
   const renderEcho = (data: LiveState, fsVal: number): React.ReactElement => {
@@ -426,6 +446,9 @@ export default function LiveDisplayPage() {
     const lineCount   = echoLinesV === "auto" ? null : parseInt(echoLinesV);
     const jc  = echoAlign === "center" ? "center" : "flex-start";
     const ml  = echoAlign === "left"   ? "0" : "0 auto";
+    const ss  = data.echoSacredScale  ?? 1.75;
+    const cs  = data.echoContentScale ?? 1.30;
+    const fs2 = data.echoFuncScale    ?? 0.62;
 
     const CHAR_W = 0.63;
     const GAP_R  = 0.18;
@@ -438,7 +461,7 @@ export default function LiveDisplayPage() {
       let gIdx = 0;
       for (const row of rows) {
         const rowFactor = row.reduce((sum, word, wi) => {
-          const sm = echoWordSm(word, gIdx + wi);
+          const sm = echoWordSm(word, gIdx + wi, ss, cs, fs2);
           return sum + word.length * CHAR_W * sm + (wi > 0 ? GAP_R : 0);
         }, 0);
         gIdx += row.length;
@@ -456,7 +479,7 @@ export default function LiveDisplayPage() {
       // Height constraint — mirrors Screen logic exactly
       let gIdxH = 0;
       const rowMaxSms = rows.map(row => {
-        const m = row.reduce((acc, w, wi) => Math.max(acc, echoWordSm(w, gIdxH + wi)), 0) || 1.0;
+        const m = row.reduce((acc, w, wi) => Math.max(acc, echoWordSm(w, gIdxH + wi, ss, cs, fs2)), 0) || 1.0;
         gIdxH += row.length;
         return m;
       });
@@ -470,7 +493,7 @@ export default function LiveDisplayPage() {
         <div style={{ display:"flex", flexDirection:"column", alignItems: echoAlign === "center" ? "center" : "flex-start", gap:`${rowGap}px`, maxWidth:`${maxPx}px`, margin:ml }}>
           {rows.map((rw, ri) => (
             <div key={ri} style={{ display:"flex", justifyContent:jc, alignItems:"baseline", gap:`${Math.round(echoFs*0.18)}px` }}>
-              {rw.map(word => makeSpan(word, gIdx++, echoFs))}
+              {rw.map(word => makeSpan(word, gIdx++, echoFs, ss, cs, fs2))}
             </div>
           ))}
         </div>
@@ -479,14 +502,14 @@ export default function LiveDisplayPage() {
 
     // Auto — width + height clamped, mirrors Screen exactly
     const maxWordLen = allWords.reduce((m, w) => Math.max(m, w.length), 0);
-    const maxFsWord  = maxWordLen > 0 ? (maxPx * 0.80) / (maxWordLen * CHAR_W * 1.30) : fsVal;
+    const maxFsWord  = maxWordLen > 0 ? (maxPx * 0.80) / (maxWordLen * CHAR_W * cs) : fsVal;
     const estRows    = Math.max(1, Math.round(allWords.length / 3));
     const maxFsByH   = availH / (estRows * 1.40 + (estRows - 1) * echoLineHeight * 0.10);
     const autoFs     = Math.round(Math.min(fsVal, maxFsWord, maxFsByH));
     const autoRowGap = Math.max(2, Math.round(autoFs * echoLineHeight * 0.05));
     return (
       <div style={{ display:"flex", flexWrap:"wrap", justifyContent:jc, alignItems:"baseline", gap:`${autoRowGap}px ${Math.round(autoFs*0.18)}px`, maxWidth:`${maxPx}px`, margin:ml }}>
-        {allWords.map((word, i) => makeSpan(word, i, autoFs))}
+        {allWords.map((word, i) => makeSpan(word, i, autoFs, ss, cs, fs2))}
       </div>
     );
   };
@@ -562,10 +585,13 @@ export default function LiveDisplayPage() {
       {live?.bgVideo && (() => {
         const bv = live.bgVideo!;
         if (bv.type === "local" || bv.type === "firebase") {
-          // Prefer localUrl when offline so video plays without internet
-          const src = (bv.type === "firebase" && !navigator.onLine && bv.localUrl)
-            ? bv.localUrl
-            : bv.url;
+          // For type:"local": url is /api/live-bg-video/<preset> — always use localUrl when
+          // available (injected by injectLocalUrls on the server). Fall back to url which
+          // works as a relative path when OBS browser source is on localhost.
+          // For type:"firebase": prefer localUrl when offline (avoids Firebase Storage hit).
+          const src = ((bv as {localUrl?:string}).localUrl && !(bv as {localUrl?:string}).localUrl!.startsWith("blob:"))
+            ? (bv as {localUrl?:string}).localUrl!
+            : (bv as {url:string}).url;
           return (
             <div style={{ position:"absolute", inset:0, overflow:"hidden", zIndex:0 }}>
               <video
@@ -611,28 +637,27 @@ export default function LiveDisplayPage() {
       {/* Stage glow */}
       <div style={{ position:"absolute", inset:0, background:"radial-gradient(ellipse 70% 35% at 50% 25%, rgba(100,60,220,0.07) 0%, transparent 70%)", pointerEvents:"none", zIndex:0 }} />
 
-      {/* Marquee Echo background — 5 scrolling outline rows */}
-      {echoText && (
-        <div ref={marqueeRef} style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", overflow:"hidden", opacity:0, zIndex:0, pointerEvents:"none" }}>
-          {Array.from({ length: NUM_ROWS }, (_, i) => {
-            const track = `${echoText}${GAP}${echoText}${GAP}`;
-            return (
-              <div key={i} style={{ flex:1, overflow:"hidden", display:"flex", alignItems:"center" }}>
-                <div className="mqtrack" style={{
-                  whiteSpace: "nowrap",
-                  display: "inline-block",
-                  fontSize: fs * 1.8,
-                  fontWeight: 900,
-                  letterSpacing: "-0.02em",
-                  lineHeight: 1,
-                  color: "rgba(255,255,255,0.14)",
-                  userSelect: "none",
-                }}>{track}</div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {/* Marquee Echo background — always mounted so marqueeRef.current is never null */}
+      <div ref={marqueeRef} style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", overflow:"hidden", opacity:0, zIndex:0, pointerEvents:"none" }}>
+        {echoText && Array.from({ length: NUM_ROWS }, (_, i) => {
+          const track = `${echoText}${GAP}${echoText}${GAP}`;
+          return (
+            <div key={i} style={{ flex:1, overflow:"hidden", display:"flex", alignItems:"center" }}>
+              <div className="mqtrack" style={{
+                whiteSpace: "nowrap",
+                display: "inline-block",
+                fontSize: fs * 1.8,
+                fontWeight: 900,
+                letterSpacing: "-0.02em",
+                lineHeight: 1,
+                color: "rgba(255,255,255,0.14)",
+                userSelect: "none",
+              }}>{track}</div>
+            </div>
+          );
+        })}
+      </div>
+
 
       {/* Lyrics — outer div holds user scale (React only, never GSAP). Inner lyricsRef is GSAP-only. */}
       <div style={{ position:"relative", zIndex:1, width:"100%", textAlign:"center",
@@ -655,9 +680,9 @@ export default function LiveDisplayPage() {
                 textShadow: "0 3px 40px rgba(0,0,0,0.99), 0 2px 8px rgba(0,0,0,0.95)",
                 letterSpacing: "-0.02em",
                 display: "block", width: "100%",
-                whiteSpace: "normal", wordBreak: "normal", overflowWrap: "normal",
+                whiteSpace: "normal", wordBreak: live.animStyle==="typewriter"?"break-all":"normal", overflowWrap: live.animStyle==="typewriter"?"break-word":"normal",
               }}>
-                {renderLine(line, live.animStyle)}
+                {renderLine(line, live.animStyle, live.bigSmallFont ?? false)}
               </p>
             ))
           )

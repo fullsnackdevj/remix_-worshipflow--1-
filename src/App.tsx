@@ -208,6 +208,7 @@ const ROLE_BADGE: Record<string, { label: string; className: string }> = {
   audio_tech: { label: "Audio / Tech", className: "bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-400" },
   member: { label: "Member", className: "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300" },
   qa_specialist: { label: "QA Specialist", className: "bg-fuchsia-100 dark:bg-fuchsia-900/40 text-fuchsia-700 dark:text-fuchsia-400" },
+  guest: { label: "Guest", className: "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400" },
 };
 
 const QA_SWITCH_ROLES = [
@@ -217,6 +218,7 @@ const QA_SWITCH_ROLES = [
   { value: "musician", label: "Musician" },
   { value: "audio_tech", label: "Audio / Tech" },
   { value: "member", label: "Member" },
+  { value: "guest", label: "Guest" },
 ];
 
 function UserMenu({ simulatedRole, onRoleSwitch, plannerAccess, eventsAccess }: { simulatedRole: string; onRoleSwitch: (r: string) => void; plannerAccess?: boolean; eventsAccess?: boolean }) {
@@ -357,7 +359,7 @@ function UserMenu({ simulatedRole, onRoleSwitch, plannerAccess, eventsAccess }: 
 }
 
 export default function App() {
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Bug fix: sidebar should NEVER be collapsed on mobile — reset state when below lg breakpoint
@@ -512,7 +514,7 @@ export default function App() {
   // 🎸 Auto-collapse sidebar when entering Rehearsal mode (needs full width)
   // Desktop/tablet only  — on mobile the sidebar is already a drawer overlay
   useEffect(() => {
-    if ((currentView === "rehearsal" || currentView === "freedom-wall") && window.innerWidth >= 1024) {
+    if ((currentView === "rehearsal" || currentView === "freedom-wall" || currentView === "live-stage") && window.innerWidth >= 1024) {
       setIsSidebarCollapsed(true);
     }
   }, [currentView]);
@@ -625,6 +627,12 @@ export default function App() {
   const isPlanningLead = effectiveRole === "planning_lead";
   const isRoleAdmin = isAdmin || effectiveRole === "admin"; // covers owner email AND Firestore-assigned admin
   const isQARole = effectiveRole === "qa_specialist"; // effective QA (includes simulated)
+  const isGuest = effectiveRole === "guest"; // Guest role: Live Stage access only
+  // Auto-navigate Guest users to Live Stage (their only module)
+  useEffect(() => {
+    if (isGuest && currentView !== "live-stage") setCurrentView("live-stage");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isGuest]);
   // isDesigner: member whose Team Management role is "Designer" (Creative Support category)
   // Note: myMemberProfile is defined later via useMemo — hoisted here via lazy reference on render
   // We'll derive it after myMemberProfile is defined (see canAccessDesignRequests below)
@@ -1280,7 +1288,8 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
             </div>
           )}
 
-          {/* Dashboard — available to all roles */}
+          {/* Dashboard — hidden for Guest role */}
+          {!isGuest && (
           <div className="relative group/tip">
             <button
               onClick={() => { setCurrentView("dashboard"); setIsMobileMenuOpen(false); }}
@@ -1295,9 +1304,12 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
             </button>
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Dashboard</span>}
           </div>
+          )}
 
 
-          {/* Bible — open to ALL roles */}
+          {/* Bible through Freedom Wall — hidden for Guest role */}
+          {!isGuest && (<>
+          {/* Bible */}
           <div className="relative group/tip">
             <button
               onClick={() => { setCurrentView("bible"); setIsMobileMenuOpen(false); markBibleSeen(); }}
@@ -1331,8 +1343,9 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
             </button>
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Bible</span>}
           </div>
+          </>)}
 
-          {/* Song Management */}
+          {/* Song Management — visible to all roles including Guest (read-only for Guest) */}
           <div className="relative group/tip">
             <button
               onClick={() => { setCurrentView("songs"); setIsMobileMenuOpen(false); }}
@@ -1348,7 +1361,9 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Song Management</span>}
           </div>
 
-          {/* ── Playlist — All users ── */}
+          {/* Playlist through Freedom Wall — hidden for Guest role */}
+          {!isGuest && (<>
+          {/* ── Playlist ── */}
           <div className="relative group/tip">
             <button
               onClick={() => { setCurrentView("playlist"); setIsMobileMenuOpen(false); markPlaylistSeen(); }}
@@ -1539,9 +1554,10 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
             </button>
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Freedom Wall</span>}
           </div>
+          </>)}
 
-          {/* Live Stage — Admin OR members with liveStageAccess only */}
-          {(isRoleAdmin || myMemberProfile?.liveStageAccess) && (
+          {/* Live Stage — Admin OR members with liveStageAccess OR Guest role */}
+          {(isRoleAdmin || myMemberProfile?.liveStageAccess || isGuest) && (
             <div className="relative group/tip">
               <button
                 onClick={() => { setCurrentView("live-stage"); setIsMobileMenuOpen(false); }}
@@ -1559,8 +1575,8 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
             </div>
           )}
 
-          {/* Design Requests — Admin + Audio/Tech + Designer (team role) */}
-          {canAccessDesignRequests && (
+          {/* Design Requests — Admin + Audio/Tech + Designer, hidden for Guest */}
+          {canAccessDesignRequests && !isGuest && (
             <div className="relative group/tip">
               <button
                 onClick={() => { setCurrentView("design-requests"); setIsMobileMenuOpen(false); markDesignRequestsSeen(); }}
@@ -1592,7 +1608,8 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
             </div>
           )}
 
-          {/* Preaching — open to ALL roles */}
+          {/* Preaching — open to all roles except Guest */}
+          {!isGuest && (
           <div className="relative group/tip">
             <button
               onClick={() => { setCurrentView("preaching"); setIsMobileMenuOpen(false); markPreachingSeen(); }}
@@ -1626,6 +1643,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
             </button>
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Preaching</span>}
           </div>
+          )}
 
 
           {/* Admin Panel — admin only, always hidden for QA Specialist */}
@@ -1697,10 +1715,8 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                 }
               }}
               className={[
-                currentView === "songs" || currentView === "members" || currentView === "schedule" || currentView === "freedom-wall" || currentView === "preaching" || currentView === "bible" || currentView === "playlist"
-                  ? "lg:hidden"   // desktop sidebar-accessible views — mobile only
-                  : "",           // detached views — always visible
-                "flex items-center gap-1 py-1.5 pl-1 pr-3 rounded-xl font-semibold",
+                "lg:hidden",   // desktop: always hidden — sidebar handles navigation; mobile only
+                "flex items-center self-center gap-1 pl-1 pr-3 rounded-xl font-semibold",
                 "text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400",
                 "hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all active:scale-95",
               ].join(" ")}
@@ -1736,6 +1752,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
             {/* Help & Knowledge Base */}
             <HelpPanel
               isAdmin={isRoleAdmin}
+              userRole={effectiveRole}
               userId={user?.uid ?? ""}
               userName={user?.displayName ?? ""}
               userEmail={user?.email ?? ""}
@@ -1745,7 +1762,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
 
 
 
-            <div ref={notifRef} className="relative">
+            {!isGuest && <div ref={notifRef} className="relative">
               <button
                 id="notif-bell-btn"
                 onClick={() => { setNotifOpen(o => !o); if (!notifOpen && unreadCount > 0) { } }}
@@ -1850,7 +1867,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                 </>
               )}
 
-            </div>
+            </div>}
             <UserMenu simulatedRole={simulatedRole} onRoleSwitch={handleRoleSwitch} plannerAccess={isAdmin || (myMemberProfile?.plannerAccess ?? false)} eventsAccess={isAdmin || (myMemberProfile?.eventsAccess ?? false)} />
           </div>
         </header>
@@ -1861,7 +1878,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
         <main className="flex-1 overflow-y-auto overflow-x-hidden wf-page-bg">
           <div className="flex flex-col h-full">
             {/* ── Keep-alive LiveStageView — always mounted, shown/hidden via CSS ── */}
-            {(isRoleAdmin || myMemberProfile?.liveStageAccess) && (
+            {(isRoleAdmin || myMemberProfile?.liveStageAccess || isGuest) && (
               <div
                 style={{
                   display: currentView === "live-stage" ? "flex" : "none",
@@ -2044,6 +2061,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                   canAddSong={canAddSong}
                   canEditSong={canEditSong}
                   canDeleteSong={canDeleteSong}
+                  canAddToPlaylist={!isGuest}
                   user={user}
                   showToast={showToast}
                   showConfirm={showConfirm}

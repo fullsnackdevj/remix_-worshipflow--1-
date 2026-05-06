@@ -26,6 +26,7 @@ const ROLE_OPTIONS = [
     { value: "audio_tech", label: "Audio / Tech", color: "text-teal-600 dark:text-teal-400", bg: "bg-teal-50 dark:bg-teal-900/20", icon: <Sliders size={12} /> },
     { value: "admin", label: "Admin", color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-900/20", icon: <Shield size={12} /> },
     { value: "qa_specialist", label: "QA Specialist", color: "text-fuchsia-600 dark:text-fuchsia-400", bg: "bg-fuchsia-50 dark:bg-fuchsia-900/20", icon: <FlaskConical size={12} /> },
+    { value: "guest", label: "Guest", color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-900/20", icon: <User size={12} /> },
 ];
 
 function RoleBadge({ role }: { role: string }) {
@@ -480,6 +481,7 @@ export default function AdminPanel({
     const [grantingLiveStageId, setGrantingLiveStageId] = useState<string | null>(null);
 
     const autoGenerate = async () => {
+        if (bAutoGenerating) return; // prevent double-fire
         setBAutoGenerating(true);
         try {
             if (bType === "maintenance") {
@@ -498,28 +500,46 @@ export default function AdminPanel({
                         message: "We're upgrading WorshipFlow right now. Hang tight — exciting improvements are coming your way!",
                     },
                 ];
-                // Rotate through templates based on current time so it's not always the same
                 const pick = templates[Math.floor(Date.now() / 1000) % templates.length];
                 setBTitle(pick.title);
                 setBMessage(pick.message);
                 setBBullets([]);
+                onToast?.("success", "✨ Maintenance template generated!");
             } else {
-                // What's New — pass whatever the user typed in the message field as a topic hint
+                // What's New:
+                // • If the admin typed something in the message box → send it as the topic,
+                //   the server will parse it into structured bullet points + auto-title.
+                // • If the message box is empty → pull curated highlights from release-notes.json.
                 const topic = bMessage.trim();
                 const url = topic
                     ? `/api/release-notes?topic=${encodeURIComponent(topic)}`
                     : "/api/release-notes";
+
                 const res = await fetch(url);
-                if (!res.ok) throw new Error(`Server error ${res.status}`);
-                const data = await res.json();
+                if (!res.ok) throw new Error(`Server returned ${res.status}`);
+                const data: { title?: string; message?: string; bulletPoints?: string[]; error?: string } = await res.json();
                 if (data.error) throw new Error(data.error);
-                if (data.title) setBTitle(data.title);
-                if (data.message) setBMessage(data.message);
-                if (data.bulletPoints?.length) setBBullets(data.bulletPoints);
+
+                const newTitle   = data.title?.trim()   || "What's New in WorshipFlow";
+                const newMsg     = data.message?.trim() || "Here's what changed in the latest update:";
+                const newBullets = Array.isArray(data.bulletPoints) && data.bulletPoints.length > 0
+                    ? data.bulletPoints
+                    : [];
+
+                setBTitle(newTitle);
+                setBMessage(newMsg);
+                if (newBullets.length > 0) setBBullets(newBullets);
+                onToast?.("success", topic
+                    ? `✨ Formatted ${newBullets.length} bullet points from your notes!`
+                    : `✨ Generated ${newBullets.length} feature highlights!`
+                );
             }
         } catch (err: any) {
+            console.error("[autoGenerate] Failed:", err);
             onToast?.("error", `Auto-generate failed: ${err?.message ?? "Unknown error"}`);
-        } finally { setBAutoGenerating(false); }
+        } finally {
+            setBAutoGenerating(false);
+        }
     };
 
     const fetchBroadcasts = async () => {
@@ -976,7 +996,7 @@ export default function AdminPanel({
                             <input value={bTitle} onChange={e => setBTitle(e.target.value)} onKeyDown={e => e.stopPropagation()} placeholder={bType === "maintenance" ? "e.g. App Under Maintenance" : "e.g. New Features Added!"} className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
 
                             {/* Message */}
-                            <AutoTextarea value={bMessage} onChange={e => setBMessage(e.target.value)} placeholder="Optional message..." minRows={2} className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                            <AutoTextarea value={bMessage} onChange={e => setBMessage(e.target.value)} placeholder={bType === "whats_new" ? "Type your update notes here, then click Auto-generate to format them into bullets… or leave empty to pull from release notes." : "Optional context message..."} minRows={2} className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
 
                             {/* Bullet points (What's New only) */}
                             {bType === "whats_new" && (
