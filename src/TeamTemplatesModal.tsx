@@ -270,73 +270,88 @@ export default function TeamTemplatesModal({ onClose, allMembers, onToast }: Pro
                   </button>
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {templates.map(t => (
-                    <div key={t.id} className="rounded-2xl bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-white/[0.08] hover:border-indigo-200 dark:hover:border-indigo-700/50 transition-all overflow-hidden group">
+                    <div key={t.id} className="rounded-2xl bg-gray-800/70 border border-white/[0.07] overflow-hidden shadow-lg hover:shadow-xl hover:border-violet-500/30 transition-all duration-200">
 
-                      {/* Card row */}
-                      <div className="flex items-start gap-3 p-4">
-                        {/* Icon */}
-                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shrink-0">
-                          <Users size={16} className="text-white" />
-                        </div>
+                      {/* Top accent bar */}
+                      <div className="h-[3px] w-full bg-gradient-to-r from-violet-500 via-indigo-500 to-blue-500" />
 
-                        {/* Info */}
-                        <div className="flex-1 min-w-0">
-                          <p className="font-bold text-gray-900 dark:text-white text-sm truncate">{t.name}</p>
-                          <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                      {/* Card body */}
+                      <div className="px-4 pt-3.5 pb-3">
+                        {/* Name + badge */}
+                        <div className="mb-3">
+                          <h3 className="font-extrabold text-white text-base leading-tight truncate">{t.name}</h3>
+                          <span className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full bg-violet-500/15 border border-violet-500/20 text-violet-300 text-[10px] font-bold uppercase tracking-wide">
+                            <Users size={9} />
                             {t.musicians.length} musician{t.musicians.length !== 1 ? "s" : ""}
-                          </p>
-                          {/* Member avatar chips */}
-                          <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
-                            {t.musicians.map((mu, i) => {
-                              const livePhoto = mu.photo || allMembers.find(m => m.id === mu.memberId)?.photo || "";
-                              return (
-                                <div
-                                  key={i}
-                                  title={`${mu.name} — ${mu.role}`}
-                                  className="flex items-center gap-1.5 bg-white dark:bg-gray-800 border border-indigo-100 dark:border-indigo-700/40 rounded-full pl-0.5 pr-2.5 py-0.5 shadow-sm"
-                                >
-                                  {livePhoto
-                                    ? <img src={livePhoto} alt={mu.name} className="w-5 h-5 rounded-full object-cover shrink-0" />
-                                    : <div className="w-5 h-5 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white text-[8px] font-bold shrink-0">{mu.name[0]}</div>
-                                  }
-                                  <span className="text-[11px] font-semibold text-gray-700 dark:text-gray-200 max-w-[72px] truncate">{mu.name.split(" ")[0]}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
+                          </span>
                         </div>
 
-                        {/* Actions — always visible */}
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button
-                            onClick={() => openEdit(t)}
-                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-800/50 text-indigo-500 transition-all"
-                            title="Edit"
-                          >
-                            <Pencil size={13} />
-                          </button>
-                          <button
-                            onClick={() => setConfirmDeleteId(t.id)}
-                            disabled={deleting === t.id}
-                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-400 transition-all disabled:opacity-50"
-                            title="Delete template"
-                          >
-                            {deleting === t.id
-                              ? <Loader2 size={13} className="animate-spin" />
-                              : <Trash2 size={13} />
-                            }
-                          </button>
-                        </div>
-
-                        {/* Chevron */}
-                        <ChevronRight
-                          size={14}
-                          className="text-gray-300 dark:text-gray-600 shrink-0 self-center cursor-pointer"
-                          onClick={() => openEdit(t)}
-                        />
+                        {/* Overlapping avatar stack */}
+                        {t.musicians.length > 0 && (() => {
+                          const shown = t.musicians.slice(0, 5);
+                          const overflow = t.musicians.length - 5;
+                          return (
+                            <div className="flex items-center gap-2.5">
+                              <div className="flex items-center">
+                                {shown.map((mu, i) => {
+                                  const photo = mu.photo || allMembers.find(m => m.id === mu.memberId)?.photo || "";
+                                  return (
+                                    <div
+                                      key={i}
+                                      title={`${mu.name} — ${mu.role}`}
+                                      className="w-8 h-8 rounded-full ring-2 ring-gray-850 shrink-0 overflow-hidden"
+                                      style={{ marginLeft: i === 0 ? 0 : "-10px", zIndex: shown.length - i, boxShadow: "0 0 0 2px rgb(31 37 49)" }}
+                                    >
+                                      {photo
+                                        ? <img src={photo} alt={mu.name} className="w-full h-full object-cover" />
+                                        : <div className="w-full h-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white text-[11px] font-bold">{mu.name[0]}</div>
+                                      }
+                                    </div>
+                                  );
+                                })}
+                                {overflow > 0 && (
+                                  <div
+                                    className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-[10px] font-bold text-gray-300 shrink-0"
+                                    style={{ marginLeft: "-10px", boxShadow: "0 0 0 2px rgb(31 37 49)" }}
+                                  >
+                                    +{overflow}
+                                  </div>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-gray-400 leading-tight truncate">
+                                {t.musicians.slice(0, 3).map(m => m.name.split(" ")[0]).join(", ")}
+                                {t.musicians.length > 3 ? ` & ${t.musicians.length - 3} more` : ""}
+                              </p>
+                            </div>
+                          );
+                        })()}
                       </div>
+
+                      {/* Bottom action strip */}
+                      <div className="border-t border-white/[0.06] flex">
+                        <button
+                          onClick={() => openEdit(t)}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[12px] font-semibold text-indigo-400 hover:text-white hover:bg-indigo-600/20 transition-all"
+                        >
+                          <Pencil size={11} />
+                          Edit
+                        </button>
+                        <div className="w-px bg-white/[0.06]" />
+                        <button
+                          onClick={() => setConfirmDeleteId(t.id)}
+                          disabled={deleting === t.id}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[12px] font-semibold text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-all disabled:opacity-40"
+                        >
+                          {deleting === t.id
+                            ? <Loader2 size={11} className="animate-spin" />
+                            : <Trash2 size={11} />
+                          }
+                          Delete
+                        </button>
+                      </div>
+
                     </div>
                   ))}
                 </div>
