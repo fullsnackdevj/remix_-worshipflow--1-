@@ -89,10 +89,10 @@ function TeamNoteViewModal({
   const isAdmin  = userRole === "admin" || userRole === "leader";
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    document.body.style.overflow = "hidden";
+    document.body.style.overscrollBehavior = "none";
     window.addEventListener("keydown", handler);
     return () => {
-      document.body.style.overflow = "";
+      document.body.style.overscrollBehavior = "";
       window.removeEventListener("keydown", handler);
     };
   }, [onClose]);
@@ -400,9 +400,9 @@ function NoteFormModal({
 }) {
   // Lock body scroll
   useEffect(() => {
-    document.body.style.overflow = "hidden";
+    document.body.style.overscrollBehavior = "none";
     return () => {
-      document.body.style.overflow = "";
+      document.body.style.overscrollBehavior = "";
     };
   }, []);
   // Seed from draft only for NEW notes (not edits) — so a crashed edit

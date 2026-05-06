@@ -64,10 +64,10 @@ function PersonalNoteViewModal({
   const cfg = catConfig(note.category);
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    document.body.style.overflow = "hidden";
+    document.body.style.overscrollBehavior = "none";
     window.addEventListener("keydown", handler);
     return () => {
-      document.body.style.overflow = "";
+      document.body.style.overscrollBehavior = "";
       window.removeEventListener("keydown", handler);
     };
   }, [onClose]);
@@ -288,8 +288,8 @@ function PersonalNoteFormModal({
 }) {
   // Lock body scroll while form is open
   useEffect(() => {
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = ""; };
+    document.body.style.overscrollBehavior = "none";
+    return () => { document.body.style.overscrollBehavior = ""; };
   }, []);
 
   const seedDraft = !initial

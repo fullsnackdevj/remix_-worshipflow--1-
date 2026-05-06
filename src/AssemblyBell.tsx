@@ -168,20 +168,20 @@ export default function AssemblyBell({ userId, userName, userPhoto, fullWidth, m
         const html = document.documentElement;
         if (showAlarm) {
             html.style.overflow = "hidden";
-            document.body.style.overflow = "hidden";
+            document.body.style.overscrollBehavior = "none";
             document.body.style.position = "fixed";
             document.body.style.width = "100%";
             document.body.style.top = "0";
         } else {
             html.style.overflow = "";
-            document.body.style.overflow = "";
+            document.body.style.overscrollBehavior = "";
             document.body.style.position = "";
             document.body.style.width = "";
             document.body.style.top = "";
         }
         return () => {
             html.style.overflow = "";
-            document.body.style.overflow = "";
+            document.body.style.overscrollBehavior = "";
             document.body.style.position = "";
             document.body.style.width = "";
             document.body.style.top = "";

@@ -151,22 +151,23 @@ const fetchTeamTemplates = useCallback(async () => {
 
 useEffect(() => { fetchTeamTemplates(); }, [fetchTeamTemplates]); // eslint-disable-line
 
-// Lock body AND the app's <main> scroll container when pre-save preview is open
+// Lock background scroll when pre-save preview is open — use overscrollBehavior
+// instead of overflow:hidden so the modal's inner scroll still works on iOS.
 useEffect(() => {
   const mainEl = document.querySelector("main") as HTMLElement | null;
   if (showPreviewBeforeSave) {
     document.body.setAttribute("data-modal-open", "1");
-    document.body.style.overflow = "hidden";
-    if (mainEl) mainEl.style.overflow = "hidden";
+    document.body.style.overscrollBehavior = "none";
+    if (mainEl) mainEl.style.overscrollBehavior = "none";
   } else {
     document.body.removeAttribute("data-modal-open");
-    document.body.style.overflow = "";
-    if (mainEl) mainEl.style.overflow = "";
+    document.body.style.overscrollBehavior = "";
+    if (mainEl) mainEl.style.overscrollBehavior = "";
   }
   return () => {
     document.body.removeAttribute("data-modal-open");
-    document.body.style.overflow = "";
-    if (mainEl) mainEl.style.overflow = "";
+    document.body.style.overscrollBehavior = "";
+    if (mainEl) mainEl.style.overscrollBehavior = "";
   };
 }, [showPreviewBeforeSave]);
 
@@ -2144,7 +2145,7 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
             </div>
 
             {/* ── Scrollable Body ── */}
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto" style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y", overscrollBehavior: "contain" }}>
 
               {/* ── SUMMARY TAB ── */}
               {previewTab === "summary" && (

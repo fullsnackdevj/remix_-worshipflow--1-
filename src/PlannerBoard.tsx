@@ -207,10 +207,10 @@ function CardModal({ card, lists, boards, allMembers, currentUser, customFieldDe
 
   // Body scroll lock + sidebar collapse while card is open
   useEffect(() => {
-    document.body.style.overflow = 'hidden';
+    document.body.style.overscrollBehavior = "none";
     window.dispatchEvent(new CustomEvent('pg-card-open'));
     return () => {
-      document.body.style.overflow = '';
+      document.body.style.overscrollBehavior = "";
       window.dispatchEvent(new CustomEvent('pg-card-close'));
     };
   }, []);
