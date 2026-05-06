@@ -179,15 +179,15 @@ body {
 }
 
 /* ── Global modal scroll lock ─────────────────────────────────────────────────
-   When a modal is open, ALL scrollable containers must freeze.
-   JS sets data-modal-open on <body>; this CSS handles every child.
+   When a modal is open, the background page must not scroll.
+   JS sets data-modal-open on <body>; CSS freezes only the page root & <main>.
+   ⚠ Do NOT lock [overflow-y-auto] children — modal bodies need to scroll!
    ─────────────────────────────────────────────────────────────────────────── */
 body[data-modal-open] {
   overflow: hidden !important;
 }
-body[data-modal-open] main,
-body[data-modal-open] [class*="overflow-y-auto"],
-body[data-modal-open] [class*="overflow-y-scroll"] {
+body[data-modal-open] > main,
+body[data-modal-open] > #root > main {
   overflow: hidden !important;
 }
 
