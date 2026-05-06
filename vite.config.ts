@@ -27,6 +27,8 @@ export default defineConfig(({mode}) => {
           '**/liveState.json',
           '**/live-bg-videos/**',
           '**/node_modules/**',
+          '**/dist/**',
+          '**/public/firebase-messaging-sw.js',
         ],
       },
     },

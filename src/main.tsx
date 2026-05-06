@@ -26,43 +26,49 @@ const MIN_SPLASH_MS = isReturning ? 400 : 1600;
 try { sessionStorage.setItem('wf_visited', '1'); } catch { /* noop */ }
 
 // ── Service Worker registration with auto-update ──────────────────────────────
-// Snapshot BEFORE registration — if no controller yet, this is the first install.
-// Only auto-reload when a NEW SW replaces an EXISTING one (version update).
-// Without this guard, controllerchange fires on first install mid-splash → double splash.
+// Strategy: register SW silently; only trigger a page reload when a brand-new
+// SW activates WHILE the page is already open (not on every fresh page load).
+// Guards:
+//   • hadController  — skip reload on very first SW install (no old SW to replace)
+//   • pageAgeOk      — skip reload in first 8s (splash screen still visible)
+//   • reloadCooldown — skip if we reloaded within the last 60s (prevents loops)
+//   • localStorage   — cooldown survives hard-reloads (sessionStorage gets cleared)
 if ('serviceWorker' in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
+  const pageOpenedAt  = Date.now();
 
-  // Debounce guard: prevent reload loop when multiple Vite rebuilds happen in rapid
-  // succession (e.g. after saving several files). Only reload once per 30 seconds.
-  const SW_RELOAD_KEY = 'wf_sw_last_reload';
-  const lastReload = parseInt(sessionStorage.getItem(SW_RELOAD_KEY) ?? '0', 10);
-  const reloadTooRecent = Date.now() - lastReload < 30_000; // 30 second cooldown
+  // 60-second cooldown stored in localStorage so it survives page reloads.
+  const SW_RELOAD_KEY  = 'wf_sw_last_reload';
+  const lastReload     = parseInt(localStorage.getItem(SW_RELOAD_KEY) ?? '0', 10);
+  const reloadCooldown = Date.now() - lastReload < 60_000;
 
   navigator.serviceWorker.register('/sw.js').then(reg => {
-    // Already a new SW waiting — activate it now
-    if (reg.waiting) {
-      reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-    }
-    // New SW just installed while page is open
+    // ── DO NOT call SKIP_WAITING on reg.waiting here ──
+    // If a SW is already waiting from a previous deploy, let it activate naturally
+    // on the NEXT page open — calling postMessage here triggers an immediate
+    // controllerchange → reload() which is the main cause of the flicker.
+
+    // Only activate a SW that installs WHILE this page session is open.
     reg.addEventListener('updatefound', () => {
       const newSW = reg.installing;
       if (!newSW) return;
       newSW.addEventListener('statechange', () => {
+        // SW installed & there's already an active controller → safe to activate
         if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
-          // New version ready — activate immediately
           newSW.postMessage({ type: 'SKIP_WAITING' });
         }
       });
     });
   }).catch(() => { /* SW registration failed silently */ });
 
-  // Reload to pick up new assets — but ONLY if a previous SW was already active
-  // AND we haven't reloaded too recently (prevents infinite splash loop).
+  // controllerchange = new SW just took control. Reload to load fresh assets.
+  // All three guards must pass to prevent flicker / infinite loops.
   let refreshing = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (hadController && !refreshing && !reloadTooRecent) {
+    const pageAgeOk = Date.now() - pageOpenedAt > 8_000; // splash must be gone
+    if (hadController && !refreshing && !reloadCooldown && pageAgeOk) {
       refreshing = true;
-      try { sessionStorage.setItem(SW_RELOAD_KEY, String(Date.now())); } catch { /* noop */ }
+      try { localStorage.setItem(SW_RELOAD_KEY, String(Date.now())); } catch { /* noop */ }
       window.location.reload();
     }
   });
