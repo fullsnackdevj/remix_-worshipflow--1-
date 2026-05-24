@@ -29,6 +29,15 @@ service firebase.storage {
       allow write: if request.auth != null;
     }
 
+    // ── Media Library — uploaded by admin, thumbnails & URLs read by the app ──
+    // Items in this path have Firebase Storage download tokens in their URLs,
+    // which bypass auth checks. Adding an explicit rule ensures reads are
+    // consistent regardless of token state and eliminates any auth edge cases.
+    match /media_library/{filename} {
+      allow read:  if true;
+      allow write: if request.auth != null;
+    }
+
     // ── All other paths: require authentication ───────────────────────────────
     match /{allPaths=**} {
       allow read, write: if request.auth != null;

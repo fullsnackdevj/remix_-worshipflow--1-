@@ -183,18 +183,28 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
       const vid = document.createElement("video");
       vid.muted = true;
       vid.playsInline = true;
-      vid.preload = "metadata";
+      // preload="auto" buffers enough data for reliable seeking
+      // ("metadata" only downloads the header, often insufficient for frame capture)
+      vid.preload = "auto";
       // CRITICAL: must be set BEFORE src to avoid canvas tainting SecurityError
       // on cross-origin Firebase Storage URLs
       vid.crossOrigin = "anonymous";
 
-      // Abort after 15s — prevents hanging forever on bad URLs
-      const giveUpTimer = setTimeout(() => { vid.src = ""; resolve(); }, 15000);
+      // Abort after 20s — prevents hanging forever on bad/slow URLs
+      const giveUpTimer = setTimeout(() => { vid.src = ""; resolve(); }, 20000);
       const cleanup = () => { clearTimeout(giveUpTimer); vid.src = ""; resolve(); };
 
-      // Try multiple seek positions to find a non-black frame
-      const seekAttempts = [1.0, 2.0, 0.5, 0.1];
+      // Expanded seek positions — more attempts = better chance of a non-black frame
+      const seekAttempts = [1.0, 2.0, 3.0, 0.5, 0.25, 0.1];
       let attemptIdx = 0;
+      let seekTriggered = false;
+
+      const doSeek = () => {
+        if (seekTriggered) return;
+        seekTriggered = true;
+        const target = Math.min(seekAttempts[0], Math.max(0.1, (vid.duration || 10) * 0.1));
+        vid.currentTime = target;
+      };
 
       const tryCapture = () => {
         try {
@@ -216,21 +226,21 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
             if (attemptIdx < seekAttempts.length) {
               vid.currentTime = Math.min(seekAttempts[attemptIdx], Math.max(0.1, vid.duration * 0.5));
             } else {
-              cleanup(); // gave up — leave placeholder
+              cleanup(); // gave up — leave placeholder (video element fallback will show real frame)
             }
           }
         } catch (err) {
-          // SecurityError from canvas tainting (CORS) — try without crossOrigin as last resort
+          // SecurityError from canvas tainting (CORS) — expected for Firebase URLs without CORS headers
           console.warn(`[MediaLib] Thumbnail canvas error for ${id}:`, err);
           cleanup();
         }
       };
 
-      vid.onloadedmetadata = () => {
-        // Seek to 1s or 10% of duration, whichever is less
-        vid.currentTime = Math.min(seekAttempts[0], Math.max(0.1, vid.duration * 0.1));
-      };
-
+      // Two triggers for seek — whichever fires first:
+      // onloadedmetadata: duration is known, safe to seek
+      // oncanplay: enough data is buffered for seeking (more reliable for some codecs)
+      vid.onloadedmetadata = doSeek;
+      vid.oncanplay = doSeek;
       vid.onseeked = tryCapture;
       vid.onerror = (e) => { console.warn(`[MediaLib] Video load error for thumb ${id}:`, e); cleanup(); };
       // Set src AFTER crossOrigin is configured
@@ -258,18 +268,26 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
       if (blob) {
         const url = URL.createObjectURL(blob);
         setBlobUrls(prev => ({ ...prev, [item.id]: url }));
-        // For videos, generate/load thumbnail after blob URL is ready
-        if (item.type === "video") generateVideoThumb(item.id, url);
+        if (item.type === "video") {
+          // Check IDB for a previously-cached thumbnail before re-seeking
+          // (generateVideoThumb also checks, but this avoids the async overhead of creating a video element)
+          const cachedThumb = await idbGet<string>(`media_thumb_${item.id}`);
+          if (cachedThumb && cachedThumb.length > 2000) {
+            setVideoThumbs(p => ({ ...p, [item.id]: cachedThumb }));
+          } else {
+            // Generate from the local blob URL — no CORS restrictions, preload="auto" for reliable seek
+            generateVideoThumb(item.id, url);
+          }
+        }
       } else if (item.type === "video") {
-        // No blob cached — try loading thumb from IDB (may exist from a previous session)
-        // Only use cached thumb if it looks valid (> 2000 chars = non-blank JPEG data URL)
+        // No IDB blob — try loading a previously-cached canvas thumbnail from IDB
         const cached = await idbGet<string>(`media_thumb_${item.id}`);
         if (cached && cached.length > 2000) {
           setVideoThumbs(p => ({ ...p, [item.id]: cached }));
-        } else {
-          // IDB miss or stale blank entry — generate fresh from Firebase URL (crossOrigin fix applied)
-          generateVideoThumb(item.id, item.firebaseUrl);
         }
+        // NOTE: We do NOT call generateVideoThumb(item.id, item.firebaseUrl) here.
+        // Firebase Storage URLs are cross-origin and canvas reads fail with SecurityError.
+        // The <video> element fallback in the grid/list views shows a real frame without CORS.
       }
     });
     return () => { Object.values(blobUrls).forEach(URL.revokeObjectURL); };
@@ -607,9 +625,14 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
                             : videoThumbs[item.id]
                               ? <img src={videoThumbs[item.id]} alt={item.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                               : (
-                                <div style={{ width: "100%", height: "100%", background: "linear-gradient(135deg, #0d0522 0%, #1a0a3d 50%, #0a0d1a 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                  <Film size={22} color="rgba(167,139,250,0.35)" strokeWidth={1.5} />
-                                </div>
+                                // Live video element fallback — shows a real frame cross-origin without CORS.
+                                // Browsers can DISPLAY cross-origin video freely; only canvas reads require CORS.
+                                <video
+                                  src={blobUrls[item.id] ?? item.firebaseUrl}
+                                  muted playsInline preload="metadata"
+                                  style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none", display: "block" }}
+                                  onLoadedData={e => { (e.target as HTMLVideoElement).currentTime = 1; }}
+                                />
                               )
                           }
                           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 50%)" }} />
@@ -687,7 +710,15 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
                               ? <img src={thumbUrl} alt={item.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} loading="lazy" />
                               : videoThumbs[item.id]
                                 ? <img src={videoThumbs[item.id]} alt={item.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                                : <div style={{ width: "100%", height: "100%", background: "linear-gradient(135deg,#0d0522,#1a0a3d)", display: "flex", alignItems: "center", justifyContent: "center" }}><Film size={14} color="rgba(167,139,250,0.4)" /></div>
+                                : (
+                                  // Live video element fallback — shows a real frame cross-origin without CORS
+                                  <video
+                                    src={blobUrls[item.id] ?? item.firebaseUrl}
+                                    muted playsInline preload="metadata"
+                                    style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none", display: "block" }}
+                                    onLoadedData={e => { (e.target as HTMLVideoElement).currentTime = 1; }}
+                                  />
+                                )
                             }
                           </div>
                           {/* Details */}
