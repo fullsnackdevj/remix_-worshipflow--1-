@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Search, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Music2, Layers, Play, Wand2, AlignCenter, AlignLeft, Video, Upload, Copy, Check as CheckIcon, Settings, Zap, Heart, EyeOff, Image as ImageIcon, Timer, PlusCircle, Minus, FolderOpen, Tent, ShieldCheck, AlertTriangle, RefreshCw } from "lucide-react";
+import { Search, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Music2, Layers, Play, Wand2, AlignCenter, AlignLeft, Video, Upload, Copy, Check as CheckIcon, Settings, Zap, Heart, EyeOff, Image as ImageIcon, Timer, PlusCircle, Minus, FolderOpen, Tent, ShieldCheck, AlertTriangle, RefreshCw, Volume2, VolumeX } from "lucide-react";
 import LyricsGridModal from "./LyricsGridModal";
 import CampReadinessModal from "./CampReadinessModal";
 import MediaLibraryModal, { type MediaItem, type MediaTarget } from "./MediaLibraryModal";
@@ -18,9 +18,9 @@ type FadeScreenBg =
   | { type: "image-url"; url: string }
   | { type: "image-local"; url: string }                           // legacy base64 — stays in IDB only, never sent to Firestore
   | { type: "image-firebase"; url: string; localUrl?: string }    // Firebase Storage URL + optional local disk copy
-  | { type: "video-local"; url: string }                          // legacy base64 — stays in IDB only, never sent to Firestore
-  | { type: "video-firebase"; url: string; localUrl?: string }    // Firebase Storage URL + optional local disk copy
-  | { type: "video-youtube"; videoId: string };
+  | { type: "video-local"; url: string; muted?: boolean }          // legacy base64 — stays in IDB only, never sent to Firestore
+  | { type: "video-firebase"; url: string; localUrl?: string; muted?: boolean }    // Firebase Storage URL + optional local disk copy
+  | { type: "video-youtube"; videoId: string; muted?: boolean };
 
 // Returns a Firestore-safe version of a FadeScreenBg.
 // image-local / video-local are base64 blobs (often >1MB) that exceed Firestore's 1MB doc limit
@@ -990,16 +990,21 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
     // Always persist to storage so large file uploads aren't lost on Cancel
     // Large local types (base64) live in IDB only — never in Firestore.
     // Firebase types are just URLs — store in localStorage (tiny payload).
-    if (bg.type === "image-local" || bg.type === "video-local") {
-      idbSet("lsv_fade_screen", bg).catch(e =>
+    // Strip any session-scoped blob: localUrl before persisting — blob: URLs are
+    // invalid after a page refresh and would leave OBS with a broken image on next load.
+    const safeBg: FadeScreenBg = (bg as { localUrl?: string }).localUrl?.startsWith("blob:")
+      ? ({ ...bg, localUrl: undefined } as FadeScreenBg)
+      : bg;
+    if (safeBg.type === "image-local" || safeBg.type === "video-local") {
+      idbSet("lsv_fade_screen", safeBg).catch(e =>
         console.warn("[LiveStage] IDB write failed:", e)
       );
       try { localStorage.removeItem("lsv_fade_screen"); } catch {}
     } else {
-      try { localStorage.setItem("lsv_fade_screen", JSON.stringify(bg)); } catch (e) {
+      try { localStorage.setItem("lsv_fade_screen", JSON.stringify(safeBg)); } catch (e) {
         console.warn("[LiveStage] localStorage write failed:", e);
       }
-      idbSet("lsv_fade_screen", bg).catch(() => {});
+      idbSet("lsv_fade_screen", safeBg).catch(() => {});
     }
 
     if (settingsOpenRef.current) {
@@ -1760,14 +1765,41 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
                     </div>
                     {/* 4 — Source status bar */}
                     {sourceLabel && (
-                      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-                        padding:"9px 12px", borderRadius:8, background:statusBg, border:`1px solid ${statusBorder}` }}>
-                        <span style={{ fontSize:11, fontWeight:700, color:statusColor }}>{sourceLabel}</span>
-                        <button
-                          onClick={() => saveFadeScreenBg({ type:"color", color:"#000000" })}
-                          style={{ padding:"4px 10px", borderRadius:6, background:"rgba(255,255,255,0.07)",
-                            border:"1px solid rgba(255,255,255,0.15)", color:"rgba(255,255,255,0.5)",
-                            fontSize:10, fontWeight:700, cursor:"pointer" }}>Remove</button>
+                      <div style={{ display:"flex", flexDirection:"column", gap:10,
+                        padding:"12px", borderRadius:8, background:statusBg, border:`1px solid ${statusBorder}` }}>
+                        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                          <span style={{ fontSize:11, fontWeight:700, color:statusColor, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:"75%" }}>{sourceLabel}</span>
+                          <button
+                            onClick={() => saveFadeScreenBg({ type:"color", color:"#000000" })}
+                            style={{ padding:"4px 10px", borderRadius:6, background:"rgba(255,255,255,0.07)",
+                              border:"1px solid rgba(255,255,255,0.15)", color:"rgba(255,255,255,0.5)",
+                              fontSize:10, fontWeight:700, cursor:"pointer" }}>Remove</button>
+                        </div>
+                        
+                        {/* Audio control for video files only */}
+                        {(fbg.type === "video-local" || fbg.type === "video-firebase" || fbg.type === "video-youtube") && (
+                          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", paddingTop:"6px", borderTop:"1px solid rgba(255,255,255,0.05)" }}>
+                            <span style={{ fontSize:11, color:"rgba(255,255,255,0.45)" }}>Sound Option</span>
+                            <button
+                              onClick={() => {
+                                const isCurrentlyMuted = fbg.muted !== false;
+                                const updatedBg = { ...fbg, muted: isCurrentlyMuted ? false : true };
+                                setModalFadeScreenBg(updatedBg);
+                              }}
+                              style={{
+                                display: "flex", alignItems: "center", gap: 5,
+                                padding:"4px 10px", borderRadius:6,
+                                background: fbg.muted === false ? "rgba(239,68,68,0.12)" : "rgba(52,211,153,0.12)",
+                                border: fbg.muted === false ? "1px solid rgba(239,68,68,0.3)" : "1px solid rgba(52,211,153,0.3)",
+                                color: fbg.muted === false ? "#f87171" : "#34d399",
+                                fontSize:10, fontWeight:700, cursor:"pointer"
+                              }}
+                            >
+                              {fbg.muted === false ? <Volume2 size={12} /> : <VolumeX size={12} />}
+                              <span>{fbg.muted === false ? "Sound ON (OBS)" : "Muted (OBS)"}</span>
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -2424,16 +2456,28 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
               }
               onToast('success', `✅ Applied to ${preset} background — hit Save to lock in`);
             } else if (target === 'fade-screen') {
+              // Strip blob: localUrl before persisting — blob: URLs are session-scoped and invalid after refresh.
+              // OBS will fall back to the Firebase URL until the local disk copy is ready.
               const fadeBg: FadeScreenBg = item.type === 'image'
-                ? { type: 'image-firebase' as const, url: item.firebaseUrl, localUrl: blobUrl ?? undefined }
-                : { type: 'video-firebase' as const, url: item.firebaseUrl, localUrl: blobUrl ?? undefined };
+                ? { type: 'image-firebase' as const, url: item.firebaseUrl }
+                : { type: 'video-firebase' as const, url: item.firebaseUrl };
               setFadeScreenBg(fadeBg);
               setModalFadeScreenBg(fadeBg);
               fadeScreenBgRef.current = fadeBg;
               idbSet('lsv_fade_screen', fadeBg).catch(() => {});
               try { localStorage.setItem('lsv_fade_screen', JSON.stringify(fadeBg)); } catch {}
               clearOtherAssignments(target);
-              // ── FIX: Upload to local server — use blobUrl if available, else fetch Firebase URL
+              // Initial push so OBS knows the new fade screen was assigned.
+              if (fadeScreenActiveRef.current) {
+                fetch('/api/live-push', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ _bgOnly: true, fadeScreen: true, fadeScreenBg: fadeBg, updatedAt: Date.now() }),
+                }).catch(() => {});
+              }
+              // ── Upload to local server disk so OBS can load the image offline ──
+              // After upload completes, send a FOLLOW-UP push with localUrl='/api/live-fade-image'
+              // so OBS immediately switches to the locally-served copy (no Firebase needed).
               if (item.type === 'image') {
                 (async () => {
                   try {
@@ -2442,17 +2486,25 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
                     const blob  = await resp.blob();
                     const fd    = new FormData();
                     fd.append('image', blob, item.name);
-                    await fetch('/api/live-fade-image', { method: 'POST', body: fd });
-                    console.log('[LiveStage] Fade image cached to disk for offline OBS');
+                    const uploadRes = await fetch('/api/live-fade-image', { method: 'POST', body: fd });
+                    if (uploadRes.ok) {
+                      // Update state with the local server URL so OBS can load it offline
+                      const localFadeBg: FadeScreenBg = { ...fadeBg, localUrl: '/api/live-fade-image' } as FadeScreenBg;
+                      setFadeScreenBg(localFadeBg);
+                      setModalFadeScreenBg(localFadeBg);
+                      fadeScreenBgRef.current = localFadeBg;
+                      idbSet('lsv_fade_screen', localFadeBg).catch(() => {});
+                      try { localStorage.setItem('lsv_fade_screen', JSON.stringify(localFadeBg)); } catch {}
+                      // Follow-up push: OBS now gets the local server URL
+                      fetch('/api/live-push', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ _bgOnly: true, fadeScreen: fadeScreenActiveRef.current, fadeScreenBg: localFadeBg, updatedAt: Date.now() }),
+                      }).catch(() => {});
+                      console.log('[LiveStage] Fade image cached — OBS updated with local URL');
+                    }
                   } catch (e) { console.warn('[LiveStage] Could not cache fade image locally:', e); }
                 })();
-              }
-              if (fadeScreenActiveRef.current) {
-                fetch('/api/live-push', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ _bgOnly: true, fadeScreen: true, fadeScreenBg: fadeBg, updatedAt: Date.now() }),
-                }).catch(() => {});
               }
               onToast('success', `✅ "${item.name}" set as Fade Screen`);
             }
@@ -2555,16 +2607,26 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
               }
               onToast('success', `✅ "${item.name}" → ${preset === 'praise' ? 'Praise' : 'Worship'} Background`);
             } else if (target === 'fade-screen') {
+              // Strip blob: localUrl before persisting — blob: URLs are session-scoped and invalid after refresh.
+              // OBS will fall back to the Firebase URL until the local disk copy is ready.
               const fadeBg: FadeScreenBg = item.type === 'image'
-                ? { type: 'image-firebase' as const, url: item.firebaseUrl, localUrl: blobUrl ?? undefined }
-                : { type: 'video-firebase' as const, url: item.firebaseUrl, localUrl: blobUrl ?? undefined };
+                ? { type: 'image-firebase' as const, url: item.firebaseUrl }
+                : { type: 'video-firebase' as const, url: item.firebaseUrl };
               setFadeScreenBg(fadeBg);
               setModalFadeScreenBg(fadeBg);
               fadeScreenBgRef.current = fadeBg;
               idbSet('lsv_fade_screen', fadeBg).catch(() => {});
               try { localStorage.setItem('lsv_fade_screen', JSON.stringify(fadeBg)); } catch {}
               clearOtherAssignments(target);
-              // ── FIX: Upload to local server — use blobUrl if available, else fetch Firebase URL
+              // Initial push so OBS knows the new fade screen was assigned.
+              fetch('/api/live-push', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ _bgOnly: true, fadeScreen: fadeScreenActiveRef.current, fadeScreenBg: fadeBg, updatedAt: Date.now() }),
+              }).catch(() => {});
+              // ── Upload to local server disk so OBS can load the image offline ──
+              // After upload completes, send a FOLLOW-UP push with localUrl='/api/live-fade-image'
+              // so OBS immediately switches to the locally-served copy (no Firebase needed).
               if (item.type === 'image') {
                 (async () => {
                   try {
@@ -2573,21 +2635,26 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
                     const blob  = await resp.blob();
                     const fd    = new FormData();
                     fd.append('image', blob, item.name);
-                    await fetch('/api/live-fade-image', { method: 'POST', body: fd });
-                    console.log('[LiveStage] Fade image cached to disk for offline OBS');
+                    const uploadRes = await fetch('/api/live-fade-image', { method: 'POST', body: fd });
+                    if (uploadRes.ok) {
+                      // Update state with the local server URL so OBS can load it offline
+                      const localFadeBg: FadeScreenBg = { ...fadeBg, localUrl: '/api/live-fade-image' } as FadeScreenBg;
+                      setFadeScreenBg(localFadeBg);
+                      setModalFadeScreenBg(localFadeBg);
+                      fadeScreenBgRef.current = localFadeBg;
+                      idbSet('lsv_fade_screen', localFadeBg).catch(() => {});
+                      try { localStorage.setItem('lsv_fade_screen', JSON.stringify(localFadeBg)); } catch {}
+                      // Follow-up push: OBS now gets the local server URL
+                      fetch('/api/live-push', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ _bgOnly: true, fadeScreen: fadeScreenActiveRef.current, fadeScreenBg: localFadeBg, updatedAt: Date.now() }),
+                      }).catch(() => {});
+                      console.log('[LiveStage] Fade image cached — OBS updated with local URL');
+                    }
                   } catch (e) { console.warn('[LiveStage] Could not cache fade image locally:', e); }
                 })();
               }
-              fetch('/api/live-push', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  _bgOnly: true,
-                  fadeScreen: fadeScreenActiveRef.current,
-                  fadeScreenBg: fadeBg,
-                  updatedAt: Date.now(),
-                }),
-              }).catch(() => {});
               onToast('success', `✅ "${item.name}" set as Fade Screen`);
             }
             void url; // suppress unused-variable warning

@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import AutoTextarea from "./AutoTextarea";
 import PersonalNotesTab from "./PersonalNotesTab";
+import { renderTextWithLinks } from "./utils/linkify";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface TeamNoteEntry {
@@ -140,7 +141,7 @@ function TeamNoteViewModal({
         {/* Body */}
         <div className="px-5 py-4 overflow-y-auto max-h-[60vh]" style={{ scrollbarWidth: "thin" }}>
           <h2 className="text-lg font-extrabold text-gray-900 dark:text-white mb-3 leading-snug tracking-tight">{note.title}</h2>
-          <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words leading-relaxed">{note.body}</p>
+          <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words leading-relaxed">{renderTextWithLinks(note.body)}</p>
         </div>
         {/* Footer — icon-only, bigger on mobile: [❤️ count] spacer [copy][pin][edit][delete] */}
         <div className="flex items-center gap-1 px-4 py-3 border-t border-gray-100 dark:border-white/10 bg-gray-50 dark:bg-white/5">
@@ -300,7 +301,7 @@ function NoteCard({
           onClick={() => !expanded && onView(note)}
           title={!expanded ? "Click to view full note" : undefined}
         >
-          {note.body}
+          {renderTextWithLinks(note.body)}
         </p>
         {/* Show more / less toggle */}
         {(isOverflowing || expanded) && (

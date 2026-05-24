@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { X, NotepadText, Trash2, ImagePlus, Loader2, Bug, Lightbulb, MessageSquare, Pencil, Check, CheckCircle2, ChevronDown, Film, RotateCcw, Archive, Eye, Search, Code2, Wrench, XCircle, ThumbsUp, Maximize2, Play, ArrowUpDown } from "lucide-react";
 import AutoTextarea from "./AutoTextarea";
 import { useRealtimeNotes } from "./useRealtimeNotes";
+import { renderTextWithLinks } from "./utils/linkify";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 export interface TeamNote {
@@ -285,7 +286,7 @@ function NoteCard({ note, userId, userRole, highlighted, onEdit, onDelete, onRea
             </div>
 
             {/* Content */}
-            <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words leading-relaxed mb-3">{note.content}</p>
+            <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words leading-relaxed mb-3">{renderTextWithLinks(note.content)}</p>
 
             {/* Image — click to open lightbox */}
             {note.imageData && (
@@ -1055,7 +1056,7 @@ export default function NotesPanel({ userId, userName, userPhoto, userRole, onTo
                                                     <span className={`ml-auto shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${days <= 3 ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400" : "bg-gray-100 dark:bg-gray-700 text-gray-500"
                                                         }`}>{days}d left</span>
                                                 </div>
-                                                <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2">{note.content}</p>
+                                                <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2">{renderTextWithLinks(note.content)}</p>
                                             </div>
                                             {/* Actions */}
                                             <div className="flex flex-col gap-1 shrink-0" onClick={e => e.stopPropagation()}>

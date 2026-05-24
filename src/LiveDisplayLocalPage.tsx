@@ -26,7 +26,7 @@ interface LiveState {
   bigSmallFont?:     boolean; // alternate big/small word sizes
   bgVideo?: {type:"local";url:string}|{type:"firebase";url:string;localUrl?:string}|{type:"image-firebase";url:string;localUrl?:string}|{type:"youtube";videoId:string}|null;
   transitioning?: boolean; fadeScreen?: boolean;
-  fadeScreenBg?: {type:"color";color:string}|{type:"image-url";url:string}|{type:"image-local";url:string}|{type:"image-firebase";url:string;localUrl?:string}|{type:"video-local";url:string}|{type:"video-firebase";url:string;localUrl?:string}|{type:"video-youtube";videoId:string};
+  fadeScreenBg?: {type:"color";color:string}|{type:"image-url";url:string}|{type:"image-local";url:string}|{type:"image-firebase";url:string;localUrl?:string}|{type:"video-local";url:string;muted?:boolean}|{type:"video-firebase";url:string;localUrl?:string;muted?:boolean}|{type:"video-youtube";videoId:string;muted?:boolean};
   _fadeOnly?: boolean;
 }
 
@@ -211,9 +211,7 @@ export default function LiveDisplayLocalPage() {
     let pollInterval: ReturnType<typeof setInterval>|null=null;
     let es: EventSource|null=null;
     let sseOk=false;
-    // suppressNextFade: ignore the very first fadeScreen so stale overlay from
-    // a previous session doesn't block OBS on load.
-    let suppressNextFade = true;
+
 
     const applyStateLocal = (data: LiveState) => {
       const key=`${data.updatedAt}`;
@@ -221,13 +219,19 @@ export default function LiveDisplayLocalPage() {
       lastKeyRef.current=key;
       if(data.transitioning){ setFadeBlack(true); return; }
       setFadeBlack(false);
-      const suppressFade = suppressNextFade;
-      suppressNextFade = false;
-      if(!suppressFade && data.fadeScreen){
+      // Always apply fadeScreen state from controller — OBS display should match
+      // the controller exactly on connect, reconnect, and every push.
+      if(data.fadeScreen){
         const bg=data.fadeScreenBg??{type:"color",color:"#000"};
         prevFadeScreenRef.current=bg; setFadeScreen(bg as LiveState["fadeScreenBg"]);
       } else { setFadeScreen(null); }
-      if(data._fadeOnly) return;
+      if(data._fadeOnly) {
+        // _fadeOnly: only lift the fade overlay — skip lyric animation so there's no flash.
+        // BUT update bgVideo and bgIdx so the persistent video element switches immediately
+        // to the correct background (e.g. a worship video assigned while fade was active).
+        setLive(prev => prev ? { ...prev, bgVideo: data.bgVideo, bgIdx: data.bgIdx } : data);
+        return;
+      }
       const lyricsEl=lyricsRef.current;
       if(!lyricsEl){ setLive(data); return; }
       if(loopCleanupRef.current){ loopCleanupRef.current(); loopCleanupRef.current=null; }
@@ -383,8 +387,8 @@ export default function LiveDisplayLocalPage() {
         return (
           <div style={{position:"absolute",inset:0,zIndex:90,opacity:fadeScreen?1:0,transition:"opacity 0.7s ease",pointerEvents:"none",background:bg?.type==="color"?(bg as {type:"color";color:string}).color:"#000"}}>
             {bg&&(bg.type==="image-url"||bg.type==="image-local"||bg.type==="image-firebase")&&bgUrl&&<img src={bgUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}} />}
-            {bg&&(bg.type==="video-local"||bg.type==="video-firebase")&&bgUrl&&<video key={bgUrl} src={bgUrl} autoPlay loop muted playsInline style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}} />}
-            {bg&&bg.type==="video-youtube"&&ytId&&<iframe key={ytId} src={`https://www.youtube.com/embed/${ytId}?autoplay=1&loop=1&playlist=${ytId}&mute=1&muted=1&controls=0&disablekb=1&fs=0&modestbranding=1&iv_load_policy=3`} style={{width:"100%",height:"100%",border:"none",pointerEvents:"none",display:"block"}} allow="autoplay; encrypted-media" title="fade-video-bg" />}
+            {bg&&(bg.type==="video-local"||bg.type==="video-firebase")&&bgUrl&&<video key={bgUrl} src={bgUrl} autoPlay loop muted={bg.muted !== false} playsInline style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}} />}
+            {bg&&bg.type==="video-youtube"&&ytId&&<iframe key={ytId} src={`https://www.youtube.com/embed/${ytId}?autoplay=1&loop=1&playlist=${ytId}&mute=${bg.muted !== false ? 1 : 0}&muted=${bg.muted !== false ? 1 : 0}&controls=0&disablekb=1&fs=0&modestbranding=1&iv_load_policy=3`} style={{width:"100%",height:"100%",border:"none",pointerEvents:"none",display:"block"}} allow="autoplay; encrypted-media" title="fade-video-bg" />}
           </div>
         );
       })()}

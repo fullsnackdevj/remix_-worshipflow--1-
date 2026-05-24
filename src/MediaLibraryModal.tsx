@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { X, Upload, Trash2, Image as ImageIcon, Video, Check, Wifi, WifiOff, FolderOpen, Film, Loader, Zap, CheckSquare, Square } from "lucide-react";
+import { X, Upload, Trash2, Image as ImageIcon, Video, Check, Wifi, WifiOff, FolderOpen, Film, Loader, Zap, CheckSquare, Square, LayoutGrid, List, Tag } from "lucide-react";
 import { db, storage } from "./firebase";
 import { collection, addDoc, onSnapshot, deleteDoc, doc, query, orderBy } from "firebase/firestore";
 import { ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
@@ -42,11 +42,30 @@ async function idbDelete(key: string): Promise<void> {
   });
 }
 
+export type MediaCategory = "praise" | "worship" | "fade" | "none";
+
 export interface MediaItem {
   id: string; name: string; type: "image" | "video";
   firebaseUrl: string; storagePath: string;
   uploadedAt: number; sizeBytes: number; mimeType: string;
+  category?: MediaCategory;
 }
+
+/** Infers a category from the filename as a fallback for untagged items */
+export function getCategoryFromFileName(name: string): MediaCategory {
+  const lower = name.toLowerCase();
+  if (lower.includes("praise")) return "praise";
+  if (lower.includes("worship")) return "worship";
+  if (lower.includes("fade") || lower.includes("splash") || lower.includes("screen")) return "fade";
+  return "none";
+}
+
+const CATEGORY_META: Record<MediaCategory, { label: string; color: string; bg: string; border: string }> = {
+  praise:  { label: "Praise",      color: "#f59e0b", bg: "rgba(245,158,11,0.12)",  border: "rgba(245,158,11,0.3)" },
+  worship: { label: "Worship",     color: "#818cf8", bg: "rgba(129,140,248,0.12)", border: "rgba(129,140,248,0.3)" },
+  fade:    { label: "Fade Screen", color: "#34d399", bg: "rgba(52,211,153,0.12)",  border: "rgba(52,211,153,0.3)" },
+  none:    { label: "Untagged",    color: "rgba(255,255,255,0.4)", bg: "rgba(255,255,255,0.05)", border: "rgba(255,255,255,0.12)" },
+};
 export type MediaTarget = "praise-bg" | "worship-bg" | "fade-screen";
 
 interface Props {
@@ -95,6 +114,27 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkConfirm, setBulkConfirm] = useState(false);
 
+  // ── Filter & View Mode ───────────────────────────────────────────────────
+  const [filter, setFilter] = useState<"all" | MediaCategory>("all");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  // localCategories stores overrides set this session (not persisted to Firestore today)
+  const [localCategories, setLocalCategories] = useState<Record<string, MediaCategory>>(() => {
+    try { return JSON.parse(localStorage.getItem("ml_local_categories") ?? "{}") ?? {}; } catch { return {}; }
+  });
+
+  const getItemCategory = (item: MediaItem): MediaCategory =>
+    localCategories[item.id] ?? item.category ?? getCategoryFromFileName(item.name);
+
+  const filteredItems = filter === "all"
+    ? items
+    : items.filter(item => getItemCategory(item) === filter);
+
+  const setItemCategory = (item: MediaItem, cat: MediaCategory) => {
+    const updated = { ...localCategories, [item.id]: cat };
+    setLocalCategories(updated);
+    try { localStorage.setItem("ml_local_categories", JSON.stringify(updated)); } catch {}
+  };
+
   const [blobUrls, setBlobUrls] = useState<Record<string, string>>({});
   const [videoThumbs, setVideoThumbs] = useState<Record<string, string>>({}); // id → dataURL thumbnail
   const [dragOver, setDragOver] = useState(false);
@@ -105,7 +145,7 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
 
   const exitSelectMode = () => { setSelectMode(false); setMultiSelected(new Set()); setBulkConfirm(false); };
   const toggleItemSelect = (id: string) => setMultiSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const selectAll = () => setMultiSelected(new Set(items.map(i => i.id)));
+  const selectAll = () => setMultiSelected(new Set(filteredItems.map(i => i.id)));
 
   const handleBulkDelete = async () => {
     if (!bulkConfirm) { setBulkConfirm(true); return; }
@@ -246,9 +286,12 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
         const task = uploadBytesResumable(sRef, file);
         await new Promise<void>((res, rej) => task.on("state_changed", snap => setUploadProgress(Math.round(snap.bytesTransferred / snap.totalBytes * 100)), rej, () => res()));
         const firebaseUrl = await getDownloadURL(sRef);
+        // Auto-detect category from filename and include it in Firestore doc
+        const autoCategory = getCategoryFromFileName(file.name);
         const docRef = await addDoc(collection(db, "media_library"), {
           name: file.name, type: file.type.startsWith("video/") ? "video" : "image",
           firebaseUrl, storagePath: path, uploadedAt: Date.now(), sizeBytes: file.size, mimeType: file.type,
+          category: autoCategory,
         });
         await idbSet(`media_blob_${docRef.id}`, file);
         const blobUrl = URL.createObjectURL(file);
@@ -433,22 +476,89 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
               </div>
             </div>
 
-            {/* Grid */}
+            {/* Filter bar + view mode toggle */}
+            {!selectMode && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 14px", marginBottom: 10 }}>
+                {/* Filter pills */}
+                <div style={{ display: "flex", gap: 4, flex: 1, flexWrap: "wrap" }}>
+                  {(["all", "praise", "worship", "fade"] as const).map(f => {
+                    const active = filter === f;
+                    const meta = f === "all" ? null : CATEGORY_META[f];
+                    return (
+                      <button
+                        key={f}
+                        onClick={() => setFilter(f)}
+                        style={{
+                          padding: "4px 10px", borderRadius: 20, fontSize: 10, fontWeight: 700,
+                          cursor: "pointer", transition: "all 0.15s",
+                          border: active
+                            ? `1px solid ${meta?.border ?? "rgba(255,255,255,0.35)"}`
+                            : "1px solid rgba(255,255,255,0.08)",
+                          background: active
+                            ? meta?.bg ?? "rgba(255,255,255,0.1)"
+                            : "rgba(255,255,255,0.03)",
+                          color: active
+                            ? meta?.color ?? "rgba(255,255,255,0.9)"
+                            : "rgba(255,255,255,0.4)",
+                        }}
+                      >
+                        {f === "all" ? "All" : CATEGORY_META[f].label}
+                        {f !== "all" && (
+                          <span style={{
+                            marginLeft: 5, fontSize: 9,
+                            background: active ? (meta?.border ?? "rgba(255,255,255,0.15)") : "rgba(255,255,255,0.07)",
+                            borderRadius: 10, padding: "1px 5px",
+                          }}>
+                            {items.filter(i => getItemCategory(i) === f).length}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+                {/* View mode toggle */}
+                <div style={{ display: "flex", gap: 2, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 2 }}>
+                  {(["grid", "list"] as const).map(mode => (
+                    <button
+                      key={mode}
+                      onClick={() => setViewMode(mode)}
+                      title={mode === "grid" ? "Grid view" : "List view"}
+                      style={{
+                        width: 26, height: 26, borderRadius: 6, border: "none",
+                        background: viewMode === mode ? "rgba(167,139,250,0.2)" : "transparent",
+                        color: viewMode === mode ? "#c4b5fd" : "rgba(255,255,255,0.3)",
+                        cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                        transition: "all 0.15s",
+                      }}
+                    >
+                      {mode === "grid" ? <LayoutGrid size={13} /> : <List size={13} />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Grid / List */}
             <div style={{ flex: 1, overflowY: "auto", padding: "0 14px 14px" }}>
               {items.length === 0 ? (
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 10, color: "rgba(255,255,255,0.2)" }}>
                   <Film size={32} strokeWidth={1.5} />
                   <span style={{ fontSize: 13 }}>No media yet — upload something above</span>
                 </div>
+              ) : filteredItems.length === 0 ? (
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 10, color: "rgba(255,255,255,0.2)" }}>
+                  <Film size={28} strokeWidth={1.5} />
+                  <span style={{ fontSize: 12, textAlign: "center" }}>No media tagged as<br /><strong style={{ color: filter !== "all" ? CATEGORY_META[filter].color : "#fff" }}>{filter !== "all" ? CATEGORY_META[filter].label : ""}</strong></span>
+                </div>
               ) : (
                 <>
                 {/* Select-mode toolbar */}
                 {selectMode && (
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                    <button onClick={multiSelected.size === items.length ? () => setMultiSelected(new Set()) : selectAll}
+                    <button onClick={multiSelected.size === filteredItems.length ? () => setMultiSelected(new Set()) : selectAll}
                       style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer",
                         border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.6)" }}>
-                      {multiSelected.size === items.length ? <><Square size={10}/> Deselect All</> : <><CheckSquare size={10}/> Select All</>}
+                      {multiSelected.size === filteredItems.length ? <><Square size={10}/> Deselect All</> : <><CheckSquare size={10}/> Select All</>}
                     </button>
                     {bulkConfirm ? (
                       <>
@@ -460,73 +570,160 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
                       <button onClick={handleBulkDelete} disabled={bulkDeleting}
                         style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer", marginLeft: "auto",
                           border: "1px solid rgba(239,68,68,0.4)", background: "rgba(239,68,68,0.14)", color: "#f87171" }}>
-                        {bulkDeleting ? <><Loader size={10} style={{ animation: "spin 1s linear infinite" }}/> Deleting…</> : <><Trash2 size={10}/> Delete {multiSelected.size} item{multiSelected.size !== 1 ? "s" : ""}</>}
+                        {bulkDeleting ? <><Loader size={10} style={{ animation: "spin 1s linear infinite"}}/> Deleting…</> : <><Trash2 size={10}/> Delete {multiSelected.size} item{multiSelected.size !== 1 ? "s" : ""}</>}
                       </button>
-                    )}
-                  </div>
+                  )}
+                </div>
                 )}
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(auto-fill,minmax(90px,1fr))" : "repeat(auto-fill,minmax(130px,1fr))", gap: isMobile ? 6 : 8 }}>
-                  {items.map(item => {
-                    const thumbUrl = blobUrls[item.id] ?? item.firebaseUrl;
-                    const isSelected = selected?.id === item.id;
-                    const isMultiChecked = multiSelected.has(item.id);
-                    const cached = cachedIds.has(item.id);
-                    const borderCol = selectMode
-                      ? isMultiChecked ? "2px solid #ef4444" : "2px solid rgba(255,255,255,0.06)"
-                      : isSelected ? "2px solid #a78bfa" : "2px solid rgba(255,255,255,0.06)";
-                    return (
-                      <div
-                        key={item.id}
-                        onClick={() => {
-                          if (selectMode) { toggleItemSelect(item.id); return; }
-                          setSelected(isSelected ? null : item); setDeleteConfirm(null);
-                        }}
-                        style={{
-                          position: "relative", borderRadius: 10, overflow: "hidden",
-                          aspectRatio: "16/9", cursor: "pointer",
-                          border: borderCol, background: "#0a0a0f", transition: "all 0.15s",
-                          boxShadow: (selectMode ? isMultiChecked : isSelected) ? "0 0 0 3px rgba(239,68,68,0.2), 0 8px 24px rgba(0,0,0,0.5)" : "0 4px 12px rgba(0,0,0,0.4)",
-                          transform: (selectMode ? isMultiChecked : isSelected) ? "scale(1.02)" : "scale(1)",
-                        }}
-                      >
-                        {item.type === "image"
-                          ? <img src={thumbUrl} alt={item.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} loading="lazy" />
-                          : videoThumbs[item.id]
-                            ? <img src={videoThumbs[item.id]} alt={item.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                            : (
-                              <div style={{ width: "100%", height: "100%", background: "linear-gradient(135deg, #0d0522 0%, #1a0a3d 50%, #0a0d1a 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                <Film size={22} color="rgba(167,139,250,0.35)" strokeWidth={1.5} />
+                {viewMode === "grid" ? (
+                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(auto-fill,minmax(90px,1fr))" : "repeat(auto-fill,minmax(130px,1fr))", gap: isMobile ? 6 : 8 }}>
+                    {filteredItems.map(item => {
+                      const thumbUrl = blobUrls[item.id] ?? item.firebaseUrl;
+                      const isSelected = selected?.id === item.id;
+                      const isMultiChecked = multiSelected.has(item.id);
+                      const cached = cachedIds.has(item.id);
+                      const cat = getItemCategory(item);
+                      const catMeta = cat !== "none" ? CATEGORY_META[cat] : null;
+                      const borderCol = selectMode
+                        ? isMultiChecked ? "2px solid #ef4444" : "2px solid rgba(255,255,255,0.06)"
+                        : isSelected ? "2px solid #a78bfa" : "2px solid rgba(255,255,255,0.06)";
+                      return (
+                        <div
+                          key={item.id}
+                          onClick={() => {
+                            if (selectMode) { toggleItemSelect(item.id); return; }
+                            setSelected(isSelected ? null : item); setDeleteConfirm(null);
+                          }}
+                          style={{
+                            position: "relative", borderRadius: 10, overflow: "hidden",
+                            aspectRatio: "16/9", cursor: "pointer",
+                            border: borderCol, background: "#0a0a0f", transition: "all 0.15s",
+                            boxShadow: (selectMode ? isMultiChecked : isSelected) ? "0 0 0 3px rgba(239,68,68,0.2), 0 8px 24px rgba(0,0,0,0.5)" : "0 4px 12px rgba(0,0,0,0.4)",
+                            transform: (selectMode ? isMultiChecked : isSelected) ? "scale(1.02)" : "scale(1)",
+                          }}
+                        >
+                          {item.type === "image"
+                            ? <img src={thumbUrl} alt={item.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} loading="lazy" />
+                            : videoThumbs[item.id]
+                              ? <img src={videoThumbs[item.id]} alt={item.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                              : (
+                                <div style={{ width: "100%", height: "100%", background: "linear-gradient(135deg, #0d0522 0%, #1a0a3d 50%, #0a0d1a 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                  <Film size={22} color="rgba(167,139,250,0.35)" strokeWidth={1.5} />
+                                </div>
+                              )
+                          }
+                          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 50%)" }} />
+                          <div style={{ position: "absolute", top: 5, left: 5, background: "rgba(0,0,0,0.7)", borderRadius: 5, padding: "2px 6px", display: "flex", alignItems: "center", gap: 3, backdropFilter: "blur(4px)" }}>
+                            {item.type === "video" ? <Film size={9} color="#a78bfa" /> : <ImageIcon size={9} color="#34d399" />}
+                            <span style={{ fontSize: 9, fontWeight: 700, color: item.type === "video" ? "#a78bfa" : "#34d399" }}>{item.type === "video" ? "VID" : "IMG"}</span>
+                          </div>
+                          {/* Category dot in grid */}
+                          {catMeta && (
+                            <div style={{ position: "absolute", top: 5, left: 5, marginLeft: 38 }}>
+                              <div style={{ width: 8, height: 8, borderRadius: "50%", background: catMeta.color, boxShadow: `0 0 5px ${catMeta.color}` }} />
+                            </div>
+                          )}
+                          <div style={{ position: "absolute", top: 5, right: 5 }}>
+                            {selectMode
+                              ? <div style={{ width: 18, height: 18, borderRadius: 5, border: isMultiChecked ? "2px solid #ef4444" : "2px solid rgba(255,255,255,0.35)", background: isMultiChecked ? "rgba(239,68,68,0.85)" : "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                  {isMultiChecked && <Check size={11} color="#fff" strokeWidth={3} />}
+                                </div>
+                              : cached
+                                ? <div style={{ background: "rgba(52,211,153,0.2)", borderRadius: 4, padding: "2px 4px", display: "flex" }}><Wifi size={9} color="#34d399" /></div>
+                                : <div style={{ background: "rgba(0,0,0,0.5)", borderRadius: 4, padding: "2px 4px", display: "flex" }}><WifiOff size={9} color="rgba(255,255,255,0.3)" /></div>}
+                          </div>
+                          <div style={{ position: "absolute", bottom: 5, left: 6, right: 6, fontSize: 9, fontWeight: 600, color: "rgba(255,255,255,0.85)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {item.name}
+                          </div>
+                          {!selectMode && isSelected && (
+                            <div style={{ position: "absolute", inset: 0, background: "rgba(167,139,250,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              <div style={{ background: "#a78bfa", borderRadius: "50%", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(167,139,250,0.6)" }}>
+                                <Check size={15} color="#fff" />
                               </div>
-                            )
-                        }
-                        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 50%)" }} />
-                        <div style={{ position: "absolute", top: 5, left: 5, background: "rgba(0,0,0,0.7)", borderRadius: 5, padding: "2px 6px", display: "flex", alignItems: "center", gap: 3, backdropFilter: "blur(4px)" }}>
-                          {item.type === "video" ? <Film size={9} color="#a78bfa" /> : <ImageIcon size={9} color="#34d399" />}
-                          <span style={{ fontSize: 9, fontWeight: 700, color: item.type === "video" ? "#a78bfa" : "#34d399" }}>{item.type === "video" ? "VID" : "IMG"}</span>
+                            </div>
+                          )}
                         </div>
-                        <div style={{ position: "absolute", top: 5, right: 5 }}>
-                          {selectMode
-                            ? <div style={{ width: 18, height: 18, borderRadius: 5, border: isMultiChecked ? "2px solid #ef4444" : "2px solid rgba(255,255,255,0.35)", background: isMultiChecked ? "rgba(239,68,68,0.85)" : "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                {isMultiChecked && <Check size={11} color="#fff" strokeWidth={3} />}
-                              </div>
-                            : cached
-                              ? <div style={{ background: "rgba(52,211,153,0.2)", borderRadius: 4, padding: "2px 4px", display: "flex" }}><Wifi size={9} color="#34d399" /></div>
-                              : <div style={{ background: "rgba(0,0,0,0.5)", borderRadius: 4, padding: "2px 4px", display: "flex" }}><WifiOff size={9} color="rgba(255,255,255,0.3)" /></div>}
-                        </div>
-                        <div style={{ position: "absolute", bottom: 5, left: 6, right: 6, fontSize: 9, fontWeight: 600, color: "rgba(255,255,255,0.85)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {item.name}
-                        </div>
-                        {!selectMode && isSelected && (
-                          <div style={{ position: "absolute", inset: 0, background: "rgba(167,139,250,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            <div style={{ background: "#a78bfa", borderRadius: "50%", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(167,139,250,0.6)" }}>
-                              <Check size={15} color="#fff" />
+                      );
+                    })}
+                  </div>
+                ) : (
+                  /* ── List View ── */
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {filteredItems.map(item => {
+                      const thumbUrl = blobUrls[item.id] ?? item.firebaseUrl;
+                      const isSelected = selected?.id === item.id;
+                      const isMultiChecked = multiSelected.has(item.id);
+                      const cached = cachedIds.has(item.id);
+                      const cat = getItemCategory(item);
+                      const catMeta = CATEGORY_META[cat];
+                      return (
+                        <div
+                          key={item.id}
+                          onClick={() => {
+                            if (selectMode) { toggleItemSelect(item.id); return; }
+                            setSelected(isSelected ? null : item); setDeleteConfirm(null);
+                          }}
+                          style={{
+                            display: "flex", alignItems: "center", gap: 10,
+                            padding: "7px 8px", borderRadius: 9, cursor: "pointer",
+                            background: isSelected ? "rgba(167,139,250,0.1)" : (selectMode && isMultiChecked) ? "rgba(239,68,68,0.08)" : "rgba(255,255,255,0.02)",
+                            border: isSelected
+                              ? "1px solid rgba(167,139,250,0.35)"
+                              : (selectMode && isMultiChecked)
+                                ? "1px solid rgba(239,68,68,0.35)"
+                                : "1px solid rgba(255,255,255,0.05)",
+                            transition: "all 0.13s",
+                          }}
+                        >
+                          {/* Multi-select checkbox */}
+                          {selectMode && (
+                            <div style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, border: isMultiChecked ? "2px solid #ef4444" : "2px solid rgba(255,255,255,0.25)", background: isMultiChecked ? "rgba(239,68,68,0.85)" : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              {isMultiChecked && <Check size={11} color="#fff" strokeWidth={3} />}
+                            </div>
+                          )}
+                          {/* Thumbnail */}
+                          <div style={{ width: 60, height: 34, borderRadius: 6, overflow: "hidden", flexShrink: 0, background: "#0a0a0f" }}>
+                            {item.type === "image"
+                              ? <img src={thumbUrl} alt={item.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} loading="lazy" />
+                              : videoThumbs[item.id]
+                                ? <img src={videoThumbs[item.id]} alt={item.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                : <div style={{ width: "100%", height: "100%", background: "linear-gradient(135deg,#0d0522,#1a0a3d)", display: "flex", alignItems: "center", justifyContent: "center" }}><Film size={14} color="rgba(167,139,250,0.4)" /></div>
+                            }
+                          </div>
+                          {/* Details */}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 11, fontWeight: 600, color: isSelected ? "#e9d5ff" : "rgba(255,255,255,0.8)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 3, flexWrap: "wrap" }}>
+                              {/* Type badge */}
+                              <span style={{ fontSize: 9, fontWeight: 700, color: item.type === "video" ? "#a78bfa" : "#34d399", background: item.type === "video" ? "rgba(167,139,250,0.12)" : "rgba(52,211,153,0.12)", border: `1px solid ${item.type === "video" ? "rgba(167,139,250,0.25)" : "rgba(52,211,153,0.25)"}`, borderRadius: 4, padding: "1px 5px", display: "flex", alignItems: "center", gap: 2 }}>
+                                {item.type === "video" ? <Film size={8} /> : <ImageIcon size={8} />} {item.type === "video" ? "VID" : "IMG"}
+                              </span>
+                              {/* Category badge */}
+                              <span style={{ fontSize: 9, fontWeight: 700, color: catMeta.color, background: catMeta.bg, border: `1px solid ${catMeta.border}`, borderRadius: 4, padding: "1px 5px" }}>
+                                {catMeta.label}
+                              </span>
+                              {/* Size */}
+                              <span style={{ fontSize: 9, color: "rgba(255,255,255,0.3)" }}>{fmt(item.sizeBytes)}</span>
                             </div>
                           </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                          {/* Network status */}
+                          <div style={{ flexShrink: 0 }}>
+                            {cached
+                              ? <div style={{ background: "rgba(52,211,153,0.1)", borderRadius: 4, padding: "3px 5px", display: "flex" }}><Wifi size={10} color="#34d399" /></div>
+                              : <div style={{ background: "rgba(0,0,0,0.3)", borderRadius: 4, padding: "3px 5px", display: "flex" }}><WifiOff size={10} color="rgba(255,255,255,0.25)" /></div>
+                            }
+                          </div>
+                          {/* Selected indicator */}
+                          {!selectMode && isSelected && (
+                            <div style={{ flexShrink: 0, width: 22, height: 22, background: "#a78bfa", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 10px rgba(167,139,250,0.5)" }}>
+                              <Check size={12} color="#fff" />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
                 </>
               )}
             </div>
@@ -580,6 +777,37 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
                     <span style={{ fontSize: 10, borderRadius: 5, padding: "2px 7px", display: "flex", alignItems: "center", gap: 3, background: isCached ? "rgba(52,211,153,0.1)" : "rgba(255,255,255,0.04)", border: `1px solid ${isCached ? "rgba(52,211,153,0.25)" : "rgba(255,255,255,0.08)"}`, color: isCached ? "#34d399" : "rgba(255,255,255,0.35)", fontWeight: 700 }}>
                       {isCached ? <><Wifi size={9} /> Offline ready</> : <><WifiOff size={9} /> Online only</>}
                     </span>
+                  </div>
+                </div>
+
+                {/* Category classifier */}
+                <div style={{ padding: "10px 14px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 7, display: "flex", alignItems: "center", gap: 5 }}>
+                    <Tag size={9} /> Category
+                  </div>
+                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                    {(["praise", "worship", "fade", "none"] as MediaCategory[]).map(cat => {
+                      const meta = CATEGORY_META[cat];
+                      const current = getItemCategory(selected);
+                      const isActive = current === cat;
+                      return (
+                        <button
+                          key={cat}
+                          onClick={() => setItemCategory(selected, cat)}
+                          style={{
+                            padding: "4px 10px", borderRadius: 20, fontSize: 10, fontWeight: 700,
+                            cursor: "pointer", transition: "all 0.15s",
+                            border: isActive ? `1px solid ${meta.border}` : "1px solid rgba(255,255,255,0.08)",
+                            background: isActive ? meta.bg : "rgba(255,255,255,0.03)",
+                            color: isActive ? meta.color : "rgba(255,255,255,0.35)",
+                            boxShadow: isActive ? `0 0 8px ${meta.bg}` : "none",
+                          }}
+                        >
+                          {isActive && <Check size={9} style={{ marginRight: 3, display: "inline" }} />}
+                          {meta.label}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 

@@ -38,7 +38,7 @@ interface LiveState {
   bgVideo?: { type: "local"; url: string } | { type: "firebase"; url: string; localUrl?: string } | { type: "image-firebase"; url: string; localUrl?: string } | { type: "youtube"; videoId: string } | null;
   transitioning?: boolean;
   fadeScreen?: boolean;
-  fadeScreenBg?: { type: "color"; color: string } | { type: "image-url"; url: string } | { type: "image-local"; url: string } | { type: "image-firebase"; url: string } | { type: "video-local"; url: string } | { type: "video-firebase"; url: string } | { type: "video-youtube"; videoId: string };
+  fadeScreenBg?: { type: "color"; color: string } | { type: "image-url"; url: string } | { type: "image-local"; url: string } | { type: "image-firebase"; url: string } | { type: "video-local"; url: string; muted?: boolean } | { type: "video-firebase"; url: string; muted?: boolean } | { type: "video-youtube"; videoId: string; muted?: boolean };
   echoSacredScale?: number;
   echoContentScale?: number;
   echoFuncScale?: number;
@@ -184,11 +184,9 @@ export default function LiveDisplayPage() {
   // Keep last non-null bg so the image stays mounted during the CSS fade-out transition.
   // Without this the <img> unmounts instantly when fadeScreen becomes null, showing a black flash.
   const prevFadeScreenRef = useRef<LiveState["fadeScreenBg"] | null>(null);
-  // Ignore fadeScreen on the FIRST state received — it's stale from a previous
-  // session. Fade should only activate from a live controller push this session.
-  // EXCEPTION: ?preview=1 is used by the Grid View iframe — show fade immediately.
   const isPreviewMode = new URLSearchParams(window.location.search).get("preview") === "1";
-  const isFirstStateRef = useRef(!isPreviewMode); // preview=false means suppress is already off
+  void isPreviewMode; // kept for future use
+
 
   const wrapperRef  = useRef<HTMLDivElement>(null);
   const lyricsRef   = useRef<HTMLDivElement>(null);
@@ -236,11 +234,9 @@ export default function LiveDisplayPage() {
       if (data.transitioning) { setFadeBlack(true); return; }
       setFadeBlack(false);
 
-      // Strip fadeScreen on first state — prevents stale overlay from blocking OBS on load
-      const suppressFade = isFirstStateRef.current;
-      isFirstStateRef.current = false;
-
-      if (!suppressFade && data.fadeScreen) {
+      // Always apply fadeScreen state from controller — OBS display should match
+      // the controller exactly on connect, reconnect, and every push.
+      if (data.fadeScreen) {
         const bg = data.fadeScreenBg ?? { type: "color", color: "#000" };
         prevFadeScreenRef.current = bg;
         setFadeScreen(bg);
@@ -248,7 +244,13 @@ export default function LiveDisplayPage() {
         setFadeScreen(null);
       }
 
-      if (data._fadeOnly) return;
+      if (data._fadeOnly) {
+        // _fadeOnly: only lift the fade overlay — skip lyric animation so there's no flash.
+        // BUT update bgVideo and bgIdx so the background video element switches immediately
+        // to the correct source (e.g. a worship video assigned while fade was active).
+        setLive(prev => prev ? { ...prev, bgVideo: data.bgVideo, bgIdx: data.bgIdx } : data);
+        return;
+      }
 
       const lyricsEl = lyricsRef.current;
       if (!lyricsEl) { setLive(data); return; }
@@ -562,18 +564,18 @@ export default function LiveDisplayPage() {
             )}
             {/* video-local — base64 data URL (admin session only, but still rendered if present) */}
             {bg && bg.type === "video-local" && bgUrl && (
-              <video key={bgUrl} src={bgUrl} autoPlay loop muted playsInline
+              <video key={bgUrl} src={bgUrl} autoPlay loop muted={bg.muted !== false} playsInline
                 style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }} />
             )}
             {/* video-firebase — Firebase Storage URL, permanent and OBS-accessible */}
             {bg && bg.type === "video-firebase" && bgUrl && (
-              <video key={bgUrl} src={bgUrl} autoPlay loop muted playsInline
+              <video key={bgUrl} src={bgUrl} autoPlay loop muted={bg.muted !== false} playsInline
                 style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }} />
             )}
             {bg && bg.type === "video-youtube" && ytId && (
               <iframe
                 key={ytId}
-                src={`https://www.youtube.com/embed/${ytId}?autoplay=1&loop=1&playlist=${ytId}&mute=1&muted=1&controls=0&disablekb=1&fs=0&modestbranding=1&iv_load_policy=3`}
+                src={`https://www.youtube.com/embed/${ytId}?autoplay=1&loop=1&playlist=${ytId}&mute=${bg.muted !== false ? 1 : 0}&muted=${bg.muted !== false ? 1 : 0}&controls=0&disablekb=1&fs=0&modestbranding=1&iv_load_policy=3`}
                 style={{ width:"100%", height:"100%", border:"none", pointerEvents:"none", display:"block" }}
                 allow="autoplay; encrypted-media"
                 title="fade-video-bg" />
