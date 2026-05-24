@@ -363,7 +363,8 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
     setTimeout(() => {
       setConfirming(false);
       setAssignedTarget(null);
-      onClose();
+      // Modal stays open — user can assign more items or browse freely.
+      // Close is only triggered by the explicit ✕ button.
     }, 1200);
   };
 
@@ -626,12 +627,14 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
                               ? <img src={videoThumbs[item.id]} alt={item.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                               : (
                                 // Live video element fallback — shows a real frame cross-origin without CORS.
-                                // Browsers can DISPLAY cross-origin video freely; only canvas reads require CORS.
+                                // autoPlay + muted + playsInline = iOS Safari exception for user-gesture requirement.
+                                // onSeeked → pause() freezes the card on the 1s frame so it doesn't keep playing.
                                 <video
                                   src={blobUrls[item.id] ?? item.firebaseUrl}
-                                  muted playsInline preload="metadata"
+                                  muted playsInline autoPlay preload="auto"
                                   style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none", display: "block" }}
                                   onLoadedData={e => { (e.target as HTMLVideoElement).currentTime = 1; }}
+                                  onSeeked={e => { (e.target as HTMLVideoElement).pause(); }}
                                 />
                               )
                           }
@@ -712,11 +715,14 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
                                 ? <img src={videoThumbs[item.id]} alt={item.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                                 : (
                                   // Live video element fallback — shows a real frame cross-origin without CORS
+                                  // autoPlay + muted + playsInline = iOS Safari exception for user-gesture requirement.
+                                  // onSeeked → pause() freezes the card on the 1s frame so it doesn't keep playing.
                                   <video
                                     src={blobUrls[item.id] ?? item.firebaseUrl}
-                                    muted playsInline preload="metadata"
+                                    muted playsInline autoPlay preload="auto"
                                     style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none", display: "block" }}
                                     onLoadedData={e => { (e.target as HTMLVideoElement).currentTime = 1; }}
+                                    onSeeked={e => { (e.target as HTMLVideoElement).pause(); }}
                                   />
                                 )
                             }
