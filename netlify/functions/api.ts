@@ -3601,6 +3601,160 @@ BULLET: [...]`;
         }
     }
 
+    // DELETE /preaching-drafts (bulk) — body: { ids: string[] }
+    if (rawPath === "/preaching-drafts" && method === "DELETE") {
+        const { ids } = body as { ids?: string[] };
+        if (!ids || !Array.isArray(ids) || ids.length === 0) return json(400, { error: "ids array required" });
+        try {
+            const batch = firestore.batch();
+            ids.forEach(id => batch.delete(firestore.collection("preachingDrafts").doc(id)));
+            await batch.commit();
+            return json(200, { ok: true, deleted: ids.length });
+        } catch (e: any) {
+            return json(500, { error: "Failed to bulk delete" });
+        }
+    }
+
+    // ─── PREACHING SHARES ──────────────────────────────────────────────────────
+
+    // Helper — short random slug
+    function genShareId(): string {
+        return "s_" + Math.random().toString(36).slice(2, 10);
+    }
+
+    // POST /preaching-shares — create a new shareable link (authenticated)
+    if (rawPath === "/preaching-shares" && method === "POST") {
+        const { createdBy, createdByName, serviceType = "", scheduledDate = "", instructions = "" } = body;
+        if (!createdBy || !createdByName) return json(400, { error: "createdBy and createdByName required" });
+        try {
+            const shareId = genShareId();
+            const now = new Date().toISOString();
+            await firestore.collection("preachingShares").doc(shareId).set({
+                id: shareId, createdBy, createdByName,
+                serviceType, scheduledDate, instructions,
+                active: true, createdAt: now,
+            });
+            return json(200, { ok: true, shareId });
+        } catch (e: any) {
+            console.error("[preaching-shares POST]", e?.message ?? e);
+            return json(500, { error: "Failed to create share link" });
+        }
+    }
+
+    // GET /preaching-shares?userId=... — list user's active share links
+    if (rawPath === "/preaching-shares" && method === "GET") {
+        const userId = event.queryStringParameters?.userId;
+        if (!userId) return json(200, []);
+        try {
+            const snap = await firestore.collection("preachingShares")
+                .where("createdBy", "==", userId)
+                .where("active", "==", true)
+                .get();
+            const docs = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+            docs.sort((a: any, b: any) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+            return json(200, docs);
+        } catch (e: any) {
+            console.error("[preaching-shares GET]", e?.message ?? e);
+            return json(500, { error: "Failed to list share links" });
+        }
+    }
+
+    // DELETE /preaching-shares/:id — revoke a share link
+    const preachingShareMatch = rawPath.match(/^\/preaching-shares\/([^/]+)$/);
+    if (preachingShareMatch && method === "DELETE") {
+        const shareId = preachingShareMatch[1];
+        try {
+            await firestore.collection("preachingShares").doc(shareId).delete();
+            return json(200, { ok: true });
+        } catch (e: any) {
+            return json(500, { error: "Failed to delete share link" });
+        }
+    }
+
+    // GET /preaching-shares/public/:id — no auth, resolve link details
+    const preachingPublicMatch = rawPath.match(/^\/preaching-shares\/public\/([^/]+)$/);
+    if (preachingPublicMatch && method === "GET") {
+        const shareId = preachingPublicMatch[1];
+        try {
+            const doc = await firestore.collection("preachingShares").doc(shareId).get();
+            if (!doc.exists) return json(404, { error: "Link not found" });
+            const data = doc.data() as Record<string, any>;
+            if (!data.active) return json(410, { error: "Link inactive" });
+            return json(200, {
+                id: doc.id,
+                createdByName: data.createdByName ?? "",
+                serviceType: data.serviceType ?? "",
+                scheduledDate: data.scheduledDate ?? "",
+                instructions: data.instructions ?? "",
+            });
+        } catch (e: any) {
+            console.error("[preaching-shares/public GET]", e?.message ?? e);
+            return json(500, { error: "Failed to load link" });
+        }
+    }
+
+    // POST /preaching-shares/public/:id/submit — guest submits sermon request (no auth)
+    const preachingSubmitMatch = rawPath.match(/^\/preaching-shares\/public\/([^/]+)\/submit$/);
+    if (preachingSubmitMatch && method === "POST") {
+        const shareId = preachingSubmitMatch[1];
+        const {
+            preacherName, title, scheduledDate: sd, serviceType: st,
+            notes, link, fileUrl, fileName, fileType, files,
+        } = body;
+        if (!preacherName?.trim() || !title?.trim()) {
+            return json(400, { error: "preacherName and title are required" });
+        }
+        try {
+            const shareDoc = await firestore.collection("preachingShares").doc(shareId).get();
+            if (!shareDoc.exists) return json(404, { error: "Link not found" });
+            const shareData = shareDoc.data() as Record<string, any>;
+            if (!shareData.active) return json(410, { error: "Link has been deactivated" });
+
+            const now = new Date().toISOString();
+            const ref = await firestore.collection("preachingDrafts").add({
+                title: title.trim(),
+                authorName: preacherName.trim(),
+                authorId: `guest_${shareId}`,
+                scheduledDate: sd ?? shareData.scheduledDate ?? "",
+                serviceType: st ?? shareData.serviceType ?? "",
+                status: "submitted",
+                submittedAt: now,
+                submittedByName: preacherName.trim(),
+                isExternal: true,
+                shareId,
+                externalNotes: notes?.trim() ?? "",
+                externalLink: link?.trim() ?? "",
+                externalFileUrl: fileUrl ?? "",
+                externalFileName: fileName ?? "",
+                externalFileType: fileType ?? "",
+                externalFiles: Array.isArray(files) ? files : [],
+                createdAt: now,
+                updatedAt: now,
+                keyPoints: [],
+                scriptures: [],
+                freeNotes: "",
+                designStatus: "pending",
+            });
+
+            // Notify Audio/Tech + Admin that a guest submitted
+            writeNotif(firestore, {
+                type: "new_design_request",
+                message: `🎤 New request from ${preacherName.trim()}`,
+                subMessage: `"${title.trim()}" has been submitted via the preaching share link.`,
+                actorName: preacherName.trim(),
+                actorPhoto: "",
+                actorUserId: `guest_${shareId}`,
+                targetAudience: "non_member",
+                resourceId: ref.id,
+            });
+
+            return json(200, { ok: true, id: ref.id });
+        } catch (e: any) {
+            console.error("[preaching-shares/public/submit]", e?.message ?? e);
+            return json(500, { error: "Failed to submit request" });
+        }
+    }
+
     // ─── BIBLE GATEWAY PROXY ───────────────────────────────────────────────────
     // GET /bible/gateway?book=John&chapter=3&version=NIV
     if (rawPath === "/bible/gateway" && method === "GET") {
