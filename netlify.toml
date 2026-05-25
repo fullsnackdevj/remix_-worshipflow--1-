@@ -19,6 +19,13 @@
 [build.environment]
   RESEND_API_KEY = ""
 
+# ── OCR Preaching → dedicated function (must be before /api/* wildcard) ──────
+[[redirects]]
+  from = "/api/ocr-preaching"
+  to = "/.netlify/functions/ocr-preaching"
+  status = 200
+  force = true
+
 # ── API routes → Netlify Function ────────────────────────────────────────────
 [[redirects]]
   from = "/api/*"
