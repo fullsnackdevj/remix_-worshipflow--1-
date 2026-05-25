@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { storage } from "./firebase";
 import {
   Mic2, FileText, Link2, Upload, X, Check, Loader2,
-  AlertTriangle, BookOpen, ChevronDown, CalendarDays, Paperclip,
+  AlertTriangle, BookOpen, ChevronDown, CalendarDays, Paperclip, Plus,
 } from "lucide-react";
 
 interface ShareInfo {
@@ -15,6 +15,17 @@ interface ShareInfo {
 }
 
 const SERVICE_TYPES = ["Sunday Service", "Midweek Service", "Prayer Meeting", "Special Service", "Camp / Retreat", "Other"];
+
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
+
+interface UploadedFile {
+  id: string;
+  file: File;
+  progress: number;   // 0-100
+  status: "uploading" | "done" | "error";
+  url: string;
+  errorMsg?: string;
+}
 
 export default function PreachingRequestPage({ shareId }: { shareId: string }) {
   const [shareInfo, setShareInfo] = useState<ShareInfo | null>(null);
@@ -29,13 +40,8 @@ export default function PreachingRequestPage({ shareId }: { shareId: string }) {
   const [notes, setNotes] = useState("");
   const [link, setLink] = useState("");
 
-  // File upload
-  const [file, setFile] = useState<File | null>(null);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploading, setUploading] = useState(false);
-  const [uploadedFileUrl, setUploadedFileUrl] = useState("");
-  const [uploadedFileName, setUploadedFileName] = useState("");
-  const [uploadedFileType, setUploadedFileType] = useState("");
+  // Multi-file upload
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Submission
@@ -63,61 +69,65 @@ export default function PreachingRequestPage({ shareId }: { shareId: string }) {
     })();
   }, [shareId]);
 
-  const handleFileChange = (f: File | null) => {
-    if (!f) return;
-    setFile(f);
-    setUploadedFileUrl("");
-    setUploadedFileName("");
-    setUploadedFileType("");
-  };
+  // Auto-upload a single File object and track it
+  const uploadOneFile = useCallback((f: File): string => {
+    const id = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const entry: UploadedFile = { id, file: f, progress: 0, status: "uploading", url: "" };
+    setUploadedFiles(prev => [...prev, entry]);
 
-  const handleUpload = async () => {
-    if (!file) return;
-    setUploading(true);
-    setUploadProgress(0);
-    try {
-      const path = `preaching_shares/${shareId}/${Date.now()}_${file.name}`;
-      const sRef = storageRef(storage, path);
-      const task = uploadBytesResumable(sRef, file);
-      await new Promise<void>((resolve, reject) =>
-        task.on("state_changed",
-          snap => setUploadProgress(Math.round(snap.bytesTransferred / snap.totalBytes * 100)),
-          reject,
-          () => resolve()
-        )
-      );
-      const url = await getDownloadURL(sRef);
-      setUploadedFileUrl(url);
-      setUploadedFileName(file.name);
-      setUploadedFileType(file.type);
-    } catch {
-      alert("Upload failed. Please try again.");
-    } finally {
-      setUploading(false);
+    const path = `preaching_shares/${shareId}/${id}_${f.name}`;
+    const sRef = storageRef(storage, path);
+    const task = uploadBytesResumable(sRef, f);
+
+    task.on(
+      "state_changed",
+      snap => {
+        const pct = Math.round(snap.bytesTransferred / snap.totalBytes * 100);
+        setUploadedFiles(prev => prev.map(u => u.id === id ? { ...u, progress: pct } : u));
+      },
+      _err => {
+        setUploadedFiles(prev => prev.map(u => u.id === id ? { ...u, status: "error", errorMsg: "Upload failed" } : u));
+      },
+      async () => {
+        const url = await getDownloadURL(sRef);
+        setUploadedFiles(prev => prev.map(u => u.id === id ? { ...u, status: "done", url, progress: 100 } : u));
+      }
+    );
+    return id;
+  }, [shareId]);
+
+  // Handle file picker change — validate size then auto-upload each
+  const handleFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const chosen = Array.from(e.target.files ?? []) as File[];
+    e.target.value = ""; // allow re-picking same file
+    for (const f of chosen) {
+      if (f.size > MAX_FILE_SIZE) {
+        setSubmitError(`"${f.name}" exceeds the 100 MB limit and was skipped.`);
+        continue;
+      }
+      uploadOneFile(f);
     }
   };
 
-  const removeFile = () => {
-    setFile(null);
-    setUploadedFileUrl("");
-    setUploadedFileName("");
-    setUploadedFileType("");
-    setUploadProgress(0);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+  const removeUploadedFile = (id: string) => {
+    setUploadedFiles(prev => prev.filter(u => u.id !== id));
   };
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!preacherName.trim()) { setSubmitError("Please enter your name."); return; }
     if (!title.trim()) { setSubmitError("Please enter a sermon title."); return; }
-    if (!notes.trim() && !link.trim() && !uploadedFileUrl) {
-      setSubmitError("Please add notes, a reference link, or upload a file."); return;
+    if (!notes.trim() && !link.trim() && uploadedFiles.filter(u => u.status === "done").length === 0) {
+      setSubmitError("Please add notes, a reference link, or upload at least one file."); return;
     }
-    if (file && !uploadedFileUrl) {
-      setSubmitError("Please upload the file first by clicking 'Upload File'."); return;
-    }
+    const stillUploading = uploadedFiles.some(u => u.status === "uploading");
+    if (stillUploading) { setSubmitError("Please wait for all files to finish uploading."); return; }
     setSubmitError(null);
     setSubmitting(true);
+    const doneFiles = uploadedFiles.filter(u => u.status === "done");
+    // Send first file in legacy fields + all files as array
+    const firstFile = doneFiles[0];
     try {
       const res = await fetch(`/api/preaching-shares/public/${shareId}/submit`, {
         method: "POST",
@@ -129,9 +139,10 @@ export default function PreachingRequestPage({ shareId }: { shareId: string }) {
           serviceType,
           notes: notes.trim(),
           link: link.trim(),
-          fileUrl: uploadedFileUrl,
-          fileName: uploadedFileName,
-          fileType: uploadedFileType,
+          fileUrl: firstFile?.url ?? "",
+          fileName: firstFile?.file.name ?? "",
+          fileType: firstFile?.file.type ?? "",
+          files: doneFiles.map(u => ({ url: u.url, name: u.file.name, type: u.file.type })),
         }),
       });
       if (!res.ok) {
@@ -215,25 +226,10 @@ export default function PreachingRequestPage({ shareId }: { shareId: string }) {
             Your sermon request has been sent to the design team. They'll be in touch!
           </p>
 
-          {/* Submission summary card */}
-          <div style={{
-            padding: "20px 24px", borderRadius: 18,
-            background: "rgba(255,255,255,0.04)",
-            border: "1px solid rgba(255,255,255,0.09)",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
-            backdropFilter: "blur(12px)",
-          }}>
-            <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 10, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 10 }}>Submitted By</p>
-            <p style={{ color: "rgba(255,255,255,0.92)", fontSize: 20, fontWeight: 800, letterSpacing: "-0.02em", margin: "0 0 6px" }}>{preacherName}</p>
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 12px", borderRadius: 20, background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.22)" }}>
-              <Mic2 size={11} style={{ color: "#a5b4fc" }} />
-              <span style={{ color: "#a5b4fc", fontSize: 12, fontWeight: 600 }}>{title}</span>
-            </div>
-          </div>
-
-          <p style={{ color: "rgba(255,255,255,0.15)", fontSize: 11, marginTop: 20, letterSpacing: "0.02em" }}>
+          <p style={{ color: "rgba(255,255,255,0.15)", fontSize: 11, marginTop: 8, letterSpacing: "0.02em" }}>
             You may close this tab.
           </p>
+
         </div>
       </div>
     );
@@ -366,62 +362,74 @@ export default function PreachingRequestPage({ shareId }: { shareId: string }) {
               />
             </div>
 
-            {/* File upload */}
+            {/* File upload — multi-file, auto-upload */}
             <div>
-              <label style={labelStyle}><Paperclip size={12} style={{ display: "inline", marginRight: 4 }} />Attachment (optional)</label>
+              <label style={labelStyle}><Paperclip size={12} style={{ display: "inline", marginRight: 4 }} />Attachments (optional · max 100 MB each)</label>
+
+              {/* Hidden multi-file input */}
               <input
                 ref={fileInputRef}
                 type="file"
+                multiple
                 accept=".pdf,.doc,.docx,.zip,.jpg,.jpeg,.png,.gif,.webp,image/*,application/zip,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 style={{ display: "none" }}
-                onChange={e => handleFileChange(e.target.files?.[0] ?? null)}
+                onChange={handleFilesChange}
               />
 
-              {!file ? (
-                <button
-                  type="button"
-                  className="prq-upload-btn"
-                  onClick={() => fileInputRef.current?.click()}
-                  style={{ width: "100%", justifyContent: "center", padding: "12px 16px", borderRadius: 12 }}
-                >
-                  <Upload size={15} />
-                  Choose File (PDF, Word, ZIP, Image)
-                </button>
-              ) : (
-                <div style={{ padding: "14px 16px", borderRadius: 12, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: uploadedFileUrl ? 0 : 10 }}>
-                    <Paperclip size={14} style={{ color: "#818cf8", flexShrink: 0 }} />
-                    <span style={{ color: "rgba(255,255,255,0.75)", fontSize: 13, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{file.name}</span>
-                    <button type="button" onClick={removeFile} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.3)", padding: 2, flexShrink: 0 }}>
-                      <X size={15} />
-                    </button>
-                  </div>
-
-                  {!uploadedFileUrl && (
-                    <>
-                      {uploading ? (
-                        <>
-                          <div style={{ height: 5, borderRadius: 3, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
-                            <div style={{ height: "100%", width: `${uploadProgress}%`, background: "linear-gradient(90deg,#6366f1,#a78bfa)", borderRadius: 3, transition: "width 0.3s" }} />
+              {/* File list */}
+              {uploadedFiles.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
+                  {uploadedFiles.map(u => (
+                    <div key={u.id} style={{ padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,0.04)", border: `1px solid ${ u.status === "error" ? "rgba(239,68,68,0.3)" : u.status === "done" ? "rgba(52,211,153,0.25)" : "rgba(255,255,255,0.08)" }` }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        {/* Status icon */}
+                        {u.status === "uploading" && <Loader2 size={13} style={{ color: "#818cf8", animation: "spin 1s linear infinite", flexShrink: 0 }} />}
+                        {u.status === "done"      && <Check size={13} style={{ color: "#34d399", flexShrink: 0 }} />}
+                        {u.status === "error"     && <AlertTriangle size={13} style={{ color: "#f87171", flexShrink: 0 }} />}
+                        {/* File name */}
+                        <span style={{ color: u.status === "error" ? "#fca5a5" : "rgba(255,255,255,0.75)", fontSize: 13, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {u.file.name}
+                        </span>
+                        {/* Size */}
+                        <span style={{ color: "rgba(255,255,255,0.2)", fontSize: 11, flexShrink: 0 }}>
+                          {(u.file.size / 1024 / 1024).toFixed(1)} MB
+                        </span>
+                        {/* Remove */}
+                        {u.status !== "uploading" && (
+                          <button type="button" onClick={() => removeUploadedFile(u.id)}
+                            style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.25)", padding: 2, flexShrink: 0 }}
+                          >
+                            <X size={14} />
+                          </button>
+                        )}
+                      </div>
+                      {/* Progress bar */}
+                      {u.status === "uploading" && (
+                        <div style={{ marginTop: 7 }}>
+                          <div style={{ height: 4, borderRadius: 2, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+                            <div style={{ height: "100%", width: `${u.progress}%`, background: "linear-gradient(90deg,#6366f1,#a78bfa)", borderRadius: 2, transition: "width 0.25s" }} />
                           </div>
-                          <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 11, marginTop: 6 }}>Uploading… {uploadProgress}%</p>
-                        </>
-                      ) : (
-                        <button type="button" className="prq-upload-btn" onClick={handleUpload} disabled={uploading}>
-                          <Upload size={13} />
-                          Upload File
-                        </button>
+                          <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 10, marginTop: 4 }}>Uploading… {u.progress}%</p>
+                        </div>
                       )}
-                    </>
-                  )}
-                  {uploadedFileUrl && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8 }}>
-                      <Check size={13} style={{ color: "#34d399" }} />
-                      <span style={{ color: "#34d399", fontSize: 12, fontWeight: 600 }}>File uploaded successfully</span>
+                      {u.status === "error" && (
+                        <p style={{ color: "#f87171", fontSize: 11, marginTop: 4 }}>{u.errorMsg}</p>
+                      )}
                     </div>
-                  )}
+                  ))}
                 </div>
               )}
+
+              {/* Add files button */}
+              <button
+                type="button"
+                className="prq-upload-btn"
+                onClick={() => fileInputRef.current?.click()}
+                style={{ width: "100%", justifyContent: "center", padding: "11px 16px", borderRadius: 12 }}
+              >
+                {uploadedFiles.length > 0 ? <Plus size={15} /> : <Upload size={15} />}
+                {uploadedFiles.length > 0 ? "Add More Files" : "Choose Files (PDF, Word, ZIP, Image)"}
+              </button>
             </div>
 
             {/* Error */}
@@ -433,7 +441,7 @@ export default function PreachingRequestPage({ shareId }: { shareId: string }) {
             )}
 
             {/* Submit */}
-            <button type="submit" className="prq-btn-primary" disabled={submitting || uploading} style={{ marginTop: 4 }}>
+            <button type="submit" className="prq-btn-primary" disabled={submitting || uploadedFiles.some(u => u.status === "uploading")} style={{ marginTop: 4 }}>
               {submitting
                 ? <><Loader2 size={17} style={{ animation: "spin 1s linear infinite" }} /> Submitting…</>
                 : <><Mic2 size={17} /> Submit Sermon Request</>
