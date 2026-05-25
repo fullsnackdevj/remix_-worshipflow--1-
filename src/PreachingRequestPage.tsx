@@ -86,7 +86,10 @@ export default function PreachingRequestPage({ shareId }: { shareId: string }) {
         setUploadedFiles(prev => prev.map(u => u.id === id ? { ...u, progress: pct } : u));
       },
       _err => {
-        setUploadedFiles(prev => prev.map(u => u.id === id ? { ...u, status: "error", errorMsg: "Upload failed" } : u));
+        const msg = (_err as any)?.code === "storage/unauthorized"
+          ? "Permission denied. Contact the team."
+          : (_err as any)?.message ?? "Upload failed";
+        setUploadedFiles(prev => prev.map(u => u.id === id ? { ...u, status: "error", errorMsg: msg } : u));
       },
       async () => {
         const url = await getDownloadURL(sRef);
