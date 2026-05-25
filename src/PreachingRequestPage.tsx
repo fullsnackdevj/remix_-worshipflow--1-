@@ -181,24 +181,64 @@ export default function PreachingRequestPage({ shareId }: { shareId: string }) {
   if (submitted) {
     return (
       <div style={fullBg}>
-        <div style={{ ...cardStyle, textAlign: "center" }}>
-          <div style={{ ...iconBox, background: "rgba(16,185,129,0.15)", border: "1px solid rgba(16,185,129,0.35)", marginBottom: 20, width: 72, height: 72 }}>
-            <Check size={34} style={{ color: "#34d399" }} />
+        <style>{`
+          @keyframes spin { to { transform: rotate(360deg); } }
+          @keyframes scaleIn { from { opacity:0; transform:scale(0.6); } to { opacity:1; transform:scale(1); } }
+          @keyframes fadeUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+          @keyframes ringPulse { 0%,100% { opacity:0.35; transform:scale(1); } 50% { opacity:0.65; transform:scale(1.07); } }
+        `}</style>
+        <div style={{ width: "100%", maxWidth: 420, padding: "24px 16px", boxSizing: "border-box", textAlign: "center", animation: "fadeUp 0.5s ease forwards" }}>
+          {/* Animated check circle */}
+          <div style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 28 }}>
+            {/* Outer glow ring */}
+            <div style={{ position: "absolute", width: 96, height: 96, borderRadius: "50%", border: "2px solid rgba(52,211,153,0.3)", animation: "ringPulse 2.2s ease-in-out infinite" }} />
+            {/* Inner ring */}
+            <div style={{ position: "absolute", width: 80, height: 80, borderRadius: "50%", border: "1.5px solid rgba(52,211,153,0.18)" }} />
+            {/* Icon circle */}
+            <div style={{
+              width: 64, height: 64, borderRadius: "50%",
+              background: "linear-gradient(135deg, rgba(16,185,129,0.2), rgba(52,211,153,0.12))",
+              border: "1.5px solid rgba(52,211,153,0.5)",
+              boxShadow: "0 0 32px rgba(52,211,153,0.25), inset 0 1px 0 rgba(255,255,255,0.08)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              animation: "scaleIn 0.4s cubic-bezier(0.34,1.56,0.64,1) forwards",
+            }}>
+              <Check size={28} style={{ color: "#34d399", strokeWidth: 2.5 }} />
+            </div>
           </div>
-          <h1 style={{ ...h1Style, fontSize: 26 }}>Request Submitted! 🎉</h1>
-          <p style={{ ...subStyle, marginTop: 8 }}>
+
+          {/* Title */}
+          <h1 style={{ color: "#fff", fontSize: 28, fontWeight: 800, letterSpacing: "-0.03em", margin: "0 0 10px", lineHeight: 1.15 }}>
+            Request Submitted! 🎉
+          </h1>
+          <p style={{ color: "rgba(255,255,255,0.45)", fontSize: 15, lineHeight: 1.6, margin: "0 0 28px" }}>
             Your sermon request has been sent to the design team. They'll be in touch!
           </p>
-          <div style={{ marginTop: 24, padding: "16px 20px", borderRadius: 14, background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)" }}>
-            <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 6 }}>Submitted By</p>
-            <p style={{ color: "#e0e7ff", fontSize: 16, fontWeight: 700 }}>{preacherName}</p>
-            <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 13, marginTop: 4 }}>{title}</p>
+
+          {/* Submission summary card */}
+          <div style={{
+            padding: "20px 24px", borderRadius: 18,
+            background: "rgba(255,255,255,0.04)",
+            border: "1px solid rgba(255,255,255,0.09)",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
+            backdropFilter: "blur(12px)",
+          }}>
+            <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 10, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 10 }}>Submitted By</p>
+            <p style={{ color: "rgba(255,255,255,0.92)", fontSize: 20, fontWeight: 800, letterSpacing: "-0.02em", margin: "0 0 6px" }}>{preacherName}</p>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 12px", borderRadius: 20, background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.22)" }}>
+              <Mic2 size={11} style={{ color: "#a5b4fc" }} />
+              <span style={{ color: "#a5b4fc", fontSize: 12, fontWeight: 600 }}>{title}</span>
+            </div>
           </div>
-          <p style={{ color: "rgba(255,255,255,0.15)", fontSize: 11, marginTop: 20 }}>You may close this tab.</p>
+
+          <p style={{ color: "rgba(255,255,255,0.15)", fontSize: 11, marginTop: 20, letterSpacing: "0.02em" }}>
+            You may close this tab.
+          </p>
         </div>
       </div>
     );
   }
+
 
   // ── Form
   return (

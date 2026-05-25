@@ -3541,6 +3541,38 @@ app.patch("/api/preaching-drafts/:id/complete", async (req, res) => {
   }
 });
 
+// DELETE /api/preaching-drafts/:id — permanently delete a single draft/submission
+app.delete("/api/preaching-drafts/:id", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  try {
+    await firestore.collection("preachingDrafts").doc(req.params.id).delete();
+    res.json({ ok: true });
+  } catch (e: any) {
+    console.error("[preaching-drafts DELETE]", e?.message ?? e);
+    if (!res.headersSent) res.status(500).json({ error: "Failed to delete" });
+  }
+});
+
+// DELETE /api/preaching-drafts — bulk delete (body: { ids: string[] })
+app.delete("/api/preaching-drafts", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  const { ids } = req.body as { ids?: string[] };
+  if (!ids || !Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: "ids array required" });
+  }
+  try {
+    const batch = firestore.batch();
+    ids.forEach(id => batch.delete(firestore.collection("preachingDrafts").doc(id)));
+    await batch.commit();
+    res.json({ ok: true, deleted: ids.length });
+  } catch (e: any) {
+    console.error("[preaching-drafts bulk DELETE]", e?.message ?? e);
+    if (!res.headersSent) res.status(500).json({ error: "Failed to bulk delete" });
+  }
+});
+
 // ── PREACHING SHARES ──────────────────────────────────────────────────────────
 // Helper: generate a short random slug
 function genShareId(): string {

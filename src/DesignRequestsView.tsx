@@ -4,6 +4,7 @@ import {
   RefreshCw, Loader2, CornerUpLeft, FileText, Lightbulb, Heart, BookMarked,
   PenLine, CheckCircle2, InboxIcon, AlertTriangle, Copy, Check, Info, X,
   Brush, Sparkles, CheckCheck, Link2, ExternalLink, Download, ScanText,
+  LayoutList, LayoutGrid, Trash2, Square, CheckSquare,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -254,6 +255,16 @@ export default function DesignRequestsView({ currentUserId, currentUserName, cur
   const [infoOpen, setInfoOpen] = useState(false);
   const [infoGlowing, setInfoGlowing] = useState(() => !localStorage.getItem("wf_design_requests_info_seen"));
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  // View mode: list | grid2 | grid3
+  const [viewMode, setViewMode] = useState<"list" | "grid2" | "grid3">(() =>
+    (localStorage.getItem("wf_design_view") as "list" | "grid2" | "grid3") || "grid2"
+  );
+  // Bulk select & delete
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+  const [deleteModal, setDeleteModal] = useState<{ open: boolean; ids: string[]; isBulk: boolean; title: string } | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const isBulkMode = selectedIds.size > 0;
 
   // ── Confirm modal state ───────────────────────────────────────────────────
   const [confirmState, setConfirmState] = useState<{
@@ -265,6 +276,61 @@ export default function DesignRequestsView({ currentUserId, currentUserName, cur
     setConfirmState({ ...opts, open: true, loading: false });
   const closeConfirm = () => setConfirmState(s => ({ ...s, open: false }));
   const setConfirmLoading = (v: boolean) => setConfirmState(s => ({ ...s, loading: v }));
+
+  // ── View mode persist ─────────────────────────────────────────────────────
+  const setView = (m: "list" | "grid2" | "grid3") => {
+    setViewMode(m);
+    localStorage.setItem("wf_design_view", m);
+    setSelectedIds(new Set());
+  };
+
+  // ── Delete handlers ───────────────────────────────────────────────────────
+  const openDeleteModal = (ids: string[], isBulk = false) => {
+    const title = isBulk
+      ? `Delete ${ids.length} sermon request${ids.length > 1 ? "s" : ""}?`
+      : `Delete this request?`;
+    setDeleteModal({ open: true, ids, isBulk, title });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteModal) return;
+    const { ids } = deleteModal;
+    setDeleteLoading(true);
+    try {
+      if (ids.length === 1) {
+        const res = await fetch(`/api/preaching-drafts/${ids[0]}`, { method: "DELETE" });
+        if (!res.ok) throw new Error();
+      } else {
+        const res = await fetch("/api/preaching-drafts", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids }),
+        });
+        if (!res.ok) throw new Error();
+      }
+      setItems(prev => prev.filter(d => !ids.includes(d.id)));
+      setSelectedIds(new Set());
+      setDeleteModal(null);
+      onToast?.("success", ids.length > 1 ? `${ids.length} requests deleted` : "Request deleted");
+    } catch {
+      onToast?.("error", "Delete failed. Please try again.");
+    }
+    setDeleteLoading(false);
+    setDeletingIds(new Set());
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === items.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(items.map(i => i.id)));
+  };
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
@@ -432,6 +498,24 @@ export default function DesignRequestsView({ currentUserId, currentUserName, cur
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* View mode toggle */}
+          <div className="flex items-center rounded-xl overflow-hidden border border-white/[0.08]" style={{ background: "rgba(255,255,255,0.03)" }}>
+            {(["list", "grid2", "grid3"] as const).map((m, i) => {
+              const icons = [<LayoutList size={15} />, <LayoutGrid size={15} />, <span style={{ fontSize: 12, fontWeight: 800, lineHeight: 1 }}>3</span>];
+              const titles = ["List view", "2-column grid", "3-column grid"];
+              return (
+                <button key={m} onClick={() => setView(m)} title={titles[i]}
+                  className="flex items-center justify-center transition-all active:scale-90"
+                  style={{
+                    width: 34, height: 34,
+                    background: viewMode === m ? "rgba(139,92,246,0.25)" : "transparent",
+                    color: viewMode === m ? "#c4b5fd" : "rgba(255,255,255,0.3)",
+                    borderRight: i < 2 ? "1px solid rgba(255,255,255,0.06)" : "none",
+                  }}
+                >{icons[i]}</button>
+              );
+            })}
+          </div>
           {/* Info button */}
           <button
             onClick={() => { setInfoOpen(true); if (infoGlowing) { localStorage.setItem("wf_design_requests_info_seen", "1"); setInfoGlowing(false); } }}
@@ -456,6 +540,29 @@ export default function DesignRequestsView({ currentUserId, currentUserName, cur
           </button>
         </div>
       </div>
+
+      {/* ── Bulk action toolbar ── */}
+      {isBulkMode && (
+        <div className="flex-shrink-0 flex items-center gap-3 px-4 py-2.5 border-b border-white/[0.06]" style={{ background: "rgba(139,92,246,0.08)" }}>
+          <button onClick={toggleSelectAll}
+            className="flex items-center gap-1.5 text-xs font-semibold text-violet-300"
+          >
+            {selectedIds.size === items.length ? <CheckSquare size={14} /> : <Square size={14} />}
+            {selectedIds.size === items.length ? "Deselect All" : "Select All"}
+          </button>
+          <span className="text-xs text-white/30 font-medium">{selectedIds.size} selected</span>
+          <div className="flex-1" />
+          <button
+            onClick={() => openDeleteModal(Array.from(selectedIds), true)}
+            className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold text-red-400 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 transition-all active:scale-95"
+          >
+            <Trash2 size={13} /> Delete {selectedIds.size}
+          </button>
+          <button onClick={() => setSelectedIds(new Set())} className="text-white/30 hover:text-white/60 transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+      )}
 
       {/* ── Banner ── */}
       <div className="flex-shrink-0 mx-4 mt-3 mb-2 rounded-xl px-4 py-3 flex items-start gap-3 bg-indigo-500/[0.07] border border-indigo-400/20">
@@ -490,9 +597,14 @@ export default function DesignRequestsView({ currentUserId, currentUserName, cur
           </div>
         )}
 
-        {/* Cards — 2-column grid on desktop */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
+        {/* Cards ── dynamic grid based on viewMode */}
+        <div className={`grid gap-3 items-start ${
+          viewMode === "list" ? "grid-cols-1" :
+          viewMode === "grid2" ? "grid-cols-1 md:grid-cols-2" :
+          "grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
+        }`}>
         {!loading && items.map(item => {
+          const isSelected = selectedIds.has(item.id);
           const isExpanded = expandedId === item.id;
           const scriptureText = item.scriptures?.[0]?.text || item.mainVerse || "";
           const hasMore = (item.scriptures?.length ?? 0) > 1;
@@ -508,16 +620,49 @@ export default function DesignRequestsView({ currentUserId, currentUserName, cur
               className={`rounded-2xl overflow-hidden transition-all border ${
                 highlightedId === item.id
                   ? "border-amber-400/80 shadow-[0_0_0_3px_rgba(245,158,11,0.2),0_8px_32px_rgba(0,0,0,0.4)]"
-                  : isDone
-                    ? "border-emerald-500/25 bg-white/[0.025]"
-                    : inDesign
-                      ? "border-violet-500/25 bg-white/[0.025]"
-                      : isExpanded
-                        ? "border-indigo-400/30 shadow-[0_8px_32px_rgba(0,0,0,0.4)] bg-white/[0.025]"
-                        : "border-white/[0.08] bg-white/[0.025]"
+                  : isSelected
+                    ? "border-violet-400/60 shadow-[0_0_0_2px_rgba(139,92,246,0.25)]"
+                    : isDone
+                      ? "border-emerald-500/25 bg-white/[0.025]"
+                      : inDesign
+                        ? "border-violet-500/25 bg-white/[0.025]"
+                        : isExpanded
+                          ? "border-indigo-400/30 shadow-[0_8px_32px_rgba(0,0,0,0.4)] bg-white/[0.025]"
+                          : "border-white/[0.08] bg-white/[0.025]"
               }`}
               style={{ transition: "border 0.3s ease, box-shadow 0.3s ease" }}
             >
+              {/* ── Selection checkbox strip ── */}
+              <div
+                className="flex items-center gap-2 px-4 pt-3 pb-0 cursor-pointer"
+                onClick={() => toggleSelect(item.id)}
+                style={{ display: "flex" }}
+              >
+                <div style={{
+                  width: 18, height: 18, borderRadius: 5, flexShrink: 0,
+                  border: isSelected ? "none" : "1.5px solid rgba(255,255,255,0.15)",
+                  background: isSelected ? "rgba(139,92,246,0.8)" : "rgba(255,255,255,0.03)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  transition: "all 0.15s",
+                }}>
+                  {isSelected && <Check size={11} style={{ color: "#fff", strokeWidth: 3 }} />}
+                </div>
+                <span style={{ fontSize: 10, color: isSelected ? "#c4b5fd" : "rgba(255,255,255,0.2)", fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                  {isSelected ? "Selected" : "Select"}
+                </span>
+                {/* Delete single button — right side of strip */}
+                <div style={{ flex: 1 }} />
+                <button
+                  onClick={e => { e.stopPropagation(); openDeleteModal([item.id]); }}
+                  title="Delete this request"
+                  className="flex items-center justify-center rounded-lg transition-all active:scale-90"
+                  style={{ width: 26, height: 26, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.18)", color: "rgba(239,68,68,0.5)" }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "#f87171"; (e.currentTarget as HTMLElement).style.background = "rgba(239,68,68,0.16)"; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "rgba(239,68,68,0.5)"; (e.currentTarget as HTMLElement).style.background = "rgba(239,68,68,0.08)"; }}
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
               {/* ── Card Body ── */}
               <div className="px-5 pt-6 pb-0">
 
@@ -842,6 +987,75 @@ export default function DesignRequestsView({ currentUserId, currentUserName, cur
       onCancel={closeConfirm}
     />
 
+    {/* ── Premium Delete Confirmation Modal ── */}
+    {deleteModal?.open && (
+      <div
+        className="fixed inset-0 z-[9999] flex items-center justify-center px-4"
+        style={{ background: "rgba(0,0,0,0.82)", backdropFilter: "blur(12px)" }}
+        onClick={() => !deleteLoading && setDeleteModal(null)}
+      >
+        <div
+          className="w-full max-w-sm rounded-2xl overflow-hidden"
+          style={{ background: "linear-gradient(160deg, rgba(25,10,10,1) 0%, rgba(18,10,15,1) 100%)", border: "1px solid rgba(239,68,68,0.25)", boxShadow: "0 0 0 1px rgba(239,68,68,0.1), 0 32px 80px rgba(0,0,0,0.9)" }}
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Red top accent bar */}
+          <div style={{ height: 3, background: "linear-gradient(90deg, #ef4444, #f97316, #ef4444)", backgroundSize: "200% 100%", animation: "shimmer 2s linear infinite" }} />
+          <style>{`@keyframes shimmer { from { background-position: 0% 0% } to { background-position: 200% 0% } }`}</style>
+
+          <div className="px-6 pt-6 pb-5">
+            {/* Icon + title */}
+            <div className="flex items-start gap-4 mb-5">
+              <div className="flex items-center justify-center rounded-2xl shrink-0"
+                style={{ width: 48, height: 48, background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.3)", boxShadow: "0 0 16px rgba(239,68,68,0.15)" }}>
+                <Trash2 size={22} style={{ color: "#f87171" }} />
+              </div>
+              <div>
+                <p className="font-extrabold text-white" style={{ fontSize: 16, letterSpacing: "-0.02em", marginBottom: 4 }}>
+                  {deleteModal.title}
+                </p>
+                <p style={{ fontSize: 13, color: "rgba(255,255,255,0.45)", lineHeight: 1.5 }}>
+                  {deleteModal.isBulk
+                    ? "These submissions will be permanently removed from the Design Requests queue."
+                    : "This submission will be permanently removed from the Design Requests queue."}
+                </p>
+              </div>
+            </div>
+
+            {/* Warning box */}
+            <div className="rounded-xl px-4 py-3 mb-5 flex items-center gap-3"
+              style={{ background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.15)" }}>
+              <AlertTriangle size={14} style={{ color: "#f87171", flexShrink: 0 }} />
+              <p style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", lineHeight: 1.4 }}>
+                <strong style={{ color: "rgba(255,255,255,0.65)" }}>This action cannot be undone.</strong> The record will be deleted from Firestore permanently.
+              </p>
+            </div>
+
+            {/* Buttons */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => !deleteLoading && setDeleteModal(null)}
+                disabled={deleteLoading}
+                className="flex-1 rounded-xl py-3 font-bold text-sm transition-all active:scale-95"
+                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.5)" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteConfirm}
+                disabled={deleteLoading}
+                className="flex-1 rounded-xl py-3 font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-95"
+                style={{ background: deleteLoading ? "rgba(239,68,68,0.3)" : "linear-gradient(135deg, #ef4444, #dc2626)", border: "none", color: "#fff", opacity: deleteLoading ? 0.7 : 1, boxShadow: "0 4px 16px rgba(239,68,68,0.3)" }}
+              >
+                {deleteLoading ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+                {deleteLoading ? "Deleting…" : deleteModal.isBulk ? `Delete ${deleteModal.ids.length}` : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+
     {/* ── Design Requests Info Modal ── */}
     {infoOpen && (
       <DesignRequestsInfoModal onClose={() => setInfoOpen(false)} />
@@ -849,6 +1063,7 @@ export default function DesignRequestsView({ currentUserId, currentUserName, cur
     </>
   );
 }
+
 
 // ── External Submission Panel ─────────────────────────────────────────────────
 function ExternalSubmissionPanel({ item, onToast }: { item: SermonDraft; onToast?: (type: "success" | "error" | "info", message: string) => void }) {
