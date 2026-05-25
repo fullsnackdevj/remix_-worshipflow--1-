@@ -5,7 +5,7 @@ import {
   ChevronUp, Trash2, X, BookMarked, Lightbulb, Heart, Star,
   PlusCircle, Check, Loader2, RefreshCw, List, GripVertical, CalendarDays,
   ChevronLeft, ChevronRight, PanelRight, PanelLeft, CornerDownLeft, Eye, EyeOff, Printer, PenLine,
-  SendHorizonal, CheckCircle2, Info, AlertTriangle,
+  SendHorizonal, CheckCircle2, Info, AlertTriangle, Link2, Copy, ExternalLink, Share2,
 } from "lucide-react";
 import DatePicker from "./DatePicker";
 
@@ -1884,16 +1884,84 @@ function PreachingInfoModal({ onClose }: { onClose: () => void }) {
 }
 
 
-function DraftList({ drafts, activeDraftId, onSelect, onNew, onDelete, onSubmit, onRecallEdit, onPreview, onClose, onInfo, infoGlowing, currentUserName, initialTab }:
+function DraftList({ drafts, activeDraftId, onSelect, onNew, onDelete, onSubmit, onRecallEdit, onPreview, onClose, onInfo, infoGlowing, currentUserName, currentUserId, initialTab }:
   { drafts: SermonDraft[]; activeDraftId: string | null; onSelect: (id: string) => void;
     onNew: () => void; onDelete: (id: string) => void; onSubmit: (id: string) => void;
     onRecallEdit: (id: string) => void; onPreview: (id: string) => void;
-    onClose: () => void; onInfo: () => void; infoGlowing: boolean; currentUserName: string;
+    onClose: () => void; onInfo: () => void; infoGlowing: boolean; currentUserName: string; currentUserId: string;
     initialTab?: 'drafts' | 'submitted' }) {
-  const [tab, setTab] = useState<'drafts' | 'submitted'>(initialTab ?? 'drafts');
+  const [tab, setTab] = useState<'drafts' | 'submitted' | 'share'>(
+    initialTab === 'submitted' ? 'submitted' : 'drafts'
+  );
+
+  // Share links state
+  const [shareLinks, setShareLinks] = useState<any[]>([]);
+  const [loadingShares, setLoadingShares] = useState(false);
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [genServiceType, setGenServiceType] = useState("");
+  const [genDate, setGenDate] = useState("");
+  const [genInstructions, setGenInstructions] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [copiedShareId, setCopiedShareId] = useState<string | null>(null);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+
+  const fetchShares = useCallback(async () => {
+    if (!currentUserId) return;
+    setLoadingShares(true);
+    try {
+      const res = await fetch(`/api/preaching-shares?userId=${currentUserId}`);
+      if (res.ok) setShareLinks(await res.json());
+    } catch { /* silent */ }
+    setLoadingShares(false);
+  }, [currentUserId]);
+
+  useEffect(() => { if (tab === 'share') fetchShares(); }, [tab, fetchShares]);
+
+  const handleGenerate = async () => {
+    if (!currentUserId) return;
+    setGenerating(true);
+    try {
+      const res = await fetch("/api/preaching-shares", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          createdBy: currentUserId,
+          createdByName: currentUserName,
+          serviceType: genServiceType,
+          scheduledDate: genDate,
+          instructions: genInstructions,
+        }),
+      });
+      if (res.ok) {
+        setShowGenerateModal(false);
+        setGenServiceType(""); setGenDate(""); setGenInstructions("");
+        await fetchShares();
+      }
+    } catch { /* silent */ }
+    setGenerating(false);
+  };
+
+  const handleRevoke = async (id: string) => {
+    if (!window.confirm("Revoke this share link? Preachers won't be able to submit with it.")) return;
+    setRevokingId(id);
+    try {
+      await fetch(`/api/preaching-shares/${id}`, { method: "DELETE" });
+      setShareLinks(prev => prev.filter((s: any) => s.id !== id));
+    } catch { /* silent */ }
+    setRevokingId(null);
+  };
+
+  const copyLink = async (id: string) => {
+    const url = `${window.location.origin}/preach-request/${id}`;
+    await navigator.clipboard.writeText(url).catch(() => {});
+    setCopiedShareId(id);
+    setTimeout(() => setCopiedShareId(cid => cid === id ? null : cid), 2000);
+  };
+
+  const SERVICE_OPTIONS = ["Sunday Service", "Midweek Service", "Prayer Meeting", "Special Service", "Camp / Retreat", "Other"];
 
   // Sync initialTab if parent changes it (e.g. notification deep-link)
-  useEffect(() => { if (initialTab) setTab(initialTab); }, [initialTab]);
+  useEffect(() => { if (initialTab) setTab(initialTab === 'submitted' ? 'submitted' : initialTab as any); }, [initialTab]);
 
   const submitted = drafts.filter(d => d.status === 'submitted');
   const draftItems = drafts.filter(d => d.status !== 'submitted');
@@ -1957,20 +2025,20 @@ function DraftList({ drafts, activeDraftId, onSelect, onNew, onDelete, onSubmit,
 
       {/* ── Tabs ───────────────────────────── */}
       <div className="flex shrink-0" style={{ borderBottom: '2px solid rgba(255,255,255,0.06)' }}>
-        {(['drafts', 'submitted'] as const).map(t => (
+        {(['drafts', 'submitted', 'share'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className="flex-1 flex items-center justify-center gap-1.5 transition-all"
             style={{
               height: 46,
-              fontSize: 13, fontWeight: 700,
-              letterSpacing: '0.05em', textTransform: 'uppercase',
+              fontSize: 12, fontWeight: 700,
+              letterSpacing: '0.04em', textTransform: 'uppercase',
               background: 'none', border: 'none', cursor: 'pointer',
               color: tab === t ? 'var(--wf-at2)' : 'rgba(255,255,255,0.28)',
               borderBottom: tab === t ? '2px solid var(--wf-c1-hex)' : '2px solid transparent',
               marginBottom: -2,
             }}>
-            {t === 'drafts' ? <PenLine size={13} /> : <SendHorizonal size={13} />}
-            {t === 'drafts' ? `Drafts${draftItems.length > 0 ? ` (${draftItems.length})` : ''}` : 'Submitted'}
+            {t === 'drafts' ? <PenLine size={12} /> : t === 'submitted' ? <SendHorizonal size={12} /> : <Share2 size={12} />}
+            {t === 'drafts' ? `Drafts${draftItems.length > 0 ? ` (${draftItems.length})` : ''}` : t === 'submitted' ? 'Submitted' : 'Share'}
           </button>
         ))}
       </div>
@@ -2194,7 +2262,169 @@ function DraftList({ drafts, activeDraftId, onSelect, onNew, onDelete, onSubmit,
           </>
         )}
 
+        {/* ── Share Links tab ── */}
+        {tab === 'share' && (
+          <div style={{ paddingBottom: 80 }}>
+            {/* Generate button */}
+            <button
+              onClick={() => setShowGenerateModal(true)}
+              className="w-full flex items-center justify-center gap-2 rounded-2xl transition-all active:scale-95"
+              style={{ height: 48, marginBottom: 16, background: "linear-gradient(135deg,rgba(var(--wf-c1),0.85),rgba(var(--wf-c2),0.75))", color: "#fff", fontSize: 14, fontWeight: 700, boxShadow: "0 4px 16px rgba(var(--wf-c1),0.3)" }}
+            >
+              <Link2 size={16} /> Generate Share Link
+            </button>
+
+            {/* List */}
+            {loadingShares ? (
+              <div style={{ display: "flex", justifyContent: "center", padding: 32 }}>
+                <Loader2 size={22} style={{ color: "rgba(var(--wf-c1),0.5)", animation: "spin 1s linear infinite" }} />
+              </div>
+            ) : shareLinks.length === 0 ? (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "28px 16px", textAlign: "center" }}>
+                <div style={{ width: 52, height: 52, borderRadius: 14, background: "rgba(var(--wf-c1),0.08)", border: "1px solid rgba(var(--wf-c1),0.15)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
+                  <Link2 size={22} style={{ color: "rgba(var(--wf-c1),0.4)" }} />
+                </div>
+                <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 13, fontWeight: 600 }}>No share links yet</p>
+                <p style={{ color: "rgba(255,255,255,0.15)", fontSize: 12, marginTop: 4 }}>Generate a link to send to preachers</p>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {shareLinks.map((s: any) => {
+                  const url = `${window.location.origin}/preach-request/${s.id}`;
+                  const copied = copiedShareId === s.id;
+                  return (
+                    <div key={s.id} style={{ borderRadius: 16, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", padding: "14px 16px" }}>
+                      {/* Service type + date badges */}
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+                        {s.serviceType && (
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 20, background: "rgba(var(--wf-c1),0.12)", border: "1px solid rgba(var(--wf-c1),0.22)", color: "var(--wf-at2)", letterSpacing: "0.05em", textTransform: "uppercase" }}>{s.serviceType}</span>
+                        )}
+                        {s.scheduledDate && (
+                          <span style={{ fontSize: 10, fontWeight: 600, padding: "3px 9px", borderRadius: 20, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.45)" }}>
+                            {new Date(s.scheduledDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                          </span>
+                        )}
+                      </div>
+                      {/* Instructions preview */}
+                      {s.instructions && (
+                        <p style={{ color: "rgba(255,255,255,0.45)", fontSize: 12, marginBottom: 10, lineHeight: 1.45 }} className="line-clamp-2">{s.instructions}</p>
+                      )}
+                      {/* URL row */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 10, background: "rgba(0,0,0,0.25)", border: "1px solid rgba(255,255,255,0.07)", marginBottom: 10 }}>
+                        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 11, color: "rgba(255,255,255,0.4)", fontFamily: "monospace" }}>{url}</span>
+                        <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: "rgba(255,255,255,0.25)", flexShrink: 0, display: "flex" }}>
+                          <ExternalLink size={13} />
+                        </a>
+                      </div>
+                      {/* Action row */}
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button
+                          onClick={() => copyLink(s.id)}
+                          style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, height: 34, borderRadius: 10, border: copied ? "1px solid rgba(52,211,153,0.4)" : "1px solid rgba(var(--wf-c1),0.3)", background: copied ? "rgba(16,185,129,0.12)" : "rgba(var(--wf-c1),0.1)", color: copied ? "#34d399" : "var(--wf-at2)", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                        >
+                          {copied ? <Check size={13} /> : <Copy size={13} />}
+                          {copied ? "Copied!" : "Copy Link"}
+                        </button>
+                        <button
+                          onClick={() => handleRevoke(s.id)}
+                          disabled={revokingId === s.id}
+                          title="Revoke link"
+                          style={{ width: 34, height: 34, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 10, border: "1px solid rgba(239,68,68,0.2)", background: "rgba(239,68,68,0.07)", color: "rgba(239,68,68,0.6)", cursor: "pointer", flexShrink: 0 }}
+                        >
+                          {revokingId === s.id ? <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} /> : <Trash2 size={13} />}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Info text */}
+            <div style={{ marginTop: 20, padding: "12px 14px", borderRadius: 12, background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.06)" }}>
+              <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 11, lineHeight: 1.55, margin: 0 }}>
+                📤 Share the link with preachers. They can submit notes, a reference link, or upload a file — no login required. Submissions go directly to the Design Requests queue.
+              </p>
+            </div>
+          </div>
+        )}
+
       </div>
+
+      {/* ── Generate Modal ── */}
+      {showGenerateModal && (
+        <div
+          style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.75)", backdropFilter: "blur(8px)", padding: 16 }}
+          onClick={e => e.target === e.currentTarget && setShowGenerateModal(false)}
+        >
+          <div style={{ width: "100%", maxWidth: 420, background: "var(--wf-bg3)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 20, boxShadow: "0 24px 64px rgba(0,0,0,0.8)", overflow: "hidden" }}>
+            {/* Header */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg,rgba(var(--wf-c1),0.25),rgba(var(--wf-c2),0.15))", border: "1px solid rgba(var(--wf-c1),0.3)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Link2 size={17} style={{ color: "var(--wf-at2)" }} />
+                </div>
+                <div>
+                  <p style={{ color: "rgba(255,255,255,0.88)", fontWeight: 700, fontSize: 14, margin: 0 }}>Generate Share Link</p>
+                  <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, margin: 0 }}>Preachers can submit their message via this link</p>
+                </div>
+              </div>
+              <button onClick={() => setShowGenerateModal(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.3)", padding: 4 }}>
+                <X size={17} />
+              </button>
+            </div>
+            {/* Body */}
+            <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: 14 }}>
+              {/* Service Type */}
+              <div>
+                <label style={{ display: "block", color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6 }}>Default Service Type</label>
+                <div style={{ position: "relative" }}>
+                  <select
+                    value={genServiceType}
+                    onChange={e => setGenServiceType(e.target.value)}
+                    style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)", color: "rgba(255,255,255,0.75)", borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", appearance: "none", boxSizing: "border-box" }}
+                  >
+                    <option value="">None / Unspecified</option>
+                    {SERVICE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <ChevronDown size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.25)", pointerEvents: "none" }} />
+                </div>
+              </div>
+              {/* Date */}
+              <div>
+                <label style={{ display: "block", color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6 }}>Default Service Date</label>
+                <input
+                  type="date"
+                  value={genDate}
+                  onChange={e => setGenDate(e.target.value)}
+                  style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)", color: "rgba(255,255,255,0.75)", borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", colorScheme: "dark", boxSizing: "border-box" }}
+                />
+              </div>
+              {/* Instructions */}
+              <div>
+                <label style={{ display: "block", color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6 }}>Instructions for Preacher <span style={{ color: "rgba(255,255,255,0.2)", fontWeight: 500 }}>(optional)</span></label>
+                <textarea
+                  value={genInstructions}
+                  onChange={e => setGenInstructions(e.target.value)}
+                  placeholder="e.g. Please submit before Friday night with your outline."
+                  rows={3}
+                  style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)", color: "rgba(255,255,255,0.75)", borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", resize: "vertical", boxSizing: "border-box" }}
+                />
+              </div>
+              {/* Generate button */}
+              <button
+                onClick={handleGenerate}
+                disabled={generating}
+                style={{ width: "100%", height: 44, borderRadius: 12, background: "linear-gradient(135deg,rgba(var(--wf-c1),0.9),rgba(var(--wf-c2),0.8))", border: "none", color: "#fff", fontSize: 14, fontWeight: 700, cursor: generating ? "not-allowed" : "pointer", opacity: generating ? 0.6 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+              >
+                {generating ? <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} /> : <Link2 size={16} />}
+                {generating ? "Generating…" : "Generate Link"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
@@ -2599,6 +2829,7 @@ export default function PreachingView({ currentUser, onToast, initialTab }: Prop
               onInfo={() => { setInfoOpen(true); if (infoGlowing) { localStorage.setItem('wf_preaching_info_seen','1'); setInfoGlowing(false); } }}
               infoGlowing={infoGlowing}
               currentUserName={currentUser?.name || ""}
+              currentUserId={currentUser?.uid || ""}
               initialTab={initialTab}
             />
           </div>
@@ -2818,6 +3049,7 @@ export default function PreachingView({ currentUser, onToast, initialTab }: Prop
               onInfo={() => { setInfoOpen(true); if (infoGlowing) { localStorage.setItem('wf_preaching_info_seen','1'); setInfoGlowing(false); } }}
               infoGlowing={infoGlowing}
               currentUserName={currentUser?.name || ""}
+              currentUserId={currentUser?.uid || ""}
               initialTab={initialTab}
             />
           )}

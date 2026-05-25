@@ -3541,6 +3541,239 @@ app.patch("/api/preaching-drafts/:id/complete", async (req, res) => {
   }
 });
 
+// ── PREACHING SHARES ──────────────────────────────────────────────────────────
+// Helper: generate a short random slug
+function genShareId(): string {
+  return "s_" + Math.random().toString(36).slice(2, 10);
+}
+
+// POST /api/preaching-shares — create a new shareable link (authenticated)
+app.post("/api/preaching-shares", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  try {
+    const { createdBy, createdByName, serviceType = "", scheduledDate = "", instructions = "" } = req.body as {
+      createdBy: string; createdByName: string;
+      serviceType?: string; scheduledDate?: string; instructions?: string;
+    };
+    if (!createdBy) return res.status(400).json({ error: "createdBy required" });
+    const shareId = genShareId();
+    const now = new Date().toISOString();
+    await firestore.collection("preachingShares").doc(shareId).set({
+      id: shareId, createdBy, createdByName,
+      serviceType, scheduledDate, instructions,
+      active: true, createdAt: now,
+    });
+    res.json({ ok: true, shareId });
+  } catch (e: any) {
+    console.error("[preaching-shares POST]", e?.message ?? e);
+    if (!res.headersSent) res.status(500).json({ error: "Failed" });
+  }
+});
+
+// GET /api/preaching-shares?userId=... — list user's active share links
+app.get("/api/preaching-shares", async (req, res) => {
+  const firestore = getDb();
+  const userId = req.query.userId as string;
+  if (!firestore || !userId) return res.json([]);
+  try {
+    const snap = await firestore.collection("preachingShares")
+      .where("createdBy", "==", userId)
+      .where("active", "==", true)
+      .get();
+    const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    docs.sort((a: any, b: any) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+    res.json(docs);
+  } catch (e: any) {
+    console.error("[preaching-shares GET]", e?.message ?? e);
+    if (!res.headersSent) res.status(500).json({ error: "Failed" });
+  }
+});
+
+// DELETE /api/preaching-shares/:id — revoke a share link
+app.delete("/api/preaching-shares/:id", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  try {
+    await firestore.collection("preachingShares").doc(req.params.id).delete();
+    res.json({ ok: true });
+  } catch (e: any) {
+    console.error("[preaching-shares DELETE]", e?.message ?? e);
+    if (!res.headersSent) res.status(500).json({ error: "Failed" });
+  }
+});
+
+// GET /api/preaching-shares/public/:id — public: resolve link details (no auth)
+app.get("/api/preaching-shares/public/:id", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  try {
+    const doc = await firestore.collection("preachingShares").doc(req.params.id).get();
+    if (!doc.exists) return res.status(404).json({ error: "Link not found" });
+    const data = doc.data() as Record<string, any>;
+    if (!data.active) return res.status(410).json({ error: "Link inactive" });
+    res.json({
+      id: doc.id,
+      createdByName: data.createdByName ?? "",
+      serviceType: data.serviceType ?? "",
+      scheduledDate: data.scheduledDate ?? "",
+      instructions: data.instructions ?? "",
+    });
+  } catch (e: any) {
+    console.error("[preaching-shares/public GET]", e?.message ?? e);
+    if (!res.headersSent) res.status(500).json({ error: "Failed" });
+  }
+});
+
+// POST /api/preaching-shares/public/:id/submit — guest submits a sermon request (no auth)
+app.post("/api/preaching-shares/public/:id/submit", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(503).json({ error: "DB unavailable" });
+  try {
+    // Validate that the share still exists and is active
+    const shareDoc = await firestore.collection("preachingShares").doc(req.params.id).get();
+    if (!shareDoc.exists) return res.status(404).json({ error: "Link not found" });
+    const shareData = shareDoc.data() as Record<string, any>;
+    if (!shareData.active) return res.status(410).json({ error: "This link is no longer active" });
+
+    const {
+      preacherName = "Guest Preacher",
+      title = "Untitled",
+      scheduledDate = "",
+      serviceType = "",
+      notes = "",
+      link = "",
+      fileUrl = "",
+      fileName = "",
+      fileType = "",
+    } = req.body as {
+      preacherName?: string; title?: string; scheduledDate?: string;
+      serviceType?: string; notes?: string; link?: string;
+      fileUrl?: string; fileName?: string; fileType?: string;
+    };
+
+    const now = new Date().toISOString();
+    const draftRef = await firestore.collection("preachingDrafts").add({
+      isExternal: true,
+      externalShareId: req.params.id,
+      externalNotes: notes,
+      externalLink: link,
+      externalFileUrl: fileUrl,
+      externalFileName: fileName,
+      externalFileType: fileType,
+      title,
+      scheduledDate,
+      serviceType,
+      status: "submitted",
+      designStatus: "pending",
+      submittedAt: now,
+      submittedByName: preacherName,
+      // Minimal preaching draft fields so the queue renders it properly
+      subtitle: "",
+      scriptures: [],
+      keyPoints: [],
+      introduction: "",
+      mainPassage: "",
+      freeNotes: "",
+      application: "",
+      closingPrayer: "",
+      collectedVerses: [],
+      submissionVersion: 1,
+      createdAt: now,
+      updatedAt: now,
+      authorId: "",
+    });
+
+    // In-app notification for Audio/Tech + Admin
+    firestore.collection("notifications").add({
+      type: "new_design_request",
+      message: `🎨 Guest Request from ${preacherName}`,
+      subMessage: `"${title}" has been submitted via the preaching share link.`,
+      actorName: preacherName,
+      actorPhoto: "",
+      actorUserId: "",
+      targetAudience: "non_member",
+      resourceId: draftRef.id,
+      readBy: [],
+      deletedBy: [],
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    }).catch(() => { /* silent */ });
+
+    // FCM push
+    sendPushNotification(firestore, {
+      title: `🎨 Guest Request from ${preacherName}`,
+      body: `"${title}" was submitted via share link. Check Design Requests!`,
+      targetAudience: "non_member",
+      type: "new_design_request",
+      resourceId: draftRef.id,
+    });
+
+    res.json({ ok: true, draftId: draftRef.id });
+  } catch (e: any) {
+    console.error("[preaching-shares/public/submit POST]", e?.message ?? e);
+    if (!res.headersSent) res.status(500).json({ error: "Failed to submit" });
+  }
+});
+
+// POST /api/ocr-preaching — OCR image URL → Gemini text extraction (Designer tool)
+app.post("/api/ocr-preaching", async (req, res) => {
+  try {
+    const { imageUrl } = req.body as { imageUrl: string };
+    if (!imageUrl) return res.status(400).json({ error: "imageUrl required" });
+    if (!process.env.GEMINI_API_KEY) return res.status(500).json({ error: "OCR not configured" });
+
+    // Fetch the image server-side (bypasses client CORS)
+    const https = await import("https");
+    const http = await import("http");
+    const imageBuffer = await new Promise<Buffer>((resolve, reject) => {
+      const protocol = imageUrl.startsWith("https") ? https : http;
+      protocol.get(imageUrl, (response) => {
+        const chunks: Buffer[] = [];
+        response.on("data", (chunk: Buffer) => chunks.push(chunk));
+        response.on("end", () => resolve(Buffer.concat(chunks)));
+        response.on("error", reject);
+      }).on("error", reject);
+    });
+
+    const base64Data = imageBuffer.toString("base64");
+    // Detect mime from URL extension
+    const ext = imageUrl.split("?")[0].split(".").pop()?.toLowerCase() ?? "jpg";
+    const mimeMap: Record<string, string> = {
+      jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
+      gif: "image/gif", webp: "image/webp", bmp: "image/bmp",
+    };
+    const mimeType = mimeMap[ext] ?? "image/jpeg";
+
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: [{
+        role: "user",
+        parts: [
+          { inlineData: { data: base64Data, mimeType } },
+          {
+            text: `You are a precise sermon document transcriber. Extract ALL visible text from this image EXACTLY as it appears, preserving:\n- Every section heading (e.g. "Introduction:", "Key Points:", "Conclusion:")\n- Every scripture reference and Bible verse\n- Every bullet point, note, or outline item\n- Every annotation, emphasis, or formatting cue\n- Empty lines between sections for spacing\n\nRules:\n- Do NOT skip any visible text.\n- Do NOT add, invent, or summarize anything.\n- Do NOT use Markdown formatting (no **, no ##, no bullets unless they appear in the original).\n- Output ONLY the plain text transcription, nothing else.`,
+          },
+        ],
+      }],
+    });
+
+    let rawText = "";
+    try {
+      rawText = response.candidates?.[0]?.content?.parts
+        ?.filter((p: any) => typeof p.text === "string")
+        ?.map((p: any) => p.text as string)
+        ?.join("") ?? "";
+      if (!rawText) rawText = (response as any).text ?? "";
+    } catch { /* no usable text */ }
+
+    res.json({ ok: true, text: rawText.replace(/\*\*/g, "").trim() });
+  } catch (e: any) {
+    console.error("[ocr-preaching POST]", e?.message ?? e);
+    if (!res.headersSent) res.status(500).json({ error: "OCR failed", detail: e?.message });
+  }
+});
+
 // ── FREEDOM WALL ─────────────────────────────────────────────────────────────
 
 

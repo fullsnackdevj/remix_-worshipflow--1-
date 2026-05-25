@@ -3,7 +3,7 @@ import {
   Palette, BookOpen, CalendarDays, User2, Clock, ChevronDown, ChevronUp, ChevronsUpDown,
   RefreshCw, Loader2, CornerUpLeft, FileText, Lightbulb, Heart, BookMarked,
   PenLine, CheckCircle2, InboxIcon, AlertTriangle, Copy, Check, Info, X,
-  Brush, Sparkles, CheckCheck,
+  Brush, Sparkles, CheckCheck, Link2, ExternalLink, Download, ScanText,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -43,6 +43,13 @@ interface SermonDraft {
   designerPhoto?: string;
   designClaimedAt?: string;
   designCompletedAt?: string;
+  // ── External share-link submission ───────────────────────────
+  isExternal?: boolean;
+  externalNotes?: string;
+  externalLink?: string;
+  externalFileUrl?: string;
+  externalFileName?: string;
+  externalFileType?: string;
 }
 
 interface Props {
@@ -717,11 +724,17 @@ export default function DesignRequestsView({ currentUserId, currentUserName, cur
 
 
 
-              {/* Expanded detail panel */}
-              {isExpanded && (
-                <div className="px-4 pb-4 pt-3 border-t border-white/[0.06] bg-black/15">
-                  {/* All scriptures */}
-                  {(item.scriptures?.length ?? 0) > 1 && (
+                  {/* Expanded detail panel */}
+                  {isExpanded && (
+                    <div className="px-4 pb-4 pt-3 border-t border-white/[0.06] bg-black/15">
+
+                      {/* ── External submission content ── */}
+                      {item.isExternal && (
+                        <ExternalSubmissionPanel item={item} onToast={onToast} />
+                      )}
+
+                      {/* All scriptures */}
+                      {!item.isExternal && (item.scriptures?.length ?? 0) > 1 && (
                     <Section icon={<BookOpen size={13} />} label="Main Scriptures">
                       <ul className="space-y-1">
                         {item.scriptures.map((s, i) => (
@@ -837,7 +850,165 @@ export default function DesignRequestsView({ currentUserId, currentUserName, cur
   );
 }
 
-// ── Design Requests Info Modal ────────────────────────────────────────────────
+// ── External Submission Panel ─────────────────────────────────────────────────
+function ExternalSubmissionPanel({ item, onToast }: { item: SermonDraft; onToast?: (type: "success" | "error" | "info", message: string) => void }) {
+  const [ocrText, setOcrText] = useState<string | null>(null);
+  const [ocrLoading, setOcrLoading] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedNotes, setCopiedNotes] = useState(false);
+
+  const isImage = item.externalFileType?.startsWith("image/") ||
+    (item.externalFileName && /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(item.externalFileName));
+
+  const handleOcr = async () => {
+    if (!item.externalFileUrl) return;
+    setOcrLoading(true);
+    setOcrText(null);
+    try {
+      const res = await fetch("/api/ocr-preaching", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrl: item.externalFileUrl }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "OCR failed");
+      setOcrText(data.text || "(No text found)");
+      onToast?.("success", "Image converted to text successfully!");
+    } catch (e: any) {
+      onToast?.("error", e.message || "OCR failed");
+    } finally {
+      setOcrLoading(false);
+    }
+  };
+
+  const copyText = async (text: string, setFlag: (v: boolean) => void) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setFlag(true);
+      setTimeout(() => setFlag(false), 2000);
+    } catch {
+      onToast?.("error", "Could not copy");
+    }
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+
+      {/* Notes */}
+      {item.externalNotes && (
+        <div style={{ borderRadius: 14, padding: "14px 16px", background: "rgba(99,102,241,0.06)", border: "1px solid rgba(99,102,241,0.15)" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <FileText size={13} style={{ color: "rgba(var(--wf-c1),0.7)" }} />
+              <span style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.35)", letterSpacing: "0.07em", textTransform: "uppercase" }}>Sermon Notes</span>
+            </div>
+            <button
+              onClick={() => copyText(item.externalNotes!, setCopiedNotes)}
+              style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 6, background: copiedNotes ? "rgba(52,211,153,0.12)" : "rgba(255,255,255,0.06)", border: copiedNotes ? "1px solid rgba(52,211,153,0.3)" : "1px solid rgba(255,255,255,0.1)", color: copiedNotes ? "#34d399" : "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 600, cursor: "pointer" }}
+            >
+              {copiedNotes ? <Check size={11} /> : <Copy size={11} />}
+              {copiedNotes ? "Copied!" : "Copy"}
+            </button>
+          </div>
+          <p style={{ fontSize: 13, color: "rgba(255,255,255,0.65)", lineHeight: 1.6, whiteSpace: "pre-wrap", margin: 0 }}>{item.externalNotes}</p>
+        </div>
+      )}
+
+      {/* Reference link */}
+      {item.externalLink && (
+        <div style={{ borderRadius: 14, padding: "12px 16px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 9, background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Link2 size={15} style={{ color: "rgba(var(--wf-c1),0.8)" }} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.3)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 2 }}>Reference Link</p>
+            <p style={{ fontSize: 12, color: "rgba(165,180,252,0.9)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.externalLink}</p>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+            <button
+              onClick={() => copyText(item.externalLink!, setCopiedLink)}
+              style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 10px", borderRadius: 8, background: copiedLink ? "rgba(52,211,153,0.12)" : "rgba(99,102,241,0.12)", border: copiedLink ? "1px solid rgba(52,211,153,0.3)" : "1px solid rgba(99,102,241,0.25)", color: copiedLink ? "#34d399" : "var(--wf-at2)", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+            >
+              {copiedLink ? <Check size={12} /> : <Copy size={12} />}
+              {copiedLink ? "Copied!" : "Copy"}
+            </button>
+            <a
+              href={item.externalLink} target="_blank" rel="noopener noreferrer"
+              style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, borderRadius: 8, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.4)" }}
+            >
+              <ExternalLink size={13} />
+            </a>
+          </div>
+        </div>
+      )}
+
+      {/* File attachment */}
+      {item.externalFileUrl && (
+        <div style={{ borderRadius: 14, padding: "12px 16px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: isImage ? 12 : 0 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 9, background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <FileText size={15} style={{ color: "rgba(245,158,11,0.9)" }} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.3)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 2 }}>Attached File</p>
+              <p style={{ fontSize: 12, color: "rgba(255,255,255,0.65)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.externalFileName || "attachment"}</p>
+            </div>
+            <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+              <a
+                href={item.externalFileUrl} download={item.externalFileName || "attachment"} target="_blank" rel="noopener noreferrer"
+                style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 10px", borderRadius: 8, background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.25)", color: "#fbbf24", fontSize: 12, fontWeight: 600, textDecoration: "none" }}
+              >
+                <Download size={12} /> Download
+              </a>
+            </div>
+          </div>
+          {/* Image preview */}
+          {isImage && (
+            <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)", marginBottom: 10 }}>
+              <img src={item.externalFileUrl} alt="Attached" style={{ width: "100%", maxHeight: 280, objectFit: "cover", display: "block" }} />
+            </div>
+          )}
+          {/* OCR button for images */}
+          {isImage && (
+            <button
+              onClick={handleOcr}
+              disabled={ocrLoading}
+              style={{ width: "100%", height: 38, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, borderRadius: 10, background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.3)", color: "#c4b5fd", fontSize: 13, fontWeight: 700, cursor: ocrLoading ? "not-allowed" : "pointer", opacity: ocrLoading ? 0.6 : 1 }}
+            >
+              {ocrLoading ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <ScanText size={14} />}
+              {ocrLoading ? "Converting image to text…" : "Convert Image to Text (OCR)"}
+            </button>
+          )}
+          {/* OCR Result */}
+          {ocrText && (
+            <div style={{ marginTop: 10, borderRadius: 12, padding: "12px 14px", background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.2)" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <ScanText size={12} style={{ color: "rgba(196,181,253,0.8)" }} />
+                  <span style={{ fontSize: 10, fontWeight: 700, color: "rgba(196,181,253,0.6)", letterSpacing: "0.07em", textTransform: "uppercase" }}>Extracted Text</span>
+                </div>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(ocrText).then(() => onToast?.("success", "OCR text copied!")).catch(() => {}); }}
+                  style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 6, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 600, cursor: "pointer" }}
+                >
+                  <Copy size={11} /> Copy
+                </button>
+              </div>
+              <p style={{ fontSize: 12, color: "rgba(255,255,255,0.65)", lineHeight: 1.65, whiteSpace: "pre-wrap", margin: 0, maxHeight: 300, overflowY: "auto" }}>{ocrText}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Empty state for external */}
+      {!item.externalNotes && !item.externalLink && !item.externalFileUrl && (
+        <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 13, textAlign: "center", padding: "12px 0" }}>No content was attached to this request.</p>
+      )}
+    </div>
+  );
+}
+
+
 function DesignRequestsInfoModal({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<"about" | "workflow" | "integration">("about");
   const tabs = [

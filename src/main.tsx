@@ -19,6 +19,7 @@ const InternalMemberFormPage   = lazy(() => import('./InternalMemberFormPage.tsx
 const PublicPlaylistPage       = lazy(() => import('./PublicPlaylistPage.tsx'));
 const LiveDisplayPage          = lazy(() => import('./LiveDisplayPage.tsx'));
 const LiveDisplayLocalPage     = lazy(() => import('./LiveDisplayLocalPage.tsx'));
+const PreachingRequestPage     = lazy(() => import('./PreachingRequestPage.tsx'));
 
 // Returning users skip the full splash — first visit gets brand impression, repeat visits feel instant
 const isReturning = (() => { try { return !!sessionStorage.getItem('wf_visited'); } catch { return false; } })();
@@ -108,9 +109,10 @@ function Root() {
   // Path-based: /r/EVENT_ID  → registration
   //             /d/EVENT_ID  → dashboard
   //             /p/SLUG      → public playlist
-  const pathRegMatch  = pathname.match(/^\/r\/([^/?#]+)/);
-  const pathDashMatch = pathname.match(/^\/d\/([^/?#]+)/);
-  const pathPlayMatch = pathname.match(/^\/p\/([^/?#]+)/);
+  const pathRegMatch   = pathname.match(/^\/r\/([^/?#]+)/);
+  const pathDashMatch  = pathname.match(/^\/d\/([^/?#]+)/);
+  const pathPlayMatch  = pathname.match(/^\/p\/([^/?#]+)/);
+  const pathPreachMatch = pathname.match(/^\/preach-request\/([^/?#]+)/);
 
   const publicEventId = pathRegMatch?.[1] ?? pathDashMatch?.[1] ?? params.get('event');
   const publicRegId   = params.get('registrant') ?? undefined;
@@ -141,6 +143,15 @@ function Root() {
       <div style={{ width: 32, height: 32, border: '3px solid transparent', borderTopColor: '#6d28d9', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
     </div>
   );
+
+  // ── Public preaching request form: /preach-request/:shareId ─────────────
+  if (pathPreachMatch?.[1]) {
+    return (
+      <Suspense fallback={fallback}>
+        <PreachingRequestPage shareId={pathPreachMatch[1]} />
+      </Suspense>
+    );
+  }
 
   // ── Public playlist: /p/:slug ───────────────────────────────────────────
   if (publicPlaylistSlug) {
