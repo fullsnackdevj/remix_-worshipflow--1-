@@ -1597,6 +1597,13 @@ BULLET: [...]`;
                 return json(500, { error: "OCR service is not configured (missing API key)" });
             }
 
+            // Use the correct prompt depending on content type
+            const preachingPrompt = `You are a precise sermon document transcriber. Extract ALL visible text from this image EXACTLY as it appears, preserving:\n- Every section heading (e.g. "Introduction:", "Key Points:", "Conclusion:")\n- Every scripture reference and Bible verse\n- Every bullet point, note, or outline item\n- Every annotation, emphasis, or formatting cue\n- Empty lines between sections for spacing\n\nRules:\n- Do NOT skip any visible text.\n- Do NOT add, invent, or summarize anything.\n- Do NOT use Markdown formatting (no **, no ##, no bullets unless they appear in the original).\n- Output ONLY the plain text transcription, nothing else.`;
+
+            const musicPrompt = `You are a precise music document transcriber. Transcribe ALL visible text from this image EXACTLY as it appears, preserving:\n- Every section label (e.g. "Verse:", "Chorus:", "Bridge:", "Pre Chorus:", etc.)\n- Every tag or annotation (e.g. "//JOYFUL", "(3x)", "(Jesus...)")\n- Every song title or header at the top\n- Every chord or lyric line, in the correct order\n- Empty lines between sections for spacing\n\nRules:\n- Do NOT skip any line of text you can see.\n- Do NOT add, invent, or summarize anything.\n- Do NOT use Markdown formatting (no **, no ##, no bullets).\n- Output ONLY the plain text transcription, nothing else.`;
+
+            const prompt = type === "preaching" ? preachingPrompt : musicPrompt;
+
             const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
             const response = await ai.models.generateContent({
                 model: "gemini-2.0-flash",
@@ -1605,9 +1612,7 @@ BULLET: [...]`;
                         role: "user",
                         parts: [
                             { inlineData: { data: base64Data, mimeType } },
-                            {
-                                text: `You are a precise music document transcriber. Transcribe ALL visible text from this image EXACTLY as it appears, preserving:\n- Every section label (e.g. "Verse:", "Chorus:", "Bridge:", "Pre Chorus:", etc.)\n- Every tag or annotation (e.g. "//JOYFUL", "(3x)", "(Jesus...)")\n- Every song title or header at the top\n- Every chord or lyric line, in the correct order\n- Empty lines between sections for spacing\n\nRules:\n- Do NOT skip any line of text you can see.\n- Do NOT add, invent, or summarize anything.\n- Do NOT use Markdown formatting (no **, no ##, no bullets).\n- Output ONLY the plain text transcription, nothing else.`,
-                            },
+                            { text: prompt },
                         ],
                     },
                 ],
