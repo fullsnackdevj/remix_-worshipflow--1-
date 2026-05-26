@@ -1080,10 +1080,28 @@ function ExternalSubmissionPanel({ item, onToast }: { item: SermonDraft; onToast
     setOcrLoading(true);
     setOcrText(null);
     try {
-      const res = await fetch("/api/ocr-preaching", {
+      // Fetch image client-side and convert to base64
+      // (bypasses the broken /api/ocr-preaching route entirely)
+      const imgRes = await fetch(item.externalFileUrl);
+      if (!imgRes.ok) throw new Error("Failed to load image");
+      const blob = await imgRes.blob();
+      const mimeType = blob.type || "image/jpeg";
+      const base64Data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          // Strip the data:...;base64, prefix
+          resolve(result.split(",")[1] || result);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+
+      // Use /api/ocr — the same working endpoint used by song OCR
+      const res = await fetch("/api/ocr", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageUrl: item.externalFileUrl }),
+        body: JSON.stringify({ base64Data, mimeType, type: "preaching" }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "OCR failed");
