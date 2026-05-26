@@ -255,9 +255,9 @@ export default function DesignRequestsView({ currentUserId, currentUserName, cur
   const [infoOpen, setInfoOpen] = useState(false);
   const [infoGlowing, setInfoGlowing] = useState(() => !localStorage.getItem("wf_design_requests_info_seen"));
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  // View mode: list | grid2 | grid3
-  const [viewMode, setViewMode] = useState<"list" | "grid2" | "grid3">(() =>
-    (localStorage.getItem("wf_design_view") as "list" | "grid2" | "grid3") || "grid2"
+  // View mode: list | grid2
+  const [viewMode, setViewMode] = useState<"list" | "grid2">(() =>
+    (localStorage.getItem("wf_design_view") as "list" | "grid2") || "grid2"
   );
   // Bulk select & delete
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -278,7 +278,7 @@ export default function DesignRequestsView({ currentUserId, currentUserName, cur
   const setConfirmLoading = (v: boolean) => setConfirmState(s => ({ ...s, loading: v }));
 
   // ── View mode persist ─────────────────────────────────────────────────────
-  const setView = (m: "list" | "grid2" | "grid3") => {
+  const setView = (m: "list" | "grid2") => {
     setViewMode(m);
     localStorage.setItem("wf_design_view", m);
     setSelectedIds(new Set());
@@ -500,9 +500,9 @@ export default function DesignRequestsView({ currentUserId, currentUserName, cur
         <div className="flex items-center gap-2">
           {/* View mode toggle */}
           <div className="flex items-center rounded-xl overflow-hidden border border-white/[0.08]" style={{ background: "rgba(255,255,255,0.03)" }}>
-            {(["list", "grid2", "grid3"] as const).map((m, i) => {
-              const icons = [<LayoutList size={15} />, <LayoutGrid size={15} />, <span style={{ fontSize: 12, fontWeight: 800, lineHeight: 1 }}>3</span>];
-              const titles = ["List view", "2-column grid", "3-column grid"];
+            {(["list", "grid2"] as const).map((m, i) => {
+              const icons = [<LayoutList size={15} />, <LayoutGrid size={15} />];
+              const titles = ["List view", "2-column grid"];
               return (
                 <button key={m} onClick={() => setView(m)} title={titles[i]}
                   className="flex items-center justify-center transition-all active:scale-90"
@@ -510,7 +510,7 @@ export default function DesignRequestsView({ currentUserId, currentUserName, cur
                     width: 34, height: 34,
                     background: viewMode === m ? "rgba(139,92,246,0.25)" : "transparent",
                     color: viewMode === m ? "#c4b5fd" : "rgba(255,255,255,0.3)",
-                    borderRight: i < 2 ? "1px solid rgba(255,255,255,0.06)" : "none",
+                    borderRight: i < 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
                   }}
                 >{icons[i]}</button>
               );
@@ -599,9 +599,7 @@ export default function DesignRequestsView({ currentUserId, currentUserName, cur
 
         {/* Cards ── dynamic grid based on viewMode */}
         <div className={`grid gap-3 items-start ${
-          viewMode === "list" ? "grid-cols-1" :
-          viewMode === "grid2" ? "grid-cols-1 md:grid-cols-2" :
-          "grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
+          viewMode === "list" ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2"
         }`}>
         {!loading && items.map(item => {
           const isSelected = selectedIds.has(item.id);

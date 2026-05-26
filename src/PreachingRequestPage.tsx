@@ -267,11 +267,11 @@ export default function PreachingRequestPage({ shareId }: { shareId: string }) {
         {/* Header brand */}
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 28 }}>
           <div style={{ ...iconBox, width: 46, height: 46, background: "linear-gradient(135deg, rgba(99,102,241,0.3), rgba(139,92,246,0.2))", border: "1px solid rgba(99,102,241,0.4)" }}>
-            <Mic2 size={22} style={{ color: "#a5b4fc" }} />
+            <Send size={22} style={{ color: "#a5b4fc" }} />
           </div>
           <div>
             <p style={{ color: "rgba(255,255,255,0.85)", fontWeight: 800, fontSize: 16, margin: 0 }}>WorshipFlow</p>
-            <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 12, margin: 0 }}>Sermon Design Request</p>
+            <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 12, margin: 0 }}>Preaching Slide Design Request</p>
           </div>
         </div>
 
@@ -301,7 +301,7 @@ export default function PreachingRequestPage({ shareId }: { shareId: string }) {
               <label style={labelStyle}>Your Name <span style={{ color: "#f87171" }}>*</span></label>
               <input
                 className="prq-input"
-                placeholder="e.g. Pastor John"
+                placeholder="Enter your Name"
                 value={preacherName}
                 onChange={e => setPreacherName(e.target.value)}
                 required
@@ -348,32 +348,9 @@ export default function PreachingRequestPage({ shareId }: { shareId: string }) {
               </div>
             </div>
 
-            {/* Notes */}
-            <div>
-              <label style={labelStyle}><FileText size={12} style={{ display: "inline", marginRight: 4 }} />Sermon Notes / Outline</label>
-              <textarea
-                className="prq-input prq-textarea"
-                placeholder="Paste your sermon outline, key points, scriptures, or any notes here…"
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-              />
-            </div>
-
-            {/* Reference link */}
-            <div>
-              <label style={labelStyle}><Link2 size={12} style={{ display: "inline", marginRight: 4 }} />Reference Link (optional)</label>
-              <input
-                className="prq-input"
-                type="url"
-                placeholder="https://docs.google.com/…"
-                value={link}
-                onChange={e => setLink(e.target.value)}
-              />
-            </div>
-
             {/* File upload — multi-file, auto-upload */}
             <div>
-              <label style={labelStyle}><Paperclip size={12} style={{ display: "inline", marginRight: 4 }} />Attachments (optional · max 100 MB each)</label>
+              <label style={labelStyle}><Paperclip size={12} style={{ display: "inline", marginRight: 4 }} />Upload Screenshot of your notes (optional · max 100 MB each)</label>
 
               {/* Hidden multi-file input */}
               <input
@@ -439,6 +416,29 @@ export default function PreachingRequestPage({ shareId }: { shareId: string }) {
                 {uploadedFiles.length > 0 ? <Plus size={15} /> : <Upload size={15} />}
                 {uploadedFiles.length > 0 ? "Add More Files" : "Choose Files (PDF, Word, ZIP, Image)"}
               </button>
+            </div>
+
+            {/* Reference link */}
+            <div>
+              <label style={labelStyle}><Link2 size={12} style={{ display: "inline", marginRight: 4 }} />Reference Link (optional)</label>
+              <input
+                className="prq-input"
+                type="url"
+                placeholder="https://docs.google.com/…"
+                value={link}
+                onChange={e => setLink(e.target.value)}
+              />
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label style={labelStyle}><FileText size={12} style={{ display: "inline", marginRight: 4 }} />Sermon Notes / Outline</label>
+              <textarea
+                className="prq-input prq-textarea"
+                placeholder="Paste your sermon outline, key points, scriptures, or any notes here…"
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+              />
             </div>
 
             {/* Error */}
