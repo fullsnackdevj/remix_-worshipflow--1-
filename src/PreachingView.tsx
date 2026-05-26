@@ -8,6 +8,7 @@ import {
   SendHorizonal, CheckCircle2, Info, AlertTriangle, Link2, Copy, ExternalLink, Share2,
 } from "lucide-react";
 import DatePicker from "./DatePicker";
+import { useAuth } from "./AuthContext";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 // Detects if user typed/pasted 2+ verse references into one field.
@@ -1890,6 +1891,9 @@ function DraftList({ drafts, activeDraftId, onSelect, onNew, onDelete, onSubmit,
     onRecallEdit: (id: string) => void; onPreview: (id: string) => void;
     onClose: () => void; onInfo: () => void; infoGlowing: boolean; currentUserName: string; currentUserId: string;
     initialTab?: 'drafts' | 'submitted' }) {
+  const { userRole } = useAuth();
+  const canShare = userRole === "admin" || userRole === "audio_tech" || userRole === "qa_specialist";
+
   const [tab, setTab] = useState<'drafts' | 'submitted' | 'share'>(
     initialTab === 'submitted' ? 'submitted' : 'drafts'
   );
@@ -1915,7 +1919,7 @@ function DraftList({ drafts, activeDraftId, onSelect, onNew, onDelete, onSubmit,
     setLoadingShares(false);
   }, [currentUserId]);
 
-  useEffect(() => { if (tab === 'share') fetchShares(); }, [tab, fetchShares]);
+  useEffect(() => { if (tab === 'share' && canShare) fetchShares(); }, [tab, fetchShares, canShare]);
 
   const handleGenerate = async () => {
     if (!currentUserId) return;
@@ -2025,22 +2029,25 @@ function DraftList({ drafts, activeDraftId, onSelect, onNew, onDelete, onSubmit,
 
       {/* ── Tabs ───────────────────────────── */}
       <div className="flex shrink-0" style={{ borderBottom: '2px solid rgba(255,255,255,0.06)' }}>
-        {(['drafts', 'submitted', 'share'] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            className="flex-1 flex items-center justify-center gap-1.5 transition-all"
-            style={{
-              height: 46,
-              fontSize: 12, fontWeight: 700,
-              letterSpacing: '0.04em', textTransform: 'uppercase',
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: tab === t ? 'var(--wf-at2)' : 'rgba(255,255,255,0.28)',
-              borderBottom: tab === t ? '2px solid var(--wf-c1-hex)' : '2px solid transparent',
-              marginBottom: -2,
-            }}>
-            {t === 'drafts' ? <PenLine size={12} /> : t === 'submitted' ? <SendHorizonal size={12} /> : <Share2 size={12} />}
-            {t === 'drafts' ? `Drafts${draftItems.length > 0 ? ` (${draftItems.length})` : ''}` : t === 'submitted' ? 'Submitted' : 'Share'}
-          </button>
-        ))}
+        {(['drafts', 'submitted', 'share'] as const)
+          .filter(t => t !== 'share' || canShare)
+          .map(t => (
+            <button key={t} onClick={() => setTab(t)}
+              className="flex-1 flex items-center justify-center gap-1.5 transition-all"
+              style={{
+                height: 46,
+                fontSize: 12, fontWeight: 700,
+                letterSpacing: '0.04em', textTransform: 'uppercase',
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: tab === t ? 'var(--wf-at2)' : 'rgba(255,255,255,0.28)',
+                borderBottom: tab === t ? '2px solid var(--wf-c1-hex)' : '2px solid transparent',
+                marginBottom: -2,
+              }}>
+              {t === 'drafts' ? <PenLine size={12} /> : t === 'submitted' ? <SendHorizonal size={12} /> : <Share2 size={12} />}
+              {t === 'drafts' ? `Drafts${draftItems.length > 0 ? ` (${draftItems.length})` : ''}` : t === 'submitted' ? 'Submitted' : 'Share'}
+            </button>
+          ))
+        }
       </div>
 
       {/* Tab content */}
@@ -2263,7 +2270,7 @@ function DraftList({ drafts, activeDraftId, onSelect, onNew, onDelete, onSubmit,
         )}
 
         {/* ── Share Links tab ── */}
-        {tab === 'share' && (
+        {tab === 'share' && canShare && (
           <div style={{ paddingBottom: 80 }}>
             {/* Generate button */}
             <button
