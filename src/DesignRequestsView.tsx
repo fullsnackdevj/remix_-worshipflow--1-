@@ -1080,24 +1080,52 @@ function ExternalSubmissionPanel({ item, onToast }: { item: SermonDraft; onToast
     setOcrLoading(true);
     setOcrText(null);
     try {
-      // Fetch image client-side and convert to base64
-      // (bypasses the broken /api/ocr-preaching route entirely)
-      const imgRes = await fetch(item.externalFileUrl);
-      if (!imgRes.ok) throw new Error("Failed to load image");
-      const blob = await imgRes.blob();
-      const mimeType = blob.type || "image/jpeg";
-      const base64Data = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const result = reader.result as string;
-          // Strip the data:...;base64, prefix
-          resolve(result.split(",")[1] || result);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
+      // Convert image to base64 client-side, then call /api/ocr (proven working endpoint).
+      // Strategy: try canvas (no CORS issues for same-origin images), fallback to fetch.
+      let base64Data = "";
+      let mimeType = "image/jpeg";
 
-      // Use /api/ocr — the same working endpoint used by song OCR
+      // Method 1: Load via <img> + canvas — works even with CORS-restricted URLs
+      // because <img crossOrigin="anonymous"> + canvas.toDataURL() is allowed
+      // when Firebase Storage sends proper CORS headers for the storage bucket.
+      // Method 2 (fallback): Direct fetch — works on same-origin or permissive CORS.
+      try {
+        const imgRes = await fetch(item.externalFileUrl);
+        if (!imgRes.ok) throw new Error("fetch failed");
+        const blob = await imgRes.blob();
+        mimeType = blob.type || "image/jpeg";
+        base64Data = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve((reader.result as string).split(",")[1] || "");
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      } catch {
+        // Fetch blocked by CORS — fallback to img+canvas
+        const { b64, mime } = await new Promise<{ b64: string; mime: string }>((resolve, reject) => {
+          const img = new Image();
+          img.crossOrigin = "anonymous";
+          img.onload = () => {
+            try {
+              const canvas = document.createElement("canvas");
+              canvas.width = img.naturalWidth;
+              canvas.height = img.naturalHeight;
+              const ctx = canvas.getContext("2d")!;
+              ctx.drawImage(img, 0, 0);
+              const dataUrl = canvas.toDataURL("image/png");
+              resolve({ b64: dataUrl.split(",")[1] || "", mime: "image/png" });
+            } catch (err) { reject(err); }
+          };
+          img.onerror = () => reject(new Error("Failed to load image"));
+          img.src = item.externalFileUrl!;
+        });
+        base64Data = b64;
+        mimeType = mime;
+      }
+
+      if (!base64Data) throw new Error("Could not read image data");
+
+      // Call /api/ocr — the same proven endpoint used by song OCR in production
       const res = await fetch("/api/ocr", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
