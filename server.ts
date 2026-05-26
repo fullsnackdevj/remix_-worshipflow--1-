@@ -4096,29 +4096,38 @@ app.get("/api/public-playlist/:slug", async (req, res) => {
     const data = doc.data() as any;
     const storedSongs: any[] = data.songs ?? [];
 
-    // ── Live-enrich songs with current video_url from the songs collection ──
-    // This ensures playback works even if the playlist was published before
-    // YouTube URLs were added to the songs in Song Management.
     if (storedSongs.length > 0) {
       const songIds = storedSongs.map((s: any) => s.id).filter(Boolean);
       // Firestore IN query supports up to 30 items; batch if needed
       const chunks: string[][] = [];
       for (let i = 0; i < songIds.length; i += 30) chunks.push(songIds.slice(i, i + 30));
 
-      const liveMap: Record<string, string> = {};
+      const liveMap: Record<string, { video_url?: string; lyrics?: string; chords?: string; title?: string; artist?: string }> = {};
       await Promise.all(chunks.map(async chunk => {
         const snap = await firestore!.collection("songs").where(admin.firestore.FieldPath.documentId(), "in", chunk).get();
         snap.docs.forEach(d => {
-          const v = (d.data() as any).video_url ?? "";
-          if (v) liveMap[d.id] = v;
+          const sData = d.data() as any;
+          liveMap[d.id] = {
+            video_url: sData.video_url,
+            lyrics: sData.lyrics,
+            chords: sData.chords,
+            title: sData.title,
+            artist: sData.artist
+          };
         });
       }));
 
-      data.songs = storedSongs.map((s: any) => ({
-        ...s,
-        // Prefer live value; fall back to stored value
-        youtubeUrl: liveMap[s.id] ?? s.youtubeUrl ?? "",
-      }));
+      data.songs = storedSongs.map((s: any) => {
+        const live = liveMap[s.id];
+        return {
+          ...s,
+          title: live?.title ?? s.title,
+          artist: live?.artist ?? s.artist,
+          youtubeUrl: live?.video_url ?? s.youtubeUrl ?? "",
+          lyrics: live?.lyrics ?? s.lyrics ?? "",
+          chords: live?.chords ?? s.chords ?? "",
+        };
+      });
     }
 
     res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
