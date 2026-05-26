@@ -257,7 +257,11 @@ export default function PreachingRequestPage({ shareId }: { shareId: string }) {
         .prq-upload-btn { background: rgba(99,102,241,0.12); border: 1px solid rgba(99,102,241,0.3); color: #a5b4fc; border-radius: 10px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: background 0.2s; }
         .prq-upload-btn:hover { background: rgba(99,102,241,0.2); }
         .prq-upload-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-      `}</style>
+        .prq-grid-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        @media (max-width: 480px) {
+          .prq-grid-row { grid-template-columns: 1fr; }
+        }
+      `}</style>,StartLine:257,TargetContent:
 
       <div style={{ width: "100%", maxWidth: 560, animation: "fadeUp 0.4s ease forwards", boxSizing: "border-box", padding: "24px 16px" }}>
         {/* Header brand */}
@@ -317,7 +321,7 @@ export default function PreachingRequestPage({ shareId }: { shareId: string }) {
             </div>
 
             {/* Date + Service Type row */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div className="prq-grid-row">
               <div>
                 <label style={labelStyle}><CalendarDays size={12} style={{ display: "inline", marginRight: 4 }} />Service Date</label>
                 <input
@@ -328,17 +332,19 @@ export default function PreachingRequestPage({ shareId }: { shareId: string }) {
                   style={{ colorScheme: "dark" }}
                 />
               </div>
-              <div style={{ position: "relative" }}>
+              <div>
                 <label style={labelStyle}>Service Type</label>
-                <select
-                  className="prq-input prq-select"
-                  value={serviceType}
-                  onChange={e => setServiceType(e.target.value)}
-                >
-                  <option value="">Select…</option>
-                  {SERVICE_TYPES.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-                <ChevronDown size={13} style={{ position: "absolute", right: 12, top: "65%", color: "rgba(255,255,255,0.25)", pointerEvents: "none" }} />
+                <div style={{ position: "relative" }}>
+                  <select
+                    className="prq-input prq-select"
+                    value={serviceType}
+                    onChange={e => setServiceType(e.target.value)}
+                  >
+                    <option value="">Select…</option>
+                    {SERVICE_TYPES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <ChevronDown size={13} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.25)", pointerEvents: "none" }} />
+                </div>
               </div>
             </div>
 

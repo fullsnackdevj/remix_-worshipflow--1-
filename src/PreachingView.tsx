@@ -1335,7 +1335,7 @@ function SermonCanvas({
 
           {/* Expanded content — stacks vertically on mobile, side-by-side on sm+ */}
           {serviceInfoOpen && (
-            <div className="px-5 pb-5 pt-3 grid grid-cols-2 gap-4" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+            <div className="px-5 pb-5 pt-3 grid grid-cols-1 sm:grid-cols-2 gap-4" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
               {/* Date */}
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5 mb-2">
