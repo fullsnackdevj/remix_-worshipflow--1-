@@ -6,7 +6,6 @@
 
 [functions]
   node_bundler = "esbuild"
-  timeout = 30
 
 # ── Edge Functions ────────────────────────────────────────────────────────────
 # Runs at the CDN edge BEFORE HTML reaches the browser.
