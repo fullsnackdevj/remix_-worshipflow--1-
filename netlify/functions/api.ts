@@ -377,6 +377,66 @@ async function writeNotif(firestore: FirebaseFirestore.Firestore | null, payload
 }
 
 export const handler: Handler = async (event: HandlerEvent, _context: HandlerContext) => {
+    // ─── EARLY: OCR Preaching — checked FIRST using event.path directly ──────────
+    // This runs before rawPath parsing to guarantee matching regardless of how
+    // Netlify delivers the path (with or without /api/ prefix, etc.)
+    const isOcrPreachingRoute =
+        event.path === "/api/ocr-preaching" ||
+        event.path === "/ocr-preaching" ||
+        event.path.endsWith("/ocr-preaching") ||
+        event.path.includes("/ocr-preaching");
+    if (isOcrPreachingRoute && event.httpMethod === "POST") {
+        try {
+            let earlyBody: Record<string, any> = {};
+            try {
+                const rb = event.isBase64Encoded && event.body
+                    ? Buffer.from(event.body, "base64").toString("utf-8")
+                    : event.body;
+                earlyBody = rb ? JSON.parse(rb) : {};
+            } catch { earlyBody = {}; }
+
+            const { imageUrl } = earlyBody as { imageUrl?: string };
+            if (!imageUrl) return json(400, { error: "imageUrl required" });
+            if (!process.env.GEMINI_API_KEY) return json(500, { error: "OCR not configured (missing API key)" });
+
+            // Fetch image server-side — bypasses client CORS on Firebase Storage URLs
+            const imgRes = await fetch(imageUrl);
+            if (!imgRes.ok) {
+                console.error("[ocr-preaching] Failed to fetch image:", imgRes.status);
+                return json(502, { error: "Failed to fetch image from URL" });
+            }
+            const arrayBuf = await imgRes.arrayBuffer();
+            const base64Data = Buffer.from(arrayBuf).toString("base64");
+            const ext = imageUrl.split("?")[0].split(".").pop()?.toLowerCase() ?? "jpg";
+            const mimeMap: Record<string, string> = {
+                jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
+                gif: "image/gif", webp: "image/webp", bmp: "image/bmp",
+            };
+            const mimeType = mimeMap[ext] ?? "image/jpeg";
+
+            const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+            const response = await ai.models.generateContent({
+                model: "gemini-2.5-flash",
+                contents: [{ role: "user", parts: [
+                    { inlineData: { data: base64Data, mimeType } },
+                    { text: `You are a precise sermon document transcriber. Extract ALL visible text from this image EXACTLY as it appears, preserving:\n- Every section heading (e.g. "Introduction:", "Key Points:", "Conclusion:")\n- Every scripture reference and Bible verse\n- Every bullet point, note, or outline item\n- Every annotation, emphasis, or formatting cue\n- Empty lines between sections for spacing\n\nRules:\n- Do NOT skip any visible text.\n- Do NOT add, invent, or summarize anything.\n- Do NOT use Markdown formatting (no **, no ##, no bullets unless they appear in the original).\n- Output ONLY the plain text transcription, nothing else.` },
+                ]}],
+            });
+            let rawText = "";
+            try {
+                rawText = response.candidates?.[0]?.content?.parts
+                    ?.filter((p: any) => typeof p.text === "string")
+                    ?.map((p: any) => p.text as string)
+                    ?.join("") ?? "";
+                if (!rawText) rawText = (response as any).text ?? "";
+            } catch { /* no usable text */ }
+            return json(200, { ok: true, text: rawText.replace(/\*\*/g, "").trim() });
+        } catch (e: any) {
+            console.error("[ocr-preaching EARLY]", e?.message ?? e);
+            return json(500, { error: "OCR failed", detail: e?.message });
+        }
+    }
+
     // Parse path: strip /.netlify/functions/api OR /api prefix
     const rawPath = event.path
         .replace(/^\/\.netlify\/functions\/api/, "")
