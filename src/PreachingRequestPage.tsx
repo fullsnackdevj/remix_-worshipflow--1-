@@ -3,7 +3,7 @@ import { ref as storageRef, uploadBytesResumable, getDownloadURL } from "firebas
 import { storage } from "./firebase";
 import {
   Mic2, FileText, Link2, Upload, X, Check, Loader2,
-  AlertTriangle, BookOpen, ChevronDown, CalendarDays, Paperclip, Plus,
+  AlertTriangle, BookOpen, ChevronDown, CalendarDays, Paperclip, Plus, Send,
 } from "lucide-react";
 
 interface ShareInfo {
@@ -453,7 +453,7 @@ export default function PreachingRequestPage({ shareId }: { shareId: string }) {
             <button type="submit" className="prq-btn-primary" disabled={submitting || uploadedFiles.some(u => u.status === "uploading")} style={{ marginTop: 4 }}>
               {submitting
                 ? <><Loader2 size={17} style={{ animation: "spin 1s linear infinite" }} /> Submitting…</>
-                : <><Mic2 size={17} /> Submit Sermon Request</>
+                : <><Send size={17} /> Submit Design Request</>
               }
             </button>
           </form>
