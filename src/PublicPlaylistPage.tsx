@@ -839,11 +839,19 @@ export default function PublicPlaylistPage({ slug }: { slug: string }) {
                 <X size={18} />
               </button>
             </div>
-            {/* Tabs — Chords tab hidden for now */}
+            {/* Tabs */}
             <div className="flex gap-2 px-5 pt-3 pb-2 shrink-0">
               <button onClick={() => setLyricsTab("lyrics")}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all bg-indigo-600 text-white">
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+                  lyricsTab === "lyrics" ? "bg-indigo-600 text-white" : "bg-white/5 text-gray-400 hover:text-white"
+                }`}>
                 <BookOpen size={13} /> Lyrics
+              </button>
+              <button onClick={() => setLyricsTab("chords")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+                  lyricsTab === "chords" ? "bg-indigo-600 text-white" : "bg-white/5 text-gray-400 hover:text-white"
+                }`}>
+                <Guitar size={13} /> Chords
               </button>
             </div>
             {/* Content */}
