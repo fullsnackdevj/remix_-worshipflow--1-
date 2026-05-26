@@ -261,7 +261,7 @@ export default function PreachingRequestPage({ shareId }: { shareId: string }) {
         @media (max-width: 480px) {
           .prq-grid-row { grid-template-columns: 1fr; }
         }
-      `}</style>,StartLine:257,TargetContent:
+      `}</style>
 
       <div style={{ width: "100%", maxWidth: 560, animation: "fadeUp 0.4s ease forwards", boxSizing: "border-box", padding: "24px 16px" }}>
         {/* Header brand */}

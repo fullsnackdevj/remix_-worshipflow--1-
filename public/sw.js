@@ -9,7 +9,7 @@
 //   • API calls (/api/*)               → Network-First  (fresh data when online)
 //   • Firebase / FCM / external CDN    → Pass-through  (browser handles)
 
-const CACHE_VERSION = 'wf-v13';
+const CACHE_VERSION = 'wf-v14';
 const OFFLINE_URL   = '/offline.html';
 
 // ── App shell: pre-cached at install ─────────────────────────────────────────
