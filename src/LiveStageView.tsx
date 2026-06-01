@@ -2349,12 +2349,19 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
           }}
           onOpenCampReadiness={() => setShowCampReady(true)}
           onResetLiveBg={() => {
-            // Clear bgVideo from both presets in state (auto-saves to localStorage via existing effect)
-            setPresets(prev => ({
-              ...prev,
-              praise:  { ...prev.praise,  bgVideo: null },
-              worship: { ...prev.worship, bgVideo: null },
-            }));
+            // Clear bgVideo from React state AND write to localStorage immediately.
+            // setPresets alone does NOT auto-save to localStorage — saves are inline per-handler.
+            // Without the direct write, the stale bgVideo survives a page reload and gets
+            // pushed back to Firestore on next mount, making OBS show the old video again.
+            setPresets(prev => {
+              const cleared = {
+                ...prev,
+                praise:  { ...prev.praise,  bgVideo: null },
+                worship: { ...prev.worship, bgVideo: null },
+              };
+              try { localStorage.setItem("lsv_presets", JSON.stringify(cleared)); } catch {}
+              return cleared;
+            });
             setBgVideo(null);
             // Clear server liveState, .meta.json, Firestore, and broadcast to SSE
             fetch("/api/reset-live-bg", { method: "POST" }).catch(() => {});
