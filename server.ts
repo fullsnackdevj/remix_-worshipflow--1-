@@ -554,6 +554,25 @@ app.post("/api/live-push", async (req, res) => {
   res.json({ ok: true, clients: sseClients.size });
 });
 
+// POST /api/reset-live-bg — clears bgVideo from liveState and rebroadcasts
+// Used by the "Reset BG" button in Live Stage so stale cached backgrounds are wiped
+app.post("/api/reset-live-bg", async (req, res) => {
+  liveState = { ...liveState, bgVideo: null, updatedAt: uniqueNow() };
+  const payload = `data: ${JSON.stringify(liveState)}\n\n`;
+  sseClients.forEach(client => {
+    try {
+      client.write(payload);
+      if (typeof (client as any).flush === "function") (client as any).flush();
+    } catch { sseClients.delete(client); }
+  });
+  saveLiveStateToDisk();
+  try {
+    const firestore = getDb();
+    if (firestore) await firestore.collection("live_state").doc("current").set(liveState);
+  } catch { /* offline — ok */ }
+  res.json({ ok: true });
+});
+
 // GET /api/camp-status — Camp Readiness check (used by the ⛺ modal in LiveStageView)
 // Returns whether each required offline resource exists on disk.
 app.get("/api/camp-status", (req, res) => {

@@ -14,7 +14,7 @@
  *   initialSongId? — pre-select a song (e.g. the one currently on Live Stage)
  */
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { X, LayoutGrid, Radio, Music2, ChevronDown, EyeOff, Zap, Heart, Monitor, Pencil, Check, AlertCircle, Settings, Link, FolderOpen, Plus, Minus, Search, Tent, GripVertical } from "lucide-react";
+import { X, LayoutGrid, Radio, Music2, ChevronDown, EyeOff, Zap, Heart, Monitor, Pencil, Check, AlertCircle, Settings, Link, FolderOpen, Plus, Minus, Search, Tent, GripVertical, RefreshCw } from "lucide-react";
 import type { Song } from "./types";
 import { db } from "./firebase";
 import { doc, onSnapshot } from "firebase/firestore";
@@ -500,6 +500,7 @@ export default function LyricsGridModal({
   const [obsUrlCopied,      setObsUrlCopied]      = useState(false);
   const [obsLocalUrlCopied, setObsLocalUrlCopied] = useState(false);
   const [showCampReady,     setShowCampReady]     = useState(false);
+  const [bgResetDone,       setBgResetDone]       = useState(false);
 
   // ── Left Song Panel state ─────────────────────────────────────────────────
   // Desktop: open by default. Mobile: hidden by default (user can toggle via + button).
@@ -1255,6 +1256,32 @@ export default function LyricsGridModal({
           >
             <Monitor size={15} />
             <span className="lgm-btn-label">Live Preview</span>
+          </button>
+
+          {/* Reset BG — clears stale/cached bgVideo from server liveState and rebroadcasts */}
+          <button
+            onClick={() => {
+              fetch("/api/reset-live-bg", { method: "POST" })
+                .then(() => { setBgResetDone(true); setTimeout(() => setBgResetDone(false), 2500); })
+                .catch(() => {});
+            }}
+            className="lgm-labeled-btn"
+            title="Clear stale OBS background cache — forces OBS to reload the correct scene background"
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+              height: 36, padding: "0 13px", borderRadius: 8, flexShrink: 0,
+              cursor: "pointer", transition: "all 0.15s",
+              background: bgResetDone ? "rgba(52,211,153,0.12)" : "rgba(248,113,113,0.08)",
+              border: bgResetDone ? "1px solid rgba(52,211,153,0.5)" : "1px solid rgba(248,113,113,0.28)",
+              color: bgResetDone ? "#34d399" : "#fca5a5",
+              fontSize: 12, fontWeight: 600,
+            }}
+            onMouseEnter={e => !bgResetDone && ((e.currentTarget as HTMLElement).style.background = "rgba(248,113,113,0.18)")}
+            onMouseLeave={e => !bgResetDone && ((e.currentTarget as HTMLElement).style.background = "rgba(248,113,113,0.08)")}
+          >
+            {bgResetDone
+              ? <><Check size={15} /><span className="lgm-btn-label">Cleared!</span></>
+              : <><RefreshCw size={15} /><span className="lgm-btn-label">Reset BG</span></>}
           </button>
 
           {/* Settings — purple accent, same rounded-square style as Live Preview */}
