@@ -2349,10 +2349,7 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
           }}
           onOpenCampReadiness={() => setShowCampReady(true)}
           onResetLiveBg={() => {
-            // Clear bgVideo from React state AND write to localStorage immediately.
-            // setPresets alone does NOT auto-save to localStorage — saves are inline per-handler.
-            // Without the direct write, the stale bgVideo survives a page reload and gets
-            // pushed back to Firestore on next mount, making OBS show the old video again.
+            // 1. Clear preset bgVideos (praise + worship) from React state and localStorage
             setPresets(prev => {
               const cleared = {
                 ...prev,
@@ -2363,7 +2360,12 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
               return cleared;
             });
             setBgVideo(null);
-            // Clear server liveState, .meta.json, Firestore, and broadcast to SSE
+            // 2. Clear song-specific backgrounds — this was the main source of the
+            // "keeps coming back" bug: clicking any song that had lsv_song_bgs assigned
+            // would call applySongBackground → push the old video to OBS immediately.
+            setSongBgMeta({});
+            try { localStorage.setItem("lsv_song_bgs", JSON.stringify({})); } catch {}
+            // 3. Clear server liveState, .meta.json, Firestore, and broadcast to SSE
             fetch("/api/reset-live-bg", { method: "POST" }).catch(() => {});
           }}
           isInline={true}
