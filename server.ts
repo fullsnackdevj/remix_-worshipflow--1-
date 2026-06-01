@@ -434,7 +434,12 @@ function injectLocalUrls(state: Record<string, unknown>): Record<string, unknown
       const STALE_MS = 24 * 60 * 60 * 1000;
       const age = Date.now() - ((saved.updatedAt as number) ?? 0);
       if (age < STALE_MS) {
-        liveState = { ...saved, visible: false, lines: [], _fadeOnly: false };
+        // If .meta.json is empty (Reset BG was pressed), strip bgVideo from the restored state
+        // so a server restart after reset doesn't bring the old background back to OBS.
+        const metaUrls = loadLiveBgMetaUrls();
+        const hasAssignedBg = Object.keys(metaUrls).length > 0;
+        liveState = { ...saved, visible: false, lines: [], _fadeOnly: false,
+          ...(hasAssignedBg ? {} : { bgVideo: null }) };
         // Inject echo advanced defaults for fields missing from old state files
         liveState = {
           echoSacredScale: 1.75, echoContentScale: 1.30, echoFuncScale: 0.62,
@@ -488,7 +493,10 @@ function injectLocalUrls(state: Record<string, unknown>): Record<string, unknown
     // ✅ OFFLINE FALLBACK: load from disk file saved by previous session
     const diskState = loadLiveStateFromDisk();
     if (diskState) {
-      liveState = { ...diskState, visible: false, lines: [], _fadeOnly: false };
+      const metaUrls = loadLiveBgMetaUrls();
+      const hasAssignedBg = Object.keys(metaUrls).length > 0;
+      liveState = { ...diskState, visible: false, lines: [], _fadeOnly: false,
+        ...(hasAssignedBg ? {} : { bgVideo: null }) };
       // Inject echo advanced defaults for fields missing from old disk files
       liveState = {
         echoSacredScale: 1.75, echoContentScale: 1.30, echoFuncScale: 0.62,
