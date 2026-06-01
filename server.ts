@@ -4274,8 +4274,14 @@ async function startServer() {
         const snap = await firestore.collection("live_state").doc("current").get();
         if (snap.exists) {
           const data = snap.data() as Record<string, unknown>;
+          // Strip bgVideo if .meta.json is empty — prevents stale background from a
+          // previous session showing in OBS after Reset BG was pressed.
+          const metaUrls = loadLiveBgMetaUrls();
+          const hasAssignedBg = Object.keys(metaUrls).length > 0;
           // Always clear fadeScreen on startup — prevents stale overlay blocking OBS
-          liveState = { ...data, fadeScreen: false, updatedAt: uniqueNow() };
+          liveState = { ...data, fadeScreen: false, updatedAt: uniqueNow(),
+            ...(hasAssignedBg ? {} : { bgVideo: null }) };
+          liveState = injectLocalUrls(liveState);
           console.log("[startup] liveState synced from Firestore:", (data.songTitle as string) || "(no song)");
         }
       } catch (e: unknown) {
