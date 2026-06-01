@@ -593,9 +593,10 @@ export default function LiveDisplayPage() {
           // available (injected by injectLocalUrls on the server). Fall back to url which
           // works as a relative path when OBS browser source is on localhost.
           // For type:"firebase": prefer localUrl when offline (avoids Firebase Storage hit).
-          const src = ((bv as {localUrl?:string}).localUrl && !(bv as {localUrl?:string}).localUrl!.startsWith("blob:"))
-            ? (bv as {localUrl?:string}).localUrl!
-            : (bv as {url:string}).url;
+          const localUrl = (bv as {localUrl?:string}).localUrl;
+          const firebaseUrl = (bv as {url:string}).url;
+          const safeLocal = localUrl && !localUrl.startsWith("blob:") ? localUrl : null;
+          const src = safeLocal ?? firebaseUrl;
           return (
             <div style={{ position:"absolute", inset:0, overflow:"hidden", zIndex:0 }}>
               <video
@@ -603,6 +604,11 @@ export default function LiveDisplayPage() {
                 src={src}
                 autoPlay loop muted playsInline
                 style={{ width:"100%", height:"100%", objectFit:"cover" }}
+                onError={(e) => {
+                  // localUrl failed (server not running or file missing) — fall back to Firebase URL
+                  const v = e.currentTarget;
+                  if (v.src !== firebaseUrl && firebaseUrl) { v.src = firebaseUrl; v.load(); v.play().catch(()=>{}); }
+                }}
               />
               {/* Dark scrim — keeps lyrics readable over video */}
               <div style={{ position:"absolute", inset:0, background:"rgba(0,0,0,0.45)" }} />

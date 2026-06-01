@@ -1098,16 +1098,15 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
     setFadeScreenActive(true);
     fadeScreenActiveRef.current = true;
     localStorage.setItem("lsv_fade_active", "1");
-    // Push fade-on to OBS immediately (blank scene, fade overlay active)
+    // Push fade-on to OBS — _bgOnly:true so we ONLY activate the overlay without
+    // wiping the existing bgVideo in liveState (bgVideoRef.current may be null at mount
+    // if localStorage hasn't loaded yet, which would erase the active background from OBS).
     fetch("/api/live-push", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        songTitle: "", lines: [], animStyle: "word-fade", visible: false,
-        bgIdx: bgIdxRef.current,
-        echoAlign: _cur.echoAlign, echoLines: _cur.echoLines, echoLineHeight: _cur.echoLineHeight,
-        lyricsScale: _cur.lyricsScale ?? 1.0, loopEnabled: _cur.loopEnabled ?? true,
-        bgVideo: bgVideoRef.current, loopInterval: _cur.loopInterval,
+        _bgOnly: true,
+        visible: false, lines: [], songTitle: "",
         fadeScreen: true, fadeScreenBg: toFiresafeFadeBg(fadeScreenBgRef.current),
         updatedAt: Date.now(),
       }),

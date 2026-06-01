@@ -523,13 +523,13 @@ app.post("/api/live-push", async (req, res) => {
   // Normal slide/clear pushes do NOT set _bgOnly and fully replace state (old behaviour).
   const { _bgOnly, ...body } = req.body as Record<string, unknown>;
   if (_bgOnly) {
-    liveState = { ...liveState, ...body, updatedAt: uniqueNow() };
+    liveState = injectLocalUrls({ ...liveState, ...body, updatedAt: uniqueNow() });
   } else {
-    liveState = { ...body, updatedAt: uniqueNow() };
+    liveState = injectLocalUrls({ ...body, updatedAt: uniqueNow() });
   }
   // 1. Broadcast to SSE clients (instant local push — walkie-talkie mode)
-  const broadcastState = injectLocalUrls(liveState);
-  const payload = `data: ${JSON.stringify(broadcastState)}\n\n`;
+  // liveState already has localUrls injected — Firestore, disk, and SSE all share the same state
+  const payload = `data: ${JSON.stringify(liveState)}\n\n`;
   sseClients.forEach(client => {
     try {
       client.write(payload);
@@ -543,6 +543,7 @@ app.post("/api/live-push", async (req, res) => {
   try {
     const firestore = getDb();
     if (firestore) {
+      // liveState already has localUrls injected — Firestore gets same state as SSE
       await firestore.collection("live_state").doc("current").set(liveState);
     }
   } catch (e: unknown) {
