@@ -2533,10 +2533,10 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
                   body: JSON.stringify({ _bgOnly: true, fadeScreen: true, fadeScreenBg: toFiresafeFadeBg(fadeBg), updatedAt: Date.now() }),
                 }).catch(() => {});
               }
-              // ── Upload to local server so OBS can load the image offline ─────────
-              // 3-tier: blobUrl (session) → IDB cache → Firebase URL (online fallback)
+              // ── Upload to local server so OBS can load it offline ──────────────
+              // Handles both images AND videos. 3-tier: blobUrl → IDB → Firebase.
               // After upload, follow-up push gives OBS a real localhost URL.
-              if (item.type === 'image') {
+              if (item.type === 'image' || item.type === 'video') {
                 (async () => {
                   try {
                     let srcBlob: Blob | null = null;

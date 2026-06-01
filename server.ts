@@ -425,22 +425,17 @@ function injectLocalUrls(state: Record<string, unknown>): Record<string, unknown
     }
   }
 
-  // ── fadeScreenBg injection — only cache images locally, never videos ────────
-  // Videos are too large and /api/live-fade-image only handles image MIME types.
-  // For video-firebase: always strip localUrl so OBS loads from Firebase URL directly.
-  // For image-firebase: inject localUrl only when fadeBgFirebaseUrl matches (prevents
-  //   serving a stale image from a prior session).
+  // ── fadeScreenBg injection — image AND video fade screens cached locally ─────
+  // Inject localUrl only when fadeBgFirebaseUrl matches the incoming URL so we never
+  // serve a stale disk file from a prior session.
   const fb = result.fadeScreenBg as Record<string, unknown> | null | undefined;
-  if (fb && fb.type === "video-firebase") {
-    // Never inject localUrl for video fade screens — always use Firebase URL in OBS
-    result = { ...result, fadeScreenBg: { ...fb, localUrl: undefined } };
-  } else if (fb && fb.type === "image-firebase") {
+  if (fb && (fb.type === "image-firebase" || fb.type === "video-firebase")) {
     const fbIncomingUrl = (fb.url as string) ?? "";
     const urlMatch = fadeBgFirebaseUrl && fadeBgFirebaseUrl === fbIncomingUrl;
     if (urlMatch && fadeBgFilePath && fs.existsSync(fadeBgFilePath)) {
       result = { ...result, fadeScreenBg: { ...fb, localUrl: "/api/live-fade-image" } };
     } else {
-      // URL mismatch — disk file is stale; let OBS fall back to Firebase URL
+      // URL mismatch or no disk file — let OBS fall back to Firebase URL
       result = { ...result, fadeScreenBg: { ...fb, localUrl: undefined } };
     }
   }
@@ -813,29 +808,29 @@ function loadFadeBgMeta(): string | null {
   try { const d = JSON.parse(fs.readFileSync(FADE_BG_META_FILE, "utf-8")); return d.url || null; } catch { return null; }
 }
 
-// Load any existing fade image on startup
+// Load any existing fade bg (image or video) on startup
 (() => {
   try {
     fadeBgFirebaseUrl = loadFadeBgMeta();
     const files = fs.readdirSync(FADE_IMAGE_DIR);
     for (const file of files) {
-      const m = file.match(/^_fade_screen\.(jpg|jpeg|png|webp|gif)$/i);
+      const m = file.match(/^_fade_screen\.(jpg|jpeg|png|webp|gif|mp4|webm)$/i);
       if (!m) continue;
       fadeBgFilePath = path.join(FADE_IMAGE_DIR, file);
       const ext = m[1].toLowerCase();
-      fadeBgMime = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : ext === "gif" ? "image/gif" : "image/jpeg";
-      // If meta was cleared or missing, recover Firebase URL from liveState.json so
-      // OBS doesn't show black on first load — the disk file was saved for that session's URL.
+      fadeBgMime = ext === "mp4" ? "video/mp4" : ext === "webm" ? "video/webm"
+                 : ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : ext === "gif" ? "image/gif" : "image/jpeg";
+      // If meta was cleared or missing, recover Firebase URL from liveState.json
       if (!fadeBgFirebaseUrl) {
         try {
           const saved = JSON.parse(fs.readFileSync(LIVE_STATE_FILE, "utf-8"));
           const savedFb = saved?.fadeScreenBg as { type?: string; url?: string } | null;
-          if (savedFb?.url && savedFb.type === "image-firebase") {
+          if (savedFb?.url && (savedFb.type === "image-firebase" || savedFb.type === "video-firebase")) {
             fadeBgFirebaseUrl = savedFb.url;
             saveFadeBgMeta();
             console.log(`[FadeBG] Recovered Firebase URL from liveState cache: ${fadeBgFirebaseUrl.slice(0, 60)}...`);
           }
-        } catch { /* liveState.json missing — no recovery possible */ }
+        } catch { /* liveState.json missing */ }
       }
       console.log(`[FadeBG] Loaded from disk: ${file} (cached url: ${fadeBgFirebaseUrl ?? "none"})`);
       break;
@@ -843,17 +838,19 @@ function loadFadeBgMeta(): string | null {
   } catch { /* ignore */ }
 })();
 
-app.post("/api/live-fade-image", multer({ storage: multer.memoryStorage(), limits: { fileSize: 30 * 1024 * 1024 } }).single("image"), (req, res) => {
+// Accepts both images AND videos — field name "image" is kept for backward compat
+app.post("/api/live-fade-image", multer({ storage: multer.memoryStorage(), limits: { fileSize: 200 * 1024 * 1024 } }).single("image"), (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file" });
   const mime = req.file.mimetype || "image/jpeg";
-  const ext  = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : mime.includes("gif") ? "gif" : "jpg";
-  // Remove old fade image if present
+  const isVideo = mime.startsWith("video/");
+  const ext = isVideo
+    ? (mime.includes("webm") ? "webm" : "mp4")
+    : (mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : mime.includes("gif") ? "gif" : "jpg");
   if (fadeBgFilePath) { try { fs.unlinkSync(fadeBgFilePath); } catch { /* ignore */ } }
   const filePath = path.join(FADE_IMAGE_DIR, `_fade_screen.${ext}`);
   fs.writeFileSync(filePath, req.file.buffer);
   fadeBgFilePath = filePath;
   fadeBgMime     = mime;
-  // Track which Firebase URL this file corresponds to (sent as optional form field)
   const firebaseUrl = (req.body as Record<string, string>)?.firebaseUrl ?? null;
   fadeBgFirebaseUrl = firebaseUrl;
   saveFadeBgMeta();
