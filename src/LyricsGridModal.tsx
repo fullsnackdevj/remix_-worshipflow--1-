@@ -1398,26 +1398,36 @@ export default function LyricsGridModal({
                 border: "none", pointerEvents: "none", background: "#000",
               }}
             />
-            {/* Fade screen overlay — mirrors what OBS shows, sourced directly from Firestore */}
-            {liveFadeActive && liveFadeBg && (() => {
-              const bg = liveFadeBg as { type?: string; url?: string; color?: string; videoId?: string };
+            {/* Fade screen overlay — uses fadeScreenBg prop (React state) so blob: and
+                localhost URLs work immediately; Firestore liveFadeBg has no localUrl offline. */}
+            {(fadeScreenActive || liveFadeActive) && (() => {
+              // Prop has localUrl (blob: for instant preview, /api/live-fade-image after upload).
+              // Firestore liveFadeBg is the online fallback (plain Firebase URL, no localUrl).
+              const propBg = fadeScreenBg as { type?: string; url?: string; color?: string; videoId?: string; localUrl?: string } | null | undefined;
+              const fbBg   = liveFadeBg   as { type?: string; url?: string; color?: string; videoId?: string; localUrl?: string } | null;
+              // Use prop when URLs match (prop has richer localUrl), else fall back to Firestore data
+              const bg: { type?: string; url?: string; color?: string; videoId?: string; localUrl?: string } =
+                (propBg?.url && propBg.url === fbBg?.url) ? propBg! : (propBg ?? fbBg ?? {});
+              if (!bg.type) return null;
+              // Prefer localUrl (blob: works in same tab; /api/live-fade-image works offline)
+              const bgSrc = bg.localUrl ?? bg.url ?? "";
               return (
                 <div style={{
                   position: "absolute", inset: 0, zIndex: 10,
                   transition: "opacity 0.4s ease",
-                  opacity: liveFadeActive ? 1 : 0,
+                  opacity: 1,
                   overflow: "hidden",
                 }}>
-                  {(bg.type === "image-firebase" || bg.type === "image-url" || bg.type === "image-local") && bg.url && (
-                    <img src={bg.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  {(bg.type === "image-firebase" || bg.type === "image-url" || bg.type === "image-local") && bgSrc && (
+                    <img src={bgSrc} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                   )}
-                  {(bg.type === "video-firebase" || bg.type === "video-local") && bg.url && (
-                    <video src={bg.url} autoPlay muted loop style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  {(bg.type === "video-firebase" || bg.type === "video-local") && bgSrc && (
+                    <video key={bgSrc} src={bgSrc} autoPlay muted loop playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                   )}
                   {bg.type === "color" && bg.color && (
                     <div style={{ width: "100%", height: "100%", background: bg.color }} />
                   )}
-                  {(!bg.type || !bg.url) && (
+                  {(!bgSrc && bg.type !== "color") && (
                     <div style={{ width: "100%", height: "100%", background: "#000" }} />
                   )}
                 </div>

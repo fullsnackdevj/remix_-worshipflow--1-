@@ -2543,6 +2543,7 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
                     if (blobUrl) { const r = await fetch(blobUrl).catch(() => null); if (r?.ok) srcBlob = await r.blob(); }
                     if (!srcBlob) { const cached = await idbGet<Blob>(`media_blob_${item.id}`); if (cached instanceof Blob) srcBlob = cached; }
                     if (!srcBlob) { const r = await fetch(item.firebaseUrl); srcBlob = await r.blob(); }
+                    if (!srcBlob) return;
                     const fd = new FormData();
                     fd.append('image', srcBlob, item.name);
                     fd.append('firebaseUrl', item.firebaseUrl);
@@ -2720,13 +2721,14 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ _bgOnly: true, fadeScreen: fadeScreenActiveRef.current, fadeScreenBg: toFiresafeFadeBg(fadeBg), updatedAt: Date.now() }),
               }).catch(() => {});
-              if (item.type === 'image') {
+              if (item.type === 'image' || item.type === 'video') {
                 (async () => {
                   try {
                     let srcBlob: Blob | null = null;
                     if (blobUrl) { const r = await fetch(blobUrl).catch(() => null); if (r?.ok) srcBlob = await r.blob(); }
                     if (!srcBlob) { const cached = await idbGet<Blob>(`media_blob_${item.id}`); if (cached instanceof Blob) srcBlob = cached; }
                     if (!srcBlob) { const r = await fetch(item.firebaseUrl); srcBlob = await r.blob(); }
+                    if (!srcBlob) return;
                     const fd = new FormData();
                     fd.append('image', srcBlob, item.name);
                     fd.append('firebaseUrl', item.firebaseUrl);
