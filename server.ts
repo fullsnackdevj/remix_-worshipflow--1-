@@ -360,52 +360,60 @@ function injectLocalUrls(state: Record<string, unknown>): Record<string, unknown
   // ── bgVideo injection ────────────────────────────────────────────────────────
   const bv = result.bgVideo as Record<string, unknown> | null | undefined;
   if (bv && (bv.type === "firebase" || bv.type === "local")) {
-    const alreadyOk = bv.localUrl && !(bv.localUrl as string).startsWith("blob:");
-    if (!alreadyOk) {
-      const firebaseUrl = (bv.url as string) ?? "";
-      let injected = false;
-      // ── Tier 1: exact Firebase URL match (reliable — set at upload time) ──
+    const firebaseUrl = (bv.url as string) ?? "";
+    let injected = false;
+    // Always re-derive localUrl from .meta.json — never trust the client-sent value.
+    // Stale/wrong localUrls from previous sessions (e.g. worship localUrl on praise bgVideo)
+    // would survive undetected if we short-circuited on alreadyOk.
+    // ── Tier 1: exact Firebase URL match (reliable — set at upload time) ──
+    for (const preset of Object.keys(liveBgMeta)) {
+      const meta = liveBgMeta[preset];
+      if (!meta || !fs.existsSync(meta.filePath)) continue;
+      if (meta.firebaseUrl && meta.firebaseUrl === firebaseUrl) {
+        result = { ...result, bgVideo: { ...bv, localUrl: `/api/live-bg-video/${preset}` } };
+        injected = true;
+        break;
+      }
+    }
+    // ── Tier 2: song-keyed presets — match by songId in URL (reliable) ──
+    if (!injected) {
       for (const preset of Object.keys(liveBgMeta)) {
-        const meta = liveBgMeta[preset];
-        if (!meta || !fs.existsSync(meta.filePath)) continue;
-        if (meta.firebaseUrl && meta.firebaseUrl === firebaseUrl) {
+        if (!preset.startsWith('song_')) continue;
+        const meta2 = liveBgMeta[preset];
+        if (!meta2 || !fs.existsSync(meta2.filePath)) continue;
+        const presetSongId = preset.slice(5); // strip "song_"
+        if (firebaseUrl.includes(presetSongId)) {
           result = { ...result, bgVideo: { ...bv, localUrl: `/api/live-bg-video/${preset}` } };
           injected = true;
           break;
         }
       }
-      // ── Tier 2: song-keyed presets — match by songId in URL (reliable) ──
-      if (!injected) {
-        for (const preset of Object.keys(liveBgMeta)) {
-          if (!preset.startsWith('song_')) continue;
-          const meta2 = liveBgMeta[preset];
-          if (!meta2 || !fs.existsSync(meta2.filePath)) continue;
-          const presetSongId = preset.slice(5); // strip "song_"
-          if (firebaseUrl.includes(presetSongId)) {
-            result = { ...result, bgVideo: { ...bv, localUrl: `/api/live-bg-video/${preset}` } };
-            injected = true;
-            break;
-          }
+    }
+    // ── Tier 3: name substring match (legacy fallback — unreliable for praise/worship) ──
+    if (!injected) {
+      for (const preset of Object.keys(liveBgMeta)) {
+        if (preset === 'praise' || preset === 'worship') continue; // skip — too generic, causes wrong matches
+        const meta = liveBgMeta[preset];
+        if (!meta || !fs.existsSync(meta.filePath)) continue;
+        if (firebaseUrl.toLowerCase().includes(preset.toLowerCase())) {
+          result = { ...result, bgVideo: { ...bv, localUrl: `/api/live-bg-video/${preset}` } };
+          injected = true;
+          break;
         }
       }
-      // ── Tier 3: name substring match (legacy fallback — unreliable for praise/worship) ──
-      if (!injected) {
-        for (const preset of Object.keys(liveBgMeta)) {
-          if (preset === 'praise' || preset === 'worship') continue; // skip — too generic, causes wrong matches
-          const meta = liveBgMeta[preset];
-          if (!meta || !fs.existsSync(meta.filePath)) continue;
-          if (firebaseUrl.toLowerCase().includes(preset.toLowerCase())) {
-            result = { ...result, bgVideo: { ...bv, localUrl: `/api/live-bg-video/${preset}` } };
-            injected = true;
-            break;
-          }
-        }
+    }
+    if (!injected) {
+      // Fallback: if only one non-song preset file exists, use it
+      const presets = Object.keys(liveBgMeta).filter(p => !p.startsWith('song_') && liveBgMeta[p] && fs.existsSync(liveBgMeta[p]!.filePath));
+      if (presets.length === 1) {
+        result = { ...result, bgVideo: { ...bv, localUrl: `/api/live-bg-video/${presets[0]}` } };
       }
-      if (!injected) {
-        // Fallback: if only one non-song preset file exists, use it
-        const presets = Object.keys(liveBgMeta).filter(p => !p.startsWith('song_') && liveBgMeta[p] && fs.existsSync(liveBgMeta[p]!.filePath));
-        if (presets.length === 1) {
-          result = { ...result, bgVideo: { ...bv, localUrl: `/api/live-bg-video/${presets[0]}` } };
+      // If still no match, strip any stale client-sent localUrl so OBS falls back to Firebase URL
+      if (!injected && bv.localUrl && !(bv.localUrl as string).startsWith("blob:")) {
+        const localPath = (bv.localUrl as string).replace("/api/live-bg-video/", "");
+        const meta = liveBgMeta[localPath];
+        if (!meta || !fs.existsSync(meta.filePath)) {
+          result = { ...result, bgVideo: { ...bv, localUrl: undefined } };
         }
       }
     }
