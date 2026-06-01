@@ -20,7 +20,7 @@ import { db } from "./firebase";
 import { doc, onSnapshot } from "firebase/firestore";
 
 
-type AnimStyle = "fade" | "slide-up" | "word-fade" | "word-bounce" | "typewriter" | "blur-in" | "echo" | "breathe";
+type AnimStyle = "fade" | "none" | "word-fade" | "word-bounce" | "typewriter" | "blur-in" | "echo" | "breathe";
 
 interface LiveState {
   songTitle: string;
@@ -86,8 +86,8 @@ function animIn(el: HTMLElement, style: AnimStyle, opts?: { echoAnimDuration?: n
   // Kill ALL tweens and clear stale GSAP inline styles before starting new animation
   gsap.killTweensOf([...ws, ...cs, ...ls, el]);
   gsap.set([...ws, ...cs, ...ls, el], { clearProps: "opacity,transform,filter,scale" });
-  if      (style === "fade")       gsap.fromTo(el, { opacity:0 }, { opacity:1, duration:0.8, ease:"power2.out" });
-  else if (style === "slide-up")   gsap.fromTo(ls, { opacity:0, y:32 }, { opacity:1, y:0, duration:0.6, ease:"power3.out", stagger:0.1 });
+  if      (style === "none")       { gsap.set(el, { opacity:1 }); gsap.set([...ws, ...cs, ...ls], { opacity:1, y:0, scale:1, filter:"none" }); return; }
+  else if (style === "fade")       gsap.fromTo(el, { opacity:0 }, { opacity:1, duration:0.8, ease:"power2.out" });
   else if (style === "word-fade")  { gsap.set(ls,{opacity:1}); gsap.set(ws,{opacity:0}); gsap.to(ws,{opacity:1,duration:0.4,ease:"power2.out",stagger:0.07}); }
   else if (style === "word-bounce"){ gsap.set(ls,{opacity:1}); gsap.set(ws,{opacity:0,y:22,scale:0.65}); gsap.to(ws,{opacity:1,y:0,scale:1,duration:0.5,ease:"back.out(2.2)",stagger:0.065}); }
   else if (style === "typewriter") { gsap.set(ls,{opacity:1}); gsap.set(cs,{opacity:0}); gsap.to(cs,{opacity:1,duration:0.01,stagger:0.03,ease:"none"}); }
@@ -109,6 +109,8 @@ function animIn(el: HTMLElement, style: AnimStyle, opts?: { echoAnimDuration?: n
 // ── Loop — smooth fade-out then replay entrance (no hard blink) ──────────────
 // Returns a cleanup fn — the active flag prevents stale onComplete from firing animIn
 function idleLoop(el: HTMLElement, style: AnimStyle, interval = 3500): () => void {
+  // "none" style: no looping — return a no-op cleanup immediately
+  if (style === "none") return () => {};
   let active = true;
   const id = setInterval(() => {
     if (!active) return;

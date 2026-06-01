@@ -136,6 +136,7 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
   };
 
   const [blobUrls, setBlobUrls] = useState<Record<string, string>>({});
+  const [precachingId, setPrecachingId] = useState<string | null>(null);
   const [videoThumbs, setVideoThumbs] = useState<Record<string, string>>({}); // id → dataURL thumbnail
   const [dragOver, setDragOver] = useState(false);
   const [assignedTarget, setAssignedTarget] = useState<MediaTarget | null>(null);
@@ -292,6 +293,34 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
     });
     return () => { Object.values(blobUrls).forEach(URL.revokeObjectURL); };
   }, [items]); // eslint-disable-line
+
+  // Pre-fetch selected Firebase item into IDB so onAssign never needs to hit Firebase Storage.
+  // Runs as soon as the user clicks an item — while they're still browsing online.
+  useEffect(() => {
+    if (!selected) return;
+    if (cachedIds.has(selected.id)) return;
+    if (blobUrls[selected.id]) return;
+    let cancelled = false;
+    setPrecachingId(selected.id);
+    (async () => {
+      try {
+        const resp = await fetch(selected.firebaseUrl);
+        if (cancelled || !resp.ok) return;
+        const blob = await resp.blob();
+        if (cancelled) return;
+        await idbSet(`media_blob_${selected.id}`, blob);
+        const url = URL.createObjectURL(blob);
+        setBlobUrls(prev => ({ ...prev, [selected.id]: url }));
+        setCachedIds(prev => new Set([...prev, selected.id]));
+        if (selected.type === "video") generateVideoThumb(selected.id, url);
+      } catch {
+        // silent — onAssign will fall back to IDB → Firebase URL
+      } finally {
+        if (!cancelled) setPrecachingId(null);
+      }
+    })();
+    return () => { cancelled = true; setPrecachingId(null); };
+  }, [selected?.id]); // eslint-disable-line
 
   const handleFiles = useCallback(async (files: FileList | File[]) => {
     const arr = Array.from(files).filter(f => f.type.startsWith("image/") || f.type.startsWith("video/"));
@@ -811,8 +840,11 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
                     <span style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 5, padding: "2px 7px" }}>
                       {fmt(selected.sizeBytes)}
                     </span>
-                    <span style={{ fontSize: 10, borderRadius: 5, padding: "2px 7px", display: "flex", alignItems: "center", gap: 3, background: isCached ? "rgba(52,211,153,0.1)" : "rgba(255,255,255,0.04)", border: `1px solid ${isCached ? "rgba(52,211,153,0.25)" : "rgba(255,255,255,0.08)"}`, color: isCached ? "#34d399" : "rgba(255,255,255,0.35)", fontWeight: 700 }}>
-                      {isCached ? <><Wifi size={9} /> Offline ready</> : <><WifiOff size={9} /> Online only</>}
+                    <span style={{ fontSize: 10, borderRadius: 5, padding: "2px 7px", display: "flex", alignItems: "center", gap: 3,
+                      background: isCached ? "rgba(52,211,153,0.1)" : precachingId === selected.id ? "rgba(251,191,36,0.08)" : "rgba(255,255,255,0.04)",
+                      border: `1px solid ${isCached ? "rgba(52,211,153,0.25)" : precachingId === selected.id ? "rgba(251,191,36,0.25)" : "rgba(255,255,255,0.08)"}`,
+                      color: isCached ? "#34d399" : precachingId === selected.id ? "#fbbf24" : "rgba(255,255,255,0.35)", fontWeight: 700 }}>
+                      {isCached ? <><Wifi size={9} /> Offline ready</> : precachingId === selected.id ? <><Loader size={9} style={{ animation: "spin 1s linear infinite" }} /> Caching…</> : <><WifiOff size={9} /> Online only</>}
                     </span>
                   </div>
                 </div>

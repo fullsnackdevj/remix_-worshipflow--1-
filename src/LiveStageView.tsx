@@ -10,7 +10,7 @@ import { ref as storageRef, uploadBytesResumable, getDownloadURL } from "firebas
 import { collection, addDoc } from "firebase/firestore";
 
 
-type AnimStyle = "word-fade" | "word-bounce" | "typewriter" | "blur-in" | "fade" | "slide-up" | "echo" | "breathe";
+type AnimStyle = "word-fade" | "word-bounce" | "typewriter" | "blur-in" | "fade" | "none" | "echo" | "breathe";
 type BgVideo   = { type: "local"; url: string } | { type: "firebase"; url: string; localUrl?: string } | { type: "image-firebase"; url: string; localUrl?: string } | { type: "youtube"; videoId: string };
 
 type FadeScreenBg =
@@ -77,8 +77,8 @@ interface LyricSlide {
 }
 interface LyricSection { label: string; slides: LyricSlide[]; }
 
-const ANIM_OPTIONS: AnimStyle[] = ["word-fade","word-bounce","typewriter","blur-in","fade","slide-up","echo","breathe"];
-const ANIM_LABELS:  Record<AnimStyle, string> = { "word-fade":"Word Fade","word-bounce":"Bounce","typewriter":"Type","blur-in":"Blur","fade":"Fade","slide-up":"Slide Up","echo":"Echo","breathe":"Breathe" };
+const ANIM_OPTIONS: AnimStyle[] = ["word-fade","word-bounce","typewriter","blur-in","fade","none","echo","breathe"];
+const ANIM_LABELS:  Record<AnimStyle, string> = { "word-fade":"Word Fade","word-bounce":"Bounce","typewriter":"Type","blur-in":"Blur","fade":"Fade","none":"None","echo":"Echo","breathe":"Breathe" };
 
 const BG_PRESETS = [
   { label:"Stage Dark",  style:"linear-gradient(135deg,#0a0a14 0%,#1a0a2e 50%,#0d1a2e 100%)" },
@@ -168,8 +168,8 @@ function animIn(el: HTMLElement, style: AnimStyle) {
   const cs = Array.from(el.querySelectorAll<HTMLElement>(".pc"));
   const ls = Array.from(el.querySelectorAll<HTMLElement>(".pl"));
   gsap.killTweensOf([...ws,...cs,...ls,el]);
-  if      (style==="fade")        gsap.fromTo(el,{opacity:0},{opacity:1,duration:0.8,ease:"power2.out"});
-  else if (style==="slide-up")    gsap.fromTo(ls,{opacity:0,y:32},{opacity:1,y:0,duration:0.6,ease:"power3.out",stagger:0.1});
+  if      (style==="none")        { gsap.set(el,{opacity:1}); gsap.set([...ws,...cs,...ls],{opacity:1,y:0,scale:1,filter:"none"}); return; }
+  else if (style==="fade")        gsap.fromTo(el,{opacity:0},{opacity:1,duration:0.8,ease:"power2.out"});
   else if (style==="word-fade")   { gsap.set(ls,{opacity:1}); gsap.set(ws,{opacity:0}); gsap.to(ws,{opacity:1,duration:0.4,ease:"power2.out",stagger:0.07}); }
   else if (style==="word-bounce") { gsap.set(ls,{opacity:1}); gsap.set(ws,{opacity:0,y:22,scale:0.65}); gsap.to(ws,{opacity:1,y:0,scale:1,duration:0.5,ease:"back.out(2.2)",stagger:0.065}); }
   else if (style==="typewriter")  { gsap.set(ls,{opacity:1}); gsap.set(cs,{opacity:0}); gsap.to(cs,{opacity:1,duration:0.01,stagger:0.03,ease:"none"}); }
@@ -197,6 +197,8 @@ function idleLoop(
   style: AnimStyle,
   interval = 3500
 ): () => void {
+  // "none" style: no looping — just return a no-op cleanup
+  if (style === "none") return () => {};
   let active = true;
   const id = setInterval(() => {
     if (!active) return;
@@ -1817,7 +1819,7 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
               <div>
                 <span style={{ fontSize:10, fontWeight:700, color:"rgba(255,255,255,0.35)", textTransform:"uppercase", letterSpacing:"0.12em", display:"block", marginBottom:10 }}>Text Animation Style</span>
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:4 }}>
-                  {(["word-fade","word-bounce","blur-in","fade","slide-up","typewriter","breathe","echo"] as const).map(a => {
+                  {(["word-fade","word-bounce","blur-in","fade","none","typewriter","breathe","echo"] as const).map(a => {
                     const active = draft.animStyle === a;
                     const isEcho = a === "echo";
                     return (
@@ -2401,9 +2403,13 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
             };
             if (target === 'praise-bg' || target === 'worship-bg') {
               const preset: PresetName = target === 'praise-bg' ? 'praise' : 'worship';
+              // Strip blob: URLs — blob: URLs are session-scoped to this browser tab.
+              // OBS Browser Source runs in a SEPARATE context and cannot load blob: URLs.
+              // We push without localUrl first, then update after disk-cache confirms a real HTTP path.
+              const safeBlobUrl = (blobUrl && !blobUrl.startsWith('blob:')) ? blobUrl : undefined;
               const bgVal: BgVideo = item.type === 'video'
-                ? { type: 'firebase' as const, url: item.firebaseUrl, localUrl: blobUrl ?? undefined }
-                : { type: 'image-firebase' as const, url: item.firebaseUrl, localUrl: blobUrl ?? undefined };
+                ? { type: 'firebase' as const, url: item.firebaseUrl, localUrl: safeBlobUrl }
+                : { type: 'image-firebase' as const, url: item.firebaseUrl, localUrl: safeBlobUrl };
               setModalDrafts(prev => ({ ...prev, [preset]: { ...prev[preset], bgVideo: bgVal } }));
               setPresets(prev => {
                 const updated = { ...prev, [preset]: { ...prev[preset], bgVideo: bgVal } };
@@ -2425,33 +2431,59 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
                   }),
                 }).catch(() => {});
               }
-              // ── FIX: Upload media to local server disk so Camp Readiness check passes ──
-              // /api/camp-status reads from disk (liveBgMeta), NOT from Firebase/localStorage.
-              // Without this, praise/worship always show "Missing" in the checklist.
-              if (item.type === 'video') {
+              // ── Cache to disk then follow-up push with real localUrl so OBS works offline ──
+              // blobUrl is readable here (same browser session / IDB). POST it to the local
+              // server to get a real HTTP path (/api/live-bg-video/praise), then re-push so
+              // OBS can load the video over localhost even when internet is disconnected.
+              if (item.type === 'video' || item.type === 'image') {
                 (async () => {
                   try {
-                    const sourceUrl = blobUrl ?? item.firebaseUrl;
-                    const resp = await fetch(sourceUrl);
-                    const blob = await resp.blob();
-                    const fd   = new FormData();
-                    fd.append('video', blob, item.name);
-                    await fetch(`/api/live-bg-video/${preset}`, { method: 'POST', body: fd });
-                    console.log(`[LiveStage] ${preset} video cached to disk for offline OBS`);
-                  } catch (e) { console.warn(`[LiveStage] Could not cache ${preset} video locally:`, e); }
-                })();
-              } else if (item.type === 'image') {
-                // Images assigned to bg-preset: cache to local server using preset-named endpoint
-                (async () => {
-                  try {
-                    const sourceUrl = blobUrl ?? item.firebaseUrl;
-                    const resp = await fetch(sourceUrl);
-                    const blob = await resp.blob();
-                    const fd   = new FormData();
-                    fd.append('video', blob, item.name); // server accepts any file via 'video' field
-                    await fetch(`/api/live-bg-video/${preset}`, { method: 'POST', body: fd });
-                    console.log(`[LiveStage] ${preset} image cached to disk for offline OBS`);
-                  } catch (e) { console.warn(`[LiveStage] Could not cache ${preset} image locally:`, e); }
+                    const serverLocalUrl = `/api/live-bg-video/${preset}`;
+                    // Tier 1: use blobUrl from this session (covers local uploads)
+                    // Tier 2: IDB blob cached by MediaLibraryModal on item selection
+                    // Tier 3: Firebase Storage URL (online fallback only)
+                    let srcBlob: Blob | null = null;
+                    if (blobUrl) {
+                      const r = await fetch(blobUrl).catch(() => null);
+                      if (r?.ok) srcBlob = await r.blob();
+                    }
+                    if (!srcBlob) {
+                      const cached = await idbGet<Blob>(`media_blob_${item.id}`);
+                      if (cached instanceof Blob) srcBlob = cached;
+                    }
+                    if (!srcBlob) {
+                      const r = await fetch(item.firebaseUrl);
+                      srcBlob = await r.blob();
+                    }
+                    const fd = new FormData();
+                    fd.append('video', srcBlob, item.name);
+                    const uploadRes = await fetch(serverLocalUrl, { method: 'POST', body: fd });
+                    if (uploadRes.ok) {
+                      // Real HTTP localUrl — OBS can load this offline (no Firebase needed)
+                      const bgValWithLocal: BgVideo = item.type === 'video'
+                        ? { type: 'firebase' as const, url: item.firebaseUrl, localUrl: serverLocalUrl }
+                        : { type: 'image-firebase' as const, url: item.firebaseUrl, localUrl: serverLocalUrl };
+                      setPresets(prev => {
+                        const updated = { ...prev, [preset]: { ...prev[preset], bgVideo: bgValWithLocal } };
+                        try { localStorage.setItem('lsv_presets', JSON.stringify(updated)); } catch {}
+                        return updated;
+                      });
+                      if (activePreset === preset) setBgVideo(bgValWithLocal);
+                      // Follow-up push: OBS receives the corrected localUrl and loads it offline
+                      fetch('/api/live-push', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          _bgOnly: true,
+                          bgVideo: bgValWithLocal,
+                          bgIdx: bgIdxRef.current,
+                          echoAlign, echoLines, echoLineHeight, lyricsScale, loopEnabled, loopInterval,
+                          animStyle: defaultAnimStyle, updatedAt: Date.now(),
+                        }),
+                      }).catch(() => {});
+                      console.log(`[LiveStage] ${preset} media cached — OBS updated with local URL`);
+                    }
+                  } catch (e) { console.warn(`[LiveStage] Could not cache ${preset} media locally:`, e); }
                 })();
               }
               onToast('success', `✅ Applied to ${preset} background — hit Save to lock in`);
@@ -2564,9 +2596,13 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
             };
             if (target === 'praise-bg' || target === 'worship-bg') {
               const preset: PresetName = target === 'praise-bg' ? 'praise' : 'worship';
+              // Strip blob: URLs — blob: URLs are session-scoped to this browser tab.
+              // OBS Browser Source runs in a SEPARATE context and cannot load blob: URLs.
+              // We push without localUrl first, then update after disk-cache confirms a real HTTP path.
+              const safeBlobUrl = (blobUrl && !blobUrl.startsWith('blob:')) ? blobUrl : undefined;
               const bgVal: BgVideo = item.type === 'video'
-                ? { type: 'firebase' as const, url: item.firebaseUrl, localUrl: blobUrl ?? undefined }
-                : { type: 'image-firebase' as const, url: item.firebaseUrl, localUrl: blobUrl ?? undefined };
+                ? { type: 'firebase' as const, url: item.firebaseUrl, localUrl: safeBlobUrl }
+                : { type: 'image-firebase' as const, url: item.firebaseUrl, localUrl: safeBlobUrl };
               setModalDrafts(prev => ({ ...prev, [preset]: { ...prev[preset], bgVideo: bgVal } }));
               setPresets(prev => {
                 const updated = { ...prev, [preset]: { ...prev[preset], bgVideo: bgVal } };
@@ -2588,20 +2624,55 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
                   }),
                 }).catch(() => {});
               }
-              // ── FIX: Upload media to local server disk so Camp Readiness check passes ──
-              // /api/camp-status reads from disk (liveBgMeta), NOT from Firebase/localStorage.
-              // Without this, praise/worship always show "Missing" in the checklist.
+              // ── Cache to disk then follow-up push with real localUrl so OBS works offline ──
               if (item.type === 'video' || item.type === 'image') {
                 (async () => {
                   try {
-                    const sourceUrl = blobUrl ?? item.firebaseUrl;
-                    const resp = await fetch(sourceUrl);
-                    const blob = await resp.blob();
-                    const fd   = new FormData();
-                    // Server's /api/live-bg-video/:preset uses 'video' field name for all media
-                    fd.append('video', blob, item.name);
-                    await fetch(`/api/live-bg-video/${preset}`, { method: 'POST', body: fd });
-                    console.log(`[LiveStage] ${preset} media cached to disk for offline OBS`);
+                    const serverLocalUrl = `/api/live-bg-video/${preset}`;
+                    // Tier 1: use blobUrl from this session (covers local uploads)
+                    // Tier 2: IDB blob cached by MediaLibraryModal on item selection
+                    // Tier 3: Firebase Storage URL (online fallback only)
+                    let srcBlob: Blob | null = null;
+                    if (blobUrl) {
+                      const r = await fetch(blobUrl).catch(() => null);
+                      if (r?.ok) srcBlob = await r.blob();
+                    }
+                    if (!srcBlob) {
+                      const cached = await idbGet<Blob>(`media_blob_${item.id}`);
+                      if (cached instanceof Blob) srcBlob = cached;
+                    }
+                    if (!srcBlob) {
+                      const r = await fetch(item.firebaseUrl);
+                      srcBlob = await r.blob();
+                    }
+                    const fd = new FormData();
+                    fd.append('video', srcBlob, item.name);
+                    const uploadRes = await fetch(serverLocalUrl, { method: 'POST', body: fd });
+                    if (uploadRes.ok) {
+                      // Real HTTP localUrl — OBS can load this offline (no Firebase needed)
+                      const bgValWithLocal: BgVideo = item.type === 'video'
+                        ? { type: 'firebase' as const, url: item.firebaseUrl, localUrl: serverLocalUrl }
+                        : { type: 'image-firebase' as const, url: item.firebaseUrl, localUrl: serverLocalUrl };
+                      setPresets(prev => {
+                        const updated = { ...prev, [preset]: { ...prev[preset], bgVideo: bgValWithLocal } };
+                        try { localStorage.setItem('lsv_presets', JSON.stringify(updated)); } catch {}
+                        return updated;
+                      });
+                      if (activePreset === preset) setBgVideo(bgValWithLocal);
+                      // Follow-up push: OBS receives the corrected localUrl and loads it offline
+                      fetch('/api/live-push', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          _bgOnly: true,
+                          bgVideo: bgValWithLocal,
+                          bgIdx: bgIdxRef.current,
+                          echoAlign, echoLines, echoLineHeight, lyricsScale, loopEnabled, loopInterval,
+                          animStyle: defaultAnimStyle, updatedAt: Date.now(),
+                        }),
+                      }).catch(() => {});
+                      console.log(`[LiveStage] ${preset} media cached — OBS updated with local URL`);
+                    }
                   } catch (e) { console.warn(`[LiveStage] Could not cache ${preset} media locally:`, e); }
                 })();
               }
