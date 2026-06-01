@@ -2538,6 +2538,7 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
                     const blob  = await resp.blob();
                     const fd    = new FormData();
                     fd.append('image', blob, item.name);
+                    fd.append('firebaseUrl', item.firebaseUrl); // lets server verify URL match before injecting localUrl
                     const uploadRes = await fetch('/api/live-fade-image', { method: 'POST', body: fd });
                     if (uploadRes.ok) {
                       // Update state with the local server URL so OBS can load it offline
@@ -2727,6 +2728,7 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
                     const blob  = await resp.blob();
                     const fd    = new FormData();
                     fd.append('image', blob, item.name);
+                    fd.append('firebaseUrl', item.firebaseUrl); // lets server verify URL match before injecting localUrl
                     const uploadRes = await fetch('/api/live-fade-image', { method: 'POST', body: fd });
                     if (uploadRes.ok) {
                       // Update state with the local server URL so OBS can load it offline
