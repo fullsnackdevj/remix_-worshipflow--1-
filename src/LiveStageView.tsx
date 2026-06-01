@@ -25,10 +25,13 @@ type FadeScreenBg =
 // Returns a Firestore-safe version of a FadeScreenBg.
 // image-local / video-local are base64 blobs (often >1MB) that exceed Firestore's 1MB doc limit
 // and are not accessible from OBS anyway (session-scoped blob URL). Substitute black.
-const toFiresafeFadeBg = (bg: FadeScreenBg): FadeScreenBg =>
-  bg.type === "image-local" || bg.type === "video-local"
-    ? { type: "color", color: "#000000" }
-    : bg;
+const toFiresafeFadeBg = (bg: FadeScreenBg): FadeScreenBg => {
+  if (bg.type === "image-local" || bg.type === "video-local") return { type: "color", color: "#000000" };
+  // Strip blob: localUrls — blob: is session-scoped (same tab only); Firestore/SSE must not store them
+  const lu = (bg as { localUrl?: string }).localUrl;
+  if (lu?.startsWith("blob:")) return { ...bg, localUrl: undefined } as FadeScreenBg;
+  return bg;
+};
 
 // ── IndexedDB helpers — for large data like uploaded images —————————————————
 // localStorage has a ~5MB total limit per origin; a 3-4MB image hits it silently.
@@ -2508,47 +2511,49 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
               }
               onToast('success', `✅ Applied to ${preset} background — hit Save to lock in`);
             } else if (target === 'fade-screen') {
-              // Strip blob: localUrl before persisting — blob: URLs are session-scoped and invalid after refresh.
-              // OBS will fall back to the Firebase URL until the local disk copy is ready.
+              // Include blobUrl as localUrl so the app preview works immediately (even offline).
+              // blob: URLs are session-scoped (same tab only) — toFiresafeFadeBg strips them before
+              // any server push so they never reach Firestore/SSE.
               const fadeBg: FadeScreenBg = item.type === 'image'
-                ? { type: 'image-firebase' as const, url: item.firebaseUrl }
-                : { type: 'video-firebase' as const, url: item.firebaseUrl };
+                ? { type: 'image-firebase' as const, url: item.firebaseUrl, ...(blobUrl ? { localUrl: blobUrl } : {}) }
+                : { type: 'video-firebase' as const, url: item.firebaseUrl, ...(blobUrl ? { localUrl: blobUrl } : {}) };
+              // Persist without blob: (blob: is invalid cross-session)
+              const fadeBgSafe: FadeScreenBg = blobUrl?.startsWith('blob:') ? { ...fadeBg, localUrl: undefined } as FadeScreenBg : fadeBg;
               setFadeScreenBg(fadeBg);
               setModalFadeScreenBg(fadeBg);
               fadeScreenBgRef.current = fadeBg;
-              idbSet('lsv_fade_screen', fadeBg).catch(() => {});
-              try { localStorage.setItem('lsv_fade_screen', JSON.stringify(fadeBg)); } catch {}
+              idbSet('lsv_fade_screen', fadeBgSafe).catch(() => {});
+              try { localStorage.setItem('lsv_fade_screen', JSON.stringify(fadeBgSafe)); } catch {}
               clearOtherAssignments(target);
-              // Initial push so OBS knows the new fade screen was assigned.
+              // Initial push — toFiresafeFadeBg strips blob: localUrls so server never sees them
               if (fadeScreenActiveRef.current) {
                 fetch('/api/live-push', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ _bgOnly: true, fadeScreen: true, fadeScreenBg: fadeBg, updatedAt: Date.now() }),
+                  body: JSON.stringify({ _bgOnly: true, fadeScreen: true, fadeScreenBg: toFiresafeFadeBg(fadeBg), updatedAt: Date.now() }),
                 }).catch(() => {});
               }
-              // ── Upload to local server disk so OBS can load the image offline ──
-              // After upload completes, send a FOLLOW-UP push with localUrl='/api/live-fade-image'
-              // so OBS immediately switches to the locally-served copy (no Firebase needed).
+              // ── Upload to local server so OBS can load the image offline ─────────
+              // 3-tier: blobUrl (session) → IDB cache → Firebase URL (online fallback)
+              // After upload, follow-up push gives OBS a real localhost URL.
               if (item.type === 'image') {
                 (async () => {
                   try {
-                    const sourceUrl = blobUrl ?? item.firebaseUrl;
-                    const resp  = await fetch(sourceUrl);
-                    const blob  = await resp.blob();
-                    const fd    = new FormData();
-                    fd.append('image', blob, item.name);
-                    fd.append('firebaseUrl', item.firebaseUrl); // lets server verify URL match before injecting localUrl
+                    let srcBlob: Blob | null = null;
+                    if (blobUrl) { const r = await fetch(blobUrl).catch(() => null); if (r?.ok) srcBlob = await r.blob(); }
+                    if (!srcBlob) { const cached = await idbGet<Blob>(`media_blob_${item.id}`); if (cached instanceof Blob) srcBlob = cached; }
+                    if (!srcBlob) { const r = await fetch(item.firebaseUrl); srcBlob = await r.blob(); }
+                    const fd = new FormData();
+                    fd.append('image', srcBlob, item.name);
+                    fd.append('firebaseUrl', item.firebaseUrl);
                     const uploadRes = await fetch('/api/live-fade-image', { method: 'POST', body: fd });
                     if (uploadRes.ok) {
-                      // Update state with the local server URL so OBS can load it offline
-                      const localFadeBg: FadeScreenBg = { ...fadeBg, localUrl: '/api/live-fade-image' } as FadeScreenBg;
+                      const localFadeBg: FadeScreenBg = { ...fadeBgSafe, localUrl: '/api/live-fade-image' } as FadeScreenBg;
                       setFadeScreenBg(localFadeBg);
                       setModalFadeScreenBg(localFadeBg);
                       fadeScreenBgRef.current = localFadeBg;
                       idbSet('lsv_fade_screen', localFadeBg).catch(() => {});
                       try { localStorage.setItem('lsv_fade_screen', JSON.stringify(localFadeBg)); } catch {}
-                      // Follow-up push: OBS now gets the local server URL
                       fetch('/api/live-push', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -2700,45 +2705,39 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
               }
               onToast('success', `✅ "${item.name}" → ${preset === 'praise' ? 'Praise' : 'Worship'} Background`);
             } else if (target === 'fade-screen') {
-              // Strip blob: localUrl before persisting — blob: URLs are session-scoped and invalid after refresh.
-              // OBS will fall back to the Firebase URL until the local disk copy is ready.
               const fadeBg: FadeScreenBg = item.type === 'image'
-                ? { type: 'image-firebase' as const, url: item.firebaseUrl }
-                : { type: 'video-firebase' as const, url: item.firebaseUrl };
+                ? { type: 'image-firebase' as const, url: item.firebaseUrl, ...(blobUrl ? { localUrl: blobUrl } : {}) }
+                : { type: 'video-firebase' as const, url: item.firebaseUrl, ...(blobUrl ? { localUrl: blobUrl } : {}) };
+              const fadeBgSafe: FadeScreenBg = blobUrl?.startsWith('blob:') ? { ...fadeBg, localUrl: undefined } as FadeScreenBg : fadeBg;
               setFadeScreenBg(fadeBg);
               setModalFadeScreenBg(fadeBg);
               fadeScreenBgRef.current = fadeBg;
-              idbSet('lsv_fade_screen', fadeBg).catch(() => {});
-              try { localStorage.setItem('lsv_fade_screen', JSON.stringify(fadeBg)); } catch {}
+              idbSet('lsv_fade_screen', fadeBgSafe).catch(() => {});
+              try { localStorage.setItem('lsv_fade_screen', JSON.stringify(fadeBgSafe)); } catch {}
               clearOtherAssignments(target);
-              // Initial push so OBS knows the new fade screen was assigned.
               fetch('/api/live-push', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ _bgOnly: true, fadeScreen: fadeScreenActiveRef.current, fadeScreenBg: fadeBg, updatedAt: Date.now() }),
+                body: JSON.stringify({ _bgOnly: true, fadeScreen: fadeScreenActiveRef.current, fadeScreenBg: toFiresafeFadeBg(fadeBg), updatedAt: Date.now() }),
               }).catch(() => {});
-              // ── Upload to local server disk so OBS can load the image offline ──
-              // After upload completes, send a FOLLOW-UP push with localUrl='/api/live-fade-image'
-              // so OBS immediately switches to the locally-served copy (no Firebase needed).
               if (item.type === 'image') {
                 (async () => {
                   try {
-                    const sourceUrl = blobUrl ?? item.firebaseUrl;
-                    const resp  = await fetch(sourceUrl);
-                    const blob  = await resp.blob();
-                    const fd    = new FormData();
-                    fd.append('image', blob, item.name);
-                    fd.append('firebaseUrl', item.firebaseUrl); // lets server verify URL match before injecting localUrl
+                    let srcBlob: Blob | null = null;
+                    if (blobUrl) { const r = await fetch(blobUrl).catch(() => null); if (r?.ok) srcBlob = await r.blob(); }
+                    if (!srcBlob) { const cached = await idbGet<Blob>(`media_blob_${item.id}`); if (cached instanceof Blob) srcBlob = cached; }
+                    if (!srcBlob) { const r = await fetch(item.firebaseUrl); srcBlob = await r.blob(); }
+                    const fd = new FormData();
+                    fd.append('image', srcBlob, item.name);
+                    fd.append('firebaseUrl', item.firebaseUrl);
                     const uploadRes = await fetch('/api/live-fade-image', { method: 'POST', body: fd });
                     if (uploadRes.ok) {
-                      // Update state with the local server URL so OBS can load it offline
-                      const localFadeBg: FadeScreenBg = { ...fadeBg, localUrl: '/api/live-fade-image' } as FadeScreenBg;
+                      const localFadeBg: FadeScreenBg = { ...fadeBgSafe, localUrl: '/api/live-fade-image' } as FadeScreenBg;
                       setFadeScreenBg(localFadeBg);
                       setModalFadeScreenBg(localFadeBg);
                       fadeScreenBgRef.current = localFadeBg;
                       idbSet('lsv_fade_screen', localFadeBg).catch(() => {});
                       try { localStorage.setItem('lsv_fade_screen', JSON.stringify(localFadeBg)); } catch {}
-                      // Follow-up push: OBS now gets the local server URL
                       fetch('/api/live-push', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
