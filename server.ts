@@ -365,12 +365,17 @@ function injectLocalUrls(state: Record<string, unknown>): Record<string, unknown
     // Always re-derive localUrl from .meta.json — never trust the client-sent value.
     // Stale/wrong localUrls from previous sessions (e.g. worship localUrl on praise bgVideo)
     // would survive undetected if we short-circuited on alreadyOk.
+    // Returns /api/live-bg-video/<preset>?v=<mtime> — the mtime query param busts OBS browser cache
+    // when the underlying file is replaced with a new video upload.
+    const versionedLocalUrl = (preset: string, filePath: string) => {
+      try { return `/api/live-bg-video/${preset}?v=${fs.statSync(filePath).mtimeMs}`; } catch { return `/api/live-bg-video/${preset}`; }
+    };
     // ── Tier 1: exact Firebase URL match (reliable — set at upload time) ──
     for (const preset of Object.keys(liveBgMeta)) {
       const meta = liveBgMeta[preset];
       if (!meta || !fs.existsSync(meta.filePath)) continue;
       if (meta.firebaseUrl && meta.firebaseUrl === firebaseUrl) {
-        result = { ...result, bgVideo: { ...bv, localUrl: `/api/live-bg-video/${preset}` } };
+        result = { ...result, bgVideo: { ...bv, localUrl: versionedLocalUrl(preset, meta.filePath) } };
         injected = true;
         break;
       }
@@ -383,7 +388,7 @@ function injectLocalUrls(state: Record<string, unknown>): Record<string, unknown
         if (!meta2 || !fs.existsSync(meta2.filePath)) continue;
         const presetSongId = preset.slice(5); // strip "song_"
         if (firebaseUrl.includes(presetSongId)) {
-          result = { ...result, bgVideo: { ...bv, localUrl: `/api/live-bg-video/${preset}` } };
+          result = { ...result, bgVideo: { ...bv, localUrl: versionedLocalUrl(preset, meta2.filePath) } };
           injected = true;
           break;
         }
@@ -396,7 +401,7 @@ function injectLocalUrls(state: Record<string, unknown>): Record<string, unknown
         const meta = liveBgMeta[preset];
         if (!meta || !fs.existsSync(meta.filePath)) continue;
         if (firebaseUrl.toLowerCase().includes(preset.toLowerCase())) {
-          result = { ...result, bgVideo: { ...bv, localUrl: `/api/live-bg-video/${preset}` } };
+          result = { ...result, bgVideo: { ...bv, localUrl: versionedLocalUrl(preset, meta.filePath) } };
           injected = true;
           break;
         }
@@ -406,7 +411,7 @@ function injectLocalUrls(state: Record<string, unknown>): Record<string, unknown
       // Fallback: if only one non-song preset file exists, use it
       const presets = Object.keys(liveBgMeta).filter(p => !p.startsWith('song_') && liveBgMeta[p] && fs.existsSync(liveBgMeta[p]!.filePath));
       if (presets.length === 1) {
-        result = { ...result, bgVideo: { ...bv, localUrl: `/api/live-bg-video/${presets[0]}` } };
+        result = { ...result, bgVideo: { ...bv, localUrl: versionedLocalUrl(presets[0], liveBgMeta[presets[0]]!.filePath) } };
       }
       // If still no match, strip any stale client-sent localUrl so OBS falls back to Firebase URL
       if (!injected && bv.localUrl && !(bv.localUrl as string).startsWith("blob:")) {
@@ -753,10 +758,15 @@ app.get("/api/live-bg-video/:preset", (req, res) => {
     return res.status(404).json({ error: "No video for this preset. Upload via the Live Stage settings." });
   }
   const stat = fs.statSync(entry.filePath);
+  const etag = `"${stat.mtimeMs}-${stat.size}"`;
   res.setHeader("Content-Type", entry.mime);
   res.setHeader("Content-Length", stat.size);
-  res.setHeader("Cache-Control", "public, max-age=86400"); // cache 1 day — video doesn't change often
+  // Cache with ETag revalidation — 1-day max-age but must revalidate when ?v= param changes
+  res.setHeader("Cache-Control", "public, max-age=86400, must-revalidate");
+  res.setHeader("ETag", etag);
+  res.setHeader("Last-Modified", stat.mtime.toUTCString());
   res.setHeader("Access-Control-Allow-Origin", "*");
+  if (req.headers["if-none-match"] === etag) { return res.status(304).end(); }
   fs.createReadStream(entry.filePath).pipe(res);
 });
 
