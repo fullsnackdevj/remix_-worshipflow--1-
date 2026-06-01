@@ -2348,6 +2348,17 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
             navigator.clipboard.writeText(url).catch(() => {});
           }}
           onOpenCampReadiness={() => setShowCampReady(true)}
+          onResetLiveBg={() => {
+            // Clear bgVideo from both presets in state (auto-saves to localStorage via existing effect)
+            setPresets(prev => ({
+              ...prev,
+              praise:  { ...prev.praise,  bgVideo: null },
+              worship: { ...prev.worship, bgVideo: null },
+            }));
+            setBgVideo(null);
+            // Clear server liveState, .meta.json, Firestore, and broadcast to SSE
+            fetch("/api/reset-live-bg", { method: "POST" }).catch(() => {});
+          }}
           isInline={true}
         />
 

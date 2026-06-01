@@ -554,10 +554,19 @@ app.post("/api/live-push", async (req, res) => {
   res.json({ ok: true, clients: sseClients.size });
 });
 
-// POST /api/reset-live-bg — clears bgVideo from liveState and rebroadcasts
-// Used by the "Reset BG" button in Live Stage so stale cached backgrounds are wiped
+// POST /api/reset-live-bg — clears bgVideo from liveState, Firestore, disk, and .meta.json
+// Used by the "Reset BG" button in Live Stage so stale cached backgrounds are fully wiped.
+// Client (LiveStageView) also clears preset bgVideos from localStorage on the same click.
 app.post("/api/reset-live-bg", async (req, res) => {
+  // Clear in-memory liveState
   liveState = { ...liveState, bgVideo: null, updatedAt: uniqueNow() };
+  // Clear firebaseUrl from liveBgMeta so injectLocalUrls can't re-match old URLs
+  for (const preset of Object.keys(liveBgMeta)) {
+    if (liveBgMeta[preset]) liveBgMeta[preset]!.firebaseUrl = undefined;
+  }
+  // Overwrite .meta.json to {} so server restart also starts fresh
+  try { fs.writeFileSync(LIVE_BG_META_FILE, JSON.stringify({}), "utf-8"); } catch { /* ignore */ }
+  // Broadcast cleared state to SSE clients (live-display-local)
   const payload = `data: ${JSON.stringify(liveState)}\n\n`;
   sseClients.forEach(client => {
     try {
@@ -566,6 +575,7 @@ app.post("/api/reset-live-bg", async (req, res) => {
     } catch { sseClients.delete(client); }
   });
   saveLiveStateToDisk();
+  // Push cleared state to Firestore (live-display online mode)
   try {
     const firestore = getDb();
     if (firestore) await firestore.collection("live_state").doc("current").set(liveState);

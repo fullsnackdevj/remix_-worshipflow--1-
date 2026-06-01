@@ -477,6 +477,7 @@ interface Props {
   onCopyObsLocalUrl?: () => void; // copies offline OBS URL (SSE / local mode)
   onOpenMediaLibrary?: () => void; // opens the Media Library modal from grid view
   onOpenCampReadiness?: () => void; // opens the Camp Readiness Check modal
+  onResetLiveBg?: () => void;       // clears bgVideo from all presets + server + Firestore
   isInline?: boolean; // when true: renders inline filling container instead of fixed overlay
 }
 
@@ -495,6 +496,7 @@ export default function LyricsGridModal({
   onCopyObsLocalUrl,
   onOpenMediaLibrary,
   onOpenCampReadiness,
+  onResetLiveBg,
   isInline = false,
 }: Props) {
   const [obsUrlCopied,      setObsUrlCopied]      = useState(false);
@@ -1258,12 +1260,12 @@ export default function LyricsGridModal({
             <span className="lgm-btn-label">Live Preview</span>
           </button>
 
-          {/* Reset BG — clears stale/cached bgVideo from server liveState and rebroadcasts */}
+          {/* Reset BG — clears bgVideo from all presets (localStorage), server, and Firestore */}
           <button
             onClick={() => {
-              fetch("/api/reset-live-bg", { method: "POST" })
-                .then(() => { setBgResetDone(true); setTimeout(() => setBgResetDone(false), 2500); })
-                .catch(() => {});
+              onResetLiveBg?.();
+              setBgResetDone(true);
+              setTimeout(() => setBgResetDone(false), 2500);
             }}
             className="lgm-labeled-btn"
             title="Clear stale OBS background cache — forces OBS to reload the correct scene background"
