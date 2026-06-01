@@ -425,18 +425,22 @@ function injectLocalUrls(state: Record<string, unknown>): Record<string, unknown
     }
   }
 
-  // ── fadeScreenBg injection — inject localUrl only when cached file matches current Firebase URL ──
-  // If fadeBgFirebaseUrl doesn't match the incoming URL, the disk file is stale (from a prior
-  // session). In that case we skip injection so OBS falls back to the Firebase URL instead of
-  // serving the wrong cached image.
+  // ── fadeScreenBg injection — only cache images locally, never videos ────────
+  // Videos are too large and /api/live-fade-image only handles image MIME types.
+  // For video-firebase: always strip localUrl so OBS loads from Firebase URL directly.
+  // For image-firebase: inject localUrl only when fadeBgFirebaseUrl matches (prevents
+  //   serving a stale image from a prior session).
   const fb = result.fadeScreenBg as Record<string, unknown> | null | undefined;
-  if (fb && (fb.type === "image-firebase" || fb.type === "video-firebase")) {
+  if (fb && fb.type === "video-firebase") {
+    // Never inject localUrl for video fade screens — always use Firebase URL in OBS
+    result = { ...result, fadeScreenBg: { ...fb, localUrl: undefined } };
+  } else if (fb && fb.type === "image-firebase") {
     const fbIncomingUrl = (fb.url as string) ?? "";
     const urlMatch = fadeBgFirebaseUrl && fadeBgFirebaseUrl === fbIncomingUrl;
     if (urlMatch && fadeBgFilePath && fs.existsSync(fadeBgFilePath)) {
       result = { ...result, fadeScreenBg: { ...fb, localUrl: "/api/live-fade-image" } };
     } else {
-      // Strip any stale localUrl so OBS uses the Firebase URL directly
+      // URL mismatch — disk file is stale; let OBS fall back to Firebase URL
       result = { ...result, fadeScreenBg: { ...fb, localUrl: undefined } };
     }
   }
@@ -820,6 +824,19 @@ function loadFadeBgMeta(): string | null {
       fadeBgFilePath = path.join(FADE_IMAGE_DIR, file);
       const ext = m[1].toLowerCase();
       fadeBgMime = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : ext === "gif" ? "image/gif" : "image/jpeg";
+      // If meta was cleared or missing, recover Firebase URL from liveState.json so
+      // OBS doesn't show black on first load — the disk file was saved for that session's URL.
+      if (!fadeBgFirebaseUrl) {
+        try {
+          const saved = JSON.parse(fs.readFileSync(LIVE_STATE_FILE, "utf-8"));
+          const savedFb = saved?.fadeScreenBg as { type?: string; url?: string } | null;
+          if (savedFb?.url && savedFb.type === "image-firebase") {
+            fadeBgFirebaseUrl = savedFb.url;
+            saveFadeBgMeta();
+            console.log(`[FadeBG] Recovered Firebase URL from liveState cache: ${fadeBgFirebaseUrl.slice(0, 60)}...`);
+          }
+        } catch { /* liveState.json missing — no recovery possible */ }
+      }
       console.log(`[FadeBG] Loaded from disk: ${file} (cached url: ${fadeBgFirebaseUrl ?? "none"})`);
       break;
     }
