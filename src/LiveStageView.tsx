@@ -2457,6 +2457,7 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
                     }
                     const fd = new FormData();
                     fd.append('video', srcBlob, item.name);
+                    fd.append('firebaseUrl', item.firebaseUrl);
                     const uploadRes = await fetch(serverLocalUrl, { method: 'POST', body: fd });
                     if (uploadRes.ok) {
                       // Real HTTP localUrl — OBS can load this offline (no Firebase needed)
@@ -2647,6 +2648,7 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
                     }
                     const fd = new FormData();
                     fd.append('video', srcBlob, item.name);
+                    fd.append('firebaseUrl', item.firebaseUrl);
                     const uploadRes = await fetch(serverLocalUrl, { method: 'POST', body: fd });
                     if (uploadRes.ok) {
                       // Real HTTP localUrl — OBS can load this offline (no Firebase needed)

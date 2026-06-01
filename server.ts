@@ -364,24 +364,37 @@ function injectLocalUrls(state: Record<string, unknown>): Record<string, unknown
     if (!alreadyOk) {
       const firebaseUrl = (bv.url as string) ?? "";
       let injected = false;
+      // ── Tier 1: exact Firebase URL match (reliable — set at upload time) ──
       for (const preset of Object.keys(liveBgMeta)) {
         const meta = liveBgMeta[preset];
         if (!meta || !fs.existsSync(meta.filePath)) continue;
-        if (firebaseUrl.toLowerCase().includes(preset.toLowerCase())) {
+        if (meta.firebaseUrl && meta.firebaseUrl === firebaseUrl) {
           result = { ...result, bgVideo: { ...bv, localUrl: `/api/live-bg-video/${preset}` } };
           injected = true;
           break;
         }
       }
-      // Also check song-keyed presets (song_<songId>) uploaded via onAssignToSong
+      // ── Tier 2: song-keyed presets — match by songId in URL (reliable) ──
       if (!injected) {
         for (const preset of Object.keys(liveBgMeta)) {
           if (!preset.startsWith('song_')) continue;
           const meta2 = liveBgMeta[preset];
           if (!meta2 || !fs.existsSync(meta2.filePath)) continue;
-          // Match by preset key embedded in Firebase URL OR by the songId being in the URL path
           const presetSongId = preset.slice(5); // strip "song_"
-          if (firebaseUrl.includes(presetSongId) || firebaseUrl.toLowerCase().includes(preset.toLowerCase())) {
+          if (firebaseUrl.includes(presetSongId)) {
+            result = { ...result, bgVideo: { ...bv, localUrl: `/api/live-bg-video/${preset}` } };
+            injected = true;
+            break;
+          }
+        }
+      }
+      // ── Tier 3: name substring match (legacy fallback — unreliable for praise/worship) ──
+      if (!injected) {
+        for (const preset of Object.keys(liveBgMeta)) {
+          if (preset === 'praise' || preset === 'worship') continue; // skip — too generic, causes wrong matches
+          const meta = liveBgMeta[preset];
+          if (!meta || !fs.existsSync(meta.filePath)) continue;
+          if (firebaseUrl.toLowerCase().includes(preset.toLowerCase())) {
             result = { ...result, bgVideo: { ...bv, localUrl: `/api/live-bg-video/${preset}` } };
             injected = true;
             break;
@@ -389,8 +402,8 @@ function injectLocalUrls(state: Record<string, unknown>): Record<string, unknown
         }
       }
       if (!injected) {
-        // Fallback: if only one preset file exists, use it
-        const presets = Object.keys(liveBgMeta).filter(p => liveBgMeta[p] && fs.existsSync(liveBgMeta[p]!.filePath));
+        // Fallback: if only one non-song preset file exists, use it
+        const presets = Object.keys(liveBgMeta).filter(p => !p.startsWith('song_') && liveBgMeta[p] && fs.existsSync(liveBgMeta[p]!.filePath));
         if (presets.length === 1) {
           result = { ...result, bgVideo: { ...bv, localUrl: `/api/live-bg-video/${presets[0]}` } };
         }
@@ -613,12 +626,31 @@ app.get("/api/live-state", (_req, res) => {
 const LIVE_BG_DIR = path.join(__dirname, "live-bg-videos");
 if (!fs.existsSync(LIVE_BG_DIR)) fs.mkdirSync(LIVE_BG_DIR, { recursive: true });
 
-// Metadata: maps preset name → { filePath, mime } — loaded from disk on startup
-const liveBgMeta: Record<string, { filePath: string; mime: string }> = {};
+// Metadata: maps preset name → { filePath, mime, firebaseUrl? }
+// firebaseUrl is persisted in .meta.json so injectLocalUrls can do exact URL matching
+// instead of unreliable substring matching (e.g. a video named "worship_bg.mp4"
+// assigned to the PRAISE preset would otherwise map to the wrong preset).
+const liveBgMeta: Record<string, { filePath: string; mime: string; firebaseUrl?: string }> = {};
+const LIVE_BG_META_FILE = path.join(LIVE_BG_DIR, ".meta.json");
+
+function loadLiveBgMetaUrls(): Record<string, string> {
+  try {
+    if (!fs.existsSync(LIVE_BG_META_FILE)) return {};
+    return JSON.parse(fs.readFileSync(LIVE_BG_META_FILE, "utf-8")) as Record<string, string>;
+  } catch { return {}; }
+}
+function saveLiveBgMetaUrls() {
+  const urls: Record<string, string> = {};
+  for (const [preset, meta] of Object.entries(liveBgMeta)) {
+    if (meta.firebaseUrl) urls[preset] = meta.firebaseUrl;
+  }
+  try { fs.writeFileSync(LIVE_BG_META_FILE, JSON.stringify(urls), "utf-8"); } catch { /* ignore */ }
+}
 
 // Load any existing videos/images from disk on startup
 (() => {
   try {
+    const savedUrls = loadLiveBgMetaUrls();
     const files = fs.readdirSync(LIVE_BG_DIR);
     for (const file of files) {
       // Accept video AND image extensions for bg presets
@@ -634,7 +666,7 @@ const liveBgMeta: Record<string, { filePath: string; mime: string }> = {};
         : ext === "gif"  ? "image/gif"
         : ext === "jpg" || ext === "jpeg" ? "image/jpeg"
         : "video/mp4";
-      liveBgMeta[preset] = { filePath: path.join(LIVE_BG_DIR, file), mime };
+      liveBgMeta[preset] = { filePath: path.join(LIVE_BG_DIR, file), mime, firebaseUrl: savedUrls[preset] };
       console.log(`[LiveBG] Loaded from disk: ${preset} (${file})`);
     }
   } catch { /* ignore */ }
@@ -661,7 +693,9 @@ app.post("/api/live-bg-video/:preset", multer({ storage: multer.memoryStorage(),
   }
   const filePath = path.join(LIVE_BG_DIR, `${preset}.${ext}`);
   fs.writeFileSync(filePath, req.file.buffer);
-  liveBgMeta[preset] = { filePath, mime };
+  const uploadedFirebaseUrl = typeof req.body?.firebaseUrl === "string" ? req.body.firebaseUrl : undefined;
+  liveBgMeta[preset] = { filePath, mime, ...(uploadedFirebaseUrl ? { firebaseUrl: uploadedFirebaseUrl } : {}) };
+  saveLiveBgMetaUrls();
   console.log(`[LiveBG:${preset}] Saved to disk: ${req.file.originalname} (${(req.file.size / 1024 / 1024).toFixed(1)} MB) → ${filePath}`);
   res.json({ ok: true, url: `/api/live-bg-video/${preset}` });
 });
