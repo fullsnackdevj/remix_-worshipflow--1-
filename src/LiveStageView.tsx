@@ -2525,8 +2525,10 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
               idbSet('lsv_fade_screen', fadeBgSafe).catch(() => {});
               try { localStorage.setItem('lsv_fade_screen', JSON.stringify(fadeBgSafe)); } catch {}
               clearOtherAssignments(target);
-              // Initial push — toFiresafeFadeBg strips blob: localUrls so server never sees them
-              if (fadeScreenActiveRef.current) {
+              // Online: push immediately so OBS updates right away (Firebase URL works online).
+              // Offline: skip — pushing now would give OBS a Firebase URL it can't load.
+              //          We'll push again below after the local server has the file.
+              if (navigator.onLine && fadeScreenActiveRef.current) {
                 fetch('/api/live-push', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -2535,15 +2537,18 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
               }
               // ── Upload to local server so OBS can load it offline ──────────────
               // Handles both images AND videos. 3-tier: blobUrl → IDB → Firebase.
-              // After upload, follow-up push gives OBS a real localhost URL.
+              // After upload, push with localUrl so OBS works both online and offline.
               if (item.type === 'image' || item.type === 'video') {
                 (async () => {
                   try {
                     let srcBlob: Blob | null = null;
                     if (blobUrl) { const r = await fetch(blobUrl).catch(() => null); if (r?.ok) srcBlob = await r.blob(); }
                     if (!srcBlob) { const cached = await idbGet<Blob>(`media_blob_${item.id}`); if (cached instanceof Blob) srcBlob = cached; }
-                    if (!srcBlob) { const r = await fetch(item.firebaseUrl); srcBlob = await r.blob(); }
-                    if (!srcBlob) return;
+                    if (!srcBlob && navigator.onLine) { const r = await fetch(item.firebaseUrl).catch(() => null); if (r?.ok) srcBlob = await r.blob(); }
+                    if (!srcBlob) {
+                      if (!navigator.onLine) onToast('error', `⚠️ "${item.name}" isn't cached offline — connect to internet first, then select it again`);
+                      return;
+                    }
                     const fd = new FormData();
                     fd.append('image', srcBlob, item.name);
                     fd.append('firebaseUrl', item.firebaseUrl);
@@ -2716,19 +2721,26 @@ export default function LiveStageView({ allSongs, onToast, onSongUpdated }: Prop
               idbSet('lsv_fade_screen', fadeBgSafe).catch(() => {});
               try { localStorage.setItem('lsv_fade_screen', JSON.stringify(fadeBgSafe)); } catch {}
               clearOtherAssignments(target);
-              fetch('/api/live-push', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ _bgOnly: true, fadeScreen: fadeScreenActiveRef.current, fadeScreenBg: toFiresafeFadeBg(fadeBg), updatedAt: Date.now() }),
-              }).catch(() => {});
+              // Online: push immediately so OBS updates right away (Firebase URL works online).
+              // Offline: skip — pushing now would give OBS a Firebase URL it can't load.
+              if (navigator.onLine) {
+                fetch('/api/live-push', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ _bgOnly: true, fadeScreen: fadeScreenActiveRef.current, fadeScreenBg: toFiresafeFadeBg(fadeBg), updatedAt: Date.now() }),
+                }).catch(() => {});
+              }
               if (item.type === 'image' || item.type === 'video') {
                 (async () => {
                   try {
                     let srcBlob: Blob | null = null;
                     if (blobUrl) { const r = await fetch(blobUrl).catch(() => null); if (r?.ok) srcBlob = await r.blob(); }
                     if (!srcBlob) { const cached = await idbGet<Blob>(`media_blob_${item.id}`); if (cached instanceof Blob) srcBlob = cached; }
-                    if (!srcBlob) { const r = await fetch(item.firebaseUrl); srcBlob = await r.blob(); }
-                    if (!srcBlob) return;
+                    if (!srcBlob && navigator.onLine) { const r = await fetch(item.firebaseUrl).catch(() => null); if (r?.ok) srcBlob = await r.blob(); }
+                    if (!srcBlob) {
+                      if (!navigator.onLine) onToast('error', `⚠️ "${item.name}" isn't cached offline — connect to internet first, then select it again`);
+                      return;
+                    }
                     const fd = new FormData();
                     fd.append('image', srcBlob, item.name);
                     fd.append('firebaseUrl', item.firebaseUrl);

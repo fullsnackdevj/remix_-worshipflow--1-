@@ -237,6 +237,15 @@ export default function RehearsalView({
 
     const handleOcrUpload = async (file: File) => {
         if (!file) return;
+
+        // Pre-flight size check — 8 MB keeps base64 well under Netlify's body limit
+        const MAX_MB = 8;
+        if (file.size > MAX_MB * 1024 * 1024) {
+            showToast?.("error", `Image is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Please use a screenshot under ${MAX_MB} MB.`);
+            if (ocrFileRef.current) ocrFileRef.current.value = "";
+            return;
+        }
+
         setIsOcrLoading(true);
         try {
             const reader = new FileReader();
@@ -253,14 +262,19 @@ export default function RehearsalView({
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ base64Data: base64, mimeType: file.type, type: ocrColRef.current }),
             });
-            if (!res.ok) throw new Error("OCR failed");
-            const { text } = await res.json();
-            // Route to the correct column
-            if (ocrColRef.current === "lyrics") lyricsEdit.onChange(text ?? "");
-            else chordsEdit.onChange(text ?? "");
-            showToast?.("success", `${ocrColRef.current === "lyrics" ? "Lyrics" : "Chords"} extracted from image!`);
-        } catch {
-            showToast?.("error", "Could not extract text from image. Try a clearer photo.");
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || "OCR failed");
+            const extractedText = (data.text ?? "").replace(/\*\*/g, "");
+            if (extractedText.trim()) {
+                // Route to the correct column
+                if (ocrColRef.current === "lyrics") lyricsEdit.onChange(extractedText);
+                else chordsEdit.onChange(extractedText);
+                showToast?.("success", `${ocrColRef.current === "lyrics" ? "Lyrics" : "Chords"} extracted from image!`);
+            } else {
+                showToast?.("warning", "No text could be read from that image. Try a clearer, well-lit screenshot.");
+            }
+        } catch (err: any) {
+            showToast?.("error", err?.message || "Could not extract text from image. Try a clearer photo.");
         } finally {
             setIsOcrLoading(false);
             if (ocrFileRef.current) ocrFileRef.current.value = "";

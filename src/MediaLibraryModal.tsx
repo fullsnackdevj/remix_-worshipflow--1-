@@ -294,6 +294,34 @@ export default function MediaLibraryModal({ onClose, onAssign, onToast, pickMode
     return () => { Object.values(blobUrls).forEach(URL.revokeObjectURL); };
   }, [items]); // eslint-disable-line
 
+  // Proactive background-caching: when online, silently download all uncached items to IDB
+  // so they're available even if the user goes offline later.
+  useEffect(() => {
+    if (!navigator.onLine || !items.length) return;
+    let cancelled = false;
+    (async () => {
+      for (const item of items) {
+        if (cancelled || !navigator.onLine) break;
+        const existing = await idbGet<Blob>(`media_blob_${item.id}`);
+        if (existing || cancelled) continue;
+        try {
+          const resp = await fetch(item.firebaseUrl);
+          if (!resp.ok || cancelled) continue;
+          const blob = await resp.blob();
+          if (cancelled) break;
+          await idbSet(`media_blob_${item.id}`, blob);
+          const url = URL.createObjectURL(blob);
+          setBlobUrls(prev => ({ ...prev, [item.id]: url }));
+          setCachedIds(prev => new Set([...prev, item.id]));
+          if (item.type === "video") generateVideoThumb(item.id, url);
+        } catch { /* skip — item will be tried again next modal open */ }
+        // Small yield between items to avoid saturating the network
+        await new Promise(r => setTimeout(r, 150));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [items]); // eslint-disable-line
+
   // Pre-fetch selected Firebase item into IDB so onAssign never needs to hit Firebase Storage.
   // Runs as soon as the user clicks an item — while they're still browsing online.
   useEffect(() => {

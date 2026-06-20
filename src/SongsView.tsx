@@ -1187,14 +1187,24 @@ showToast("error", "Failed to delete tag.");
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Pre-flight size check — 8 MB keeps base64 well under Netlify's 6 MB body limit
+    // (base64 expands ~33%, so 8 MB file → ~10.7 MB base64, still within Gemini's limit)
+    const MAX_MB = 8;
+    if (file.size > MAX_MB * 1024 * 1024) {
+showToast("error", `Image is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Please use a screenshot under ${MAX_MB} MB.`);
+      if (e.target) e.target.value = "";
+      return;
+    }
+
     setIsOcrLoading(type);
     try {
       const reader = new FileReader();
-      const base64Promise = new Promise<string>((resolve) => {
+      const base64Promise = new Promise<string>((resolve, reject) => {
         reader.onload = () => {
           const base64 = (reader.result as string).split(",")[1];
           resolve(base64);
         };
+        reader.onerror = reject;
       });
       reader.readAsDataURL(file);
       const base64Data = await base64Promise;
@@ -1209,14 +1219,14 @@ showToast("error", "Failed to delete tag.");
         })
       });
 
+      const data = await response.json().catch(() => ({}));
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "OCR failed on server");
+        throw new Error(data.error || "OCR failed on server");
       }
 
-      const data = await response.json();
-      const extractedText = data.text?.replace(/\*\*/g, "");
-      if (extractedText) {
+      const extractedText = (data.text ?? "").replace(/\*\*/g, "");
+      if (extractedText.trim()) {
         if (type === "lyrics") {
           setEditLyrics(extractedText);
           pushHistory(extractedText, lyricsHistory, lyricsIdx);
@@ -1228,10 +1238,13 @@ showToast("error", "Failed to delete tag.");
           setChordsCanUndo(chordsIdx.current > 0);
           setChordsCanRedo(false);
         }
+      } else {
+        // Server returned 200 but empty text (shouldn't happen after backend fix, but guard it)
+showToast("warning", "No text could be read from that image. Try a clearer, well-lit screenshot.");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("OCR failed", error);
-showToast("error", "Failed to extract text from image. Please try again.");
+showToast("error", error?.message || "Failed to extract text from image. Please try again.");
     } finally {
       setIsOcrLoading(null);
       if (e.target) e.target.value = "";

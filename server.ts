@@ -471,7 +471,7 @@ function injectLocalUrls(state: Record<string, unknown>): Record<string, unknown
         // This one-time backfill ensures the image is ready for offline use
         // the next time the dev server starts without internet.
         const fb = saved.fadeScreenBg as Record<string, unknown> | null | undefined;
-        if (fb && fb.type === "image-firebase" && fb.url && !fadeBgFilePath) {
+        if (fb && (fb.type === "image-firebase" || fb.type === "video-firebase") && fb.url && !fadeBgFilePath) {
           const fbUrl = fb.url as string;
           try {
             const { default: https } = await import("https");
@@ -2775,6 +2775,13 @@ app.post("/api/ocr", async (req, res) => {
       return res.status(500).json({ error: "OCR service is not configured (missing API key)" });
     }
 
+    // Validate base64 size — Gemini inline data limit is ~20MB decoded.
+    // base64 is ~4/3 of original, so 15MB base64 ≈ 11MB image (safe limit).
+    const base64SizeMB = (base64Data.length * 3) / 4 / 1024 / 1024;
+    if (base64SizeMB > 15) {
+      return res.status(413).json({ error: "Image is too large. Please use a smaller or more compressed image (max ~11 MB)." });
+    }
+
     // Use the correct prompt depending on content type
     const preachingPrompt = `You are a precise sermon document transcriber. Extract ALL visible text from this image EXACTLY as it appears, preserving:\n- Every section heading (e.g. "Introduction:", "Key Points:", "Conclusion:")\n- Every scripture reference and Bible verse\n- Every bullet point, note, or outline item\n- Every annotation, emphasis, or formatting cue\n- Empty lines between sections for spacing\n\nRules:\n- Do NOT skip any visible text.\n- Do NOT add, invent, or summarize anything.\n- Do NOT use Markdown formatting (no **, no ##, no bullets unless they appear in the original).\n- Output ONLY the plain text transcription, nothing else.`;
 
@@ -2805,16 +2812,35 @@ app.post("/api/ocr", async (req, res) => {
           ?.filter((p: any) => typeof p.text === "string")
           ?.map((p: any) => p.text as string)
           ?.join("") ?? "";
-      if (!rawText) rawText = (response as any).text ?? "";
+      // Fallback: try the convenience accessor
+      if (!rawText) {
+        try { rawText = (response as any).text ?? ""; } catch { /* safety-filtered */ }
+      }
     } catch {
       // response.text threw — no usable text in this response
+    }
+
+    // If Gemini returned nothing at all, surface a helpful error
+    if (!rawText.trim()) {
+      const finishReason = response.candidates?.[0]?.finishReason ?? "UNKNOWN";
+      if (finishReason === "SAFETY") {
+        return res.status(422).json({ error: "Image was blocked by safety filters. Please use a different image." });
+      }
+      return res.status(422).json({ error: "No text could be extracted from this image. Try a clearer or higher-resolution photo." });
     }
 
     const cleanText = rawText.replace(/\*\*/g, "");
     res.json({ text: cleanText });
   } catch (error: any) {
     console.error("OCR Error:", error?.message ?? error);
-    res.status(500).json({ error: error?.message ?? "Failed to extract text from image" });
+    const msg: string = error?.message ?? "";
+    if (msg.includes("quota") || msg.includes("RESOURCE_EXHAUSTED")) {
+      return res.status(429).json({ error: "AI quota exceeded. Please try again later." });
+    }
+    if (msg.includes("API key") || msg.includes("INVALID_ARGUMENT")) {
+      return res.status(500).json({ error: "OCR service configuration error. Contact the administrator." });
+    }
+    res.status(500).json({ error: msg || "Failed to extract text from image" });
   }
 });
 

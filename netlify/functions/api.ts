@@ -1597,6 +1597,13 @@ BULLET: [...]`;
                 return json(500, { error: "OCR service is not configured (missing API key)" });
             }
 
+            // Validate base64 size — Gemini inline data limit is ~20MB decoded.
+            // base64 is ~4/3 of original, so 15MB base64 ≈ 11MB image (safe limit).
+            const base64SizeMB = (base64Data.length * 3) / 4 / 1024 / 1024;
+            if (base64SizeMB > 15) {
+                return json(413, { error: "Image is too large. Please use a smaller or more compressed image (max ~11 MB)." });
+            }
+
             // Use the correct prompt depending on content type
             const preachingPrompt = `You are a precise sermon document transcriber. Extract ALL visible text from this image EXACTLY as it appears, preserving:\n- Every section heading (e.g. "Introduction:", "Key Points:", "Conclusion:")\n- Every scripture reference and Bible verse\n- Every bullet point, note, or outline item\n- Every annotation, emphasis, or formatting cue\n- Empty lines between sections for spacing\n\nRules:\n- Do NOT skip any visible text.\n- Do NOT add, invent, or summarize anything.\n- Do NOT use Markdown formatting (no **, no ##, no bullets unless they appear in the original).\n- Output ONLY the plain text transcription, nothing else.`;
 
@@ -1606,7 +1613,7 @@ BULLET: [...]`;
 
             const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
             const response = await ai.models.generateContent({
-                model: "gemini-2.0-flash",
+                model: "gemini-2.5-flash",
                 contents: [
                     {
                         role: "user",
@@ -1627,16 +1634,36 @@ BULLET: [...]`;
                         ?.filter((p: any) => typeof p.text === "string")
                         ?.map((p: any) => p.text as string)
                         ?.join("") ?? "";
-                if (!rawText) rawText = (response as any).text ?? "";
+                // Fallback: try the convenience accessor
+                if (!rawText) {
+                    try { rawText = (response as any).text ?? ""; } catch { /* safety-filtered */ }
+                }
             } catch {
-                // response.text threw — no usable text in this response
+                // response.text threw — likely safety-filtered, return empty
+            }
+
+            // If Gemini returned nothing at all, surface a helpful error
+            if (!rawText.trim()) {
+                const finishReason = response.candidates?.[0]?.finishReason ?? "UNKNOWN";
+                if (finishReason === "SAFETY") {
+                    return json(422, { error: "Image was blocked by safety filters. Please use a different image." });
+                }
+                return json(422, { error: "No text could be extracted from this image. Try a clearer or higher-resolution photo." });
             }
 
             const cleanText = rawText.replace(/\*\*/g, "");
             return json(200, { text: cleanText });
         } catch (err: any) {
             console.error("OCR Error:", err?.message ?? err);
-            return json(500, { error: err?.message ?? "Failed to extract text from image" });
+            // Surface quota/billing errors clearly
+            const msg: string = err?.message ?? "";
+            if (msg.includes("quota") || msg.includes("RESOURCE_EXHAUSTED")) {
+                return json(429, { error: "AI quota exceeded. Please try again later." });
+            }
+            if (msg.includes("API key") || msg.includes("INVALID_ARGUMENT")) {
+                return json(500, { error: "OCR service configuration error. Contact the administrator." });
+            }
+            return json(500, { error: msg || "Failed to extract text from image" });
         }
     }
 
