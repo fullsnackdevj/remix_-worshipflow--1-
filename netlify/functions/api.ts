@@ -1131,59 +1131,55 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
         try {
             const REPO = "fullsnackdevj/remix_-worshipflow--1-";
 
-            // 1. Fetch recent commits from GitHub
-            let allCommitMessages: string[] = [];
+            // 1. Fetch commits — take ONLY the 10 most recent (newest first)
+            let recentCommits: string[] = [];
             try {
                 const ghRes = await fetch(
-                    `https://api.github.com/repos/${REPO}/commits?per_page=50`,
+                    `https://api.github.com/repos/${REPO}/commits?per_page=20`,
                     { headers: { "Accept": "application/vnd.github.v3+json", "User-Agent": "WorshipFlow/1.0" } }
                 );
                 if (ghRes.ok) {
                     const commits: any[] = await ghRes.json();
-                    allCommitMessages = commits
+                    // Keep only first 10 (newest), filter out pure infra noise
+                    const skipPatterns = /^(merge pull|merged|bump version)/i;
+                    recentCommits = commits
                         .map((c: any) => c.commit.message.split("\n")[0].trim())
-                        .filter((msg: string) => msg.length > 5);
+                        .filter((msg: string) => msg.length > 5 && !skipPatterns.test(msg))
+                        .slice(0, 10); // HARD CAP — only the 10 most recent
                 }
             } catch (_) { /* GitHub unavailable */ }
 
-            if (allCommitMessages.length === 0) {
+            if (recentCommits.length === 0) {
                 throw new Error("Could not load recent commits from GitHub");
             }
 
-            // 2. Ask Gemini to translate commits into user-friendly What's New content
+            // 2. Ask Gemini — ONLY about these exact recent commits, nothing else
             const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-            const prompt = `You are writing a "What's New" announcement for WorshipFlow — a church worship team management web app.
+            const prompt = `You are writing a "What's New" broadcast for WorshipFlow — a church worship team management web app used by worship team members.
 
-WorshipFlow helps worship teams manage songs, service schedules, team members, rehearsals, live stage displays, and team communication.
+THESE ARE THE ONLY RECENT CHANGES. Write ONLY about these (listed newest first):
+${recentCommits.map((m, i) => `${i + 1}. ${m}`).join("\n")}
 
-Here are the most recent code changes from the development team (raw git commit messages):
-${allCommitMessages.map((m, i) => `${i + 1}. ${m}`).join("\n")}
+Do NOT invent features. Do NOT write about anything not in this list.
 
-Your job is to write a clear, friendly "What's New" update that the admin will broadcast to the worship team.
+Translate these developer commit messages into plain language a non-technical church volunteer will understand.
+Skip any that are purely internal fixes, refactors, or typo corrections.
 
-Step 1 — Read through all the commits and identify what meaningful new features or improvements were made. Ignore: merge commits, version bumps, spelling fixes, internal refactoring, CI changes.
-
-Step 2 — Write the announcement in a way that non-technical church volunteers will understand. Use everyday language. Focus on what the user can NOW DO or what they will NOTICE.
-
-Step 3 — Output exactly in this format:
-
-TITLE: [A short exciting headline, 5-8 words, about the most significant update]
-MESSAGE: [One warm, friendly sentence that introduces what this update brings to the team]
-BULLET: [Feature or improvement 1 — describe what the user can now do, under 18 words]
-BULLET: [Feature or improvement 2 — under 18 words]
-BULLET: [Feature or improvement 3 — under 18 words]
-BULLET: [Feature or improvement 4 — under 18 words, optional]
-BULLET: [Feature or improvement 5 — under 18 words, optional]
+Output ONLY in this exact format:
+TITLE: [Short exciting headline, 5-8 words, about the most significant update in the list above]
+MESSAGE: [One friendly sentence introducing what's new]
+BULLET: [What the user can now do — from the list above — under 18 words, start with a verb]
+BULLET: [Next update from the list — under 18 words]
+BULLET: [Next update from the list — under 18 words]
+BULLET: [optional 4th — under 18 words]
+BULLET: [optional 5th — under 18 words]
 
 Rules:
-- Write 3 to 5 bullets total
-- Each bullet must describe something the USER experiences or can do — not a technical fix
-- Start each bullet with a verb (e.g. Play, Tag, Filter, View, Browse, Track, Manage, Switch, Use)
-- Do NOT include bullets about bug fixes, code refactors, or internal changes
-- Do NOT use emojis
-- Do NOT use markdown or special formatting
-- Write as if talking to a worship team member who is not technical`;
+- Write 3 to 5 bullets ONLY from the commits listed above
+- Start each bullet with an action verb (Play, Tag, Filter, View, Use, Switch, Browse, Manage, etc.)
+- No emojis, no markdown, no asterisks
+- Write for a non-technical worship team member`;
 
             const aiRes = await ai.models.generateContent({
                 model: "gemini-2.0-flash",
