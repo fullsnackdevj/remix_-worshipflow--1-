@@ -53,6 +53,7 @@ export interface ScheduleViewProps {
   /** Shared data from App.tsx */
   allMembers: Member[];
   allSongs: Song[];
+  setAllSongs: React.Dispatch<React.SetStateAction<Song[]>>;
   birthdayMap: Record<string, Member[]>;
   /** Auth flags */
   isAdmin: boolean;
@@ -511,6 +512,31 @@ showToast("success", "Event updated!");
 showToast("success", "Event saved!");
     }
     setSchedPanelMode("view");
+
+    // ── Auto-clear 'Future Line-Up' tag for scheduled songs ───────────
+    const scheduledSongIds = [
+      editSchedSongLineup.joyful,
+      editSchedSongLineup.solemn,
+      ...(editSchedSongLineup.others || [])
+    ].filter(Boolean) as string[];
+
+    scheduledSongIds.forEach(songId => {
+      const song = allSongs.find(s => s.id === songId);
+      if (song?.isFutureLineup) {
+        // Fire background PATCH to clear the flag in Firestore
+        fetch(`/api/songs/${songId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ isFutureLineup: false })
+        }).catch(console.error);
+        
+        // Optimistically update local state immediately
+        setAllSongs(prev => prev.map(s => 
+          s.id === songId ? { ...s, isFutureLineup: false } : s
+        ));
+      }
+    });
+
     // ── Background re-sync with Firestore so local state == server state ──
     fetchSchedules({ background: true });
   } catch (err: any) {
@@ -1748,12 +1774,21 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                       !editSchedMusicians.some(mu => mu.memberId === m.id)
                     );
                     const isMidweek = editSchedEventName.toLowerCase() === "midweek service";
+                    // Helper: check if a song tagged Future Line-Up is at least 1 week old
+                    const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+                    const isFutureLineupEligible = (s: typeof allSongs[0]): boolean => {
+                      if (!s.isFutureLineup) return true; // Not tagged — always eligible
+                      const created = s.created_at ? new Date(s.created_at).getTime() : 0;
+                      return Date.now() - created >= ONE_WEEK_MS; // Only eligible if ≥ 1 week old
+                    };
                     // Filter songs by mood tag, then optionally by search
-                    const joyfulTagged = allSongs.filter(s => s.tags?.some(t => /joyful/i.test(t.name)));
-                    const solemnTagged = allSongs.filter(s => s.tags?.some(t => /solemn/i.test(t.name)));
-                    // Fall back to all songs if no tagged songs found (avoids empty list)
-                    const joyfulBase = joyfulTagged.length > 0 ? joyfulTagged : allSongs;
-                    const solemnBase = solemnTagged.length > 0 ? solemnTagged : allSongs;
+                    // Songs tagged as Future Line-Up are excluded unless they are ≥ 1 week old
+                    const joyfulTagged = allSongs.filter(s => isFutureLineupEligible(s) && s.tags?.some(t => /joyful/i.test(t.name)));
+                    const solemnTagged = allSongs.filter(s => isFutureLineupEligible(s) && s.tags?.some(t => /solemn/i.test(t.name)));
+                    // Fall back to all eligible songs if no tagged songs found (avoids empty list)
+                    const eligibleSongs = allSongs.filter(isFutureLineupEligible);
+                    const joyfulBase = joyfulTagged.length > 0 ? joyfulTagged : eligibleSongs;
+                    const solemnBase = solemnTagged.length > 0 ? solemnTagged : eligibleSongs;
                     const joyfulSongs = joyfulSearch.trim()
                       ? joyfulBase.filter(s => s.title.toLowerCase().includes(joyfulSearch.toLowerCase()) || s.artist?.toLowerCase().includes(joyfulSearch.toLowerCase()))
                       : joyfulBase;

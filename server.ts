@@ -1781,7 +1781,7 @@ app.post("/api/songs", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(500).json({ error: "Firebase not configured" });
 
-  const { title, artist, lyrics, chords, tags, video_url } = req.body;
+  const { title, artist, lyrics, chords, tags, video_url, isFutureLineup } = req.body;
 
   // Required field validation
   const missingFields: string[] = [];
@@ -1827,6 +1827,7 @@ app.post("/api/songs", async (req, res) => {
       chords: chords || "",
       tagIds: tags,
       video_url: video_url || "",
+      isFutureLineup: isFutureLineup === true,
       created_at: admin.firestore.FieldValue.serverTimestamp(),
       updated_at: admin.firestore.FieldValue.serverTimestamp()
     });
@@ -1855,7 +1856,7 @@ app.put("/api/songs/:id", async (req, res) => {
   if (!firestore) return res.status(500).json({ error: "Firebase not configured" });
 
   const { id } = req.params;
-  const { title, artist, lyrics, chords, tags, video_url } = req.body;
+  const { title, artist, lyrics, chords, tags, video_url, isFutureLineup } = req.body;
 
   // Required field validation
   const missingFields: string[] = [];
@@ -1902,6 +1903,7 @@ app.put("/api/songs/:id", async (req, res) => {
       chords: chords || "",
       tagIds: tags,
       video_url: video_url || "",
+      isFutureLineup: isFutureLineup === true,
       updated_at: admin.firestore.FieldValue.serverTimestamp()
     });
 
@@ -1921,12 +1923,13 @@ app.patch("/api/songs/:id", async (req, res) => {
   const { id } = req.params;
   const updates: Record<string, unknown> = {};
 
-  if (req.body.lyrics    !== undefined) updates.lyrics    = req.body.lyrics.trim().toUpperCase();
-  if (req.body.title     !== undefined) updates.title     = toTitleCase(req.body.title);
-  if (req.body.artist    !== undefined) updates.artist    = toTitleCase(req.body.artist);
-  if (req.body.chords    !== undefined) updates.chords    = req.body.chords;
-  if (req.body.tags      !== undefined) updates.tagIds    = req.body.tags;
-  if (req.body.video_url !== undefined) updates.video_url = req.body.video_url;
+  if (req.body.lyrics       !== undefined) updates.lyrics        = req.body.lyrics.trim().toUpperCase();
+  if (req.body.title        !== undefined) updates.title         = toTitleCase(req.body.title);
+  if (req.body.artist       !== undefined) updates.artist        = toTitleCase(req.body.artist);
+  if (req.body.chords       !== undefined) updates.chords        = req.body.chords;
+  if (req.body.tags         !== undefined) updates.tagIds        = req.body.tags;
+  if (req.body.video_url    !== undefined) updates.video_url     = req.body.video_url;
+  if (typeof req.body.isFutureLineup === "boolean") updates.isFutureLineup = req.body.isFutureLineup;
 
   if (Object.keys(updates).length === 0) {
     return res.status(400).json({ error: "No fields to update." });

@@ -12,6 +12,7 @@ export interface Song {
   chords: string;
   tags: Tag[];
   video_url?: string;
+  isFutureLineup?: boolean;
   created_at: string;
   updated_at: string;
   created_by_name?: string;

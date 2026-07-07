@@ -550,6 +550,7 @@ export default function SongsView({
   const [editLyrics, setEditLyrics] = useState("");
   const [editChords, setEditChords] = useState("");
   const [editTags, setEditTags] = useState<string[]>([]);
+  const [editIsFutureLineup, setEditIsFutureLineup] = useState(false);
   const [copiedField, setCopiedField] = useState<"lyrics" | "chords" | null>(null);
   const [transposeSteps, setTransposeSteps] = useState(0);
   const [formErrors, setFormErrors] = useState<{ title?: string; artist?: string }>({});
@@ -867,7 +868,13 @@ export default function SongsView({
 
   // Instant client-side filtering — no network, no stale results
   const filteredSongs = useMemo(() => {
-    let result = allSongs;
+    const showFutureLineup = selectedTagIds.includes("future-lineup");
+
+    // When "Future Line-Up" filter is active, show ONLY those songs
+    // When not active, exclude all songs tagged as Future Line-Up from the main library
+    let result = showFutureLineup
+      ? allSongs.filter(s => s.isFutureLineup === true)
+      : allSongs.filter(s => !s.isFutureLineup);
 
     const q = debouncedQuery.trim().toLowerCase();
 
@@ -895,8 +902,8 @@ export default function SongsView({
       result = [...result].sort((a, b) => score(b) - score(a));
     }
 
-    // Tag filters
-    const tagFilters = selectedTagIds.filter(id => id !== "recently-added");
+    // Tag filters (excluding special virtual filters)
+    const tagFilters = selectedTagIds.filter(id => id !== "recently-added" && id !== "future-lineup");
     const recentlyAdded = selectedTagIds.includes("recently-added");
 
     if (tagFilters.length > 0) {
@@ -914,6 +921,7 @@ export default function SongsView({
 
     return result;
   }, [allSongs, debouncedQuery, selectedTagIds]);
+
 
   // Visible slice for infinite scroll
   const visibleSongs = filteredSongs.slice(0, visibleCount);
@@ -1006,6 +1014,7 @@ showToast("error", `Please fill in: ${missing.join(", ")}.`);
       chords: editChords,
       tags: editTags,
       video_url: editVideoUrl,
+      isFutureLineup: editIsFutureLineup,
       actorName: cu?.displayName || cu?.email?.split("@")[0] || user?.displayName || "Worship Team",
       actorPhoto: cu?.photoURL || user?.photoURL || "",
       actorUserId: cu?.uid || user?.uid || "",
@@ -1159,6 +1168,7 @@ showToast("error", "Failed to delete tag.");
       setEditLyrics(song.lyrics);
       setEditChords(song.chords ?? "");
       setEditTags(Array.isArray(song.tags) ? song.tags.map((t) => t.id) : []);
+      setEditIsFutureLineup(song.isFutureLineup === true);
       resetLyricsHistory(song.lyrics);
       resetChordsHistory(song.chords ?? "");
     } else {
@@ -1169,6 +1179,7 @@ showToast("error", "Failed to delete tag.");
       setEditLyrics(LYRICS_TEMPLATE);
       setEditChords(CHORDS_TEMPLATE);
       setEditTags([]);
+      setEditIsFutureLineup(false);
       resetLyricsHistory(LYRICS_TEMPLATE);
       resetChordsHistory(CHORDS_TEMPLATE);
     }
@@ -1374,6 +1385,37 @@ showToast("error", error?.message || "Failed to extract text from image. Please 
                 style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.09)", caretColor: "#6366f1" }}
                 placeholder="https://www.youtube.com/watch?v=..."
               />
+            </div>
+
+            {/* Future Line-Up toggle */}
+            <div
+              onClick={() => setEditIsFutureLineup(v => !v)}
+              className={`flex items-start gap-3 px-4 py-3.5 rounded-xl border cursor-pointer transition-all select-none ${
+                editIsFutureLineup
+                  ? "bg-green-500/10 border-green-500/40 shadow-[0_0_12px_rgba(34,197,94,0.12)]"
+                  : "border-white/[0.08] hover:border-white/[0.15]"
+              }`}
+              style={{ background: editIsFutureLineup ? "rgba(34,197,94,0.06)" : "rgba(255,255,255,0.03)" }}
+            >
+              {/* Checkbox */}
+              <div className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 mt-0.5 border-2 transition-all ${
+                editIsFutureLineup ? "bg-green-500 border-green-500" : "border-white/25 bg-transparent"
+              }`}>
+                {editIsFutureLineup && (
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                )}
+              </div>
+              {/* Label */}
+              <div className="min-w-0">
+                <p className={`text-sm font-bold leading-tight ${editIsFutureLineup ? "text-green-400" : "text-white/70"}`}>
+                  Tag as Future Line-Up
+                </p>
+                <p className="text-[11px] mt-0.5" style={{ color: "rgba(156,163,175,0.7)" }}>
+                  This song will be held in the Future Line-Up queue and cannot be added to a schedule until it is at least 1 week old.
+                </p>
+              </div>
             </div>
 
             {/* Tags — dropdown */}
@@ -1604,6 +1646,13 @@ showToast("error", error?.message || "Failed to extract text from image. Please 
                       <p className="text-base font-medium mb-2" style={{ color: "rgba(156,163,175,0.8)" }}>
                         {selectedSong.artist}
                       </p>
+                    )}
+                    {/* Future Line-Up Badge */}
+                    {selectedSong.isFutureLineup && (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 mb-2 rounded-full text-[11px] font-bold bg-green-500/20 text-green-400 border border-green-500/30 w-fit">
+                        <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
+                        Future Line-Up
+                      </span>
                     )}
                     {/* Nav counter */}
                     {filteredSongs.length > 1 && (
@@ -2057,6 +2106,28 @@ showToast("error", error?.message || "Failed to extract text from image. Please 
                             <span>Recently Added</span>
                           </button>
 
+                          {/* Future Line-Up filter */}
+                          <button
+                            onClick={() => setSelectedTagIds(prev =>
+                              prev.includes("future-lineup") ? prev.filter(id => id !== "future-lineup") : [...prev, "future-lineup"]
+                            )}
+                            className="flex items-center gap-3 w-full px-3 py-2 rounded-xl hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors text-sm text-gray-700 dark:text-gray-300"
+                          >
+                            <div className={`w-4 h-4 rounded flex items-center justify-center border-2 transition-colors shrink-0 ${selectedTagIds.includes("future-lineup")
+                              ? "bg-green-500 border-green-500"
+                              : "border-gray-300 dark:border-gray-600"
+                              }`}>
+                              {selectedTagIds.includes("future-lineup") && <Check size={10} className="text-white" strokeWidth={3} />}
+                            </div>
+                            <span className="flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
+                              Future Line-Up
+                              <span className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400">
+                                {allSongs.filter(s => s.isFutureLineup).length}
+                              </span>
+                            </span>
+                          </button>
+
                           <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 px-3 pt-3 pb-2 mt-1 border-t border-gray-100 dark:border-gray-700">Tags</p>
                           {Array.isArray(tags) && tags.map((tag) => (
                             <button
@@ -2224,6 +2295,13 @@ showToast("error", error?.message || "Failed to extract text from image. Please 
                           <p className="text-sm font-medium truncate" style={{ color: "rgba(156,163,175,0.85)" }}>
                             {song.artist || <span className="italic" style={{ color: "rgba(107,114,128,0.8)" }}>Unknown Artist</span>}
                           </p>
+                          {/* Future Line-Up badge */}
+                          {song.isFutureLineup && (
+                            <span className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-500/20 text-green-400 border border-green-500/30 w-fit">
+                              <span className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
+                              Future Line-Up
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -2381,6 +2459,13 @@ showToast("error", error?.message || "Failed to extract text from image. Please 
                               color: "rgba(251,191,36,0.9)"
                             }}>
                             {song.tags.map(t => t.name).join(", ")}
+                          </span>
+                        )}
+                        {/* Future Line-Up badge */}
+                        {song.isFutureLineup && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-500/20 text-green-400 border border-green-500/30">
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
+                            Future Line-Up
                           </span>
                         )}
                       </div>

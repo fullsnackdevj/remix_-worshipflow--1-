@@ -1770,7 +1770,7 @@ BULLET: [...]`;
 
     // POST /songs
     if (rawPath === "/songs" && method === "POST") {
-        const { title, artist, lyrics, chords, tags, video_url } = body;
+        const { title, artist, lyrics, chords, tags, video_url, isFutureLineup } = body;
 
         // Required field validation
         const missingFields: string[] = [];
@@ -1813,6 +1813,7 @@ BULLET: [...]`;
                 chords: chords || "",
                 tagIds: tags,
                 video_url: video_url || "",
+                isFutureLineup: isFutureLineup === true,
                 created_by_name: actorName,
                 created_by_photo: actorPhoto,
                 updated_by_name: actorName,
@@ -1856,7 +1857,7 @@ BULLET: [...]`;
         }
 
         if (method === "PUT") {
-            const { title, artist, lyrics, chords, tags, video_url } = body;
+            const { title, artist, lyrics, chords, tags, video_url, isFutureLineup } = body;
 
             // Required field validation
             const missingFields: string[] = [];
@@ -1900,6 +1901,7 @@ BULLET: [...]`;
                     chords: chords || "",
                     tagIds: tags,
                     video_url: video_url || "",
+                    isFutureLineup: isFutureLineup === true,
                     updated_by_name: actorName,
                     updated_by_photo: actorPhoto,
                     updated_at: admin.firestore.FieldValue.serverTimestamp(),
@@ -1942,6 +1944,11 @@ BULLET: [...]`;
                 }
                 if (typeof body.actorPhoto === "string") {
                     updates.updated_by_photo = body.actorPhoto;
+                }
+                // Used by Schedule module to auto-clear the Future Line-Up tag
+                // after a song is successfully added to a scheduled service.
+                if (typeof body.isFutureLineup === "boolean") {
+                    updates.isFutureLineup = body.isFutureLineup;
                 }
 
                 if (Object.keys(updates).length === 1) {

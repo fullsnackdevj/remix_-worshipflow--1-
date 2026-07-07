@@ -706,7 +706,17 @@ export default function App() {
   const songsWithVideo = useMemo<LibraryTrack[]>(() =>
     allSongs
       .filter(s => !!s.video_url)
-      .map(s => ({ id: s.id, title: s.title, artist: s.artist ?? "", videoUrl: s.video_url! })),
+      .map(s => ({ id: s.id, title: s.title, artist: s.artist ?? "", videoUrl: s.video_url!, isFutureLineup: s.isFutureLineup === true })),
+    [allSongs]
+  );
+
+  // ALL songs tagged as Future Line-Up — regardless of whether they have a video URL.
+  // Passed to the player separately so the "All Future Line-Up" checkbox list
+  // always shows every tagged song, even those without a YouTube link.
+  const futureLineupSongs = useMemo<LibraryTrack[]>(() =>
+    allSongs
+      .filter(s => s.isFutureLineup === true)
+      .map(s => ({ id: s.id, title: s.title, artist: s.artist ?? "", videoUrl: s.video_url ?? "", isFutureLineup: true })),
     [allSongs]
   );
 
@@ -1959,6 +1969,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                   setAllSchedules={setAllSchedules}
                   allMembers={allMembers}
                   allSongs={allSongs}
+                  setAllSongs={setAllSongs}
                   birthdayMap={birthdayMap}
                   isAdmin={isAdmin}
                   isLeader={isLeader}
@@ -2358,6 +2369,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
       {libraryOpen && songsWithVideo.length > 0 && (
         <SongsLibraryPlayer
           tracks={songsWithVideo}
+          futureLineupSongs={futureLineupSongs}
           startIndex={libraryStartIndex}
           onClose={() => setLibraryOpen(false)}
         />

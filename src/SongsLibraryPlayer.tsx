@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { X, ListMusic, Shuffle, Repeat, Repeat1, Music2 } from "lucide-react";
 
-export interface LibraryTrack { id: string; title: string; artist: string; videoUrl: string; }
-interface Props { tracks: LibraryTrack[]; startIndex?: number; onClose: () => void; }
+export interface LibraryTrack { id: string; title: string; artist: string; videoUrl: string; isFutureLineup?: boolean; }
+interface Props { tracks: LibraryTrack[]; futureLineupSongs?: LibraryTrack[]; startIndex?: number; onClose: () => void; }
 declare global { interface Window { YT: any; } }
 
 function extractVideoId(url: string): string {
@@ -40,7 +40,7 @@ function MarqueeText({ text, className = "" }: { text: string; className?: strin
   );
 }
 
-export default function SongsLibraryPlayer({ tracks, startIndex = 0, onClose }: Props) {
+export default function SongsLibraryPlayer({ tracks, futureLineupSongs, startIndex = 0, onClose }: Props) {
   const [queue, setQueue] = useState<LibraryTrack[]>(() => {
     if (startIndex <= 0) return tracks;
     return [tracks[startIndex], ...tracks.slice(0, startIndex), ...tracks.slice(startIndex + 1)];
@@ -51,6 +51,19 @@ export default function SongsLibraryPlayer({ tracks, startIndex = 0, onClose }: 
   const [playerReady, setPlayerReady] = useState(false);
   const [isPlaying, setIsPlaying]     = useState(false);
   const [thumbErr, setThumbErr]       = useState(false);
+  const [showFutureOnly, setShowFutureOnly] = useState(false);
+
+  // futureLineupSongs from parent = ALL tagged songs (with or without video URL).
+  // futurePlayableTracks = only those with a video URL (for the actual playback queue).
+  const allFutureDisplayTracks = futureLineupSongs ?? tracks.filter(t => t.isFutureLineup);
+  const futurePlayableTracks   = allFutureDisplayTracks.filter(t => !!t.videoUrl);
+
+  // The active playback queue:
+  //   • showFutureOnly ON  → only future lineup songs that HAVE a video URL
+  //   • showFutureOnly OFF → full library (songs with video URLs)
+  const activeQueue = showFutureOnly && futurePlayableTracks.length > 0
+    ? futurePlayableTracks
+    : tracks;
   // On mobile, start in mini so the bottom-snap appears immediately (no backdrop tap-through bug)
   const [mode, setMode] = useState<PlayerMode>(() =>
     typeof window !== "undefined" && window.innerWidth < 640 ? "mini" : "full"
@@ -162,6 +175,34 @@ export default function SongsLibraryPlayer({ tracks, startIndex = 0, onClose }: 
     document.addEventListener("keydown", h); return () => document.removeEventListener("keydown", h);
   }, [mode, onClose]);
 
+  // Sync the playback queue when the showFutureOnly filter changes.
+  // Display list (shown in the library panel) uses allFutureDisplayTracks (all tagged songs).
+  // Playback queue only uses songs that actually have a video URL.
+  useEffect(() => {
+    const newQueue = showFutureOnly && futurePlayableTracks.length > 0
+      ? futurePlayableTracks
+      : tracks;
+    setQueue(newQueue);
+    setCurrentIdx(0);
+    loadedId.current = null;
+
+    // Force the player to load track[0] of the NEW queue immediately.
+    // We can't rely on the currentIdx effect because currentIdx may already
+    // be 0, so React won't see a change and the load effect won't re-fire.
+    const firstTrack = newQueue[0];
+    if (firstTrack && playerRef.current && playerReady) {
+      const vid = extractVideoId(firstTrack.videoUrl);
+      if (vid) {
+        loadedId.current = firstTrack.id;
+        setThumbErr(false);
+        playerRef.current.loadVideoById(vid);
+        setTimeout(() => { try { playerRef.current?.playVideo(); } catch { /**/ } }, 100);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showFutureOnly]);
+
+
   // Build a Fisher-Yates-shuffled pool of all indices except the current one
   const buildPool = (total: number, excludeIdx: number): number[] => {
     const arr = Array.from({ length: total }, (_, i) => i).filter(i => i !== excludeIdx);
@@ -204,10 +245,9 @@ export default function SongsLibraryPlayer({ tracks, startIndex = 0, onClose }: 
   const cycleLoop  = () => setLoopMode(m => m === "none" ? "all" : m === "all" ? "one" : "none");
   const togglePlay = () => { if (!playerRef.current) return; isPlaying ? playerRef.current.pauseVideo() : playerRef.current.playVideo(); };
 
-  const current = queue[currentIdx];
+  const current = queue[currentIdx] ?? queue[0] ?? null;
+  const videoId = current ? extractVideoId(current.videoUrl) : "";
   const hasPrev = currentIdx > 0, hasNext = currentIdx < queue.length - 1;
-  if (!current) return null;
-  const videoId = extractVideoId(current.videoUrl);
 
   const btnCls = "p-1.5 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-colors";
   const CycleBtn = () => (
@@ -227,10 +267,21 @@ export default function SongsLibraryPlayer({ tracks, startIndex = 0, onClose }: 
     </button>
   );
 
-  const TrackRow = ({ t, i }: { t: LibraryTrack; i: number }) => {
-    const vid = extractVideoId(t.videoUrl), isActive = i === currentIdx;
+  const TrackRow = ({ t, i, isDisplayOnly }: { t: LibraryTrack; i: number; isDisplayOnly?: boolean }) => {
+    const vid = extractVideoId(t.videoUrl), isActive = !isDisplayOnly && i === currentIdx;
+    const hasVideo = !!t.videoUrl;
     return (
-      <button onClick={() => setCurrentIdx(i)} className={`w-full flex items-center gap-3 px-4 py-3 transition-colors text-left border-l-2 border-b border-b-white/[0.12] ${ isActive ? "bg-emerald-600/[0.15] border-l-emerald-500" : "hover:bg-white/[0.04] border-l-transparent" }`}>
+      <button
+        onClick={() => { if (isDisplayOnly && !hasVideo) return; if (!isDisplayOnly) setCurrentIdx(i); }}
+        disabled={isDisplayOnly && !hasVideo}
+        className={`w-full flex items-center gap-3 px-4 py-3 transition-colors text-left border-l-2 border-b border-b-white/[0.12] ${
+          isActive
+            ? "bg-emerald-600/[0.15] border-l-emerald-500"
+            : isDisplayOnly && !hasVideo
+              ? "opacity-50 cursor-not-allowed border-l-transparent"
+              : "hover:bg-white/[0.04] border-l-transparent"
+        }`}
+      >
         <div className="relative w-12 h-12 rounded-xl overflow-hidden shrink-0 bg-gray-800">
           {vid ? <img src={ytThumb(vid)} alt={t.title} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Music2 size={16} className="text-gray-600" /></div>}
           {isActive && (
@@ -246,6 +297,9 @@ export default function SongsLibraryPlayer({ tracks, startIndex = 0, onClose }: 
         <div className="min-w-0 flex-1">
           <p className={`text-sm font-semibold truncate leading-tight ${isActive ? "text-white" : "text-gray-200"}`}>{t.title}</p>
           <p className="text-xs text-gray-500 truncate mt-0.5">{t.artist || "—"}</p>
+          {isDisplayOnly && !hasVideo && (
+            <span className="inline-block mt-1 text-[10px] font-semibold text-yellow-500/70 bg-yellow-500/10 px-1.5 py-0.5 rounded">No video link</span>
+          )}
         </div>
       </button>
     );
@@ -342,6 +396,7 @@ export default function SongsLibraryPlayer({ tracks, startIndex = 0, onClose }: 
               </div>
               {/* All controls in one row on the right */}
               <div className="flex items-center gap-2 shrink-0 flex-wrap">
+
                 <button onClick={toggleShuffle} className={`flex items-center gap-1.5 text-xs font-semibold rounded-lg px-3 py-1.5 transition-colors ${isShuffled ? "bg-emerald-600/20 text-emerald-400" : "bg-white/[0.06] text-white/50 hover:text-white hover:bg-white/[0.1]"}`}>
                   <Shuffle size={12} /><span className="hidden sm:inline">Shuffle</span>
                 </button>
@@ -362,14 +417,57 @@ export default function SongsLibraryPlayer({ tracks, startIndex = 0, onClose }: 
 
             {/* ROW 3 ─ Song Library — full width, fills all remaining space ─ */}
             <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-              <div className="px-5 py-2 border-b border-white/[0.1] bg-black/20 shrink-0">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Song Library</p>
+              {/* Future Line-Up toggle — full-width row, always visible on all screen sizes */}
+              <button
+                onClick={() => {
+                  setShowFutureOnly(v => !v);
+                  setCurrentIdx(0);
+                  setIsShuffled(false);
+                  shufflePool.current = [];
+                }}
+                className={`w-full shrink-0 flex items-center gap-3 px-5 py-3 transition-all border-b ${
+                  showFutureOnly
+                    ? "bg-green-500/[0.08] border-green-500/30"
+                    : "bg-black/10 border-white/[0.07] hover:bg-white/[0.04]"
+                }`}
+              >
+                {/* Checkbox */}
+                <div className={`w-4 h-4 rounded flex items-center justify-center border-2 transition-colors shrink-0 ${
+                  showFutureOnly ? "bg-green-500 border-green-500" : "border-gray-600"
+                }`}>
+                  {showFutureOnly && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
+                </div>
+                {/* Label */}
+                <span className={`text-sm font-bold flex-1 text-left transition-colors ${
+                  showFutureOnly ? "text-green-400" : "text-white/50"
+                }`}>All Future Line-Up</span>
+                {/* Count badge */}
+                {futurePlayableTracks.length > 0 && (
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                    showFutureOnly ? "bg-green-500/30 text-green-300" : "bg-white/10 text-white/40"
+                  }`}>{futurePlayableTracks.length} song{futurePlayableTracks.length !== 1 ? "s" : ""}</span>
+                )}
+              </button>
+              {/* Playlist label */}
+              <div className="px-5 py-2 border-b border-white/[0.1] bg-black/20 shrink-0 flex items-center justify-between">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                  {showFutureOnly && allFutureDisplayTracks.length > 0 ? (
+                    <span className="text-green-400">Future Line-Up · {allFutureDisplayTracks.length} song{allFutureDisplayTracks.length !== 1 ? "s" : ""}</span>
+                  ) : showFutureOnly && allFutureDisplayTracks.length === 0 ? (
+                    <span className="text-yellow-500/80">Future Line-Up · No songs tagged yet</span>
+                  ) : (
+                    `Song Library`
+                  )}
+                </p>
               </div>
               <div
                 className="flex-1 min-h-0 overflow-y-auto divide-y divide-white/[0.1]"
                 style={{ WebkitOverflowScrolling: "touch", scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.08) transparent" }}
               >
-                {queue.map((t, i) => <React.Fragment key={t.id + i}><TrackRow t={t} i={i} /></React.Fragment>)}
+                {showFutureOnly
+                  ? allFutureDisplayTracks.map((t, i) => <React.Fragment key={t.id + i}><TrackRow t={t} i={i} isDisplayOnly={true} /></React.Fragment>)
+                  : queue.map((t, i) => <React.Fragment key={t.id + i}><TrackRow t={t} i={i} /></React.Fragment>)
+                }
               </div>
             </div>
           </>
@@ -422,6 +520,10 @@ export default function SongsLibraryPlayer({ tracks, startIndex = 0, onClose }: 
       </div>
     </>
   );
+
+  // If there's nothing to play yet (queue initialising), render nothing gracefully.
+  // Do NOT return null before hooks — that violates React's rules.
+  if (!current || queue.length === 0) return null;
 
   return createPortal(playerUI, document.body);
 }
