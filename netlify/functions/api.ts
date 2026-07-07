@@ -1126,94 +1126,64 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
     }
 
 
-    // GET /api/release-notes — auto-generate What's New from latest GitHub commits via Gemini AI
-    // ?topic=  (optional) — if set, AI generates PURELY from the topic (no commits used).
-    //                       If empty, pull from recent GitHub commits for a general changelog.
+    // GET /api/release-notes — auto-generate "What's New" from recent GitHub commits via Gemini AI
     if (rawPath === "/release-notes" && method === "GET") {
         try {
-            const topic = (event.queryStringParameters?.topic ?? "").trim();
+            const REPO = "fullsnackdevj/remix_-worshipflow--1-";
+
+            // 1. Fetch recent commits from GitHub
+            let allCommitMessages: string[] = [];
+            try {
+                const ghRes = await fetch(
+                    `https://api.github.com/repos/${REPO}/commits?per_page=50`,
+                    { headers: { "Accept": "application/vnd.github.v3+json", "User-Agent": "WorshipFlow/1.0" } }
+                );
+                if (ghRes.ok) {
+                    const commits: any[] = await ghRes.json();
+                    allCommitMessages = commits
+                        .map((c: any) => c.commit.message.split("\n")[0].trim())
+                        .filter((msg: string) => msg.length > 5);
+                }
+            } catch (_) { /* GitHub unavailable */ }
+
+            if (allCommitMessages.length === 0) {
+                throw new Error("Could not load recent commits from GitHub");
+            }
+
+            // 2. Ask Gemini to translate commits into user-friendly What's New content
             const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-            let prompt: string;
 
-            if (topic) {
-                // ── TOPIC MODE ────────────────────────────────────────────────────────────
-                // The admin typed a specific feature/topic. Generate 100% from that topic.
-                // Do NOT include commit messages — they belong to other features and will
-                // cause the AI to generate off-topic bullets.
-                prompt = `You are writing a "What's New" broadcast announcement for WorshipFlow — a church worship team management web app.
+            const prompt = `You are writing a "What's New" announcement for WorshipFlow — a church worship team management web app.
 
-The admin wants to announce this specific feature or topic to the team: "${topic}"
+WorshipFlow helps worship teams manage songs, service schedules, team members, rehearsals, live stage displays, and team communication.
 
-WorshipFlow is used by worship team members to manage songs, schedules, team members, rehearsals, and service planning.
+Here are the most recent code changes from the development team (raw git commit messages):
+${allCommitMessages.map((m, i) => `${i + 1}. ${m}`).join("\n")}
 
-Your job:
-1. Write a short, punchy, exciting headline about "${topic}" (6-9 words max). Make it feel like a product launch.
-2. Write ONE sentence that introduces what this feature does for the team.
-3. Write 4 to 6 specific bullet points about what team members can actually DO with "${topic}". Each bullet is a real capability or action the user can take.
+Your job is to write a clear, friendly "What's New" update that the admin will broadcast to the worship team.
 
-Bullet rules:
-- Each bullet describes a concrete action or benefit — what does the user actually DO or GET?
-- Start each bullet with a present-tense action verb (e.g. Tag, Filter, Play, Track, Mark, View, Toggle, Switch, Practice)
-- Under 20 words per bullet
-- No technical jargon — write for non-technical church volunteers
-- Do NOT say "was added", "has been", "is now available" — describe it as an existing feature
-- Do NOT mention git, code, commits, or engineering details
-- Do NOT use emojis
-- Do NOT use markdown formatting (no **, no ##, no dashes as bullets)
+Step 1 — Read through all the commits and identify what meaningful new features or improvements were made. Ignore: merge commits, version bumps, spelling fixes, internal refactoring, CI changes.
 
-Output ONLY in this exact format, nothing else before or after:
-TITLE: [your headline here]
-MESSAGE: [your one-sentence intro here]
-BULLET: [bullet 1]
-BULLET: [bullet 2]
-BULLET: [bullet 3]
-BULLET: [bullet 4]
-BULLET: [optional bullet 5]
-BULLET: [optional bullet 6]`;
+Step 2 — Write the announcement in a way that non-technical church volunteers will understand. Use everyday language. Focus on what the user can NOW DO or what they will NOTICE.
 
-            } else {
-                // ── GENERAL CHANGELOG MODE ────────────────────────────────────────────────
-                // No topic — pull recent commits and summarise the biggest user-visible changes.
-                const REPO = "fullsnackdevj/remix_-worshipflow--1-";
-                let messages: string[] = [];
-                try {
-                    const ghRes = await fetch(
-                        `https://api.github.com/repos/${REPO}/commits?per_page=40`,
-                        { headers: { "Accept": "application/vnd.github.v3+json", "User-Agent": "WorshipFlow/1.0" } }
-                    );
-                    if (ghRes.ok) {
-                        const commits: any[] = await ghRes.json();
-                        const skipPatterns = /^(merge|revert|bump|chore|wip|ci:|docs:|style:|test:|refactor:|fix:)/i;
-                        messages = commits
-                            .map((c: any) => c.commit.message.split("\n")[0].trim())
-                            .filter((msg: string) => msg.length > 5 && !skipPatterns.test(msg))
-                            .slice(0, 20);
-                    }
-                } catch (_ghErr) { /* GitHub unavailable — will fail gracefully below */ }
+Step 3 — Output exactly in this format:
 
-                if (messages.length === 0) throw new Error("No meaningful commits found and no topic provided");
-
-                prompt = `You are writing a "What's New" announcement for WorshipFlow, a church worship team management app.
-
-Based on these recent git commit messages, identify the biggest visible changes only:
-${messages.map((m: string, i: number) => `${i + 1}. ${m}`).join("\n")}
-
-Include ONLY: new modules, major features, meaningful UI/UX changes, new capabilities.
-Skip entirely: bug fixes, perf tweaks, refactors, minor adjustments, anything prefixed fix:/style:/hotfix.
+TITLE: [A short exciting headline, 5-8 words, about the most significant update]
+MESSAGE: [One warm, friendly sentence that introduces what this update brings to the team]
+BULLET: [Feature or improvement 1 — describe what the user can now do, under 18 words]
+BULLET: [Feature or improvement 2 — under 18 words]
+BULLET: [Feature or improvement 3 — under 18 words]
+BULLET: [Feature or improvement 4 — under 18 words, optional]
+BULLET: [Feature or improvement 5 — under 18 words, optional]
 
 Rules:
-- Write 3 to 5 bullets — only for big user-visible updates
+- Write 3 to 5 bullets total
+- Each bullet must describe something the USER experiences or can do — not a technical fix
+- Start each bullet with a verb (e.g. Play, Tag, Filter, View, Browse, Track, Manage, Switch, Use)
+- Do NOT include bullets about bug fixes, code refactors, or internal changes
 - Do NOT use emojis
-- Do NOT use markdown
-- Bullets start with a past-tense verb, under 15 words
-
-Output ONLY in this exact format:
-TITLE: What's New in WorshipFlow
-MESSAGE: Here's what's been added and improved for your team:
-BULLET: [first major update]
-BULLET: [second major update]
-BULLET: [...]`;
-            }
+- Do NOT use markdown or special formatting
+- Write as if talking to a worship team member who is not technical`;
 
             const aiRes = await ai.models.generateContent({
                 model: "gemini-2.0-flash",
@@ -1221,22 +1191,22 @@ BULLET: [...]`;
             });
 
             const raw = aiRes.text ?? "";
-            const titleMatch  = raw.match(/^TITLE:\s*(.+)$/m);
+            const titleMatch   = raw.match(/^TITLE:\s*(.+)$/m);
             const messageMatch = raw.match(/^MESSAGE:\s*(.+)$/m);
-            const bullets = [...raw.matchAll(/^BULLET:\s*(.+)$/gm)].map((m: RegExpMatchArray) => m[1].trim());
+            const bullets      = [...raw.matchAll(/^BULLET:\s*(.+)$/gm)].map((m: RegExpMatchArray) => m[1].trim());
 
             const today = new Date().toLocaleDateString("en", { month: "long", day: "numeric", year: "numeric" });
             return json(200, {
-                title:        titleMatch?.[1]?.trim()  ?? `What's New — ${today}`,
-                message:      messageMatch?.[1]?.trim() ?? "Here's what's new in WorshipFlow:",
-                bulletPoints: bullets.length ? bullets : ["Various updates and improvements have been applied."],
+                title:        titleMatch?.[1]?.trim()   ?? `What's New — ${today}`,
+                message:      messageMatch?.[1]?.trim() ?? "Here's what's been updated for your team:",
+                bulletPoints: bullets.length ? bullets : ["New updates and improvements have been applied to the app."],
             });
+
         } catch (e) {
             console.error("Release notes error:", e);
-            return json(500, { error: "Could not generate release notes" });
+            return json(500, { error: "Could not generate release notes. Please try again." });
         }
     }
-
 
 
     // ── GET /api/lineup-listens?key=...&key=... — fetch listen data for track keys

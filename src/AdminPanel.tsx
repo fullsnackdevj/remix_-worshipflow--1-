@@ -506,22 +506,15 @@ export default function AdminPanel({
                 setBBullets([]);
                 onToast?.("success", "✨ Maintenance template generated!");
             } else {
-                // What's New:
-                // • Read the TOPIC from bTitle (field 1 — what the admin typed as the title/topic).
-                // • If bTitle has content → send it as the topic, AI generates a headline + bullets from it.
-                // • If bTitle is empty → pull curated highlights from recent commits (general mode).
-                const topic = bTitle.trim();
-                const url = topic
-                    ? `/api/release-notes?topic=${encodeURIComponent(topic)}`
-                    : "/api/release-notes";
-
-                const res = await fetch(url);
+                // What's New — always generate from recent app updates (commits).
+                // The AI writes a clean, user-friendly headline + bullets about what's new.
+                const res = await fetch("/api/release-notes");
                 if (!res.ok) throw new Error(`Server returned ${res.status}`);
                 const data: { title?: string; message?: string; bulletPoints?: string[]; error?: string } = await res.json();
                 if (data.error) throw new Error(data.error);
 
                 const newTitle   = data.title?.trim()   || "What's New in WorshipFlow";
-                const newMsg     = data.message?.trim() || "Here's what changed in the latest update:";
+                const newMsg     = data.message?.trim() || "Here's what's been updated for your team:";
                 const newBullets = Array.isArray(data.bulletPoints) && data.bulletPoints.length > 0
                     ? data.bulletPoints
                     : [];
@@ -529,10 +522,7 @@ export default function AdminPanel({
                 setBTitle(newTitle);
                 setBMessage(newMsg);
                 if (newBullets.length > 0) setBBullets(newBullets);
-                onToast?.("success", topic
-                    ? `✨ Generated ${newBullets.length} bullet points for "${topic}"!`
-                    : `✨ Generated ${newBullets.length} feature highlights!`
-                );
+                onToast?.("success", `✨ Generated ${newBullets.length} highlights from recent updates!`);
             }
         } catch (err: any) {
             console.error("[autoGenerate] Failed:", err);
