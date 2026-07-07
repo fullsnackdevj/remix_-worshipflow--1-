@@ -1131,29 +1131,35 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
         try {
             const REPO = "fullsnackdevj/remix_-worshipflow--1-";
 
-            // 1. Fetch commits — take ONLY the 10 most recent (newest first)
+            // 1. Fetch the 10 most recent commits (newest first)
             let recentCommits: string[] = [];
+            let githubStatus = 0;
             try {
                 const ghRes = await fetch(
                     `https://api.github.com/repos/${REPO}/commits?per_page=20`,
                     { headers: { "Accept": "application/vnd.github.v3+json", "User-Agent": "WorshipFlow/1.0" } }
                 );
+                githubStatus = ghRes.status;
                 if (ghRes.ok) {
                     const commits: any[] = await ghRes.json();
-                    // Keep only first 10 (newest), filter out pure infra noise
                     const skipPatterns = /^(merge pull|merged|bump version)/i;
                     recentCommits = commits
                         .map((c: any) => c.commit.message.split("\n")[0].trim())
                         .filter((msg: string) => msg.length > 5 && !skipPatterns.test(msg))
-                        .slice(0, 10); // HARD CAP — only the 10 most recent
+                        .slice(0, 10);
+                } else {
+                    console.error(`[release-notes] GitHub returned ${ghRes.status}`);
                 }
-            } catch (_) { /* GitHub unavailable */ }
-
-            if (recentCommits.length === 0) {
-                throw new Error("Could not load recent commits from GitHub");
+            } catch (ghErr) {
+                console.error("[release-notes] GitHub fetch failed:", ghErr);
             }
 
-            // 2. Ask Gemini — ONLY about these exact recent commits, nothing else
+            if (recentCommits.length === 0) {
+                // GitHub rate-limited or unavailable — return informative error
+                return json(503, { error: `GitHub API unavailable (status ${githubStatus}). Please wait a moment and try again.` });
+            }
+
+            // 2. Ask Gemini to translate commits into friendly "What's New" content
             const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
             const prompt = `You are writing a "What's New" broadcast for WorshipFlow — a church worship team management web app used by worship team members.
@@ -1186,7 +1192,16 @@ Rules:
                 contents: [{ role: "user", parts: [{ text: prompt }] }],
             });
 
-            const raw = aiRes.text ?? "";
+            // Read response using the correct SDK pattern (same as other AI calls in this file)
+            let raw = "";
+            try {
+                raw = aiRes.candidates?.[0]?.content?.parts
+                    ?.filter((p: any) => typeof p.text === "string")
+                    ?.map((p: any) => p.text as string)
+                    ?.join("") ?? "";
+                if (!raw) raw = (aiRes as any).text ?? "";
+            } catch { raw = (aiRes as any).text ?? ""; }
+
             const titleMatch   = raw.match(/^TITLE:\s*(.+)$/m);
             const messageMatch = raw.match(/^MESSAGE:\s*(.+)$/m);
             const bullets      = [...raw.matchAll(/^BULLET:\s*(.+)$/gm)].map((m: RegExpMatchArray) => m[1].trim());
@@ -1198,11 +1213,12 @@ Rules:
                 bulletPoints: bullets.length ? bullets : ["New updates and improvements have been applied to the app."],
             });
 
-        } catch (e) {
-            console.error("Release notes error:", e);
-            return json(500, { error: "Could not generate release notes. Please try again." });
+        } catch (e: any) {
+            console.error("[release-notes] Error:", e?.message ?? e);
+            return json(500, { error: `Could not generate release notes: ${e?.message ?? "Unknown error"}` });
         }
     }
+
 
 
     // ── GET /api/lineup-listens?key=...&key=... — fetch listen data for track keys

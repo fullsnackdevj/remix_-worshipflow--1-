@@ -507,11 +507,11 @@ export default function AdminPanel({
                 onToast?.("success", "✨ Maintenance template generated!");
             } else {
                 // What's New — always generate from recent app updates (commits).
-                // The AI writes a clean, user-friendly headline + bullets about what's new.
                 const res = await fetch("/api/release-notes");
-                if (!res.ok) throw new Error(`Server returned ${res.status}`);
                 const data: { title?: string; message?: string; bulletPoints?: string[]; error?: string } = await res.json();
-                if (data.error) throw new Error(data.error);
+
+                // Surface the real server error message (e.g. GitHub rate-limit) to the user
+                if (!res.ok || data.error) throw new Error(data.error ?? `Server returned ${res.status}`);
 
                 const newTitle   = data.title?.trim()   || "What's New in WorshipFlow";
                 const newMsg     = data.message?.trim() || "Here's what's been updated for your team:";
