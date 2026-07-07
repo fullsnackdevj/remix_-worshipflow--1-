@@ -1155,29 +1155,36 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
             }
 
             if (recentCommits.length === 0) {
-                // GitHub rate-limited or unavailable — return informative error
                 return json(503, { error: `GitHub API unavailable (status ${githubStatus}). Please wait a moment and try again.` });
             }
 
-            // 2. Ask Gemini to translate commits into friendly "What's New" content
-            const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+            // Helper: clean a raw commit message into readable text
+            const cleanCommit = (msg: string): string => msg
+                .replace(/^(feat|fix|chore|refactor|style|docs|test|perf|ci|build|hotfix)(\([^)]+\))?:\s*/i, "")
+                .replace(/^checkpoint:\s*/i, "")
+                .replace(/ -- .+$/, "")
+                .trim()
+                .replace(/^(.)/, (c: string) => c.toUpperCase());
 
-            const prompt = `You are writing a "What's New" broadcast for WorshipFlow — a church worship team management web app used by worship team members.
+            // 2. Try Gemini AI — gemini-1.5-flash has a separate quota from gemini-2.0-flash
+            let aiSuccess = false;
+            try {
+                const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+                const prompt = `You are writing a "What's New" broadcast for WorshipFlow — a church worship team management web app used by worship team members.
 
 THESE ARE THE ONLY RECENT CHANGES. Write ONLY about these (listed newest first):
 ${recentCommits.map((m, i) => `${i + 1}. ${m}`).join("\n")}
 
 Do NOT invent features. Do NOT write about anything not in this list.
-
 Translate these developer commit messages into plain language a non-technical church volunteer will understand.
 Skip any that are purely internal fixes, refactors, or typo corrections.
 
 Output ONLY in this exact format:
-TITLE: [Short exciting headline, 5-8 words, about the most significant update in the list above]
+TITLE: [Short exciting headline, 5-8 words, about the most significant update]
 MESSAGE: [One friendly sentence introducing what's new]
-BULLET: [What the user can now do — from the list above — under 18 words, start with a verb]
-BULLET: [Next update from the list — under 18 words]
-BULLET: [Next update from the list — under 18 words]
+BULLET: [What the user can now do — under 18 words, start with a verb]
+BULLET: [Next update — under 18 words]
+BULLET: [Next update — under 18 words]
 BULLET: [optional 4th — under 18 words]
 BULLET: [optional 5th — under 18 words]
 
@@ -1187,37 +1194,59 @@ Rules:
 - No emojis, no markdown, no asterisks
 - Write for a non-technical worship team member`;
 
-            const aiRes = await ai.models.generateContent({
-                model: "gemini-2.0-flash",
-                contents: [{ role: "user", parts: [{ text: prompt }] }],
-            });
+                const aiRes = await ai.models.generateContent({
+                    model: "gemini-1.5-flash",
+                    contents: [{ role: "user", parts: [{ text: prompt }] }],
+                });
 
-            // Read response using the correct SDK pattern (same as other AI calls in this file)
-            let raw = "";
-            try {
-                raw = aiRes.candidates?.[0]?.content?.parts
-                    ?.filter((p: any) => typeof p.text === "string")
-                    ?.map((p: any) => p.text as string)
-                    ?.join("") ?? "";
-                if (!raw) raw = (aiRes as any).text ?? "";
-            } catch { raw = (aiRes as any).text ?? ""; }
+                let raw = "";
+                try {
+                    raw = aiRes.candidates?.[0]?.content?.parts
+                        ?.filter((p: any) => typeof p.text === "string")
+                        ?.map((p: any) => p.text as string)
+                        ?.join("") ?? "";
+                    if (!raw) raw = (aiRes as any).text ?? "";
+                } catch { raw = (aiRes as any).text ?? ""; }
 
-            const titleMatch   = raw.match(/^TITLE:\s*(.+)$/m);
-            const messageMatch = raw.match(/^MESSAGE:\s*(.+)$/m);
-            const bullets      = [...raw.matchAll(/^BULLET:\s*(.+)$/gm)].map((m: RegExpMatchArray) => m[1].trim());
+                const titleMatch   = raw.match(/^TITLE:\s*(.+)$/m);
+                const messageMatch = raw.match(/^MESSAGE:\s*(.+)$/m);
+                const bullets      = [...raw.matchAll(/^BULLET:\s*(.+)$/gm)].map((m: RegExpMatchArray) => m[1].trim());
 
-            const today = new Date().toLocaleDateString("en", { month: "long", day: "numeric", year: "numeric" });
-            return json(200, {
-                title:        titleMatch?.[1]?.trim()   ?? `What's New — ${today}`,
-                message:      messageMatch?.[1]?.trim() ?? "Here's what's been updated for your team:",
-                bulletPoints: bullets.length ? bullets : ["New updates and improvements have been applied to the app."],
-            });
+                if (bullets.length > 0) {
+                    aiSuccess = true;
+                    const today = new Date().toLocaleDateString("en", { month: "long", day: "numeric", year: "numeric" });
+                    return json(200, {
+                        title:        titleMatch?.[1]?.trim()   ?? `What's New — ${today}`,
+                        message:      messageMatch?.[1]?.trim() ?? "Here's what's been updated for your team:",
+                        bulletPoints: bullets,
+                    });
+                }
+            } catch (aiErr: any) {
+                console.warn("[release-notes] Gemini unavailable, falling back to commit parsing:", aiErr?.message);
+            }
+
+            // 3. Fallback: direct commit parsing — always use 5 most recent, no prefix filtering
+            if (!aiSuccess) {
+                const fallbackBullets = recentCommits
+                    .slice(0, 5)
+                    .map(cleanCommit)
+                    .filter((b: string) => b.length > 5);
+
+                const today = new Date().toLocaleDateString("en", { month: "long", day: "numeric", year: "numeric" });
+                return json(200, {
+                    title:        `What's New — ${today}`,
+                    message:      "Here's what's been updated for your team:",
+                    bulletPoints: fallbackBullets.length > 0 ? fallbackBullets : ["New updates and improvements have been applied."],
+                });
+            }
+
 
         } catch (e: any) {
             console.error("[release-notes] Error:", e?.message ?? e);
             return json(500, { error: `Could not generate release notes: ${e?.message ?? "Unknown error"}` });
         }
     }
+
 
 
 

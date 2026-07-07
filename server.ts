@@ -1358,82 +1358,123 @@ app.get("/api/broadcasts/all", async (req, res) => {
   } catch (e) { res.status(500).json([]); }
 });
 
-// GET /api/release-notes — generate What's New content
-// If ?topic= is provided: keyword-search curated release notes for matching highlights
-// Otherwise: return the latest 8 highlights from public/release-notes.json
+// GET /api/release-notes — generate What's New from recent GitHub commits via Gemini AI
+// Falls back to clean commit parsing if Gemini quota is exceeded
 app.get("/api/release-notes", async (req, res) => {
+  const REPO = "fullsnackdevj/remix_-worshipflow--1-";
+
+  // 1. Fetch the 10 most recent commits from GitHub
+  let recentCommits: string[] = [];
+  let githubStatus = 0;
   try {
-    const fs = await import("fs");
-    const path = await import("path");
-    const filePath = path.join(process.cwd(), "public", "release-notes.json");
-    const raw = fs.readFileSync(filePath, "utf-8");
-    const data = JSON.parse(raw);
-
-    // Collect ALL highlights across all releases (newest first)
-    const allHighlights: string[] = [];
-    for (const release of (data.releases ?? [])) {
-      for (const h of (release.highlights ?? [])) {
-        allHighlights.push(h);
-      }
+    const ghRes = await fetch(
+      `https://api.github.com/repos/${REPO}/commits?per_page=20`,
+      { headers: { "Accept": "application/vnd.github.v3+json", "User-Agent": "WorshipFlow/1.0" } }
+    );
+    githubStatus = ghRes.status;
+    if (ghRes.ok) {
+      const commits: any[] = await ghRes.json();
+      const skipPatterns = /^(merge pull|merged|bump version)/i;
+      recentCommits = commits
+        .map((c: any) => c.commit.message.split("\n")[0].trim())
+        .filter((msg: string) => msg.length > 5 && !skipPatterns.test(msg))
+        .slice(0, 10);
+    } else {
+      console.error(`[release-notes] GitHub returned ${ghRes.status}`);
     }
+  } catch (ghErr) {
+    console.error("[release-notes] GitHub fetch failed:", ghErr);
+  }
 
-    const rawTopic = (req.query.topic as string || "").trim();
+  if (recentCommits.length === 0) {
+    return res.status(503).json({ error: `GitHub API unavailable (status ${githubStatus}). Please wait a moment and try again.` });
+  }
 
-    if (rawTopic) {
-      // ── Keyword mode: search highlights that match any keyword from the typed topic ──
-      // Split typed text into individual keywords (words 3+ chars long)
-      const keywords = rawTopic
-        .toLowerCase()
-        .split(/[\s,\-\/]+/)
-        .map(k => k.replace(/[^a-z0-9]/g, ""))
-        .filter(k => k.length >= 3);
+  // Helper: clean a commit message into a readable bullet
+  const cleanCommit = (msg: string): string => {
+    return msg
+      .replace(/^(feat|fix|chore|refactor|style|docs|test|perf|ci|build|hotfix)(\([^)]+\))?:\s*/i, "")
+      .replace(/^checkpoint:\s*/i, "")
+      .replace(/ -- .+$/, "")
+      .trim()
+      .replace(/^(.)/, (c) => c.toUpperCase());
+  };
 
-      let matched: string[] = [];
+  // 2. Try Gemini AI — use gemini-1.5-flash (separate quota from gemini-2.0-flash)
+  try {
+    const { GoogleGenAI } = await import("@google/genai");
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-      if (keywords.length > 0) {
-        // Score each highlight by how many keywords it contains
-        const scored = allHighlights.map(h => {
-          const lower = h.toLowerCase();
-          const score = keywords.filter(k => lower.includes(k)).length;
-          return { h, score };
-        });
+    const prompt = `You are writing a "What's New" broadcast for WorshipFlow — a church worship team management web app used by worship team members.
 
-        // Take highlights with score > 0, sorted by score desc
-        matched = scored
-          .filter(x => x.score > 0)
-          .sort((a, b) => b.score - a.score)
-          .map(x => x.h)
-          .slice(0, 8);
-      }
+THESE ARE THE ONLY RECENT CHANGES. Write ONLY about these (listed newest first):
+${recentCommits.map((m, i) => `${i + 1}. ${m}`).join("\n")}
 
-      // If no matches found, fall back to all highlights
-      const bulletPoints = matched.length > 0 ? matched : allHighlights.slice(0, 8);
+Do NOT invent features. Do NOT write about anything not in this list.
+Translate these developer commit messages into plain language a non-technical church volunteer will understand.
+Skip any that are purely internal fixes, refactors, or typo corrections.
 
-      // Generate a title from the typed topic
+Output ONLY in this exact format:
+TITLE: [Short exciting headline, 5-8 words, about the most significant update]
+MESSAGE: [One friendly sentence introducing what's new]
+BULLET: [What the user can now do — under 18 words, start with a verb]
+BULLET: [Next update — under 18 words]
+BULLET: [Next update — under 18 words]
+BULLET: [optional 4th — under 18 words]
+BULLET: [optional 5th — under 18 words]
+
+Rules:
+- Write 3 to 5 bullets ONLY from the commits listed above
+- Start each bullet with an action verb (Play, Tag, Filter, View, Use, Switch, Browse, Manage, etc.)
+- No emojis, no markdown, no asterisks
+- Write for a non-technical worship team member`;
+
+    const aiRes = await ai.models.generateContent({
+      model: "gemini-1.5-flash",
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+    });
+
+    let raw = "";
+    try {
+      raw = aiRes.candidates?.[0]?.content?.parts
+        ?.filter((p: any) => typeof p.text === "string")
+        ?.map((p: any) => p.text as string)
+        ?.join("") ?? "";
+      if (!raw) raw = (aiRes as any).text ?? "";
+    } catch { raw = (aiRes as any).text ?? ""; }
+
+    const titleMatch   = raw.match(/^TITLE:\s*(.+)$/m);
+    const messageMatch = raw.match(/^MESSAGE:\s*(.+)$/m);
+    const bullets      = [...raw.matchAll(/^BULLET:\s*(.+)$/gm)].map((m: any) => m[1].trim());
+
+    if (bullets.length > 0) {
       const today = new Date().toLocaleDateString("en", { month: "long", day: "numeric", year: "numeric" });
-      const titleTopic = rawTopic.length > 45 ? rawTopic.slice(0, 45) + "…" : rawTopic;
-      const title = `What's New — ${titleTopic}`;
-
       return res.json({
-        title,
-        message: `Here's what's new in WorshipFlow — ${rawTopic}:`,
-        bulletPoints,
+        title:        titleMatch?.[1]?.trim()   ?? `What's New — ${today}`,
+        message:      messageMatch?.[1]?.trim() ?? "Here's what's been updated for your team:",
+        bulletPoints: bullets,
       });
     }
-
-    // ── Curated mode: return latest 8 highlights ────────────────────────────
-    const bulletPoints = allHighlights.slice(0, 8);
-    const today = new Date().toLocaleDateString("en", { month: "long", day: "numeric", year: "numeric" });
-
-    res.json({
-      title: data.title ?? `What's New — ${today}`,
-      message: data.message ?? "Here's what's new in WorshipFlow:",
-      bulletPoints,
-    });
-  } catch (e) {
-    res.status(500).json({ error: "Could not load release notes" });
+    // AI returned empty/malformed — fall through to commit parsing
+  } catch (aiErr: any) {
+    console.warn("[release-notes] Gemini unavailable, falling back to commit parsing:", aiErr?.message);
   }
+
+  // 3. Fallback: clean commit parsing — always use the 5 most recent regardless of prefix
+  const fallbackBullets = recentCommits
+    .slice(0, 5)
+    .map(cleanCommit)
+    .filter(b => b.length > 5);
+
+  const today = new Date().toLocaleDateString("en", { month: "long", day: "numeric", year: "numeric" });
+  return res.json({
+    title:        `What's New — ${today}`,
+    message:      "Here's what's been updated for your team:",
+    bulletPoints: fallbackBullets.length > 0 ? fallbackBullets : ["New updates and improvements have been applied."],
+  });
 });
+
+
 
 // POST /api/broadcasts — create a new broadcast (admin only)
 app.post("/api/broadcasts", async (req, res) => {
