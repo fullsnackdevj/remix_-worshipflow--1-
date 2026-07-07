@@ -507,10 +507,10 @@ export default function AdminPanel({
                 onToast?.("success", "✨ Maintenance template generated!");
             } else {
                 // What's New:
-                // • If the admin typed something in the message box → send it as the topic,
-                //   the server will parse it into structured bullet points + auto-title.
-                // • If the message box is empty → pull curated highlights from release-notes.json.
-                const topic = bMessage.trim();
+                // • Read the TOPIC from bTitle (field 1 — what the admin typed as the title/topic).
+                // • If bTitle has content → send it as the topic, AI generates a headline + bullets from it.
+                // • If bTitle is empty → pull curated highlights from recent commits (general mode).
+                const topic = bTitle.trim();
                 const url = topic
                     ? `/api/release-notes?topic=${encodeURIComponent(topic)}`
                     : "/api/release-notes";
@@ -530,7 +530,7 @@ export default function AdminPanel({
                 setBMessage(newMsg);
                 if (newBullets.length > 0) setBBullets(newBullets);
                 onToast?.("success", topic
-                    ? `✨ Formatted ${newBullets.length} bullet points from your notes!`
+                    ? `✨ Generated ${newBullets.length} bullet points for "${topic}"!`
                     : `✨ Generated ${newBullets.length} feature highlights!`
                 );
             }
@@ -993,10 +993,11 @@ export default function AdminPanel({
                             </div>
 
                             {/* Title */}
-                            <input value={bTitle} onChange={e => setBTitle(e.target.value)} onKeyDown={e => e.stopPropagation()} placeholder={bType === "maintenance" ? "e.g. App Under Maintenance" : "e.g. New Features Added!"} className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                            <input value={bTitle} onChange={e => setBTitle(e.target.value)} onKeyDown={e => e.stopPropagation()} placeholder={bType === "maintenance" ? "e.g. App Under Maintenance" : "e.g. Future Line-Up, Song Library Player…"} className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
 
                             {/* Message */}
-                            <AutoTextarea value={bMessage} onChange={e => setBMessage(e.target.value)} placeholder={bType === "whats_new" ? "Type your update notes here, then click Auto-generate to format them into bullets… or leave empty to pull from release notes." : "Optional context message..."} minRows={2} className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                            <AutoTextarea value={bMessage} onChange={e => setBMessage(e.target.value)} placeholder={bType === "whats_new" ? "Optional: add context or extra notes. Auto-generate uses the title above as the topic." : "Optional context message..."} minRows={2} className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+
 
                             {/* Bullet points (What's New only) */}
                             {bType === "whats_new" && (

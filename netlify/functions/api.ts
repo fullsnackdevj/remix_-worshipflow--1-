@@ -1133,37 +1133,44 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
             const REPO = "fullsnackdevj/remix_-worshipflow--1-";
             const topic = (event.queryStringParameters?.topic ?? "").trim();
 
-            // 1. Fetch recent commits from public GitHub API
-            const ghRes = await fetch(
-                `https://api.github.com/repos/${REPO}/commits?per_page=40`,
-                { headers: { "Accept": "application/vnd.github.v3+json", "User-Agent": "WorshipFlow/1.0" } }
-            );
-            if (!ghRes.ok) throw new Error(`GitHub API returned ${ghRes.status}`);
-            const commits: any[] = await ghRes.json();
+            // 1. Fetch recent commits from public GitHub API (best-effort — don't fail if unavailable)
+            let messages: string[] = [];
+            try {
+                const ghRes = await fetch(
+                    `https://api.github.com/repos/${REPO}/commits?per_page=40`,
+                    { headers: { "Accept": "application/vnd.github.v3+json", "User-Agent": "WorshipFlow/1.0" } }
+                );
+                if (ghRes.ok) {
+                    const commits: any[] = await ghRes.json();
+                    const skipPatterns = /^(merge|revert|bump|chore|wip|ci:|docs:|style:|test:|refactor:)/i;
+                    messages = commits
+                        .map((c: any) => c.commit.message.split("\n")[0].trim())
+                        .filter((msg: string) => msg.length > 5 && !skipPatterns.test(msg))
+                        .slice(0, 20);
+                }
+            } catch (_ghErr) {
+                // GitHub unavailable — proceed without commits (topic-only mode still works)
+            }
 
-            // 2. Clean + filter commit messages (skip merges, reverts, chores, version bumps)
-            const skipPatterns = /^(merge|revert|bump|chore|wip|ci:|docs:|style:|test:|refactor:)/i;
-            const messages = commits
-                .map((c: any) => c.commit.message.split("\n")[0].trim())
-                .filter((msg: string) => msg.length > 5 && !skipPatterns.test(msg))
-                .slice(0, 20);
+            // If no topic AND no commits — nothing to generate from
+            if (!topic && messages.length === 0) throw new Error("No meaningful commits found and no topic provided");
 
-            if (messages.length === 0) throw new Error("No meaningful commits found");
 
             // 3. Build prompt — topic-focused OR general big-changes mode
             const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+            const commitContext = messages.length > 0
+                ? `\nFor extra context, here are some recent git commits from the app — use them only if they relate to the topic:\n${messages.map((m: string, i: number) => `${i + 1}. ${m}`).join("\n")}\n`
+                : "";
+
             const prompt = topic
                 ? `You are writing a "What's New" announcement for WorshipFlow, a church worship team management app used by worship team members.
 
-The admin wants to announce this feature or module: "${topic}"
-
-Use these recent git commits as clues to identify specific capabilities:
-${messages.map((m: string, i: number) => `${i + 1}. ${m}`).join("\n")}
-
+The admin wants to announce this feature or topic: "${topic}"
+${commitContext}
 Your tasks:
 1. Refine "${topic}" into a punchy, exciting headline (6-8 words max). Think of it like a product launch headline.
 2. Write one engaging sentence that introduces the feature to users.
-3. Write 4 to 6 bullet points that describe what users CAN DO with this feature — its capabilities and value. Think: "What will a worship team member actually use this for?" Use the commits to find specific features, and use your own knowledge to fill in what makes sense for a worship app context.
+3. Write 4 to 6 bullet points that describe what users CAN DO with this feature — its capabilities and value. Think: "What will a worship team member actually use this for?" Use your knowledge of the topic and the app context to write specific, useful bullets.
 
 Bullet point style:
 - Each bullet should describe a specific capability or interaction (e.g. "View song lyrics and chords side by side while rehearsing")
