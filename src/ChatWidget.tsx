@@ -1619,18 +1619,18 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
             {sidebarView !== "dev" && (<>
               <SidebarBtn view="search"   icon={<Search    size={17} />} title="Search" />
               <SidebarBtn view="mentions" icon={<AtSign    size={17} />} title="Mentions" badge={mentionMessages.length} />
-              <SidebarBtn view="pinned"   icon={<Pin       size={17} />} title="Pinned"   badge={pinnedMessages.length || undefined} />
-              <SidebarBtn view="images"   icon={<ImageIcon size={17} />} title="Images"   badge={imageMessages.length || undefined} />
-              <SidebarBtn view="links"    icon={<Link2     size={17} />} title="Links"    badge={linkMessages.length || undefined} />
+              <SidebarBtn view="pinned"   icon={<Pin       size={17} />} title="Pinned" />
+              <SidebarBtn view="images"   icon={<ImageIcon size={17} />} title="Images" />
+              <SidebarBtn view="links"    icon={<Link2     size={17} />} title="Links" />
               <SidebarBtn view="settings" icon={<Settings  size={17} />} title="Settings" />
             </>)}
             {/* Dev utility buttons — shown only in dev mode (emerald, controls devSubView) */}
             {sidebarView === "dev" && (<>
               <DevSidebarBtn view="search"   icon={<Search    size={17} />} title="Dev Search" />
               <DevSidebarBtn view="mentions" icon={<AtSign    size={17} />} title="Dev Mentions" badge={devMentionMessages.length || undefined} />
-              <DevSidebarBtn view="pinned"   icon={<Pin       size={17} />} title="Dev Pinned"   badge={devPinnedMessages.length || undefined} />
-              <DevSidebarBtn view="images"   icon={<ImageIcon size={17} />} title="Dev Images"   badge={devImageMessages.length || undefined} />
-              <DevSidebarBtn view="links"    icon={<Link2     size={17} />} title="Dev Links"    badge={devLinkMessages.length || undefined} />
+              <DevSidebarBtn view="pinned"   icon={<Pin       size={17} />} title="Dev Pinned" />
+              <DevSidebarBtn view="images"   icon={<ImageIcon size={17} />} title="Dev Images" />
+              <DevSidebarBtn view="links"    icon={<Link2     size={17} />} title="Dev Links" />
               <DevSidebarBtn view="settings" icon={<Settings  size={17} />} title="Settings" />
             </>)}
           </div>
@@ -1829,10 +1829,10 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
                             >
                               {[
                                 { view: "mentions" as SidebarView, icon: <AtSign size={15} />,    badge: devMentionMessages.length, label: "Mentions" },
-                                { view: "pinned"   as SidebarView, icon: <Pin size={15} />,       badge: devPinnedMessages.length,  label: "Pinned" },
-                                { view: "images"   as SidebarView, icon: <ImageIcon size={15} />, badge: devImageMessages.length,   label: "Images" },
-                                { view: "links"    as SidebarView, icon: <Link2 size={15} />,     badge: devLinkMessages.length,    label: "Links" },
-                                { view: "settings" as SidebarView, icon: <Settings size={15} />,  badge: 0,                         label: "Settings" },
+                                { view: "pinned"   as SidebarView, icon: <Pin size={15} />,       label: "Pinned" },
+                                { view: "images"   as SidebarView, icon: <ImageIcon size={15} />, label: "Images" },
+                                { view: "links"    as SidebarView, icon: <Link2 size={15} />,     label: "Links" },
+                                { view: "settings" as SidebarView, icon: <Settings size={15} />,  label: "Settings" },
                               ].map(({ view, icon, badge, label }) => (
                                 <button
                                   key={view}
@@ -2553,10 +2553,10 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
                       >
                         {[
                           { view: "mentions" as SidebarView, icon: <AtSign size={15} />, badge: mentionMessages.length, label: "Mentions" },
-                          { view: "pinned"   as SidebarView, icon: <Pin size={15} />,    badge: pinnedMessages.length,  label: "Pinned" },
-                          { view: "images"   as SidebarView, icon: <ImageIcon size={15} />, badge: imageMessages.length, label: "Images" },
-                          { view: "links"    as SidebarView, icon: <Link2 size={15} />,  badge: linkMessages.length,   label: "Links" },
-                          { view: "settings" as SidebarView, icon: <Settings size={15} />, badge: 0,                    label: "Settings" },
+                          { view: "pinned"   as SidebarView, icon: <Pin size={15} />,    label: "Pinned" },
+                          { view: "images"   as SidebarView, icon: <ImageIcon size={15} />, label: "Images" },
+                          { view: "links"    as SidebarView, icon: <Link2 size={15} />,  label: "Links" },
+                          { view: "settings" as SidebarView, icon: <Settings size={15} />, label: "Settings" },
                         ].map(({ view, icon, badge, label }) => (
                           <button
                             key={view}

@@ -4,7 +4,7 @@ import {
   Calendar, Users, Shield, Smartphone, Search, LayoutGrid,
   Mic2, Palette, Dumbbell, Gift, UserCircle, BarChart2,
   Lightbulb, CheckCircle2, Circle, Send, Loader2, ChevronDown,
-  Pencil, Trash2, Radio,
+  Pencil, Trash2, Radio, MessageSquare
 } from "lucide-react";
 import type { Member } from "./types";
 
@@ -581,6 +581,66 @@ const ARTICLES: Article[] = [
       </div>
     ),
   },
+  // 15. Future Line-Up
+  {
+    id: "future-line-up",
+    icon: <Calendar size={16} />,
+    title: "How to use the Future Line-Up",
+    summary: "Prepare the team for new songs before they are scheduled.",
+    content: (
+      <div className="space-y-3 text-sm leading-relaxed">
+        <Sh>What is the Future Line-Up?</Sh>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          The <B>Future Line-Up</B> is a special tag for brand new songs. It hides them from the main song list and places them in a "waiting room" queue.
+        </p>
+        <Sh>How it works</Sh>
+        <div className="space-y-1.5 text-xs text-gray-500 dark:text-gray-400">
+          <p>• <B>1-Week Rule:</B> Songs tagged as Future Line-Up cannot be added to a Sunday service schedule until they have been in the library for at least 1 full week. This forces the team to learn and practice the song first.</p>
+          <p>• <B>Auto-Clear:</B> Once a song is finally scheduled for a service, the system automatically removes the Future Line-Up tag and it becomes a normal song in the library.</p>
+        </div>
+        <Sh>How to tag a song</Sh>
+        <div className="space-y-1.5">
+          <Step n={1}>Go to <B>Songs</B> and tap the pencil icon to edit a song</Step>
+          <Step n={2}>Toggle the <B>Tag as Future Line-Up</B> switch</Step>
+          <Step n={3}>Tap <B>Save</B></Step>
+        </div>
+        <Sh>Listening to the Future Line-Up</Sh>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          The <B>Song Player</B> (bottom right of the screen) has a special <B>All Future Line-Up</B> toggle. The whole team can turn this on while they work or commute to automatically loop all upcoming new songs and familiarize themselves with the melodies!
+        </p>
+      </div>
+    ),
+  },
+
+  // 16. Chat Widget
+  {
+    id: "chat-widget",
+    icon: <MessageSquare size={16} />,
+    title: "Using the Chat Widget",
+    summary: "Communicate with your team in real-time.",
+    content: (
+      <div className="space-y-3 text-sm leading-relaxed">
+        <Sh>Where to find it</Sh>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          The chat widget lives in the <B>top navigation bar</B>. Just tap the <B>Message bubble icon</B> at the top right of your screen to open or close the panel.
+        </p>
+        <Sh>Notifications</Sh>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          When someone sends a message in a channel, a green notification badge with a number will appear over the chat icon in the navigation bar. You will also hear a gentle notification sound.
+        </p>
+        <Sh>Channels & Mentions</Sh>
+        <div className="space-y-1.5">
+          <Step n={1}>Use <B>Chit-Chats</B> for casual conversation</Step>
+          <Step n={2}>Use <B>Audio-Tech</B> or <B>Music Team</B> for focused ministry discussions</Step>
+          <Step n={3}>Type <B>@name</B> in any channel to mention a teammate directly. They will receive a desktop push notification.</Step>
+        </div>
+        <Sh>Sidebar filters</Sh>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Inside the chat, click the icons on the left sidebar to quickly filter messages that contain <B>Images</B>, <B>Links</B>, or that have been <B>Pinned</B> by the team.
+        </p>
+      </div>
+    ),
+  },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -592,7 +652,7 @@ function timeAgoShort(iso: string) {
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
-type HelpTab = "guides" | "progress";
+type HelpTab = "guides";
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 interface HelpPanelProps {
@@ -938,28 +998,7 @@ export default function HelpPanel({
             </button>
           </div>
 
-          {/* ── Tab bar (only on list view, not inside an article) ─────────── */}
-          {!activeArticle && (
-            <div className="flex border-b border-gray-200 dark:border-gray-700/60 shrink-0">
-              {([
-                { key: "guides", icon: <BookOpen size={12} />, label: "Guides", dot: false },
-                ...(isAdmin ? [{ key: "progress", icon: <BarChart2 size={12} />, label: "Progress", dot: hasNewProgress }] : []),
-              ] as { key: HelpTab; icon: React.ReactNode; label: string; dot: boolean }[]).map(t => (
-                <button
-                  key={t.key}
-                  onClick={() => setTab(t.key)}
-                  className={`flex-1 relative flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-colors border-b-2 ${
-                    tab === t.key
-                      ? "border-indigo-500 text-indigo-600 dark:text-indigo-400"
-                      : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
-                  }`}
-                >
-                  {t.icon}{t.label}
-                  {t.dot && <span className="w-1.5 h-1.5 rounded-full bg-red-500 ml-0.5 shrink-0" />}
-                </button>
-              ))}
-            </div>
-          )}
+          {/* ── Tab bar removed (only guides remain) ─────────── */}
 
           {/* ── Search bar (guides tab, list view only, non-guests) ─────────── */}
           {!activeArticle && tab === "guides" && !isGuest && (
@@ -1033,73 +1072,7 @@ export default function HelpPanel({
               )
             )}
 
-            {/* ── PROGRESS TAB (Admin only) ──────────────────────────────── */}
-            {tab === "progress" && isAdmin && (
-              <div className="overflow-y-auto flex-1 p-4 space-y-3">
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Track which team members have read each guide. Reads are tracked automatically when a member opens an article.
-                </p>
-                {loadingReads ? (
-                  <div className="flex items-center justify-center py-10 gap-2 text-gray-400">
-                    <Loader2 size={16} className="animate-spin" />
-                    <span className="text-xs">Loading progress...</span>
-                  </div>
-                ) : memberProgress.length === 0 ? (
-                  <div className="py-10 text-center">
-                    <BarChart2 size={28} className="text-gray-300 dark:text-gray-700 mx-auto mb-2" />
-                    <p className="text-xs text-gray-500 dark:text-gray-500">No reads recorded yet.</p>
-                    <p className="text-xs text-gray-400 dark:text-gray-600 mt-0.5">Members appear here once they open a guide.</p>
-                  </div>
-                ) : (
-                  memberProgress.map(m => {
-                    const count = Math.min(m.readIds.size, totalPublic);
-                    const pct = totalPublic > 0 ? Math.round((count / totalPublic) * 100) : 0;
-                    const isExpanded = expandedMember === m.email;
-                    return (
-                      <div key={m.email} className="bg-gray-50 dark:bg-gray-800/60 rounded-xl border border-gray-200 dark:border-gray-700/50 overflow-hidden">
-                        <button
-                          onClick={() => setExpandedMember(isExpanded ? null : m.email)}
-                          className="w-full flex items-center gap-3 p-3 text-left"
-                        >
-                          {m.photo
-                            ? <img src={m.photo} alt={m.name} className="w-8 h-8 rounded-full object-cover shrink-0" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                            : <div className="w-8 h-8 rounded-full bg-indigo-200 dark:bg-indigo-800 flex items-center justify-center text-indigo-700 dark:text-indigo-300 text-xs font-bold shrink-0">{m.name[0]?.toUpperCase()}</div>
-                          }
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate">{m.name}</p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <div className="flex-1 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                <div
-                                  className={`h-full rounded-full transition-all ${pct === 100 ? "bg-emerald-500" : pct >= 50 ? "bg-indigo-500" : "bg-amber-400"}`}
-                                  style={{ width: `${pct}%` }}
-                                />
-                              </div>
-                              <span className="text-[10px] text-gray-500 shrink-0">{count}/{totalPublic}</span>
-                            </div>
-                          </div>
-                          <ChevronDown size={13} className={`shrink-0 text-gray-400 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
-                        </button>
-                        {isExpanded && (
-                          <div className="px-3 pb-3 grid grid-cols-1 gap-1 border-t border-gray-200 dark:border-gray-700/50 pt-2">
-                            {publicArticles.map(a => (
-                              <div key={a.id} className="flex items-center gap-2">
-                                {m.readIds.has(a.id)
-                                  ? <CheckCircle2 size={13} className="text-emerald-500 shrink-0" />
-                                  : <Circle size={13} className="text-gray-300 dark:text-gray-600 shrink-0" />
-                                }
-                                <span className={`text-xs truncate ${m.readIds.has(a.id) ? "text-gray-700 dark:text-gray-300" : "text-gray-400 dark:text-gray-600"}`}>
-                                  {a.title}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            )}
+            {/* ── PROGRESS TAB REMOVED ──────────────────────────────── */}
 
             {/* ── SUGGESTIONS TAB ───────────────────────────────────────── */}
             {tab === "suggestions" && (
