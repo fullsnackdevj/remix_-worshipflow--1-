@@ -95,9 +95,10 @@ export interface ChatWidgetProps {
   // Optional configuration — lets you run multiple independent widget instances
   widgetId?:        string;          // localStorage namespace (default: "main")
   customChannels?:  ChatChannel[];   // override channel list
-  fabIcon?:         React.ReactNode; // override FAB icon (closed state)
-  fabGradient?:     string;          // CSS gradient for FAB bg
-  fabBottomOffset?: number;          // px from bottom (default: 24)
+  // Controlled open state — driven by parent navbar icon
+  externalOpen?:    boolean;         // when provided, parent controls open/close
+  onClose?:         () => void;      // called when user closes from within the widget
+  onUnreadChange?:  (n: number) => void; // surfaces unread count to parent for navbar badge
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -241,7 +242,7 @@ function LinkPreview({ url }: { url: string }) {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "member", allMembers,
-  widgetId = "main", customChannels, fabIcon, fabGradient, fabBottomOffset = 24,
+  widgetId = "main", customChannels, externalOpen, onClose, onUnreadChange,
 }: ChatWidgetProps) {
 
   // Guest role: restrict to Audio-Tech only (hide Chit-Chats and Music Team)
@@ -348,88 +349,8 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
   const [modeDropdownOpen,       setModeDropdownOpen]       = useState(false);
   // ── Mobile long-press context menu ───────────────────────────────────────────
   const [longPressTarget, setLongPressTarget] = useState<{ msg: ChatMessage; isTeam: boolean } | null>(null);
-  const [fabDragging, setFabDragging] = useState(false);
-  // ── FAB dismiss (hide for this session) ───────────────────────────────────────
-  const [fabDismissed, setFabDismissed] = useState(() => {
-    try { return sessionStorage.getItem("wf_fab_dismissed") === "1"; } catch { return false; }
-  });
-  const dismissFab = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    setFabDismissed(true);
-    try { sessionStorage.setItem("wf_fab_dismissed", "1"); } catch {}
-  };
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressMoved = useRef(false);
-
-  // ── Draggable FAB (mobile only) ───────────────────────────────────────────────
-  const FAB_SIZE = 56; // px (w-14 h-14 = 56px)
-  const FAB_MARGIN = 14; // px from edges
-  const loadFabPos = (): { x: number; y: number } => {
-    try {
-      const v = localStorage.getItem(`wf_${widgetId}_fab_pos`);
-      if (v) return JSON.parse(v);
-    } catch {}
-    // Default: bottom-right
-    return {
-      x: window.innerWidth  - FAB_SIZE - FAB_MARGIN,
-      y: window.innerHeight - FAB_SIZE - FAB_MARGIN,
-    };
-  };
-  const [fabPos, setFabPos] = useState<{ x: number; y: number }>(() => ({
-    x: typeof window !== "undefined" ? window.innerWidth  - FAB_SIZE - FAB_MARGIN : 300,
-    y: typeof window !== "undefined" ? window.innerHeight - FAB_SIZE - FAB_MARGIN : 600,
-  }));
-  const fabDragRef   = useRef<{ startX: number; startY: number; startPX: number; startPY: number; moved: boolean } | null>(null);
-  const fabElRef     = useRef<HTMLButtonElement>(null);
-
-  // Restore saved position once on mount
-  useEffect(() => {
-    const saved = loadFabPos();
-    // Clamp in case screen size changed
-    const maxX = window.innerWidth  - FAB_SIZE - FAB_MARGIN;
-    const maxY = window.innerHeight - FAB_SIZE - FAB_MARGIN;
-    setFabPos({ x: Math.max(FAB_MARGIN, Math.min(saved.x, maxX)), y: Math.max(FAB_MARGIN, Math.min(saved.y, maxY)) });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const onFabPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
-    if (open) return; // chat is open, don't drag
-    e.currentTarget.setPointerCapture(e.pointerId);
-    fabDragRef.current = { startX: fabPos.x, startY: fabPos.y, startPX: e.clientX, startPY: e.clientY, moved: false };
-  };
-
-
-  const onFabPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
-    if (!fabDragRef.current) return;
-    const dx = e.clientX - fabDragRef.current.startPX;
-    const dy = e.clientY - fabDragRef.current.startPY;
-    if (!fabDragRef.current.moved && Math.abs(dx) + Math.abs(dy) < 6) return;
-    if (!fabDragRef.current.moved) { fabDragRef.current.moved = true; setFabDragging(true); }
-    const newX = Math.max(FAB_MARGIN, Math.min(fabDragRef.current.startX + dx, window.innerWidth  - FAB_SIZE - FAB_MARGIN));
-    const newY = Math.max(FAB_MARGIN, Math.min(fabDragRef.current.startY + dy, window.innerHeight - FAB_SIZE - FAB_MARGIN));
-    setFabPos({ x: newX, y: newY });
-  };
-
-  const onFabPointerUp = (_e: React.PointerEvent<HTMLButtonElement>) => {
-    if (!fabDragRef.current) return;
-    const { moved } = fabDragRef.current;
-    fabDragRef.current = null;
-    setFabDragging(false);
-    if (!moved) {
-      // It was a tap — open or close with animation
-      if (open) { closeWidgetRef.current?.(); }
-      else { openWidgetRef.current?.(); }
-      return;
-    }
-    // Snap to nearest horizontal edge
-    const midX = window.innerWidth / 2;
-    const snappedX = fabPos.x + FAB_SIZE / 2 < midX
-      ? FAB_MARGIN
-      : window.innerWidth - FAB_SIZE - FAB_MARGIN;
-    const finalPos = { x: snappedX, y: fabPos.y };
-    setFabPos(finalPos);
-    try { localStorage.setItem(`wf_${widgetId}_fab_pos`, JSON.stringify(finalPos)); } catch {}
-  };
 
   // ── Refs ──────────────────────────────────────────────────────────────────
   const panelRef         = useRef<HTMLDivElement>(null);
@@ -1024,7 +945,15 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
   // Grace-period: ignore outside-clicks for 350ms right after opening
   const justOpenedRef    = useRef(false);
 
+  const openStateRef = useRef({ open: false, closing: false });
+  useEffect(() => {
+    openStateRef.current = { open, closing };
+  }, [open, closing]);
+
   const closeWidget = useCallback(() => {
+    if (!openStateRef.current.open && !openStateRef.current.closing) return;
+    if (openStateRef.current.closing) return; // already closing
+
     if (closeWidgetTimer.current) { clearTimeout(closeWidgetTimer.current); closeWidgetTimer.current = null; }
     setClosing(true);
     closeWidgetTimer.current = setTimeout(() => {
@@ -1032,10 +961,13 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
       setClosing(false);
       setReactingMsgId(null);
       closeWidgetTimer.current = null;
+      onClose?.();
     }, 320);
-  }, []);
+  }, [onClose]);
 
   const openWidget = useCallback(() => {
+    if (openStateRef.current.open && !openStateRef.current.closing) return;
+
     // Cancel any in-flight close timer so it can't slam the panel shut again
     if (closeWidgetTimer.current) { clearTimeout(closeWidgetTimer.current); closeWidgetTimer.current = null; }
     setClosing(false);
@@ -1045,11 +977,18 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
     setTimeout(() => { justOpenedRef.current = false; }, 350);
   }, []);
 
-  // Keep refs current so early-defined handlers (FAB tap) can call these
+  // Keep refs current so early-defined handlers can call these
   closeWidgetRef.current = closeWidget;
   openWidgetRef.current  = openWidget;
 
-  // Widget stays open during navigation — only closes via Minimize / Close buttons or FAB tap.
+  // ── Sync externalOpen → internal open/close ──────────────────────────────
+  useEffect(() => {
+    if (externalOpen === undefined) return;
+    if (externalOpen) openWidgetRef.current?.();
+    else closeWidgetRef.current?.();
+  }, [externalOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Widget stays open during navigation — only closes via Minimize / Close buttons or navbar icon.
 
   // ── Auto-reset mobile search bar when leaving search view ───────────────────
   // Covers ALL navigation paths (result click, sidebar btn, Team/Dev toggle, etc.)
@@ -1359,6 +1298,9 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
   const theme     = THEMES.find(t => t.id === chatTheme) ?? THEMES[0];
   const totalUnread = unreadDots.size;
 
+  // ── Surface unread count to parent (for navbar badge) ──────────────────────
+  useEffect(() => { onUnreadChange?.(totalUnread); }, [totalUnread, onUnreadChange]);
+
   // ── Appearance helpers (derived from settings) ───────────────────────────
   const avatarCls = avatarShape === "squircle" ? "rounded-[35%]" : "rounded-full";
   const bgPatternStyle: React.CSSProperties = bgPattern === "dots"
@@ -1609,99 +1551,44 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
           to   { opacity: 1; transform: translateY(0)   scale(1); }
         }
         .wf-menu-drop { animation: wf-menu-drop 0.18s cubic-bezier(0.34,1.56,0.64,1) forwards; }
-        /* ── Panel open: rises from bottom-right (FAB origin) ── */
+        /* ── Panel open: drops from top-right (navbar icon origin) ── */
         @keyframes wf-panel-open-mobile {
-          0%   { opacity: 0; transform: scale(0.08) translate(44vw, 44vh); filter: blur(8px); }
+          0%   { opacity: 0; transform: translateY(-12px) scale(0.97); filter: blur(4px); }
           60%  { opacity: 1; filter: blur(0px); }
-          100% { opacity: 1; transform: scale(1) translate(0, 0); filter: blur(0px); }
+          100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0px); }
         }
         @keyframes wf-panel-close-mobile {
-          0%   { opacity: 1; transform: scale(1) translate(0, 0); filter: blur(0px); }
+          0%   { opacity: 1; transform: translateY(0) scale(1); filter: blur(0px); }
           40%  { opacity: 0.6; filter: blur(2px); }
-          100% { opacity: 0; transform: scale(0.08) translate(44vw, 44vh); filter: blur(10px); }
+          100% { opacity: 0; transform: translateY(-12px) scale(0.97); filter: blur(6px); }
         }
-        /* Desktop: panel anchored bottom-right, shrinks toward tab bar */
+        /* Desktop: panel anchored top-right, drops from navbar */
         @keyframes wf-panel-open-desk {
-          0%   { opacity: 0; transform: scale(0.1); transform-origin: bottom right; filter: blur(6px); }
+          0%   { opacity: 0; transform: scale(0.94) translateY(-10px); transform-origin: top right; filter: blur(4px); }
           65%  { opacity: 1; filter: blur(0px); }
-          100% { opacity: 1; transform: scale(1); transform-origin: bottom right; filter: blur(0px); }
+          100% { opacity: 1; transform: scale(1) translateY(0); transform-origin: top right; filter: blur(0px); }
         }
         @keyframes wf-panel-close-desk {
-          0%   { opacity: 1; transform: scale(1); transform-origin: bottom right; filter: blur(0px); }
+          0%   { opacity: 1; transform: scale(1) translateY(0); transform-origin: top right; filter: blur(0px); }
           35%  { opacity: 0.7; filter: blur(2px); }
-          100% { opacity: 0; transform: scale(0.08); transform-origin: bottom right; filter: blur(8px); }
+          100% { opacity: 0; transform: scale(0.94) translateY(-10px); transform-origin: top right; filter: blur(6px); }
         }
         /* Apply on mobile (< sm breakpoint = < 640px) */
         @media (max-width: 639px) {
-          .wf-panel-opening { animation: wf-panel-open-mobile  0.32s cubic-bezier(0.34,1.56,0.64,1) forwards; }
-          .wf-panel-closing { animation: wf-panel-close-mobile 0.30s cubic-bezier(0.4,0,1,1)         forwards; }
+          .wf-panel-opening { animation: wf-panel-open-mobile  0.28s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+          .wf-panel-closing { animation: wf-panel-close-mobile 0.24s cubic-bezier(0.4,0,1,1)         forwards; }
         }
         /* Apply on desktop (>= sm breakpoint = >= 640px) */
         @media (min-width: 640px) {
-          .wf-panel-opening { animation: wf-panel-open-desk  0.32s cubic-bezier(0.34,1.56,0.64,1) forwards; }
-          .wf-panel-closing { animation: wf-panel-close-desk 0.28s cubic-bezier(0.4,0,1,1)         forwards; }
+          .wf-panel-opening { animation: wf-panel-open-desk  0.28s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+          .wf-panel-closing { animation: wf-panel-close-desk 0.22s cubic-bezier(0.4,0,1,1)         forwards; }
         }
       `}</style>
-      <style>{`
-        /* ── Premium FAB animations ─────────────────────────────────────── */
-        @keyframes fab-spin {
-          from { transform: rotate(0deg); }
-          to   { transform: rotate(360deg); }
-        }
-        @keyframes fab-breathe {
-          0%, 100% { opacity: 0.55; transform: scale(1); }
-          50%       { opacity: 0.85; transform: scale(1.12); }
-        }
-        @keyframes fab-icon-idle {
-          0%, 100% { transform: translateY(0px) scale(1); }
-          40%       { transform: translateY(-2.5px) scale(1.07); }
-          70%       { transform: translateY(1px) scale(0.97); }
-        }
-        @keyframes fab-particle {
-          0%   { transform: rotate(var(--pa)) translateX(26px) scale(1);   opacity: 0.9; }
-          50%  { transform: rotate(var(--pa)) translateX(28px) scale(1.3); opacity: 1;   }
-          100% { transform: rotate(var(--pa)) translateX(26px) scale(1);   opacity: 0.9; }
-        }
-        @keyframes fab-badge-pop {
-          0%   { transform: scale(0) rotate(-15deg); opacity:0; }
-          60%  { transform: scale(1.25) rotate(5deg); opacity:1; }
-          100% { transform: scale(1) rotate(0deg);   opacity:1; }
-        }
-        @keyframes fab-ring-pulse {
-          0%, 100% { opacity: 0.25; transform: scale(1); }
-          50%       { opacity: 0.55; transform: scale(1.06); }
-        }
-        @keyframes fab-unread-ping {
-          0%   { transform: scale(1);   opacity: 0.7; }
-          70%  { transform: scale(2.4); opacity: 0;   }
-          100% { transform: scale(2.4); opacity: 0;   }
-        }
-        @keyframes fabDismissReveal {
-          from { opacity: 0; transform: scale(0.5); }
-          to   { opacity: 1; transform: scale(1); }
-        }
-        .fab-spin     { animation: fab-spin 5s linear infinite; }
-        .fab-breathe  { animation: fab-breathe 3s ease-in-out infinite; }
-        .fab-icon-idle{ animation: fab-icon-idle 3.2s ease-in-out infinite; }
-        .fab-ring     { animation: fab-ring-pulse 2.6s ease-in-out infinite; }
-        .fab-unread-ping { animation: fab-unread-ping 1.4s ease-out infinite; }
-        .fab-badge-pop{ animation: fab-badge-pop 0.4s cubic-bezier(.34,1.56,.64,1) forwards; }
-        .fab-p1 { --pa: 0deg;   animation: fab-particle 2.6s ease-in-out infinite 0s; }
-        .fab-p2 { --pa: 120deg; animation: fab-particle 2.6s ease-in-out infinite 0.87s; }
-        .fab-p3 { --pa: 240deg; animation: fab-particle 2.6s ease-in-out infinite 1.73s; }
-        .fab-drag .fab-spin,
-        .fab-drag .fab-breathe,
-        .fab-drag .fab-icon-idle,
-        .fab-drag .fab-ring,
-        .fab-drag .fab-p1,
-        .fab-drag .fab-p2,
-        .fab-drag .fab-p3 { animation-play-state: paused; }
-      `}</style>
-      <div ref={panelRef} className="fixed right-0 sm:right-4 z-[300] flex flex-col items-end gap-0" style={{ bottom: 0 }}>
+      <div ref={panelRef} className="fixed right-0 sm:right-0 z-[300] flex flex-col items-end gap-0" style={{ top: 56 }}>
 
       {/* ── Toast notifications (fixed overlay, never covered by panel) ──── */}
       {toasts.length > 0 && (
-        <div className="fixed bottom-24 sm:bottom-28 right-4 sm:right-8 flex flex-col-reverse gap-1.5 pointer-events-none z-[500] max-w-[280px] sm:max-w-[300px]">
+        <div className="fixed top-16 right-4 sm:right-8 flex flex-col gap-1.5 pointer-events-none z-[500] max-w-[280px] sm:max-w-[300px]">
           {toasts.map(t => (
             <div key={t.id} className={`wf-toast flex items-start gap-2 rounded-2xl px-3.5 py-2.5 text-[11px] font-semibold shadow-2xl border ${
               t.type === "error"   ? "bg-red-950/97 border-red-800/60 text-red-100" :
@@ -1718,7 +1605,7 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
       {/* ── Chat Panel ──────────────────────────────────────────────────────── */}
       {(open || closing) && (
         <div
-          className={`flex fixed inset-0 sm:static sm:inset-auto sm:w-[540px] sm:h-[min(600px,calc(100dvh-52px))] sm:rounded-t-2xl overflow-hidden${closing ? " wf-panel-closing" : " wf-panel-opening"}`}
+          className={`flex fixed inset-0 sm:static sm:inset-auto sm:w-[540px] sm:h-[min(600px,calc(100dvh-52px))] sm:rounded-b-2xl overflow-hidden${closing ? " wf-panel-closing" : " wf-panel-opening"}`}
           style={{ boxShadow: sidebarView === "dev" ? "0 -4px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(16,185,129,0.2)" : "0 -4px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(99,102,241,0.18)", background: sidebarView === "dev" ? "#060d09" : "#09090b" }}
         >
           {/* ────────── LEFT SIDEBAR ────────── */}
@@ -3756,141 +3643,6 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
           </>
         );
       })()}
-
-      {/* ── Floating Action Button ───────────────────────────────────────── */}
-      {/* Mobile-only draggable FAB (circular, shown when chat closed) */}
-      {!open && !fabDismissed && (
-        <button
-          ref={fabElRef}
-          aria-label="Open team chat"
-          onPointerDown={onFabPointerDown}
-          onPointerMove={onFabPointerMove}
-          onPointerUp={onFabPointerUp}
-          className={`fixed w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center focus:outline-none touch-none select-none z-[400]${fabDragging ? " fab-drag" : ""}`}
-          style={{
-            left: fabPos.x,
-            top:  fabPos.y,
-            cursor: fabDragging ? "grabbing" : "grab",
-            transition: fabDragging ? "none" : "left 0.28s cubic-bezier(0.34,1.56,0.64,1), top 0.18s ease",
-          }}
-        >
-          {/* ── Layer 1: outer breathing glow ring */}
-          <span
-            className="fab-breathe absolute rounded-full pointer-events-none"
-            style={{
-              inset: "-10px",
-              background: "radial-gradient(circle, rgba(139,92,246,0.22) 0%, rgba(99,102,241,0.08) 60%, transparent 80%)",
-            }}
-          />
-
-          {/* ── Layer 2: rotating conic gradient (aurora shimmer) */}
-          <span
-            className="fab-spin absolute inset-0 rounded-full pointer-events-none"
-            style={{
-              background: "conic-gradient(from 0deg, #6366f1, #8b5cf6, #a855f7, #ec4899, #f59e0b, #6366f1)",
-              opacity: 0.9,
-            }}
-          />
-
-          {/* ── Layer 3: frosted inner disc (glassmorphism) */}
-          <span
-            className="absolute rounded-full pointer-events-none"
-            style={{
-              inset: "2.5px",
-              background: "linear-gradient(145deg, rgba(20,14,50,0.92) 0%, rgba(30,20,65,0.96) 100%)",
-              backdropFilter: "blur(6px)",
-            }}
-          />
-
-          {/* ── Layer 4: top specular highlight */}
-          <span
-            className="absolute rounded-full pointer-events-none"
-            style={{
-              inset: "2.5px",
-              background: "linear-gradient(160deg, rgba(255,255,255,0.18) 0%, transparent 50%)",
-            }}
-          />
-
-          {/* ── Layer 5: subtle inner ring */}
-          <span
-            className="fab-ring absolute rounded-full pointer-events-none"
-            style={{
-              inset: "3px",
-              border: "1px solid rgba(167,139,250,0.45)",
-            }}
-          />
-
-          {/* ── Layer 6: orbiting particle dots */}
-          {!fabDragging && (
-            <span className="absolute inset-0 rounded-full pointer-events-none" style={{ transformOrigin: "center" }}>
-              <span className="fab-p1 absolute" style={{ top: "50%", left: "50%", marginTop: "-3px", marginLeft: "-3px", width: "6px", height: "6px", borderRadius: "50%", background: "#a78bfa", boxShadow: "0 0 6px 2px rgba(167,139,250,0.8)", transformOrigin: "0 0" }} />
-              <span className="fab-p2 absolute" style={{ top: "50%", left: "50%", marginTop: "-2.5px", marginLeft: "-2.5px", width: "5px", height: "5px", borderRadius: "50%", background: "#f472b6", boxShadow: "0 0 5px 2px rgba(244,114,182,0.8)", transformOrigin: "0 0" }} />
-              <span className="fab-p3 absolute" style={{ top: "50%", left: "50%", marginTop: "-2px", marginLeft: "-2px", width: "4px", height: "4px", borderRadius: "50%", background: "#34d399", boxShadow: "0 0 5px 2px rgba(52,211,153,0.8)", transformOrigin: "0 0" }} />
-            </span>
-          )}
-
-          {/* ── Layer 7: chat icon with idle bounce */}
-          <span className={`fab-icon-idle relative z-10 flex items-center justify-center${fabDragging ? " !animate-none" : ""}`}>
-            {fabIcon ?? (
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path
-                  d="M12 2C6.477 2 2 6.134 2 11.25c0 2.4 1.01 4.582 2.657 6.184L3.5 21.5l4.43-1.73A10.7 10.7 0 0 0 12 20.5c5.523 0 10-4.134 10-9.25S17.523 2 12 2Z"
-                  fill="url(#fabIconGrad)"
-                />
-                <circle cx="8.5"  cy="11.25" r="1.25" fill="rgba(255,255,255,0.55)" />
-                <circle cx="12"   cy="11.25" r="1.25" fill="rgba(255,255,255,0.55)" />
-                <circle cx="15.5" cy="11.25" r="1.25" fill="rgba(255,255,255,0.55)" />
-                <defs>
-                  <linearGradient id="fabIconGrad" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
-                    <stop offset="0%"   stopColor="#c4b5fd" />
-                    <stop offset="100%" stopColor="#f9a8d4" />
-                  </linearGradient>
-                </defs>
-              </svg>
-            )}
-          </span>
-
-          {/* ── Unread badge */}
-          {totalUnread > 0 && (
-            <span
-              key={totalUnread}
-              className="fab-badge-pop absolute -top-0.5 -right-0.5 min-w-[22px] h-[22px] flex items-center justify-center rounded-full text-white text-[10px] font-black px-1 z-20"
-              style={{
-                background: "linear-gradient(135deg, #ef4444 0%, #f97316 100%)",
-                boxShadow: "0 0 0 2.5px #09090b, 0 2px 10px rgba(239,68,68,0.7)",
-              }}
-            >
-              {/* Unread ping ring */}
-              <span className="fab-unread-ping absolute inset-0 rounded-full" style={{ background: "rgba(239,68,68,0.5)" }} />
-              {totalUnread > 9 ? "9+" : totalUnread}
-            </span>
-          )}
-
-          {/* ── Dismiss (✕) badge — top-left corner, only when not dragging */}
-          {!fabDragging && (
-            <span
-              onPointerDown={e => { e.stopPropagation(); e.preventDefault(); }}
-              onClick={dismissFab}
-              role="button"
-              aria-label="Hide chat icon"
-              title="Dismiss — hide chat button"
-              className="absolute -top-1.5 -left-1.5 w-[18px] h-[18px] flex items-center justify-center rounded-full text-gray-300 hover:text-white transition-all z-30 cursor-pointer"
-              style={{
-                background: "rgba(15,10,30,0.92)",
-                border: "1px solid rgba(167,139,250,0.4)",
-                fontSize: "9px",
-                lineHeight: 1,
-                boxShadow: "0 1px 6px rgba(0,0,0,0.6)",
-                animation: "fabDismissReveal 0.3s ease 1.8s both",
-              }}
-            >
-              ✕
-            </span>
-          )}
-
-        </button>
-      )}
-
 
     </div>
     </>

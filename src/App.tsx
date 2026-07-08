@@ -74,7 +74,7 @@ const LiveStageView       = lazy(() => import("./LiveStageView"));
 import AutoTextarea from "./AutoTextarea";
 import DatePicker from "./DatePicker";
 
-import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, CheckSquare, Check, Filter, Users, Calendar, Ticket, Phone, UserPlus, Camera, BookOpen, BookMarked, LayoutGrid, Mic2, Copy, Pencil, Shield, Mail, Bell, Lock, AlertTriangle, CheckCircle, HelpCircle, FlaskConical, NotebookPen, SquareKanban, Feather, Palette, Code2, ListMusic, Radio } from "lucide-react";
+import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, CheckSquare, Check, Filter, Users, Calendar, Ticket, Phone, UserPlus, Camera, BookOpen, BookMarked, LayoutGrid, Mic2, Copy, Pencil, Shield, Mail, Bell, Lock, AlertTriangle, CheckCircle, HelpCircle, FlaskConical, NotebookPen, SquareKanban, Feather, Palette, Code2, ListMusic, Radio, MessageSquare } from "lucide-react";
 import { Song, Tag, Member, ScheduleMember, Schedule } from "./types";
 import LineupPlayer, { LineupTrack, CurrentUser } from "./LineupPlayer";
 import SongsLibraryPlayer, { LibraryTrack } from "./SongsLibraryPlayer";
@@ -535,6 +535,8 @@ export default function App() {
     refetch: refetchNotifications,
   } = useRealtimeNotifications(user?.uid, effectiveRole);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatUnread, setChatUnread] = useState(0);
   const notifRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -1759,6 +1761,22 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
 
 
 
+            {/* Team Chat Toggle */}
+            {!isGuest && (
+              <button
+                onClick={() => setChatOpen(o => !o)}
+                className={`relative p-2 rounded-xl transition-colors ${chatOpen ? "text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20" : "text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"}`}
+                title="Team Chats"
+              >
+                <MessageSquare size={20} />
+                {chatUnread > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[17px] h-[17px] flex items-center justify-center rounded-full bg-emerald-500 text-white text-[10px] font-bold px-0.5 shadow-md">
+                    {chatUnread > 9 ? "9+" : chatUnread}
+                  </span>
+                )}
+              </button>
+            )}
+
             {/* Help & Knowledge Base */}
             <HelpPanel
               isAdmin={isRoleAdmin}
@@ -2384,6 +2402,9 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
           userPhoto={user?.photoURL ?? ""}
           userRole={effectiveRole}
           allMembers={allMembers}
+          externalOpen={chatOpen}
+          onClose={() => setChatOpen(false)}
+          onUnreadChange={setChatUnread}
         />
       </Suspense>
 
