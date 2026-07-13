@@ -2075,9 +2075,9 @@ Rules:
                 };
             });
             return json(200, members, { "Cache-Control": "public, max-age=0, s-maxage=300" });
-        } catch (err) {
+        } catch (err: any) {
             console.error(err);
-            return json(500, { error: "Failed to fetch members" });
+            return json(500, { error: "Failed to fetch members", detail: err?.message, stack: err?.stack });
         }
     }
 
