@@ -151,7 +151,19 @@ const fetchTeamTemplates = useCallback(async () => {
   } catch { /* offline / no templates yet — silent */ }
 }, []); // eslint-disable-line
 
-useEffect(() => { fetchTeamTemplates(); }, [fetchTeamTemplates]); // eslint-disable-line
+const [leaves, setLeaves] = useState<any[]>([]);
+const fetchLeaves = useCallback(async () => {
+  try {
+    const q = query(collection(db, "leaves"));
+    const snap = await getDocs(q);
+    setLeaves(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  } catch { /* silent */ }
+}, []); // eslint-disable-line
+
+useEffect(() => { 
+  fetchTeamTemplates(); 
+  fetchLeaves();
+}, [fetchTeamTemplates, fetchLeaves]); // eslint-disable-line
 
 // Lock background scroll when pre-save preview is open — use overscrollBehavior
 // instead of overflow:hidden so the modal's inner scroll still works on iOS.
@@ -1229,6 +1241,15 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
             : dow === 0
               ? ["Sunday Service", "Prayer Night", "Worship Night", "Youth Service", "Revival"]
               : ["Midweek Service", "Prayer Night", "Worship Night", "Youth Service", "Revival"];
+          const isOnLeave = (memberId: string) => {
+            return leaves.some(l => 
+              l.memberId === memberId && 
+              l.status !== "rejected" && 
+              selectedScheduleDate && 
+              selectedScheduleDate >= l.startDate && 
+              selectedScheduleDate <= l.endDate
+            );
+          };
           const pickerMembers = schedMemberSearch.trim()
             ? allMembers.filter(m => m.name.toLowerCase().includes(schedMemberSearch.toLowerCase()))
             : allMembers;
@@ -1680,8 +1701,10 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                                 <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg z-50 max-h-36 overflow-y-auto">
                                   {suggestions.map(m => {
                                     const memberRole = (m as any).roles?.join(", ") || "Member";
+                                    const onLeave = isOnLeave(m.id);
                                     return (
                                       <button key={m.id} type="button"
+                                        disabled={onLeave}
                                         onMouseDown={e => e.preventDefault()}
                                         onClick={() => {
                                           setEditSchedAssignments(prev => prev.map((a, j) => j === gi
@@ -1689,13 +1712,17 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                                             : a
                                           ));
                                         }}
-                                        className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors text-left">
+                                        className={`w-full flex items-center gap-2.5 px-3 py-2 transition-colors text-left ${
+                                          onLeave ? "opacity-50 cursor-not-allowed bg-gray-50 dark:bg-gray-800" : "hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
+                                        }`}>
                                         {m.photo
                                           ? <img src={m.photo} className="w-6 h-6 rounded-full object-cover shrink-0" alt="" />
                                           : <div className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">{m.name[0]}</div>
                                         }
                                         <div className="min-w-0">
-                                          <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{m.name}</p>
+                                          <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                                            {m.name} {onLeave && <span className="ml-1 text-[10px] font-bold text-amber-500">[On Leave]</span>}
+                                          </p>
                                           <p className="text-[10px] text-gray-400 truncate">{memberRole}</p>
                                         </div>
                                       </button>
@@ -1816,19 +1843,25 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                           <div className="space-y-0.5 max-h-44 overflow-y-auto pr-1">
                             {wlCandidates.map(m => {
                               const memberRoles = ((m as any).roles || []).join(", ") || "Member";
+                              const onLeave = isOnLeave(m.id);
                               return (
                                 <button key={m.id} type="button"
+                                  disabled={onLeave}
                                   onClick={() => setEditSchedWorshipLeader({ memberId: m.id, name: m.name, photo: m.photo, role: "Worship Leader" })}
-                                  className="w-full flex items-center gap-3 px-2.5 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700/60 transition-colors">
+                                  className={`w-full flex items-center gap-3 px-2.5 py-2 rounded-xl transition-colors ${
+                                    onLeave ? "opacity-50 cursor-not-allowed bg-gray-50 dark:bg-gray-800" : "hover:bg-gray-50 dark:hover:bg-gray-700/60"
+                                  }`}>
                                   {m.photo
                                     ? <img src={m.photo} className="w-9 h-9 rounded-full object-cover shrink-0" alt="" />
                                     : <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-sm font-bold shrink-0">{m.name[0]}</div>
                                   }
                                   <div className="flex-1 text-left min-w-0">
-                                    <p className="font-semibold text-sm truncate text-gray-900 dark:text-white">{m.name}</p>
+                                    <p className="font-semibold text-sm truncate text-gray-900 dark:text-white">
+                                      {m.name} {onLeave && <span className="ml-1 text-[10px] font-bold text-amber-500">[On Leave]</span>}
+                                    </p>
                                     <p className="text-[10px] text-gray-400 truncate">{memberRoles}</p>
                                   </div>
-                                  <Plus size={18} className="text-gray-400 shrink-0" />
+                                  {!onLeave && <Plus size={18} className="text-gray-400 shrink-0" />}
                                 </button>
                               );
                             })}
@@ -1857,19 +1890,25 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                           <div className="space-y-0.5 max-h-36 overflow-y-auto pr-1">
                             {bsCandidates.map(m => {
                               const memberRoles = ((m as any).roles || []).join(", ") || "Member";
+                              const onLeave = isOnLeave(m.id);
                               return (
                                 <button key={m.id} type="button"
+                                  disabled={onLeave}
                                   onClick={() => setEditSchedBackupSingers(prev => [...prev, { memberId: m.id, name: m.name, photo: m.photo, role: "Backup Singer" }])}
-                                  className="w-full flex items-center gap-3 px-2.5 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700/60 transition-colors">
+                                  className={`w-full flex items-center gap-3 px-2.5 py-2 rounded-xl transition-colors ${
+                                    onLeave ? "opacity-50 cursor-not-allowed bg-gray-50 dark:bg-gray-800" : "hover:bg-gray-50 dark:hover:bg-gray-700/60"
+                                  }`}>
                                   {m.photo
                                     ? <img src={m.photo} className="w-9 h-9 rounded-full object-cover shrink-0" alt="" />
                                     : <div className="w-9 h-9 rounded-full bg-gradient-to-br from-pink-400 to-rose-500 flex items-center justify-center text-white text-sm font-bold shrink-0">{m.name[0]}</div>
                                   }
                                   <div className="flex-1 text-left min-w-0">
-                                    <p className="font-semibold text-sm truncate text-gray-900 dark:text-white">{m.name}</p>
+                                    <p className="font-semibold text-sm truncate text-gray-900 dark:text-white">
+                                      {m.name} {onLeave && <span className="ml-1 text-[10px] font-bold text-amber-500">[On Leave]</span>}
+                                    </p>
                                     <p className="text-[10px] text-gray-400 truncate">{memberRoles}</p>
                                   </div>
-                                  <Plus size={18} className="text-gray-400 shrink-0" />
+                                  {!onLeave && <Plus size={18} className="text-gray-400 shrink-0" />}
                                 </button>
                               );
                             })}
@@ -2007,9 +2046,11 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                                 const instrumentRoles = allRoles.filter(r => INSTRUMENTALIST_ROLES.includes(r));
                                 const memberRoles = instrumentRoles.length > 0 ? instrumentRoles : allRoles;
                                 const isPending = pendingRolePick?.m.id === m.id;
+                                const onLeave = isOnLeave(m.id);
                                 return (
                                   <div key={m.id}>
                                     <button type="button"
+                                      disabled={onLeave}
                                       onClick={() => {
                                         if (memberRoles.length <= 1) {
                                           setEditSchedMusicians(prev => [...prev, { memberId: m.id, name: m.name, photo: m.photo, role: memberRoles[0] || "Musician" }]);
@@ -2018,19 +2059,25 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                                           setPendingRolePick(isPending ? null : { m, roles: memberRoles });
                                         }
                                       }}
-                                      className={`w-full flex items-center gap-3 px-2.5 py-2 rounded-xl transition-colors ${isPending ? "bg-indigo-50 dark:bg-indigo-900/30" : "hover:bg-gray-50 dark:hover:bg-gray-700/60"}`}>
+                                      className={`w-full flex items-center gap-3 px-2.5 py-2 rounded-xl transition-colors ${
+                                        onLeave ? "opacity-50 cursor-not-allowed bg-gray-50 dark:bg-gray-800" :
+                                        isPending ? "bg-indigo-50 dark:bg-indigo-900/30" : "hover:bg-gray-50 dark:hover:bg-gray-700/60"
+                                      }`}>
                                       {m.photo
                                         ? <img src={m.photo} className="w-9 h-9 rounded-full object-cover shrink-0" alt="" />
                                         : <div className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-400 to-indigo-600 flex items-center justify-center text-white text-sm font-bold shrink-0">{m.name[0]}</div>
                                       }
                                       <div className="flex-1 text-left min-w-0">
-                                        <p className="font-semibold text-sm truncate text-gray-900 dark:text-white">{m.name}</p>
+                                        <p className="font-semibold text-sm truncate text-gray-900 dark:text-white">
+                                          {m.name} {onLeave && <span className="ml-1 text-[10px] font-bold text-amber-500">[On Leave]</span>}
+                                        </p>
                                         <p className="text-[10px] text-gray-400 truncate">{memberRoles.join(", ") || "Musician"}</p>
                                       </div>
-                                      {memberRoles.length > 1
-                                        ? <span className="text-[10px] text-indigo-400 shrink-0 font-medium">{isPending ? "▲ pick role" : "▼ pick role"}</span>
-                                        : <Plus size={18} className="text-gray-400 shrink-0" />
-                                      }
+                                      {!onLeave && (
+                                        memberRoles.length > 1
+                                          ? <span className="text-[10px] text-indigo-400 shrink-0 font-medium">{isPending ? "▲ pick role" : "▼ pick role"}</span>
+                                          : <Plus size={18} className="text-gray-400 shrink-0" />
+                                      )}
                                     </button>
                                     {isPending && (
                                       <div className="px-2.5 pb-2 pt-1 flex flex-wrap gap-1.5">

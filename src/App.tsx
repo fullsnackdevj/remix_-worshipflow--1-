@@ -60,6 +60,7 @@ const Playground    = lazy(() => import("./Playground"));
 const PlannerView      = lazy(() => import("./Planner"));
 const RehearsalView    = lazy(() => import("./RehearsalView"));
 const ScheduleView     = lazy(() => import("./ScheduleView"));
+const LeaveCalendarView = lazy(() => import("./LeaveCalendarView"));
 const SongsView        = lazy(() => import("./SongsView"));
 const MembersView      = lazy(() => import("./MembersView"));
 const TeamNotesView    = lazy(() => import("./TeamNotesView"));
@@ -74,7 +75,7 @@ const LiveStageView       = lazy(() => import("./LiveStageView"));
 import AutoTextarea from "./AutoTextarea";
 import DatePicker from "./DatePicker";
 
-import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, CheckSquare, Check, Filter, Users, Calendar, Ticket, Phone, UserPlus, Camera, BookOpen, BookMarked, LayoutGrid, Mic2, Copy, Pencil, Shield, Mail, Bell, Lock, AlertTriangle, CheckCircle, HelpCircle, FlaskConical, NotebookPen, SquareKanban, Feather, Palette, Code2, ListMusic, Radio, MessageSquare } from "lucide-react";
+import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, Menu, ChevronLeft, ChevronRight, ChevronDown, Moon, Sun, ImagePlus, Loader2, ExternalLink, CheckSquare, Check, Filter, Users, Calendar, CalendarOff, Ticket, Phone, UserPlus, Camera, BookOpen, BookMarked, LayoutGrid, Mic2, Copy, Pencil, Shield, Mail, Bell, Lock, AlertTriangle, CheckCircle, HelpCircle, FlaskConical, NotebookPen, SquareKanban, Feather, Palette, Code2, ListMusic, Radio, MessageSquare } from "lucide-react";
 import { Song, Tag, Member, ScheduleMember, Schedule } from "./types";
 import LineupPlayer, { LineupTrack, CurrentUser } from "./LineupPlayer";
 import SongsLibraryPlayer, { LibraryTrack } from "./SongsLibraryPlayer";
@@ -372,7 +373,7 @@ export default function App() {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
   const [isDarkMode, setIsDarkMode] = useState(true);
-  const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "playground" | "admin" | "team-notes" | "rehearsal" | "freedom-wall" | "preaching" | "design-requests" | "bible" | "playlist" | "live-stage">("dashboard");
+  const [currentView, setCurrentView] = useState<"dashboard" | "songs" | "members" | "schedule" | "leave-calendar" | "playground" | "admin" | "team-notes" | "rehearsal" | "freedom-wall" | "preaching" | "design-requests" | "bible" | "playlist" | "live-stage">("dashboard");
   // Tracks when Rehearsal mobile fullscreen is active so we can hide the app header
   const [rehearsalFullscreen, setRehearsalFullscreen] = useState(false);
   // Bump this key every time user navigates to Design Requests — forces a remount + fresh fetch
@@ -1442,6 +1443,22 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
             {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Scheduling</span>}
           </div>
 
+          {/* Leave Calendar */}
+          <div className="relative group/tip">
+            <button
+              onClick={() => { setCurrentView("leave-calendar"); setIsMobileMenuOpen(false); }}
+              className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-colors font-medium text-sm ${currentView === "leave-calendar"
+                ? "bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300"
+                : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:white"
+                } ${isSidebarCollapsed ? "justify-center" : ""}`}
+              title="Leave Calendar"
+            >
+              <CalendarOff size={18} className="shrink-0" />
+              {!isSidebarCollapsed && <span>Leave Calendar</span>}
+            </button>
+            {isSidebarCollapsed && <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">Leave Calendar</span>}
+          </div>
+
           {/* ── Events — Admin + Event Lead ────────────────────────────────────── */}
           {(isRoleAdmin || (myMemberProfile?.eventsAccess ?? false)) && (
           <div className="relative group/tip">
@@ -1741,7 +1758,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
 
           <div className="flex-1 flex items-center gap-2.5 min-w-0">
             <h1 className="text-base sm:text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap truncate">
-              {currentView === "dashboard" ? "Dashboard" : currentView === "schedule" ? "Scheduling" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : currentView === "playground" ? "Playground" : currentView === "planner" ? "Ministry Hub" : currentView === "team-notes" ? "Notes" : currentView === "rehearsal" ? "Rehearsal" : currentView === "freedom-wall" ? "Freedom Wall" : currentView === "preaching" ? "Preaching" : currentView === "design-requests" ? "Design Requests" : currentView === "events" ? "Events" : currentView === "bible" ? "Bible" : currentView === "playlist" ? "Playlist" : currentView === "live-stage" ? "Live Stage" : "Song Management"}
+              {currentView === "dashboard" ? "Dashboard" : currentView === "schedule" ? "Scheduling" : currentView === "leave-calendar" ? "Leave Calendar" : currentView === "members" ? "Team Members" : currentView === "admin" ? "Team Access" : currentView === "playground" ? "Playground" : currentView === "planner" ? "Ministry Hub" : currentView === "team-notes" ? "Notes" : currentView === "rehearsal" ? "Rehearsal" : currentView === "freedom-wall" ? "Freedom Wall" : currentView === "preaching" ? "Preaching" : currentView === "design-requests" ? "Design Requests" : currentView === "events" ? "Events" : currentView === "bible" ? "Bible" : currentView === "playlist" ? "Playlist" : currentView === "live-stage" ? "Live Stage" : "Song Management"}
             </h1>
             {/* Mobile offline badge — shows in topbar on mobile since sidebar is hidden */}
             {!isOnline && (
@@ -2013,6 +2030,22 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                      setCurrentView("planner");
                      markPlannerSeen();
                    }}
+                />
+              ) : null}
+
+              {/* ══════════════════════════════════════════════════════════════
+                   LEAVE CALENDAR VIEW
+              ══════════════════════════════════════════════════════════════ */}
+              {currentView === "leave-calendar" ? (
+                <LeaveCalendarView
+                  allMembers={allMembers}
+                  isAdmin={isRoleAdmin}
+                  isLeader={isLeader}
+                  user={user}
+                  myMemberProfile={myMemberProfile}
+                  showToast={showToast}
+                  showConfirm={showConfirm}
+                  closeConfirm={closeConfirm}
                 />
               ) : null}
 

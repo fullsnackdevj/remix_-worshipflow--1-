@@ -4379,6 +4379,46 @@ app.post("/api/public-playlist/publish", async (req, res) => {
   }
 });
 
+function startLeaveRemindersLoop() {
+  // Run every hour
+  setInterval(async () => {
+    try {
+      const firestore = getDb();
+      if (!firestore) return;
+      
+      const now = new Date();
+      // Target date is exactly 48 hours from now
+      const future = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+      const futureDateStr = future.toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+
+      const snap = await firestore.collection("leaves")
+        .where("status", "==", "approved")
+        .get();
+
+      snap.docs.forEach(doc => {
+        const leave = doc.data();
+        if (leave.startDate === futureDateStr && !leave.reminded48h) {
+          writeNotification(firestore, {
+            type: "leave_reminder",
+            message: `Reminder: ${leave.memberName} is on leave starting in 48 hours`,
+            subMessage: `Leave from ${leave.startDate} to ${leave.endDate}`,
+            actorName: "System", 
+            actorPhoto: "", 
+            actorUserId: "system",
+            targetAudience: "admin_only",
+            resourceId: doc.id,
+            resourceType: "leave",
+            resourceDate: leave.startDate
+          });
+          doc.ref.update({ reminded48h: true });
+        }
+      });
+    } catch (error) {
+      console.error("[Leave Reminders Loop Error]", error);
+    }
+  }, 60 * 60 * 1000);
+}
+
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
@@ -4420,6 +4460,7 @@ async function startServer() {
         console.warn(`[startup] Firestore sync skipped (offline): ${msg.slice(0, 80)}`);
       }
     })();
+    startLeaveRemindersLoop();
   });
 }
 
