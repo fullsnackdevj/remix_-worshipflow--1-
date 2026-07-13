@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { db } from "./firebase";
 import { collection, getDocs, addDoc, query, orderBy, Timestamp, deleteDoc, doc, updateDoc } from "firebase/firestore";
-import { ChevronLeft, ChevronRight, ChevronDown, Plus, CalendarOff, Trash2, X, Loader2, CheckCircle2, AlertCircle, List, Calendar as CalendarIcon } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown, Plus, CalendarOff, Trash2, X, Loader2, CheckCircle2, AlertCircle, List, Calendar as CalendarIcon, RefreshCw } from "lucide-react";
 import { Member } from "./types";
 import DatePicker from "./DatePicker";
 
@@ -47,7 +47,7 @@ export default function LeaveCalendarView({
   // Filter & View state
   const [selectedMemberFilter, setSelectedMemberFilter] = useState<string>("all");
   const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
-  const [showPendingOnly, setShowPendingOnly] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "approved" | "rejected">("pending");
 
   // Form state
   const [showRequestForm, setShowRequestForm] = useState(false);
@@ -228,11 +228,11 @@ export default function LeaveCalendarView({
     if (selectedMemberFilter !== "all") {
       list = list.filter(l => l.memberId === selectedMemberFilter);
     }
-    if (showPendingOnly) {
-      list = list.filter(l => l.status === "pending");
+    if (statusFilter !== "all") {
+      list = list.filter(l => l.status === statusFilter);
     }
     return list;
-  }, [leaves, selectedMemberFilter, showPendingOnly]);
+  }, [leaves, selectedMemberFilter, statusFilter]);
 
   const getDurationDays = (start: string, end: string) => {
     const s = new Date(start + "T00:00:00");
@@ -394,15 +394,25 @@ export default function LeaveCalendarView({
         <div className="flex-1 flex flex-col bg-white dark:bg-gray-900/90 rounded-2xl border border-gray-200 dark:border-white/8 overflow-hidden shadow-xl dark:shadow-black/40">
           <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-900/30">
             <h3 className="font-bold text-gray-700 dark:text-gray-300">All Leave Requests</h3>
-            <label className="flex items-center gap-2 text-sm font-semibold text-gray-600 dark:text-gray-400 cursor-pointer">
-              <input 
-                type="checkbox" 
-                checked={showPendingOnly}
-                onChange={(e) => setShowPendingOnly(e.target.checked)}
-                className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
-              />
-              Pending Only
-            </label>
+            <div className="flex items-center gap-4">
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as any)}
+                className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm px-3 py-1.5 pr-8 focus:outline-none focus:ring-2 focus:ring-teal-500 font-medium text-gray-700 dark:text-gray-200 cursor-pointer"
+              >
+                <option value="all">All Statuses</option>
+                <option value="pending">Pending</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+              </select>
+              <button
+                onClick={(e) => { e.stopPropagation(); fetchLeaves(); }}
+                className="p-1.5 rounded-lg text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                title="Refresh leaves"
+              >
+                <RefreshCw size={16} />
+              </button>
+            </div>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
             {listViewLeaves.length === 0 ? (

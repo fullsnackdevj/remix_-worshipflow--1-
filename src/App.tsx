@@ -574,6 +574,8 @@ export default function App() {
       setPendingDeepLinkEventDate(resourceDate);
     } else if (type === "access_request") {
       setCurrentView("admin");
+    } else if (type === "leave_requested" || type === "leave_status_updated") {
+      setCurrentView("leave-calendar");
     } else if (["team_note", "note_resolved", "note_done", "note_acknowledged", "note_followup"].includes(type)) {
       // Navigate to the Team Notes module and deep-link to the specific note
       setCurrentView("team-notes");
@@ -1860,7 +1862,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                           <button
                             onClick={() => markOneRead(n.id, n.type, n.resourceId, n.resourceDate)}
                             className="flex items-start gap-3 flex-1 min-w-0 text-left"
-                            title={`Open ${n.type === "new_song" ? "song" : n.type === "access_request" ? "admin panel" : "event"}`}
+                            title={`Open ${n.type === "new_song" ? "song" : n.type === "access_request" ? "admin panel" : (n.type === "leave_requested" || n.type === "leave_status_updated") ? "leave calendar" : "event"}`}
                           >
                             {/* Actor photo */}
                             <div className="shrink-0 mt-0.5">
