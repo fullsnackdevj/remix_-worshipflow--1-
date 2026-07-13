@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { db } from "./firebase";
 import { collection, getDocs, addDoc, query, orderBy, Timestamp, deleteDoc, doc, updateDoc } from "firebase/firestore";
-import { ChevronLeft, ChevronRight, ChevronDown, Plus, CalendarOff, Trash2, X, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown, Plus, CalendarOff, Trash2, X, Loader2, CheckCircle2, AlertCircle, List, Calendar as CalendarIcon } from "lucide-react";
 import { Member } from "./types";
 import DatePicker from "./DatePicker";
 
@@ -44,8 +44,10 @@ export default function LeaveCalendarView({
   const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
-  // Filter state
+  // Filter & View state
   const [selectedMemberFilter, setSelectedMemberFilter] = useState<string>("all");
+  const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
+  const [showPendingOnly, setShowPendingOnly] = useState(false);
 
   // Form state
   const [showRequestForm, setShowRequestForm] = useState(false);
@@ -54,6 +56,8 @@ export default function LeaveCalendarView({
   const [formEndDate, setFormEndDate] = useState("");
   const [formReason, setFormReason] = useState("");
   const [formMemberId, setFormMemberId] = useState(""); // For admins to submit on behalf of others
+
+  const [selectedLeave, setSelectedLeave] = useState<LeaveRequest | null>(null);
 
   // Check if current user is an admin or leader who can approve
   const canApprove = isAdmin || isLeader;
@@ -117,7 +121,7 @@ export default function LeaveCalendarView({
         createdAt: Date.now(),
       };
 
-      await addDoc(collection(db, "leaves"), newLeave);
+      const addedDoc = await addDoc(collection(db, "leaves"), newLeave);
 
       // Add a notification for admins/leaders
       await addDoc(collection(db, "notifications"), {
@@ -134,7 +138,7 @@ export default function LeaveCalendarView({
 
       showToast("success", "Leave request submitted successfully.");
       setShowRequestForm(false);
-      fetchLeaves();
+      setLeaves(prev => [{ id: addedDoc.id, ...newLeave } as LeaveRequest, ...prev]);
     } catch (err) {
       console.error(err);
       showToast("error", "Failed to submit leave request.");
@@ -146,8 +150,27 @@ export default function LeaveCalendarView({
   const handleUpdateStatus = async (id: string, newStatus: "approved" | "rejected") => {
     try {
       await updateDoc(doc(db, "leaves", id), { status: newStatus });
+      
+      const targetLeave = leaves.find(l => l.id === id);
+      if (targetLeave) {
+        const targetMember = allMembers.find(m => m.id === targetLeave.memberId);
+        if (targetMember && targetMember.userId) {
+          await addDoc(collection(db, "notifications"), {
+            type: "leave_status_updated",
+            message: `Your leave request was ${newStatus}`,
+            subMessage: `${targetLeave.startDate} to ${targetLeave.endDate}`,
+            actorName: user?.displayName || "Admin",
+            actorPhoto: user?.photoURL || "",
+            actorUserId: user?.uid || "",
+            targetUserId: targetMember.userId,
+            createdAt: new Date().toISOString(),
+            isRead: false
+          });
+        }
+      }
+
+      setLeaves(prev => prev.map(l => l.id === id ? { ...l, status: newStatus } : l));
       showToast("success", `Leave ${newStatus}.`);
-      fetchLeaves();
     } catch (err) {
       showToast("error", "Failed to update status.");
     }
@@ -163,8 +186,9 @@ export default function LeaveCalendarView({
         closeConfirm();
         try {
           await deleteDoc(doc(db, "leaves", id));
-          showToast("success", "Leave request deleted.");
-          fetchLeaves();
+          setLeaves(prev => prev.filter(l => l.id !== id));
+          showToast("success", "Leave deleted successfully.");
+          setSelectedLeave(null);
         } catch (err) {
           showToast("error", "Failed to delete request.");
         }
@@ -199,6 +223,23 @@ export default function LeaveCalendarView({
     return map;
   }, [leaves, selectedMemberFilter]);
 
+  const listViewLeaves = useMemo(() => {
+    let list = leaves;
+    if (selectedMemberFilter !== "all") {
+      list = list.filter(l => l.memberId === selectedMemberFilter);
+    }
+    if (showPendingOnly) {
+      list = list.filter(l => l.status === "pending");
+    }
+    return list;
+  }, [leaves, selectedMemberFilter, showPendingOnly]);
+
+  const getDurationDays = (start: string, end: string) => {
+    const s = new Date(start + "T00:00:00");
+    const e = new Date(end + "T00:00:00");
+    return Math.max(1, Math.ceil((e.getTime() - s.getTime()) / (1000 * 3600 * 24)) + 1);
+  };
+
   return (
     <div className="max-w-7xl mx-auto h-full flex flex-col pb-20 sm:pb-8">
       {/* ── Toolbar ─────────────────────────────────────────────────────────── */}
@@ -228,7 +269,25 @@ export default function LeaveCalendarView({
         </div>
 
         {/* RIGHT — Filter & Add Button */}
-        <div className="flex items-center gap-3 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-end">
+          
+          <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-xl p-1 shrink-0">
+            <button
+              onClick={() => setViewMode("calendar")}
+              className={`p-1.5 rounded-lg flex items-center justify-center transition-all ${viewMode === "calendar" ? "bg-white dark:bg-gray-700 shadow-sm text-teal-600 dark:text-teal-400" : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"}`}
+              title="Calendar View"
+            >
+              <CalendarIcon size={16} />
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              className={`p-1.5 rounded-lg flex items-center justify-center transition-all ${viewMode === "list" ? "bg-white dark:bg-gray-700 shadow-sm text-teal-600 dark:text-teal-400" : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"}`}
+              title="List View"
+            >
+              <List size={16} />
+            </button>
+          </div>
+
           <div className="relative flex-1 sm:w-48">
             <select
               value={selectedMemberFilter}
@@ -254,6 +313,7 @@ export default function LeaveCalendarView({
       </div>
 
       {/* ── Calendar Grid ───────────────────────────────────────────────────── */}
+      {viewMode === "calendar" && (
       <div className="flex-1 bg-white dark:bg-gray-900/90 rounded-2xl border border-gray-200 dark:border-white/8 overflow-hidden shadow-xl dark:shadow-black/40 flex flex-col">
         {/* Day-of-week header */}
         <div className="grid grid-cols-7 bg-teal-50/50 dark:bg-teal-900/10 border-b border-gray-100 dark:border-white/8 shrink-0">
@@ -304,8 +364,11 @@ export default function LeaveCalendarView({
                   {dayLeaves.map(leave => (
                     <div 
                       key={leave.id}
-                      onClick={(e) => e.stopPropagation()} // Prevent opening add form when clicking a leave
-                      className={`w-full text-left truncate text-[10px] sm:text-xs font-semibold px-1.5 py-0.5 rounded border ${
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedLeave(leave);
+                      }}
+                      className={`w-full text-left truncate text-[10px] sm:text-xs font-semibold px-1.5 py-0.5 rounded border cursor-pointer ${
                         leave.status === "approved" 
                           ? "bg-teal-100 dark:bg-teal-900/40 text-teal-800 dark:text-teal-200 border-teal-200 dark:border-teal-800"
                           : leave.status === "rejected"
@@ -316,29 +379,6 @@ export default function LeaveCalendarView({
                     >
                       {leave.status === "pending" && <span className="mr-1 text-[9px]">⏳</span>}
                       {leave.memberName}
-                      
-                      {canApprove && (
-                        <div className="mt-1 flex gap-1 pt-1 border-t border-black/5 dark:border-white/10 overflow-hidden opacity-0 hover:opacity-100 group-hover:opacity-100 transition-opacity">
-                          {leave.status === "pending" && (
-                            <>
-                              <button 
-                                onClick={() => handleUpdateStatus(leave.id, "approved")}
-                                className="flex-1 bg-teal-500 text-white text-[9px] py-0.5 rounded text-center"
-                              >Approve</button>
-                              <button 
-                                onClick={() => handleUpdateStatus(leave.id, "rejected")}
-                                className="flex-1 bg-red-500 text-white text-[9px] py-0.5 rounded text-center"
-                              >Reject</button>
-                            </>
-                          )}
-                          {(isAdmin || myMemberProfile?.id === leave.memberId) && (
-                            <button 
-                              onClick={() => handleDeleteLeave(leave.id)}
-                              className="flex-1 bg-gray-500 text-white text-[9px] py-0.5 rounded text-center"
-                            >Del</button>
-                          )}
-                        </div>
-                      )}
                     </div>
                   ))}
                 </div>
@@ -347,6 +387,68 @@ export default function LeaveCalendarView({
           })}
         </div>
       </div>
+      )}
+
+      {/* ── List View ──────────────────────────────────────────────────────── */}
+      {viewMode === "list" && (
+        <div className="flex-1 flex flex-col bg-white dark:bg-gray-900/90 rounded-2xl border border-gray-200 dark:border-white/8 overflow-hidden shadow-xl dark:shadow-black/40">
+          <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-900/30">
+            <h3 className="font-bold text-gray-700 dark:text-gray-300">All Leave Requests</h3>
+            <label className="flex items-center gap-2 text-sm font-semibold text-gray-600 dark:text-gray-400 cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={showPendingOnly}
+                onChange={(e) => setShowPendingOnly(e.target.checked)}
+                className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+              />
+              Pending Only
+            </label>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {listViewLeaves.length === 0 ? (
+              <div className="text-center text-gray-500 py-10 font-medium">No leave requests found.</div>
+            ) : (
+              listViewLeaves.map((leave) => (
+                <div key={leave.id} onClick={() => setSelectedLeave(leave)} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800/50 hover:border-teal-300 dark:hover:border-teal-700 cursor-pointer transition-colors">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      <span className={`inline-block px-2 py-0.5 text-[10px] font-bold rounded uppercase tracking-wider ${
+                        leave.status === "approved" ? "bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200"
+                        : leave.status === "rejected" ? "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200"
+                        : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
+                      }`}>
+                        {leave.status}
+                      </span>
+                      <span className="font-bold text-gray-900 dark:text-white">{leave.memberName}</span>
+                    </div>
+                    <div className="text-sm text-gray-500 dark:text-gray-400">
+                      <span className="font-semibold text-gray-700 dark:text-gray-300">{leave.startDate}</span> to <span className="font-semibold text-gray-700 dark:text-gray-300">{leave.endDate}</span>
+                      <span className="ml-2 text-xs opacity-70">({getDurationDays(leave.startDate, leave.endDate)} days)</span>
+                    </div>
+                    {leave.reason && (
+                      <p className="text-sm text-gray-600 dark:text-gray-400 italic mt-1 line-clamp-1">"{leave.reason}"</p>
+                    )}
+                  </div>
+                  
+                  {/* Quick Actions (Admin) */}
+                  {canApprove && leave.status === "pending" && (
+                    <div className="flex gap-2 shrink-0">
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); handleUpdateStatus(leave.id, "approved"); }}
+                        className="px-4 py-1.5 text-sm font-bold bg-teal-500 hover:bg-teal-600 text-white rounded-lg transition-colors"
+                      >Approve</button>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); handleUpdateStatus(leave.id, "rejected"); }}
+                        className="px-4 py-1.5 text-sm font-bold bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors"
+                      >Reject</button>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Request Form Modal ──────────────────────────────────────────────── */}
       {showRequestForm && (
@@ -396,6 +498,7 @@ export default function LeaveCalendarView({
                     value={formStartDate} 
                     onChange={setFormStartDate}
                     className="w-full"
+                    min={todayStr}
                   />
                 </div>
                 <div>
@@ -406,7 +509,7 @@ export default function LeaveCalendarView({
                     value={formEndDate} 
                     onChange={setFormEndDate}
                     className="w-full"
-                    min={formStartDate}
+                    min={formStartDate || todayStr}
                   />
                 </div>
               </div>
@@ -450,6 +553,79 @@ export default function LeaveCalendarView({
                 {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
                 Submit Request
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Leave Details Modal */}
+      {selectedLeave && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-0">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setSelectedLeave(null)} />
+          <div className="relative w-full max-w-sm bg-white dark:bg-gray-900 rounded-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between p-4 border-b border-gray-100 dark:border-gray-800">
+              <h3 className="font-bold text-gray-900 dark:text-white">Leave Details</h3>
+              <button 
+                onClick={() => setSelectedLeave(null)}
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-200 dark:hover:bg-gray-800 text-gray-400 transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            
+            <div className="p-5 space-y-4">
+              <div>
+                <p className="text-xs text-gray-500 uppercase tracking-wider font-bold mb-1">Member</p>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">{selectedLeave.memberName}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-gray-500 uppercase tracking-wider font-bold mb-1">From</p>
+                  <p className="text-sm text-gray-900 dark:text-white">{selectedLeave.startDate}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 uppercase tracking-wider font-bold mb-1">To</p>
+                  <p className="text-sm text-gray-900 dark:text-white">{selectedLeave.endDate}</p>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 uppercase tracking-wider font-bold mb-1">Status</p>
+                <span className={`inline-block px-2 py-0.5 text-xs font-bold rounded ${
+                  selectedLeave.status === "approved" ? "bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200"
+                  : selectedLeave.status === "rejected" ? "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200"
+                  : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
+                }`}>
+                  {selectedLeave.status.toUpperCase()}
+                </span>
+              </div>
+              {selectedLeave.reason && (
+                <div>
+                  <p className="text-xs text-gray-500 uppercase tracking-wider font-bold mb-1">Reason</p>
+                  <p className="text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 p-3 rounded-xl">{selectedLeave.reason}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Actions for Admin / Owner */}
+            <div className="p-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50 flex flex-col gap-2">
+              {canApprove && selectedLeave.status === "pending" && (
+                <div className="flex gap-2 w-full">
+                  <button 
+                    onClick={() => { handleUpdateStatus(selectedLeave.id, "approved"); setSelectedLeave(null); }}
+                    className="flex-1 bg-teal-600 hover:bg-teal-700 text-white font-bold py-2.5 rounded-xl transition-colors"
+                  >Approve</button>
+                  <button 
+                    onClick={() => { handleUpdateStatus(selectedLeave.id, "rejected"); setSelectedLeave(null); }}
+                    className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-xl transition-colors"
+                  >Reject</button>
+                </div>
+              )}
+              {(isAdmin || myMemberProfile?.id === selectedLeave.memberId) && (
+                <button 
+                  onClick={() => { handleDeleteLeave(selectedLeave.id); setSelectedLeave(null); }}
+                  className="w-full bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 font-bold py-2.5 rounded-xl transition-colors"
+                >Delete Request</button>
+              )}
             </div>
           </div>
         </div>
