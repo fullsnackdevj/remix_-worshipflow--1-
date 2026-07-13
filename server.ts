@@ -1567,18 +1567,21 @@ app.get("/api/notifications", async (req, res) => {
       return { id: d.id, ...data, isRead: readBy.includes(userId), createdAt: data.createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(), _deletedBy: deletedBy } as Record<string, any>;
     });
     const filtered = all.filter(n => {
-      // Self-exclusion: actor should not see their own notification
-      if (userId && n["actorUserId"] === userId) return false;
       // Soft-deleted for this user
       if (n["_deletedBy"].includes(userId)) return false;
+      
       // Personal / targeted notification — only visible to the specific user
       if (n["targetUserId"]) return n["targetUserId"] === userId;
+      // Direct (Planner): only the specific recipient sees this
+      if (n["targetAudience"] === "direct") return n["recipientId"] === userId;
+
+      // Self-exclusion: actor should not see their own broadcast notification
+      if (userId && n["actorUserId"] === userId) return false;
+
       // Audience filter
       if (n["targetAudience"] === "all") return true;
       if (n["targetAudience"] === "admin_only") return role === "admin";
       if (n["targetAudience"] === "non_member") return role !== "member";
-      // Direct (Planner): only the specific recipient sees this
-      if (n["targetAudience"] === "direct") return n["recipientId"] === userId;
       return false;
     });
     if (res.headersSent) return; // timeout already responded
