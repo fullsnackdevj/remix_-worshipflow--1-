@@ -455,6 +455,9 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
     }
 
     const firestore = getDb();
+    if (!firestore && rawPath !== "/auth/check") {
+        return json(500, { error: "Firebase not configured in Netlify environment variables." });
+    }
 
     // ─── AUTH ────────────────────────────────────────────────────────────────────
     if (rawPath === "/auth/check" && method === "GET") {
@@ -601,15 +604,18 @@ export const handler: Handler = async (event: HandlerEvent, _context: HandlerCon
                 return { id: d.id, ...data, isRead: readBy.includes(userId), _deletedBy: deletedBy, createdAt: data.createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString() } as Record<string, any>;
             });
             const filtered = all.filter(n => {
-                if (userId && n["actorUserId"] === userId) return false; // self-exclusion
                 if (n["_deletedBy"].includes(userId)) return false; // soft-deleted
+                
                 // Personal notifications — only visible to the target user
                 if (n["targetUserId"]) return n["targetUserId"] === userId;
+                // Direct (Planner): only the specific recipient sees this
+                if (n["targetAudience"] === "direct") return n["recipientId"] === userId;
+
+                if (userId && n["actorUserId"] === userId) return false; // self-exclusion
+
                 if (n["targetAudience"] === "all") return true;
                 if (n["targetAudience"] === "admin_only") return role === "admin";
                 if (n["targetAudience"] === "non_member") return role !== "member";
-                // Direct (Planner): only the specific recipient sees this
-                if (n["targetAudience"] === "direct") return n["recipientId"] === userId;
                 return false;
             });
             return json(200, filtered);

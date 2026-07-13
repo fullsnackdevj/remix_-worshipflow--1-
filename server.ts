@@ -268,7 +268,7 @@ function plannerTypeVerb(type: string): string {
 }
 
 async function writeNotification(firestore: admin.firestore.Firestore, payload: {
-  type: "new_event" | "updated_event" | "new_song" | "access_request" | "team_note" | "note_resolved" | "note_done" | "note_acknowledged";
+  type: "new_event" | "updated_event" | "new_song" | "access_request" | "team_note" | "note_resolved" | "note_done" | "note_acknowledged" | "leave_status_updated" | "leave_reminder";
   message: string;
   subMessage: string;
   actorName: string;

@@ -37,6 +37,7 @@ export interface Member {
   status: "active" | "on-leave" | "inactive";
   notes: string;
   birthdate?: string; // "YYYY-MM-DD"
+  userId?: string; // Auth User ID, used to match to Firebase Auth
   created_at?: string;
   updated_at?: string;
 }
