@@ -109,6 +109,18 @@ export default function LeaveCalendarView({
 
     const memberName = allMembers.find(m => m.id === memberIdToUse)?.name || "Unknown Member";
 
+    // Prevent overlapping leave requests
+    const hasOverlap = leaves.some(l => {
+      if (l.memberId !== memberIdToUse) return false;
+      if (l.status === "rejected") return false; // Only block pending or approved
+      return l.startDate <= formEndDate && l.endDate >= formStartDate;
+    });
+
+    if (hasOverlap) {
+      showToast("error", "These dates overlap with an existing leave request.");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const newLeave = {
