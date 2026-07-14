@@ -37,7 +37,7 @@ const fmtDate = (iso: string) => {
   catch { return iso; }
 };
 
-const FILTER_TABS = ["All", "Active", "On Leave"] as const;
+const FILTER_TABS = ["All", "Active", "On Leave", "Inactive"] as const;
 
 // ── Reusable Section Card ────────────────────────────────────────────────────
 function SectionCard({ label, children, right }: { label: string; children: React.ReactNode; right?: React.ReactNode }) {
@@ -131,8 +131,13 @@ export default function MembersView({
   };
 
   const getMemberStatus = useCallback((memberId: string) => {
+    const member = allMembers.find(m => m.id === memberId);
+    if (member) {
+      const n = member.name.toLowerCase();
+      if (n.includes("ricknel") || n.includes("angelica")) return "inactive";
+    }
     return activeLeaves.some(l => l.memberId === memberId) ? "on-leave" : "active";
-  }, [activeLeaves]);
+  }, [activeLeaves, allMembers]);
 
   useEffect(() => {
     if (allMembers.length > 0) { setIsLoadingMembers(false); fetchMembers({ background: true }); }
@@ -145,7 +150,7 @@ export default function MembersView({
   const filtered = useMemo(() => {
     let list = allMembers;
     if (filterTab !== "All") {
-      const map: Record<string, string> = { "Active": "active", "On Leave": "on-leave" };
+      const map: Record<string, string> = { "Active": "active", "On Leave": "on-leave", "Inactive": "inactive" };
       list = list.filter(m => getMemberStatus(m.id) === map[filterTab]);
     }
     if (!searchQ.trim()) return list;
@@ -524,8 +529,8 @@ export default function MembersView({
               <div>
                 <h2 className="text-xl font-bold text-gray-900 dark:text-white tracking-tight leading-snug">{selectedMember.name}</h2>
                 <div className="flex items-center gap-1.5 mt-1.5">
-                  <span className={`w-2 h-2 rounded-full ${STATUS_CONFIG[getMemberStatus(selectedMember.id) as "active" | "on-leave"].dot}`} />
-                  <span className="text-sm text-gray-500 dark:text-gray-400">{STATUS_CONFIG[getMemberStatus(selectedMember.id) as "active" | "on-leave"].label}</span>
+                  <span className={`w-2 h-2 rounded-full ${STATUS_CONFIG[getMemberStatus(selectedMember.id) as "active" | "on-leave" | "inactive"].dot}`} />
+                  <span className="text-sm text-gray-500 dark:text-gray-400">{STATUS_CONFIG[getMemberStatus(selectedMember.id) as "active" | "on-leave" | "inactive"].label}</span>
                   {selectedMember.roles?.length > 0 && (
                     <span className="text-gray-300 dark:text-gray-700 mx-1">·</span>
                   )}
@@ -694,10 +699,12 @@ export default function MembersView({
                         <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold mt-2 px-2.5 py-1 rounded-full ${
                           getMemberStatus(member.id) === "active"
                             ? "bg-emerald-100 dark:bg-emerald-900/25 text-emerald-700 dark:text-emerald-400"
-                            : "bg-amber-100 dark:bg-amber-900/25 text-amber-700 dark:text-amber-400"
+                            : getMemberStatus(member.id) === "on-leave"
+                            ? "bg-amber-100 dark:bg-amber-900/25 text-amber-700 dark:text-amber-400"
+                            : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
                         }`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${STATUS_CONFIG[getMemberStatus(member.id) as "active" | "on-leave"].dot}`} />
-                          {STATUS_CONFIG[getMemberStatus(member.id) as "active" | "on-leave"].label}
+                          <span className={`w-1.5 h-1.5 rounded-full ${STATUS_CONFIG[getMemberStatus(member.id) as "active" | "on-leave" | "inactive"].dot}`} />
+                          {STATUS_CONFIG[getMemberStatus(member.id) as "active" | "on-leave" | "inactive"].label}
                         </span>
                       </div>
                     </div>

@@ -1250,9 +1250,16 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
               selectedScheduleDate <= l.endDate
             );
           };
+          let pickerMembersSource = allMembers;
+          if (isServiceEvent) {
+            pickerMembersSource = pickerMembersSource.filter(m => 
+              !m.name.toLowerCase().includes("ricknel") && 
+              !m.name.toLowerCase().includes("angelica")
+            );
+          }
           const pickerMembers = schedMemberSearch.trim()
-            ? allMembers.filter(m => m.name.toLowerCase().includes(schedMemberSearch.toLowerCase()))
-            : allMembers;
+            ? pickerMembersSource.filter(m => m.name.toLowerCase().includes(schedMemberSearch.toLowerCase()))
+            : pickerMembersSource;
           return (
             <div className="fixed top-1/2 -translate-y-1/2 left-4 right-4 z-50 md:static md:translate-y-0 md:z-auto md:w-80 md:shrink-0 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-2xl overflow-hidden max-h-[85dvh] md:max-h-[calc(100vh-200px)] md:self-start md:sticky md:top-0 flex flex-col">
               {/* Event panel gradient header */}
