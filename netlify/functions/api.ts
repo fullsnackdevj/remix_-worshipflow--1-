@@ -4,20 +4,25 @@ import { GoogleGenAI } from "@google/genai";
 import { Resend } from "resend";
 
 // Firebase init
+let db: FirebaseFirestore.Firestore | null = null;
 function getDb(): FirebaseFirestore.Firestore | null {
-    const projectId = process.env.FIREBASE_PROJECT_ID;
-    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-    const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
+    if (!db) {
+        const projectId = process.env.FIREBASE_PROJECT_ID;
+        const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+        const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
 
-    if (!projectId || !clientEmail || !privateKey) return null;
+        if (!projectId || !clientEmail || !privateKey) return null;
 
-    if (admin.apps.length === 0) {
-        admin.initializeApp({
-            credential: admin.credential.cert({ projectId, clientEmail, privateKey }),
-            storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
-        });
+        if (admin.apps.length === 0) {
+            admin.initializeApp({
+                credential: admin.credential.cert({ projectId, clientEmail, privateKey }),
+                storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
+            });
+        }
+        db = admin.firestore();
+        db.settings({ ignoreUndefinedProperties: true, preferRest: true });
     }
-    return admin.firestore();
+    return db;
 }
 
 // ── Email Notifications via Resend ────────────────────────────────────────────
