@@ -4569,16 +4569,29 @@ Rules:
                 await firestore.collection("leaves").doc(id).update(data);
                 cacheDel("leaves");
 
-                // Look up the leave document to get memberId and dates
+                // Send notification to the member whose leave was approved/rejected
                 if (notifyUser && data.status) {
                     try {
                         const leaveDoc = await firestore.collection("leaves").doc(id).get();
                         const leaveData = leaveDoc.data();
                         if (leaveData && leaveData.memberId) {
-                            // Look up the member's userId from the members collection
                             const memberDoc = await firestore.collection("members").doc(leaveData.memberId).get();
                             const memberData = memberDoc.data();
-                            const targetUserId = memberData?.userId;
+                            // The userId field is often not set on member docs.
+                            // Fall back to resolving the member's email → Firebase Auth UID.
+                            let targetUserId = memberData?.userId;
+                            if (!targetUserId && memberData?.email) {
+                                try {
+                                    const authUser = await admin.auth().getUserByEmail(memberData.email.trim().toLowerCase());
+                                    targetUserId = authUser.uid;
+                                    // Backfill the userId on the member doc for future use
+                                    await firestore.collection("members").doc(leaveData.memberId).update({ userId: targetUserId });
+                                    cacheDel("members");
+                                    console.log(`[leaves] Backfilled userId=${targetUserId} on member ${leaveData.memberId}`);
+                                } catch (authErr: any) {
+                                    console.warn(`[leaves] Could not resolve auth user for email ${memberData.email}:`, authErr?.message);
+                                }
+                            }
                             if (targetUserId) {
                                 await firestore.collection("notifications").add({
                                     type: "leave_status_updated",
@@ -4593,7 +4606,7 @@ Rules:
                                 });
                                 console.log(`[leaves] Notification sent to userId=${targetUserId} for leave ${id} status=${data.status}`);
                             } else {
-                                console.warn(`[leaves] Member ${leaveData.memberId} has no userId — notification skipped`);
+                                console.warn(`[leaves] Member ${leaveData.memberId} has no userId and no email — notification skipped`);
                             }
                         }
                     } catch (notifErr: any) {
