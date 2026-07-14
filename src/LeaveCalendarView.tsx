@@ -217,9 +217,10 @@ export default function LeaveCalendarView({
   // Group leaves by date for rendering in cells
   const leavesByDate = useMemo(() => {
     const map: Record<string, LeaveRequest[]> = {};
-    const filteredLeaves = selectedMemberFilter === "all" 
+    const filteredLeaves = (selectedMemberFilter === "all" 
       ? leaves 
-      : leaves.filter(l => l.memberId === selectedMemberFilter);
+      : leaves.filter(l => l.memberId === selectedMemberFilter))
+      .filter(l => l.status !== "rejected");
 
     filteredLeaves.forEach(leave => {
       // Create a date range to span across multiple days
