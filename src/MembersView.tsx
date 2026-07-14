@@ -37,7 +37,7 @@ const fmtDate = (iso: string) => {
   catch { return iso; }
 };
 
-const FILTER_TABS = ["All", "Active", "On Leave", "Inactive"] as const;
+const FILTER_TABS = ["All", "Active", "On Leave"] as const;
 
 // ── Reusable Section Card ────────────────────────────────────────────────────
 function SectionCard({ label, children, right }: { label: string; children: React.ReactNode; right?: React.ReactNode }) {
@@ -74,7 +74,6 @@ export default function MembersView({
   const [fEmail, setFEmail] = useState("");
   const [fPhoto, setFPhoto] = useState<string>("");
   const [fRoles, setFRoles] = useState<string[]>([]);
-  const [fStatus, setFStatus] = useState<"active" | "on-leave" | "inactive">("active");
   const [fBirthdate, setFBirthdate] = useState("");
   const [fNotes, setFNotes] = useState("");
 
@@ -111,9 +110,34 @@ export default function MembersView({
     finally { if (!background) setIsLoadingMembers(false); }
   }, []);
 
+  const [activeLeaves, setActiveLeaves] = useState<any[]>([]);
+
+  const fetchActiveLeaves = async () => {
+    try {
+      const d = new Date();
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      const today = `${yyyy}-${mm}-${dd}`;
+      
+      const res = await fetch("/api/leaves");
+      const data = await res.json();
+      const leaves = Array.isArray(data) ? data : [];
+      const onLeave = leaves.filter(l => l.status === "approved" && l.startDate <= today && l.endDate >= today);
+      setActiveLeaves(onLeave);
+    } catch (err) {
+      console.error("Failed to fetch leaves for status calculation", err);
+    }
+  };
+
+  const getMemberStatus = useCallback((memberId: string) => {
+    return activeLeaves.some(l => l.memberId === memberId) ? "on-leave" : "active";
+  }, [activeLeaves]);
+
   useEffect(() => {
     if (allMembers.length > 0) { setIsLoadingMembers(false); fetchMembers({ background: true }); }
     else fetchMembers();
+    fetchActiveLeaves();
     const t = setTimeout(() => setIsLoadingMembers(false), 10_000);
     return () => clearTimeout(t);
   }, []);
@@ -121,8 +145,8 @@ export default function MembersView({
   const filtered = useMemo(() => {
     let list = allMembers;
     if (filterTab !== "All") {
-      const map: Record<string, string> = { "Active": "active", "On Leave": "on-leave", "Inactive": "inactive" };
-      list = list.filter(m => (m.status ?? "active") === map[filterTab]);
+      const map: Record<string, string> = { "Active": "active", "On Leave": "on-leave" };
+      list = list.filter(m => getMemberStatus(m.id) === map[filterTab]);
     }
     if (!searchQ.trim()) return list;
     const q = searchQ.toLowerCase();
@@ -130,12 +154,12 @@ export default function MembersView({
       m.name?.toLowerCase().includes(q) || m.phone?.toLowerCase().includes(q) ||
       m.roles?.some(r => r.toLowerCase().includes(q))
     );
-  }, [allMembers, searchQ, filterTab]);
+  }, [allMembers, searchQ, filterTab, getMemberStatus]);
 
   const counts = useMemo(() => ({
-    active: allMembers.filter(m => (m.status ?? "active") === "active").length,
-    onLeave: allMembers.filter(m => m.status === "on-leave").length,
-  }), [allMembers]);
+    active: allMembers.filter(m => getMemberStatus(m.id) === "active").length,
+    onLeave: allMembers.filter(m => getMemberStatus(m.id) === "on-leave").length,
+  }), [allMembers, getMemberStatus]);
 
   // ── Editor ─────────────────────────────────────────────────────────────────
   const openEditor = (member?: Member) => {
@@ -150,12 +174,8 @@ export default function MembersView({
       }
       setFFirstName(fn); setFMI(member.middleInitial || ""); setFLastName(ln);
       setFPhone(member.phone); setFEmail(member.email || ""); setFPhoto(member.photo || "");
-      setFRoles(member.roles || []); setFStatus(member.status || "active");
-      setFBirthdate(member.birthdate || ""); setFNotes(member.notes || "");
-    } else {
-      setSelectedMember(null);
       setFFirstName(""); setFMI(""); setFLastName(""); setFPhone(""); setFEmail("");
-      setFPhoto(""); setFRoles([]); setFStatus("active"); setFBirthdate(""); setFNotes("");
+      setFPhoto(""); setFRoles([]); setFBirthdate(""); setFNotes("");
     }
     setFormErrors({});
     setView("form");
@@ -189,7 +209,7 @@ export default function MembersView({
     const payload = {
       name: fullName, firstName: fFirstName.trim(), middleInitial: mi, lastName: fLastName.trim(),
       phone: fPhone, email: fEmail.trim().toLowerCase(), photo: fPhoto, roles: fRoles,
-      status: fStatus, birthdate: fBirthdate || undefined, notes: fNotes,
+      birthdate: fBirthdate || undefined, notes: fNotes,
     };
 
     setIsSaving(true);
@@ -203,7 +223,7 @@ export default function MembersView({
       setAllMembers(prev => {
         const updated = editId
           ? prev.map(m => m.id === editId ? { ...m, ...payload, name: rd.name ?? payload.name } : m)
-          : [{ id: rd.id, name: rd.name ?? payload.name, phone: payload.phone, email: payload.email, photo: payload.photo, roles: payload.roles, status: payload.status, notes: payload.notes } as Member, ...prev];
+          : [{ id: rd.id, name: rd.name ?? payload.name, phone: payload.phone, email: payload.email, photo: payload.photo, roles: payload.roles, notes: payload.notes } as Member, ...prev];
         writeCache(updated); return updated;
       });
       setView("list"); setSelectedMember(null);
@@ -338,30 +358,9 @@ export default function MembersView({
                 </div>
                 <input type="file" ref={photoInputRef} onChange={handlePhotoUpload} className="hidden" accept="image/*" />
 
-                {/* Name preview + Status — right of avatar on mobile, below on desktop */}
                 <div className="flex-1 lg:w-full space-y-3">
                   <div className="lg:text-center">
                     <p className="text-sm font-semibold text-gray-900 dark:text-white leading-snug">{previewName}</p>
-                  </div>
-
-                  {/* Compact segmented status control */}
-                  <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
-                    <div className="px-3 py-1.5 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500">Status</p>
-                    </div>
-                    <div className="flex divide-x divide-gray-100 dark:divide-gray-700">
-                      {(["active", "on-leave", "inactive"] as const).map(s => (
-                        <button key={s} type="button" onClick={() => setFStatus(s)}
-                          className={`flex-1 flex flex-col items-center gap-1 px-1 py-2.5 text-[10px] font-semibold transition-all uppercase tracking-wide ${
-                            fStatus === s
-                              ? "bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300"
-                              : "bg-white dark:bg-gray-800 text-gray-400 dark:text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800/80"
-                          }`}>
-                          <span className={`w-2 h-2 rounded-full ${STATUS_CONFIG[s].dot}`} />
-                          {STATUS_CONFIG[s].label}
-                        </button>
-                      ))}
-                    </div>
                   </div>
                 </div>
               </div>
@@ -522,8 +521,8 @@ export default function MembersView({
               <div>
                 <h2 className="text-xl font-bold text-gray-900 dark:text-white tracking-tight leading-snug">{selectedMember.name}</h2>
                 <div className="flex items-center gap-1.5 mt-1.5">
-                  <span className={`w-2 h-2 rounded-full ${STATUS_CONFIG[selectedMember.status ?? "active"].dot}`} />
-                  <span className="text-sm text-gray-500 dark:text-gray-400">{STATUS_CONFIG[selectedMember.status ?? "active"].label}</span>
+                  <span className={`w-2 h-2 rounded-full ${STATUS_CONFIG[getMemberStatus(selectedMember.id) as "active" | "on-leave"].dot}`} />
+                  <span className="text-sm text-gray-500 dark:text-gray-400">{STATUS_CONFIG[getMemberStatus(selectedMember.id) as "active" | "on-leave"].label}</span>
                   {selectedMember.roles?.length > 0 && (
                     <span className="text-gray-300 dark:text-gray-700 mx-1">·</span>
                   )}
@@ -690,14 +689,12 @@ export default function MembersView({
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-[15px] text-gray-900 dark:text-white leading-tight group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{member.name}</p>
                         <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold mt-2 px-2.5 py-1 rounded-full ${
-                          (member.status ?? "active") === "active"
+                          getMemberStatus(member.id) === "active"
                             ? "bg-emerald-100 dark:bg-emerald-900/25 text-emerald-700 dark:text-emerald-400"
-                            : member.status === "on-leave"
-                            ? "bg-amber-100 dark:bg-amber-900/25 text-amber-700 dark:text-amber-400"
-                            : "bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
+                            : "bg-amber-100 dark:bg-amber-900/25 text-amber-700 dark:text-amber-400"
                         }`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${STATUS_CONFIG[member.status ?? "active"].dot}`} />
-                          {STATUS_CONFIG[member.status ?? "active"].label}
+                          <span className={`w-1.5 h-1.5 rounded-full ${STATUS_CONFIG[getMemberStatus(member.id) as "active" | "on-leave"].dot}`} />
+                          {STATUS_CONFIG[getMemberStatus(member.id) as "active" | "on-leave"].label}
                         </span>
                       </div>
                     </div>
