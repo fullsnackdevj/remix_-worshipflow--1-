@@ -591,7 +591,7 @@ export default function LeaveCalendarView({
 
               <div>
                 <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
-                  Reason (Optional)
+                  Reason (Required)
                 </label>
                 <textarea
                   value={formReason}
@@ -622,7 +622,7 @@ export default function LeaveCalendarView({
               </button>
               <button
                 onClick={handleSubmitLeave}
-                disabled={isSubmitting || !formStartDate || !formEndDate || !formMemberId}
+                disabled={isSubmitting || !formStartDate || !formEndDate || !formMemberId || !formReason.trim()}
                 className="flex items-center gap-2 px-5 py-2 text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all shadow-md shadow-teal-500/20"
               >
                 {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
