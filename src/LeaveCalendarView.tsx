@@ -322,15 +322,15 @@ export default function LeaveCalendarView({
           <div className="relative flex-1 sm:w-48">
             <button
               onClick={() => setIsFilterDropdownOpen(!isFilterDropdownOpen)}
-              className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-sm rounded-xl pl-3 pr-10 py-2 text-left text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-teal-500"
+              className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-sm rounded-xl px-3 py-2 text-left text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-teal-500 flex items-center justify-between gap-2"
             >
-              <span className="block truncate">
+              <span className="block truncate flex-1">
                 {selectedMemberFilter === "all" 
                   ? "All Members" 
                   : allMembers.find(m => m.id === selectedMemberFilter)?.name || "Unknown"}
               </span>
+              <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
             </button>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             
             {isFilterDropdownOpen && (
               <>
@@ -605,7 +605,7 @@ export default function LeaveCalendarView({
               <div className="flex gap-3 items-start bg-teal-50 dark:bg-teal-900/20 text-teal-800 dark:text-teal-300 p-3 rounded-xl text-xs">
                 <AlertCircle size={16} className="shrink-0 mt-0.5" />
                 <p>
-                  Leave requests are subject to approval by admins or leaders. Once approved, you will not be assigned to the lineup for Mid-Week or Sunday services during those dates.
+                  All leave requests must be approved by an admin or leader. If your approved leave falls on a Mid-Week or Sunday service date, you won't be added to the schedule lineup.
                 </p>
               </div>
 
