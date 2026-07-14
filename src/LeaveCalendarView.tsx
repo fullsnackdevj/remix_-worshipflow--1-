@@ -44,8 +44,8 @@ export default function LeaveCalendarView({
   
   // Filter & View state
   const [selectedMemberFilter, setSelectedMemberFilter] = useState<string>("all");
-  const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
-  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "approved" | "rejected">("pending");
+  const [viewMode, setViewMode] = useState<"calendar" | "list">(isAdmin ? "list" : "calendar");
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "approved" | "rejected">(isAdmin ? "pending" : "all");
 
   // Form state
   const [showRequestForm, setShowRequestForm] = useState(false);
@@ -61,6 +61,21 @@ export default function LeaveCalendarView({
   const canApprove = isAdmin;
 
   // ── Fetch Leaves ─────────────────────────────────────────────────────────────
+  const getLeaveColor = (leaveId: string) => {
+    const colors = [
+      "bg-teal-100 dark:bg-teal-900/40 text-teal-800 dark:text-teal-200 border-teal-200 dark:border-teal-800",
+      "bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-200 border-purple-200 dark:border-purple-800",
+      "bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-800",
+      "bg-pink-100 dark:bg-pink-900/40 text-pink-800 dark:text-pink-200 border-pink-200 dark:border-pink-800",
+      "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-800 dark:text-indigo-200 border-indigo-200 dark:border-indigo-800",
+      "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800",
+      "bg-orange-100 dark:bg-orange-900/40 text-orange-800 dark:text-orange-200 border-orange-200 dark:border-orange-800",
+    ];
+    let hash = 0;
+    for (let i = 0; i < leaveId.length; i++) hash = leaveId.charCodeAt(i) + ((hash << 5) - hash);
+    return colors[Math.abs(hash) % colors.length];
+  };
+
   const fetchLeaves = async () => {
     setIsLoading(true);
     try {
@@ -352,7 +367,13 @@ export default function LeaveCalendarView({
               <div
                 key={dateStr}
                 onClick={() => {
-                  if (!isCellPast) handleOpenForm(dateStr);
+                  if (!isCellPast) {
+                    if (dayLeaves.length > 0) {
+                      setSelectedLeave(dayLeaves[0]);
+                    } else {
+                      handleOpenForm(dateStr);
+                    }
+                  }
                 }}
                 className={`group relative min-h-[100px] border-b border-r border-gray-100 dark:border-white/5 p-1.5 text-left transition-colors flex flex-col ${
                   isCellPast ? "bg-gray-50/30 dark:bg-black/10 cursor-not-allowed" : "hover:bg-teal-50/40 dark:hover:bg-teal-900/10 cursor-pointer"
@@ -366,7 +387,7 @@ export default function LeaveCalendarView({
                         ? "text-gray-300 dark:text-gray-600"
                         : "text-gray-700 dark:text-gray-300 group-hover:text-teal-700 dark:group-hover:text-teal-300"
                   }`}>{day}</span>
-                  {!isCellPast && (
+                  {!isCellPast && dayLeaves.length === 0 && (
                     <span className="hidden sm:flex w-5 h-5 items-center justify-center rounded-full bg-teal-600 text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                       +
                     </span>
@@ -385,7 +406,7 @@ export default function LeaveCalendarView({
                       }}
                       className={`w-full text-left truncate text-[10px] sm:text-xs font-semibold px-1.5 py-0.5 rounded border cursor-pointer ${
                         leave.status === "approved" 
-                          ? "bg-teal-100 dark:bg-teal-900/40 text-teal-800 dark:text-teal-200 border-teal-200 dark:border-teal-800"
+                          ? getLeaveColor(leave.id)
                           : leave.status === "rejected"
                             ? "bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-200 border-red-200 dark:border-red-800 line-through opacity-50"
                             : "bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-800 border-dashed"
