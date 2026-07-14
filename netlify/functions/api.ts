@@ -25,6 +25,33 @@ function getDb(): FirebaseFirestore.Firestore | null {
     return db;
 }
 
+// ── In-memory TTL cache ─────────────────────────────────────────────────────
+// Persists across warm Lambda invocations — dramatically reduces Firestore reads.
+// Each entry stores the JSON-ready payload and a timestamp.
+const _cache: Record<string, { data: any; ts: number }> = {};
+const CACHE_TTL: Record<string, number> = {
+    songs:       5 * 60_000, // 5 min
+    tags:        5 * 60_000,
+    members:     5 * 60_000,
+    schedules:   3 * 60_000, // 3 min
+    notes:       3 * 60_000,
+    boards:      3 * 60_000,
+    leaderboard: 10 * 60_000, // 10 min
+};
+function cacheGet(key: string): any | null {
+    const entry = _cache[key];
+    if (!entry) return null;
+    const ttl = CACHE_TTL[key] ?? 3 * 60_000;
+    if (Date.now() - entry.ts > ttl) { delete _cache[key]; return null; }
+    return entry.data;
+}
+function cacheSet(key: string, data: any): void {
+    _cache[key] = { data, ts: Date.now() };
+}
+function cacheDel(...keys: string[]): void {
+    for (const k of keys) delete _cache[k];
+}
+
 // ── Email Notifications via Resend ────────────────────────────────────────────
 async function sendScheduleEmail(
     firestore: FirebaseFirestore.Firestore,
@@ -1277,6 +1304,8 @@ Rules:
 
     // ── GET /api/lineup-listens/leaderboard — top listeners across all tracks
     if (rawPath === "/lineup-listens/leaderboard" && method === "GET") {
+        const cached = cacheGet("leaderboard");
+        if (cached) return json(200, cached);
         // Test accounts — excluded from leaderboard permanently
         const TEST_EMAILS = new Set([
             "nthlastchild@gmail.com",
@@ -1304,6 +1333,7 @@ Rules:
                 });
             });
             const sorted = Object.values(tally).sort((a, b) => b.count - a.count).slice(0, 10);
+            cacheSet("leaderboard", sorted);
             return json(200, sorted);
         } catch (e) { return json(500, { error: "Failed to fetch leaderboard" }); }
     }
@@ -1763,27 +1793,35 @@ Rules:
             const search = event.queryStringParameters?.search || "";
             const tagId = event.queryStringParameters?.tagId || "";
 
-            const snapshot = await firestore.collection("songs").get();
-            const tagsSnap = await firestore.collection("tags").get();
-            const allTags = tagsSnap.docs.reduce((acc, doc) => {
-                acc[doc.id] = { id: doc.id, ...doc.data() };
-                return acc;
-            }, {} as any);
+            // Try cache first (full unfiltered song list)
+            let songs: any[] | null = cacheGet("songs");
+            if (!songs) {
+                const snapshot = await firestore.collection("songs").get();
+                const tagsSnap = await firestore.collection("tags").get();
+                const allTags = tagsSnap.docs.reduce((acc, doc) => {
+                    acc[doc.id] = { id: doc.id, ...doc.data() };
+                    return acc;
+                }, {} as any);
 
-            let songs = snapshot.docs.map((doc) => {
-                const data = doc.data();
-                return {
-                    id: doc.id,
-                    ...data,
-                    tags: (data.tagIds || []).map((id: string) => allTags[id]).filter(Boolean),
-                    created_at: data.created_at?.toDate?.()?.toISOString() || data.created_at,
-                    updated_at: data.updated_at?.toDate?.()?.toISOString() || data.updated_at,
-                };
-            });
+                songs = snapshot.docs.map((doc) => {
+                    const data = doc.data();
+                    return {
+                        id: doc.id,
+                        ...data,
+                        tags: (data.tagIds || []).map((id: string) => allTags[id]).filter(Boolean),
+                        created_at: data.created_at?.toDate?.()?.toISOString() || data.created_at,
+                        updated_at: data.updated_at?.toDate?.()?.toISOString() || data.updated_at,
+                    };
+                });
+                songs.sort((a: any, b: any) => (a.title || "").localeCompare(b.title || ""));
+                cacheSet("songs", songs);
+            }
 
+            // Apply client-side filters on cached data
+            let result = songs;
             if (search) {
                 const s = search.toLowerCase();
-                songs = songs.filter(
+                result = result.filter(
                     (song: any) =>
                         song.title?.toLowerCase().includes(s) ||
                         song.artist?.toLowerCase().includes(s) ||
@@ -1792,10 +1830,9 @@ Rules:
                         song.tags?.some((t: any) => t.name?.toLowerCase().includes(s))
                 );
             }
-            if (tagId) songs = songs.filter((song: any) => song.tagIds?.includes(tagId));
-            songs.sort((a: any, b: any) => (a.title || "").localeCompare(b.title || ""));
+            if (tagId) result = result.filter((song: any) => song.tagIds?.includes(tagId));
 
-            return json(200, songs, { "Cache-Control": "no-store" });
+            return json(200, result, { "Cache-Control": "no-store" });
         } catch (err) {
             console.error(err);
             return json(500, { error: "Failed to fetch songs" });
@@ -1856,6 +1893,7 @@ Rules:
                 updated_at: admin.firestore.FieldValue.serverTimestamp(),
             });
 // Bell notification skipped for new_song — not critical enough for team-wide alert
+            cacheDel("songs");
             return json(201, { id: docRef.id });
         } catch (err) {
             console.error(err);
@@ -1940,6 +1978,7 @@ Rules:
                     updated_by_photo: actorPhoto,
                     updated_at: admin.firestore.FieldValue.serverTimestamp(),
                 });
+                cacheDel("songs");
                 return json(200, { success: true });
             } catch (err) {
                 return json(500, { error: "Failed to update song" });
@@ -1949,6 +1988,7 @@ Rules:
         if (method === "DELETE") {
             try {
                 await firestore.collection("songs").doc(id).delete();
+                cacheDel("songs");
                 return json(200, { success: true });
             } catch (err) {
                 return json(500, { error: "Failed to delete song" });
@@ -1991,6 +2031,7 @@ Rules:
                 }
 
                 await firestore.collection("songs").doc(id).update(updates);
+                cacheDel("songs");
                 return json(200, { success: true });
             } catch (err) {
                 console.error(err);
@@ -2003,6 +2044,8 @@ Rules:
     // ─── TAGS ───────────────────────────────────────────────────────────────────
     // GET /tags
     if (rawPath === "/tags" && method === "GET") {
+        const cached = cacheGet("tags");
+        if (cached) return json(200, cached);
         try {
             const snapshot = await firestore.collection("tags").orderBy("name").get();
             let tags = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as any[];
@@ -2036,6 +2079,7 @@ Rules:
             }
             if (changed) tags.sort((a, b) => a.name.localeCompare(b.name));
 
+            cacheSet("tags", tags);
             return json(200, tags);
         } catch (err) {
             console.error(err);
@@ -2048,6 +2092,7 @@ Rules:
         try {
             const { name, color } = body;
             const docRef = await firestore.collection("tags").add({ name, color: color || "bg-gray-100 text-gray-800" });
+            cacheDel("tags", "songs");
             return json(201, { id: docRef.id, name, color });
         } catch (err) {
             return json(500, { error: "Failed to create tag" });
@@ -2059,6 +2104,7 @@ Rules:
     if (tagMatch && method === "DELETE") {
         try {
             await firestore.collection("tags").doc(tagMatch[1]).delete();
+            cacheDel("tags", "songs");
             return json(200, { success: true });
         } catch (err) {
             return json(500, { error: "Failed to delete tag" });
@@ -2068,6 +2114,8 @@ Rules:
     // ─── MEMBERS ────────────────────────────────────────────────────────────────
     // GET /members
     if (rawPath === "/members" && method === "GET") {
+        const cached = cacheGet("members");
+        if (cached) return json(200, cached, { "Cache-Control": "public, max-age=0, s-maxage=300" });
         try {
             const snapshot = await firestore.collection("members").orderBy("name").get();
             const members = snapshot.docs.map(doc => {
@@ -2079,6 +2127,7 @@ Rules:
                     updated_at: data.updated_at?.toDate?.()?.toISOString() || data.updated_at,
                 };
             });
+            cacheSet("members", members);
             return json(200, members, { "Cache-Control": "public, max-age=0, s-maxage=300" });
         } catch (err: any) {
             console.error(err);
@@ -2117,6 +2166,7 @@ Rules:
                 created_at: admin.firestore.FieldValue.serverTimestamp(),
                 updated_at: admin.firestore.FieldValue.serverTimestamp(),
             });
+            cacheDel("members", "schedules");
             return json(201, { id: docRef.id });
         } catch (err) {
             console.error(err);
@@ -2207,6 +2257,7 @@ Rules:
                 if (middleInitial !== undefined) updateData.middleInitial = middleInitial || "";
                 if (lastName !== undefined) updateData.lastName = lastName || "";
                 await firestore.collection("members").doc(id).update(updateData);
+                cacheDel("members", "schedules");
                 return json(200, { success: true });
             } catch (err) {
                 return json(500, { error: "Failed to update member" });
@@ -2228,6 +2279,7 @@ Rules:
         if (method === "DELETE") {
             try {
                 await firestore.collection("members").doc(id).delete();
+                cacheDel("members", "schedules");
                 return json(200, { success: true });
             } catch (err) {
                 return json(500, { error: "Failed to delete member" });
@@ -2238,6 +2290,8 @@ Rules:
     // ─── SCHEDULES ───────────────────────────────────────────────────────────────
     // GET /schedules
     if (rawPath === "/schedules" && method === "GET") {
+        const cached = cacheGet("schedules");
+        if (cached) return json(200, cached);
         try {
             const [schedSnap, membersSnap] = await Promise.all([
                 firestore.collection("schedules").orderBy("date").get(),
@@ -2283,6 +2337,7 @@ Rules:
                     updated_at: data.updated_at?.toDate?.()?.toISOString() || data.updated_at,
                 };
             });
+            cacheSet("schedules", schedules);
             return json(200, schedules);
         } catch (err) {
             console.error(err);
@@ -2317,6 +2372,7 @@ Rules:
                 updated_at: admin.firestore.FieldValue.serverTimestamp(),
             });
             writeNotif(firestore, { type: "new_event", message: `${aN1} created a new event`, subMessage: `📅 ${eventName || "Event"} — ${dl1}`, actorName: aN1, actorPhoto: aP1, actorUserId: aU1, targetAudience: "all", resourceId: docRef.id, resourceType: "event", resourceDate: date });
+            cacheDel("schedules");
             return json(201, { id: docRef.id });
         } catch (err) {
             console.error(err);
@@ -2350,6 +2406,7 @@ Rules:
                 // The author already sees the toast from the frontend.
                 // Notifications fire ONLY on create (new_event) and the manual
                 // "Notify Team" button — preventing spam on every save.
+                cacheDel("schedules");
                 return json(200, { success: true });
             } catch (err) {
                 console.error(err);
@@ -2360,6 +2417,7 @@ Rules:
         if (method === "DELETE") {
             try {
                 await firestore.collection("schedules").doc(id).delete();
+                cacheDel("schedules");
                 return json(200, { success: true });
             } catch (err) {
                 console.error(err);
@@ -2510,11 +2568,14 @@ Rules:
 
     // GET /notes
     if (rawPath === "/notes" && method === "GET") {
+        const cached = cacheGet("notes");
+        if (cached) return json(200, cached);
         try {
             const snap = await firestore?.collection("team_notes").orderBy("createdAt", "desc").get();
             const notes = snap?.docs
                 .filter(d => !d.data().deletedAt)
                 .map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(), updatedAt: d.data().updatedAt?.toDate?.()?.toISOString() ?? null })) ?? [];
+            cacheSet("notes", notes);
             return json(200, notes);
         } catch (e) { return json(500, { error: "Failed to fetch notes" }); }
     }
@@ -2568,6 +2629,7 @@ Rules:
                 targetAudience: "admin_only",
                 resourceId: ref?.id,
             });
+            cacheDel("notes");
             return json(201, { id: ref?.id });
         } catch (e) { return json(500, { error: "Failed to create note" }); }
     }
@@ -3105,13 +3167,16 @@ Rules:
     // Boards
     if (rawPath === "/planner/boards" && method === "GET") {
         const wantArch = event.queryStringParameters?.archived === "true";
-        try { const s = await firestore.collection("pg_boards").orderBy("createdAt","desc").get(); const all = s.docs.map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? null })) as any[]; return json(200, all.filter(b => wantArch ? !!b.archived : !b.archived)); }
+        const cacheKey = wantArch ? "boards_arch" : "boards";
+        const cached = cacheGet(cacheKey);
+        if (cached) return json(200, cached);
+        try { const s = await firestore.collection("pg_boards").orderBy("createdAt","desc").get(); const all = s.docs.map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.()?.toISOString() ?? null })) as any[]; const result = all.filter(b => wantArch ? !!b.archived : !b.archived); cacheSet(cacheKey, result); return json(200, result); }
         catch { return json(500, { error: "Failed" }); }
     }
     if (rawPath === "/planner/boards" && method === "POST") {
         const { title, color="#6366f1", description="", createdBy } = body;
         if (!title?.trim()) return json(400, { error: "Title required" });
-        try { const r = await firestore.collection("pg_boards").add({ title: title.trim(), color, description, archived: false, customFieldDefs: [], ...(createdBy ? { createdBy } : {}), createdAt: admin.firestore.FieldValue.serverTimestamp() }); return json(201, { id: r.id }); }
+        try { const r = await firestore.collection("pg_boards").add({ title: title.trim(), color, description, archived: false, customFieldDefs: [], ...(createdBy ? { createdBy } : {}), createdAt: admin.firestore.FieldValue.serverTimestamp() }); cacheDel("boards", "boards_arch"); return json(201, { id: r.id }); }
         catch { return json(500, { error: "Failed" }); }
     }
     const _pgBM = rawPath.match(/^\/planner\/boards\/([^/]+)$/);
