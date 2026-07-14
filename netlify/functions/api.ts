@@ -4554,12 +4554,9 @@ Rules:
             try {
                 const data = { ...body };
                 const notifyUser = data._notifyUser;
-                const targetUserId = data._targetUserId;
                 const actorName = data._actorName;
                 const actorPhoto = data._actorPhoto;
                 const actorUserId = data._actorUserId;
-                const startDate = data._startDate;
-                const endDate = data._endDate;
                 
                 delete data._notifyUser;
                 delete data._targetUserId;
@@ -4572,18 +4569,36 @@ Rules:
                 await firestore.collection("leaves").doc(id).update(data);
                 cacheDel("leaves");
 
-                if (notifyUser && targetUserId) {
-                    await firestore.collection("notifications").add({
-                        type: "leave_status_updated",
-                        message: `Your leave request was ${data.status}`,
-                        subMessage: `${startDate} to ${endDate}`,
-                        actorName: actorName || "Admin",
-                        actorPhoto: actorPhoto || "",
-                        actorUserId: actorUserId || "",
-                        targetUserId: targetUserId,
-                        createdAt: new Date().toISOString(),
-                        isRead: false
-                    }).catch(err => console.error("Failed to add leave status notification:", err));
+                // Look up the leave document to get memberId and dates
+                if (notifyUser && data.status) {
+                    try {
+                        const leaveDoc = await firestore.collection("leaves").doc(id).get();
+                        const leaveData = leaveDoc.data();
+                        if (leaveData && leaveData.memberId) {
+                            // Look up the member's userId from the members collection
+                            const memberDoc = await firestore.collection("members").doc(leaveData.memberId).get();
+                            const memberData = memberDoc.data();
+                            const targetUserId = memberData?.userId;
+                            if (targetUserId) {
+                                await firestore.collection("notifications").add({
+                                    type: "leave_status_updated",
+                                    message: `Your leave request was ${data.status}`,
+                                    subMessage: `${leaveData.startDate} to ${leaveData.endDate}`,
+                                    actorName: actorName || "Admin",
+                                    actorPhoto: actorPhoto || "",
+                                    actorUserId: actorUserId || "",
+                                    targetUserId: targetUserId,
+                                    createdAt: new Date().toISOString(),
+                                    isRead: false
+                                });
+                                console.log(`[leaves] Notification sent to userId=${targetUserId} for leave ${id} status=${data.status}`);
+                            } else {
+                                console.warn(`[leaves] Member ${leaveData.memberId} has no userId — notification skipped`);
+                            }
+                        }
+                    } catch (notifErr: any) {
+                        console.error("[leaves] Failed to send status notification:", notifErr?.message);
+                    }
                 }
 
                 return json(200, { ok: true });

@@ -1,6 +1,4 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { db } from "./firebase";
-import { collection, getDocs, addDoc, query, orderBy, Timestamp, deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { ChevronLeft, ChevronRight, ChevronDown, Plus, CalendarOff, Trash2, X, Loader2, CheckCircle2, AlertCircle, List, Calendar as CalendarIcon, RefreshCw } from "lucide-react";
 import { Member } from "./types";
 import DatePicker from "./DatePicker";
@@ -59,8 +57,8 @@ export default function LeaveCalendarView({
 
   const [selectedLeave, setSelectedLeave] = useState<LeaveRequest | null>(null);
 
-  // Check if current user is an admin or leader who can approve
-  const canApprove = isAdmin || isLeader;
+  // Only admin can approve/reject/delete
+  const canApprove = isAdmin;
 
   // ── Fetch Leaves ─────────────────────────────────────────────────────────────
   const fetchLeaves = async () => {
@@ -109,10 +107,20 @@ export default function LeaveCalendarView({
 
     const memberName = allMembers.find(m => m.id === memberIdToUse)?.name || "Unknown Member";
 
-    // Prevent overlapping leave requests
-    const hasOverlap = leaves.some(l => {
+    // Re-fetch fresh leaves from server before overlap check to avoid stale data
+    let freshLeaves = leaves;
+    try {
+      const freshRes = await fetch("/api/leaves");
+      if (freshRes.ok) {
+        freshLeaves = await freshRes.json();
+        setLeaves(freshLeaves);
+      }
+    } catch { /* use local state if fetch fails */ }
+
+    // Prevent overlapping leave requests (ignore rejected leaves)
+    const hasOverlap = freshLeaves.some((l: LeaveRequest) => {
       if (l.memberId !== memberIdToUse) return false;
-      if (l.status === "rejected") return false; // Only block pending or approved
+      if (l.status === "rejected") return false;
       return l.startDate <= formEndDate && l.endDate >= formStartDate;
     });
 
@@ -160,21 +168,15 @@ export default function LeaveCalendarView({
 
   const handleUpdateStatus = async (id: string, newStatus: "approved" | "rejected") => {
     try {
-      const targetLeave = leaves.find(l => l.id === id);
-      const targetMember = targetLeave ? allMembers.find(m => m.id === targetLeave.memberId) : null;
-      
       const res = await fetch(`/api/leaves/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           status: newStatus,
           _notifyUser: true,
-          _targetUserId: targetMember?.userId,
           _actorName: user?.displayName || "Admin",
           _actorPhoto: user?.photoURL || "",
-          _actorUserId: user?.uid || "",
-          _startDate: targetLeave?.startDate,
-          _endDate: targetLeave?.endDate
+          _actorUserId: user?.uid || ""
         }),
       });
       if (!res.ok) throw new Error("Failed to update status");
@@ -220,7 +222,7 @@ export default function LeaveCalendarView({
     const filteredLeaves = (selectedMemberFilter === "all" 
       ? leaves 
       : leaves.filter(l => l.memberId === selectedMemberFilter))
-      .filter(l => l.status !== "rejected");
+      .filter(l => l.status === "approved");
 
     filteredLeaves.forEach(leave => {
       // Create a date range to span across multiple days
