@@ -136,23 +136,16 @@ export default function LeaveCalendarView({
       const res = await fetch("/api/leaves", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newLeave),
+        body: JSON.stringify({
+          ...newLeave,
+          _notifyAdmin: true,
+          _actorName: user?.displayName || "System",
+          _actorPhoto: user?.photoURL || "",
+          _actorUserId: user?.uid || ""
+        }),
       });
       if (!res.ok) throw new Error("Failed to create leave");
       const addedDoc = await res.json();
-
-      // Add a notification for admins/leaders
-      await addDoc(collection(db, "notifications"), {
-        type: "leave_requested",
-        message: `${memberName} requested a leave`,
-        subMessage: `${formStartDate} to ${formEndDate}`,
-        actorName: user?.displayName || "System",
-        actorPhoto: user?.photoURL || "",
-        actorUserId: user?.uid || "",
-        targetAudience: "admin_only",
-        createdAt: new Date().toISOString(),
-        isRead: false
-      });
 
       showToast("success", "Leave request submitted successfully.");
       setShowRequestForm(false);
@@ -167,30 +160,24 @@ export default function LeaveCalendarView({
 
   const handleUpdateStatus = async (id: string, newStatus: "approved" | "rejected") => {
     try {
+      const targetLeave = leaves.find(l => l.id === id);
+      const targetMember = targetLeave ? allMembers.find(m => m.id === targetLeave.memberId) : null;
+      
       const res = await fetch(`/api/leaves/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ 
+          status: newStatus,
+          _notifyUser: true,
+          _targetUserId: targetMember?.userId,
+          _actorName: user?.displayName || "Admin",
+          _actorPhoto: user?.photoURL || "",
+          _actorUserId: user?.uid || "",
+          _startDate: targetLeave?.startDate,
+          _endDate: targetLeave?.endDate
+        }),
       });
       if (!res.ok) throw new Error("Failed to update status");
-      
-      const targetLeave = leaves.find(l => l.id === id);
-      if (targetLeave) {
-        const targetMember = allMembers.find(m => m.id === targetLeave.memberId);
-        if (targetMember && targetMember.userId) {
-          await addDoc(collection(db, "notifications"), {
-            type: "leave_status_updated",
-            message: `Your leave request was ${newStatus}`,
-            subMessage: `${targetLeave.startDate} to ${targetLeave.endDate}`,
-            actorName: user?.displayName || "Admin",
-            actorPhoto: user?.photoURL || "",
-            actorUserId: user?.uid || "",
-            targetUserId: targetMember.userId,
-            createdAt: new Date().toISOString(),
-            isRead: false
-          });
-        }
-      }
 
       setLeaves(prev => prev.map(l => l.id === id ? { ...l, status: newStatus } : l));
       showToast("success", `Leave ${newStatus}.`);

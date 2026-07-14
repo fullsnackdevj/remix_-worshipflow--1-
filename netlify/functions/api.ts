@@ -4513,8 +4513,34 @@ Rules:
         try {
             const data = { ...body };
             if (!data.createdAt) data.createdAt = Date.now();
+            
+            const notifyAdmin = data._notifyAdmin;
+            const actorName = data._actorName;
+            const actorPhoto = data._actorPhoto;
+            const actorUserId = data._actorUserId;
+            
+            delete data._notifyAdmin;
+            delete data._actorName;
+            delete data._actorPhoto;
+            delete data._actorUserId;
+
             const docRef = await firestore.collection("leaves").add(data);
             cacheDel("leaves");
+
+            if (notifyAdmin) {
+                await firestore.collection("notifications").add({
+                    type: "leave_requested",
+                    message: `${data.memberName} requested a leave`,
+                    subMessage: `${data.startDate} to ${data.endDate}`,
+                    actorName: actorName || "System",
+                    actorPhoto: actorPhoto || "",
+                    actorUserId: actorUserId || "",
+                    targetAudience: "admin_only",
+                    createdAt: new Date().toISOString(),
+                    isRead: false
+                }).catch(err => console.error("Failed to add leave notification:", err));
+            }
+
             return json(200, { id: docRef.id, ...data });
         } catch (e: any) {
             console.error("Failed to create leave:", e?.message);
@@ -4526,8 +4552,40 @@ Rules:
         const id = leaveMatch[1];
         if (method === "PATCH" || method === "PUT") {
             try {
-                await firestore.collection("leaves").doc(id).update(body);
+                const data = { ...body };
+                const notifyUser = data._notifyUser;
+                const targetUserId = data._targetUserId;
+                const actorName = data._actorName;
+                const actorPhoto = data._actorPhoto;
+                const actorUserId = data._actorUserId;
+                const startDate = data._startDate;
+                const endDate = data._endDate;
+                
+                delete data._notifyUser;
+                delete data._targetUserId;
+                delete data._actorName;
+                delete data._actorPhoto;
+                delete data._actorUserId;
+                delete data._startDate;
+                delete data._endDate;
+
+                await firestore.collection("leaves").doc(id).update(data);
                 cacheDel("leaves");
+
+                if (notifyUser && targetUserId) {
+                    await firestore.collection("notifications").add({
+                        type: "leave_status_updated",
+                        message: `Your leave request was ${data.status}`,
+                        subMessage: `${startDate} to ${endDate}`,
+                        actorName: actorName || "Admin",
+                        actorPhoto: actorPhoto || "",
+                        actorUserId: actorUserId || "",
+                        targetUserId: targetUserId,
+                        createdAt: new Date().toISOString(),
+                        isRead: false
+                    }).catch(err => console.error("Failed to add leave status notification:", err));
+                }
+
                 return json(200, { ok: true });
             } catch (e: any) {
                 console.error("Failed to update leave:", e?.message);
