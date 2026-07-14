@@ -174,6 +174,9 @@ export default function MembersView({
       }
       setFFirstName(fn); setFMI(member.middleInitial || ""); setFLastName(ln);
       setFPhone(member.phone); setFEmail(member.email || ""); setFPhoto(member.photo || "");
+      setFRoles(member.roles || []); setFBirthdate(member.birthdate || ""); setFNotes(member.notes || "");
+    } else {
+      setSelectedMember(null);
       setFFirstName(""); setFMI(""); setFLastName(""); setFPhone(""); setFEmail("");
       setFPhoto(""); setFRoles([]); setFBirthdate(""); setFNotes("");
     }
