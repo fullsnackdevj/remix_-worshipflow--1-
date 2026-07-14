@@ -2505,8 +2505,11 @@ export function ChatWidget({ isAdmin, userId, userName, userPhoto, userRole = "m
                   >
                     <span className="text-lg leading-none shrink-0">{activeCh.emoji}</span>
                     <div className="min-w-0">
-                      <h3 className="text-sm font-bold text-white leading-tight flex items-center gap-1.5">
+                      <h3 className="text-sm font-bold text-white leading-tight flex items-center gap-1.5 relative">
                         {activeCh.name}
+                        {unreadDots.size > (unreadDots.has(activeChannel) ? 1 : 0) && (
+                          <div className="absolute -top-1 -right-3 w-2 h-2 bg-red-500 rounded-full border border-gray-900" />
+                        )}
                         <svg
                           width="14" height="14" viewBox="0 0 14 14" fill="none"
                           className={`text-indigo-400 shrink-0 transition-transform duration-200 ${channelDropdownOpen ? "rotate-180" : ""}`}

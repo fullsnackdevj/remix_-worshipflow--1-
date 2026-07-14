@@ -373,8 +373,9 @@ export default function LeaveCalendarView({
                   )}
                 </div>
 
-                {/* Leaves for this day */}
-                <div className="flex-1 overflow-y-auto space-y-1 pr-1 custom-scrollbar w-full">
+                {/* Leaves for this day (Hidden for Admins to prevent crowding) */}
+                {!isAdmin && (
+                  <div className="flex-1 overflow-y-auto space-y-1 pr-1 custom-scrollbar w-full">
                   {dayLeaves.map(leave => (
                     <div 
                       key={leave.id}
@@ -395,7 +396,8 @@ export default function LeaveCalendarView({
                       {leave.memberName}
                     </div>
                   ))}
-                </div>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -409,16 +411,19 @@ export default function LeaveCalendarView({
           <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-900/30">
             <h3 className="font-bold text-gray-700 dark:text-gray-300">All Leave Requests</h3>
             <div className="flex items-center gap-4">
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as any)}
-                className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm px-3 py-1.5 pr-8 focus:outline-none focus:ring-2 focus:ring-teal-500 font-medium text-gray-700 dark:text-gray-200 cursor-pointer"
-              >
-                <option value="all">All Statuses</option>
-                <option value="pending">Pending</option>
-                <option value="approved">Approved</option>
-                <option value="rejected">Rejected</option>
-              </select>
+              <div className="relative">
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as any)}
+                  className="appearance-none bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm px-3 py-1.5 pr-8 focus:outline-none focus:ring-2 focus:ring-teal-500 font-medium text-gray-700 dark:text-gray-200 cursor-pointer"
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="pending">Pending</option>
+                  <option value="approved">Approved</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 dark:text-gray-400 pointer-events-none" />
+              </div>
               <button
                 onClick={(e) => { e.stopPropagation(); fetchLeaves(); }}
                 className="p-1.5 rounded-lg text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
@@ -644,7 +649,7 @@ export default function LeaveCalendarView({
                   >Reject</button>
                 </div>
               )}
-              {(isAdmin || myMemberProfile?.id === selectedLeave.memberId) && (
+              {isAdmin && (
                 <button 
                   onClick={() => { handleDeleteLeave(selectedLeave.id); setSelectedLeave(null); }}
                   className="w-full bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 font-bold py-2.5 rounded-xl transition-colors"
