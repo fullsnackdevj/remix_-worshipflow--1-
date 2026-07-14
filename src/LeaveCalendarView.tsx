@@ -44,6 +44,7 @@ export default function LeaveCalendarView({
   
   // Filter & View state
   const [selectedMemberFilter, setSelectedMemberFilter] = useState<string>("all");
+  const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"calendar" | "list">(isAdmin ? "list" : "calendar");
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "approved" | "rejected">(isAdmin ? "pending" : "all");
 
@@ -317,18 +318,42 @@ export default function LeaveCalendarView({
             </button>
           </div>
 
+          {/* Custom Dropdown to force opening downwards */}
           <div className="relative flex-1 sm:w-48">
-            <select
-              value={selectedMemberFilter}
-              onChange={(e) => setSelectedMemberFilter(e.target.value)}
-              className="w-full appearance-none bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-sm rounded-xl pl-3 pr-10 py-2 text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-teal-500"
+            <button
+              onClick={() => setIsFilterDropdownOpen(!isFilterDropdownOpen)}
+              className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-sm rounded-xl pl-3 pr-10 py-2 text-left text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-teal-500 flex items-center justify-between"
             >
-              <option value="all">All Members</option>
-              {allMembers.map(m => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              <span className="truncate">
+                {selectedMemberFilter === "all" 
+                  ? "All Members" 
+                  : allMembers.find(m => m.id === selectedMemberFilter)?.name || "Unknown"}
+              </span>
+              <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+            </button>
+            
+            {isFilterDropdownOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setIsFilterDropdownOpen(false)} />
+                <div className="absolute top-full mt-2 left-0 right-0 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl max-h-60 overflow-y-auto py-1 custom-scrollbar">
+                  <button
+                    onClick={() => { setSelectedMemberFilter("all"); setIsFilterDropdownOpen(false); }}
+                    className={`w-full text-left px-4 py-2 text-sm ${selectedMemberFilter === "all" ? "bg-teal-50 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400 font-bold" : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"}`}
+                  >
+                    All Members
+                  </button>
+                  {allMembers.map(m => (
+                    <button
+                      key={m.id}
+                      onClick={() => { setSelectedMemberFilter(m.id); setIsFilterDropdownOpen(false); }}
+                      className={`w-full text-left px-4 py-2 text-sm ${selectedMemberFilter === m.id ? "bg-teal-50 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400 font-bold" : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"}`}
+                    >
+                      {m.name}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
 
           <button
@@ -368,7 +393,7 @@ export default function LeaveCalendarView({
                 key={dateStr}
                 onClick={() => {
                   if (!isCellPast) {
-                    if (dayLeaves.length > 0) {
+                    if (dayLeaves.length > 0 && !isAdmin) {
                       setSelectedLeave(dayLeaves[0]);
                     } else {
                       handleOpenForm(dateStr);
@@ -580,7 +605,7 @@ export default function LeaveCalendarView({
               <div className="flex gap-3 items-start bg-teal-50 dark:bg-teal-900/20 text-teal-800 dark:text-teal-300 p-3 rounded-xl text-xs">
                 <AlertCircle size={16} className="shrink-0 mt-0.5" />
                 <p>
-                  Leave requests are sent to the admins/leaders for approval. Once approved, you cannot be assigned to schedules on these dates.
+                  Leave requests are sent to the admins/leaders for approval. Once approved, you cannot be assigned to Mid-Week and Sunday schedules on these dates.
                 </p>
               </div>
 
