@@ -4494,6 +4494,58 @@ Rules:
             body: JSON.stringify(manifest),
         };
     }
+    // ── LEAVES ──────────────────────────────────────────────────────────────────
+    if (rawPath === "/leaves" && method === "GET") {
+        try {
+            let leaves: any[] | null = cacheGet("leaves");
+            if (!leaves) {
+                const snapshot = await firestore.collection("leaves").orderBy("createdAt", "desc").get();
+                leaves = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                cacheSet("leaves", leaves);
+            }
+            return json(200, leaves);
+        } catch (e: any) {
+            console.error("Failed to fetch leaves:", e?.message);
+            return json(500, { error: "Failed to fetch leaves" });
+        }
+    }
+    if (rawPath === "/leaves" && method === "POST") {
+        try {
+            const data = { ...body };
+            if (!data.createdAt) data.createdAt = Date.now();
+            const docRef = await firestore.collection("leaves").add(data);
+            cacheDel("leaves");
+            return json(200, { id: docRef.id, ...data });
+        } catch (e: any) {
+            console.error("Failed to create leave:", e?.message);
+            return json(500, { error: "Failed to create leave" });
+        }
+    }
+    const leaveMatch = rawPath.match(/^\/leaves\/([^/]+)$/);
+    if (leaveMatch) {
+        const id = leaveMatch[1];
+        if (method === "PATCH" || method === "PUT") {
+            try {
+                await firestore.collection("leaves").doc(id).update(body);
+                cacheDel("leaves");
+                return json(200, { ok: true });
+            } catch (e: any) {
+                console.error("Failed to update leave:", e?.message);
+                return json(500, { error: "Failed to update leave" });
+            }
+        }
+        if (method === "DELETE") {
+            try {
+                await firestore.collection("leaves").doc(id).delete();
+                cacheDel("leaves");
+                return json(200, { ok: true });
+            } catch (e: any) {
+                console.error("Failed to delete leave:", e?.message);
+                return json(500, { error: "Failed to delete leave" });
+            }
+        }
+    }
+
     return json(404, { error: "Not found" });
 
 };

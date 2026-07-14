@@ -66,9 +66,9 @@ export default function LeaveCalendarView({
   const fetchLeaves = async () => {
     setIsLoading(true);
     try {
-      const q = query(collection(db, "leaves"), orderBy("createdAt", "desc"));
-      const snap = await getDocs(q);
-      const data = snap.docs.map(d => ({ id: d.id, ...d.data() } as LeaveRequest));
+      const res = await fetch("/api/leaves");
+      if (!res.ok) throw new Error("Network response was not ok");
+      const data = await res.json();
       setLeaves(data);
     } catch (err) {
       console.error("Failed to fetch leaves:", err);
@@ -133,7 +133,13 @@ export default function LeaveCalendarView({
         createdAt: Date.now(),
       };
 
-      const addedDoc = await addDoc(collection(db, "leaves"), newLeave);
+      const res = await fetch("/api/leaves", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newLeave),
+      });
+      if (!res.ok) throw new Error("Failed to create leave");
+      const addedDoc = await res.json();
 
       // Add a notification for admins/leaders
       await addDoc(collection(db, "notifications"), {
@@ -161,7 +167,12 @@ export default function LeaveCalendarView({
 
   const handleUpdateStatus = async (id: string, newStatus: "approved" | "rejected") => {
     try {
-      await updateDoc(doc(db, "leaves", id), { status: newStatus });
+      const res = await fetch(`/api/leaves/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (!res.ok) throw new Error("Failed to update status");
       
       const targetLeave = leaves.find(l => l.id === id);
       if (targetLeave) {
@@ -197,7 +208,8 @@ export default function LeaveCalendarView({
       onConfirm: async () => {
         closeConfirm();
         try {
-          await deleteDoc(doc(db, "leaves", id));
+          const res = await fetch(`/api/leaves/${id}`, { method: "DELETE" });
+          if (!res.ok) throw new Error("Failed to delete leave");
           setLeaves(prev => prev.filter(l => l.id !== id));
           showToast("success", "Leave deleted successfully.");
           setSelectedLeave(null);
