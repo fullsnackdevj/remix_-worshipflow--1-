@@ -139,6 +139,10 @@ export default function MembersView({
     return activeLeaves.some(l => l.memberId === memberId) ? "on-leave" : "active";
   }, [activeLeaves, allMembers]);
 
+  const getMemberLeave = useCallback((memberId: string) => {
+    return activeLeaves.find(l => l.memberId === memberId);
+  }, [activeLeaves]);
+
   useEffect(() => {
     if (allMembers.length > 0) { setIsLoadingMembers(false); fetchMembers({ background: true }); }
     else fetchMembers();
@@ -530,7 +534,15 @@ export default function MembersView({
                 <h2 className="text-xl font-bold text-gray-900 dark:text-white tracking-tight leading-snug">{selectedMember.name}</h2>
                 <div className="flex items-center gap-1.5 mt-1.5">
                   <span className={`w-2 h-2 rounded-full ${STATUS_CONFIG[getMemberStatus(selectedMember.id) as "active" | "on-leave" | "inactive"].dot}`} />
-                  <span className="text-sm text-gray-500 dark:text-gray-400">{STATUS_CONFIG[getMemberStatus(selectedMember.id) as "active" | "on-leave" | "inactive"].label}</span>
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    {STATUS_CONFIG[getMemberStatus(selectedMember.id) as "active" | "on-leave" | "inactive"].label}
+                    {getMemberStatus(selectedMember.id) === "on-leave" && getMemberLeave(selectedMember.id)?.endDate && (
+                      <span className="opacity-80"> ● Ends on {(() => {
+                        const p = getMemberLeave(selectedMember.id).endDate.split('-');
+                        return `${p[1]}-${p[2]}-${p[0].slice(2)}`;
+                      })()}</span>
+                    )}
+                  </span>
                   {selectedMember.roles?.length > 0 && (
                     <span className="text-gray-300 dark:text-gray-700 mx-1">·</span>
                   )}
@@ -704,7 +716,17 @@ export default function MembersView({
                             : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
                         }`}>
                           <span className={`w-1.5 h-1.5 rounded-full ${STATUS_CONFIG[getMemberStatus(member.id) as "active" | "on-leave" | "inactive"].dot}`} />
-                          {STATUS_CONFIG[getMemberStatus(member.id) as "active" | "on-leave" | "inactive"].label}
+                          <span>
+                            {STATUS_CONFIG[getMemberStatus(member.id) as "active" | "on-leave" | "inactive"].label}
+                            {getMemberStatus(member.id) === "on-leave" && getMemberLeave(member.id)?.endDate && (
+                              <span className="opacity-80 ml-1 font-medium tracking-wide">
+                                ● Ends on {(() => {
+                                  const p = getMemberLeave(member.id).endDate.split('-');
+                                  return `${p[1]}-${p[2]}-${p[0].slice(2)}`;
+                                })()}
+                              </span>
+                            )}
+                          </span>
                         </span>
                       </div>
                     </div>
