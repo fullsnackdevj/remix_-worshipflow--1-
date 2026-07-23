@@ -230,15 +230,9 @@ export default function WorshipLeadersScheduleModal({
 
   const handleSaveManualForm = async (e: React.FormEvent) => {
     e.preventDefault();
-    const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
 
     if (!formDate || !formLeader.trim()) {
       showToast("error", "Please specify a date and Worship Leader name.");
-      return;
-    }
-
-    if (formDate < todayStr) {
-      showToast("error", "Past dates cannot be scheduled for rotation. Please select today or a future date.");
       return;
     }
 
@@ -886,7 +880,6 @@ export default function WorshipLeadersScheduleModal({
                 <input
                   type="date"
                   required
-                  min={new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" })}
                   value={formDate}
                   onChange={(e) => setFormDate(e.target.value)}
                   style={{ WebkitAppearance: "none", appearance: "none" }}
