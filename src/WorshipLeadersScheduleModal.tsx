@@ -141,13 +141,31 @@ export default function WorshipLeadersScheduleModal({
         ...d.data(),
       })) as WorshipLeaderScheduleItem[];
 
-      setItems(fetched);
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(fetched));
+      // Auto-cleanup: delete past-date rotations
+      const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+      const pastItems = fetched.filter((it) => it.date < todayStr);
+      const currentItems = fetched.filter((it) => it.date >= todayStr);
+
+      // Delete past items from Firestore silently
+      for (const pastItem of pastItems) {
+        try {
+          await deleteDoc(doc(db, "worship_leader_schedules", pastItem.id));
+        } catch (e) {
+          console.warn("Failed to auto-delete past rotation:", pastItem.id, e);
+        }
+      }
+
+      setItems(currentItems);
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(currentItems));
     } catch (e) {
       console.warn("Failed to fetch worship leader schedules from Firestore:", e);
       try {
         const cached = localStorage.getItem(LOCAL_STORAGE_KEY);
-        if (cached) setItems(JSON.parse(cached));
+        if (cached) {
+          const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+          const parsed = JSON.parse(cached).filter((it: any) => it.date >= todayStr);
+          setItems(parsed);
+        }
       } catch {}
     } finally {
       setIsLoading(false);
@@ -172,30 +190,6 @@ export default function WorshipLeadersScheduleModal({
         m.name.toLowerCase().includes(clean) ||
         clean.includes(m.name.toLowerCase())
     );
-  };
-
-  // ── 3. Toggle Completion Checklist ──────────────────────────────────────────
-  const toggleCompleted = async (item: WorshipLeaderScheduleItem) => {
-    const updatedStatus = !item.completed;
-    const newItems = items.map((it) =>
-      it.id === item.id ? { ...it, completed: updatedStatus } : it
-    );
-    setItems(newItems);
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(newItems));
-
-    try {
-      await setDoc(
-        doc(db, "worship_leader_schedules", item.id),
-        { completed: updatedStatus, updated_at: new Date().toISOString() },
-        { merge: true }
-      );
-      showToast(
-        "success",
-        `Rotation on ${item.date} marked as ${updatedStatus ? "completed" : "pending"}`
-      );
-    } catch (e) {
-      showToast("error", "Failed to save completion status.");
-    }
   };
 
   // ── 4. Manual Edit/Add Logic ────────────────────────────────────────────────
@@ -468,10 +462,14 @@ export default function WorshipLeadersScheduleModal({
       const data = await res.json();
       const rawText: string = data.text || "";
 
-      // Parse JSON from raw Gemini response
+      // Parse JSON from raw Gemini response — extract JSON array robustly
       let cleanJsonStr = rawText.trim();
-      if (cleanJsonStr.startsWith("```")) {
-        cleanJsonStr = cleanJsonStr.replace(/^```(json)?/, "").replace(/```$/, "").trim();
+      // Remove markdown code fences
+      cleanJsonStr = cleanJsonStr.replace(/^```(json)?\n?/i, "").replace(/\n?```$/i, "").trim();
+      // Extract the JSON array from any surrounding text (Gemini sometimes adds explanatory text)
+      const jsonArrayMatch = cleanJsonStr.match(/(\[\s*\{[\s\S]*\}\s*\])/m);
+      if (jsonArrayMatch) {
+        cleanJsonStr = jsonArrayMatch[1];
       }
 
       const parsed: any[] = JSON.parse(cleanJsonStr);
@@ -781,27 +779,11 @@ export default function WorshipLeadersScheduleModal({
                   return (
                     <div
                       key={item.id}
-                      className={`group flex flex-col sm:flex-row sm:items-center justify-between p-3.5 sm:p-4 rounded-2xl border gap-3 transition-all ${
-                        item.completed
-                          ? "bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/40"
-                          : "bg-white dark:bg-gray-800/90 border-gray-200 dark:border-white/10 shadow-sm hover:border-violet-300 dark:hover:border-violet-600/50"
-                      }`}
+                      className="group flex flex-col sm:flex-row sm:items-center justify-between p-3.5 sm:p-4 rounded-2xl border gap-3 transition-all bg-white dark:bg-gray-800/90 border-gray-200 dark:border-white/10 shadow-sm hover:border-violet-300 dark:hover:border-violet-600/50"
                     >
-                      {/* Top / Main Info Row: Checkbox, Date & Actions (Mobile top-right) */}
+                      {/* Top / Main Info Row: Date & Actions (Mobile top-right) */}
                       <div className="flex items-center justify-between gap-3 w-full sm:w-auto">
                         <div className="flex items-center gap-2.5 min-w-0">
-                          <button
-                            onClick={() => toggleCompleted(item)}
-                            className="shrink-0 text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
-                            title={item.completed ? "Mark as pending" : "Mark as completed"}
-                          >
-                            {item.completed ? (
-                              <CheckCircle2 size={20} className="text-emerald-600 dark:text-emerald-400" />
-                            ) : (
-                              <Circle size={20} />
-                            )}
-                          </button>
-
                           <div className="flex items-center gap-2 min-w-0">
                             <span className="w-8 h-8 rounded-xl bg-violet-100 dark:bg-white/10 flex items-center justify-center font-black text-xs text-violet-700 dark:text-gray-200 shrink-0">
                               {dayNum}
