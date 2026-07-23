@@ -66,3 +66,19 @@ export interface Schedule {
   lineupAcks?: { userId: string; userName: string; photo?: string }[];
 }
 
+export interface WorshipLeaderScheduleItem {
+  id: string;
+  date: string; // YYYY-MM-DD
+  month: string; // e.g. "August 2026"
+  worshipLeader: string;
+  worshipLeaderId?: string;
+  worshipLeaderPhoto?: string;
+  backupSingers: string[];
+  backupSingerIds?: string[];
+  completed?: boolean;
+  notes?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+

@@ -6,6 +6,7 @@ import { collection, getDocs, orderBy, query, doc, getDoc, deleteDoc } from "fir
 import AutoTextarea from "./AutoTextarea";
 import { Member, ScheduleMember, Schedule, Song, Tag } from "./types";
 import TeamTemplatesModal, { TeamTemplate } from "./TeamTemplatesModal";
+import WorshipLeadersScheduleModal from "./WorshipLeadersScheduleModal";
 import {
   ChevronLeft, ChevronRight, Plus, Calendar, List, X, Settings,
   Copy, Pencil, Lock, Users, Sun, Music, BookOpen, Mail, Eye, Loader2, Heart, SquareKanban, ExternalLink, CheckCircle2, Trash2, Check,
@@ -88,6 +89,7 @@ export default function ScheduleView({
   setAllSchedules,
   allMembers,
   allSongs,
+  setAllSongs,
   birthdayMap,
   isAdmin,
   isLeader,
@@ -135,6 +137,9 @@ const [editSchedMusicians, setEditSchedMusicians] = useState<ScheduleMember[]>([
 const [pendingRolePick, setPendingRolePick] = useState<{ m: typeof allMembers[0]; roles: string[] } | null>(null);
 const [editSchedAssignments, setEditSchedAssignments] = useState<{ role: string; members: ScheduleMember[]; search: string }[]>([]);
 const [newRoleInput, setNewRoleInput] = useState("");
+
+// ── Worship Leaders Rotation Schedule Modal state ───────────────────────────
+const [showWorshipLeadersModal, setShowWorshipLeadersModal] = useState(false);
 
 // ── Team Templates state ──────────────────────────────────────────────────────
 const [showTemplateSettings, setShowTemplateSettings] = useState(false);
@@ -706,6 +711,21 @@ showToast("error", "Could not save acknowledgment. Try again.");
     <>
     <div className="max-w-7xl mx-auto">
 
+      {/* ── Worship Leaders Rotation Schedule Modal ───────────────────── */}
+      <WorshipLeadersScheduleModal
+        isOpen={showWorshipLeadersModal}
+        onClose={() => setShowWorshipLeadersModal(false)}
+        allMembers={allMembers}
+        allSchedules={allSchedules}
+        setAllSchedules={setAllSchedules}
+        canWriteSchedule={canWriteSchedule}
+        isAdmin={isAdmin}
+        isLeader={isLeader}
+        user={user}
+        showToast={showToast}
+        showConfirm={showConfirm}
+      />
+
       {/* ── Team Templates Settings Modal ─────────────────────── */}
       {showTemplateSettings && (
         <TeamTemplatesModal
@@ -758,57 +778,70 @@ showToast("error", "Could not save acknowledgment. Try again.");
           </button>
         </div>
 
-        {/* RIGHT — Settings ⚙ + Add Event */}
-        <div className="flex items-center gap-2 shrink-0">
-          {/* ⚙ Settings — Team Templates (leaders/admins only) */}
-          {(canWriteSchedule || isLeader) && (
-            <button
-              onClick={() => setShowTemplateSettings(true)}
-              title="Scheduling Settings — Team Templates"
-              className="w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all shadow-sm"
-            >
-              <Settings size={16} />
-            </button>
-          )}
+        {/* RIGHT — Worship Leaders Schedule (left) + [Add Event & Settings] (right) */}
+        <div className="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-1.5 sm:gap-2">
+          {/* View Worship Leaders Schedule Button */}
+          <button
+            onClick={() => setShowWorshipLeadersModal(true)}
+            title="View Worship Leaders & Backup Singers Rotations"
+            className="flex items-center justify-center gap-1.5 h-9 px-3 sm:px-3.5 bg-violet-50 dark:bg-violet-950/50 hover:bg-violet-100 dark:hover:bg-violet-900/60 text-violet-700 dark:text-violet-300 rounded-xl border border-violet-200 dark:border-violet-800/50 text-xs font-extrabold transition-all shadow-sm active:scale-95 shrink-0"
+          >
+            <Users size={14} className="text-violet-600 dark:text-violet-400 shrink-0" />
+            <span className="whitespace-nowrap">View Worship Leaders Schedule</span>
+          </button>
 
-          {/* Add Event button */}
-          {(() => {
-            const isListView = scheduleView === "list";
-            const hasExisting = selectedDateEvents.length > 0;
-            const canBypassPast = false;
-            const hasDate = !!selectedScheduleDate && selectedScheduleDate >= todayStr;
-            const isPast = !!selectedScheduleDate && selectedScheduleDate < todayStr;
-            const isFormOpen = schedPanelMode === "edit";
-            const canAdd = (canWriteSchedule || leaderCanAddOnDate) && !isListView && hasDate && !isFormOpen && selectedDateEvents.length === 0;
-            const label = hasExisting ? "Add Another" : "Add Event";
-            const disabledTitle = isPast && !canBypassPast
-               ? "This date has passed — cannot add events"
-               : (!canWriteSchedule && !isLeader)
-                 ? "You don't have permission to add events"
-                 : isFormOpen
-                   ? "Close the current form before adding a new event"
-                   : isListView
-                     ? "Switch to Month view to add events"
-                     : "Select a date on the calendar first";
-            if (canAdd) {
+          {/* Right Action Group: Add Event + Settings ⚙ */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* Add Event button */}
+            {(() => {
+              const isListView = scheduleView === "list";
+              const hasExisting = selectedDateEvents.length > 0;
+              const canBypassPast = false;
+              const hasDate = !!selectedScheduleDate && selectedScheduleDate >= todayStr;
+              const isPast = !!selectedScheduleDate && selectedScheduleDate < todayStr;
+              const isFormOpen = schedPanelMode === "edit";
+              const canAdd = (canWriteSchedule || leaderCanAddOnDate) && !isListView && hasDate && !isFormOpen && selectedDateEvents.length === 0;
+              const label = hasExisting ? "Add Another" : "Add Event";
+              const disabledTitle = isPast && !canBypassPast
+                 ? "This date has passed — cannot add events"
+                 : (!canWriteSchedule && !isLeader)
+                   ? "You don't have permission to add events"
+                   : isFormOpen
+                     ? "Close the current form before adding a new event"
+                     : isListView
+                       ? "Switch to Month view to add events"
+                       : "Select a date on the calendar first";
+              if (canAdd) {
+                return (
+                  <button
+                    onClick={() => { setSelectedEventId(null); setSchedPanelMode("edit"); openBlankEventForm(selectedScheduleDate!); }}
+                    className="flex items-center justify-center gap-1.5 h-9 px-3 sm:px-4 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-xl hover:from-violet-500 hover:to-indigo-500 active:scale-[0.97] text-xs font-bold transition-all shadow-lg shadow-violet-500/30 shrink-0"
+                  >
+                    <Plus size={14} />
+                    <span className="whitespace-nowrap">{label}</span>
+                  </button>
+                );
+              }
               return (
-                <button
-                  onClick={() => { setSelectedEventId(null); setSchedPanelMode("edit"); openBlankEventForm(selectedScheduleDate!); }}
-                  className="flex items-center justify-center gap-1.5 h-9 px-4 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-xl hover:from-violet-500 hover:to-indigo-500 active:scale-[0.97] text-xs font-bold transition-all shadow-lg shadow-violet-500/30"
-                >
+                <button disabled title={disabledTitle}
+                  className="flex items-center justify-center gap-1.5 h-9 px-3 sm:px-4 rounded-xl text-xs font-bold bg-gray-100 dark:bg-white/5 text-gray-300 dark:text-gray-600 cursor-not-allowed select-none border border-gray-200 dark:border-white/10 shrink-0">
                   <Plus size={14} />
                   <span className="whitespace-nowrap">{label}</span>
                 </button>
               );
-            }
-            return (
-              <button disabled title={disabledTitle}
-                className="flex items-center justify-center gap-1.5 h-9 px-4 rounded-xl text-xs font-bold bg-gray-100 dark:bg-white/5 text-gray-300 dark:text-gray-600 cursor-not-allowed select-none border border-gray-200 dark:border-white/10">
-                <Plus size={14} />
-                <span className="whitespace-nowrap">{label}</span>
+            })()}
+
+            {/* ⚙ Settings — Team Templates (leaders/admins only) */}
+            {(canWriteSchedule || isLeader) && (
+              <button
+                onClick={() => setShowTemplateSettings(true)}
+                title="Scheduling Settings — Team Templates"
+                className="w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all shadow-sm shrink-0"
+              >
+                <Settings size={16} />
               </button>
-            );
-          })()}
+            )}
+          </div>
         </div>
       </div>
 

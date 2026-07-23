@@ -2293,7 +2293,13 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                 Cancel
               </button>
               <button
-                onClick={confirmConfig.onConfirm}
+                onClick={async () => {
+                  try {
+                    await confirmConfig.onConfirm();
+                  } finally {
+                    closeConfirm();
+                  }
+                }}
                 className={`px-5 py-2 text-sm text-white rounded-xl font-semibold transition-colors ${confirmConfig.confirmClass || "bg-red-500 hover:bg-red-600"}`}
               >
                 {confirmConfig.confirmText}
