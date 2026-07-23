@@ -1150,6 +1150,16 @@ export default function WorshipLeadersScheduleModal({
                         {idx + 1}
                       </span>
                       <div className="flex-1 min-w-0">
+                        <span className="text-sm font-bold text-gray-900 dark:text-white block truncate">
+                          {displayDate}
+                        </span>
+                        <span className="text-[10px] text-violet-500 dark:text-violet-400 font-medium block">
+                          {dayName || "Select a date"}
+                        </span>
+                      </div>
+                      {/* Compact date edit button */}
+                      <label className="shrink-0 p-1.5 rounded-lg bg-violet-100 dark:bg-violet-900/50 text-violet-600 dark:text-violet-400 hover:bg-violet-200 dark:hover:bg-violet-800/50 cursor-pointer transition-colors">
+                        <Calendar size={14} />
                         <input
                           type="date"
                           value={item.date || ""}
@@ -1159,12 +1169,9 @@ export default function WorshipLeadersScheduleModal({
                               prev!.map((it, i) => (i === idx ? { ...it, date: val } : it))
                             );
                           }}
-                          className="w-full px-2 py-1 text-xs rounded-lg border border-violet-200 dark:border-violet-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-bold focus:ring-2 focus:ring-violet-400 focus:border-transparent"
+                          className="sr-only"
                         />
-                        <span className="text-[10px] text-violet-500 dark:text-violet-400 font-medium mt-0.5 block">
-                          {displayDate}{dayName ? ` · ${dayName}` : ""}
-                        </span>
-                      </div>
+                      </label>
                     </div>
 
                     {/* Leader & Backup Fields */}
