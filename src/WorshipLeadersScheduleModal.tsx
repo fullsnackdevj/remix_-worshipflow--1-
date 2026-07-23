@@ -477,16 +477,53 @@ export default function WorshipLeadersScheduleModal({
         throw new Error("No schedule rotations could be detected from the image.");
       }
 
+      // ── Name Normalization: map nicknames / abbreviations to canonical names ──
+      const nicknameMap: Record<string, string> = {
+        pat: "Patricia", pats: "Patricia", patricia: "Patricia",
+        jek: "Jessica", jes: "Jessica", jessica: "Jessica",
+        memey: "May Arnuncio", mey: "May Arnuncio", may: "May Arnuncio",
+      };
+
+      const normalizeName = (raw: string): string => {
+        if (!raw) return raw;
+        const trimmed = raw.trim();
+        const lower = trimmed.toLowerCase();
+
+        // 1. Check direct nickname map first
+        if (nicknameMap[lower]) return nicknameMap[lower];
+
+        // 2. Try fuzzy match against allMembers (first name match)
+        const memberMatch = allMembers.find((m) => {
+          const memberLower = m.name.toLowerCase();
+          const memberFirst = memberLower.split(" ")[0];
+          return (
+            memberLower === lower ||
+            memberFirst === lower ||
+            memberLower.includes(lower) ||
+            lower.includes(memberFirst)
+          );
+        });
+        if (memberMatch) return memberMatch.name;
+
+        // 3. Capitalize properly as fallback
+        return trimmed
+          .split(" ")
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+          .join(" ");
+      };
+
       const formatted: Partial<WorshipLeaderScheduleItem>[] = parsed.map((entry, idx) => ({
         id: `ocr_${entry.date || idx}_${Date.now()}`,
         date: entry.date || "",
         month: entry.month || "",
-        worshipLeader: entry.worshipLeader || "",
-        backupSingers: Array.isArray(entry.backupSingers)
-          ? entry.backupSingers
-          : entry.backupSingers
-          ? [entry.backupSingers]
-          : [],
+        worshipLeader: normalizeName(entry.worshipLeader || ""),
+        backupSingers: (
+          Array.isArray(entry.backupSingers)
+            ? entry.backupSingers
+            : entry.backupSingers
+            ? [entry.backupSingers]
+            : []
+        ).map((name: string) => normalizeName(name)),
         completed: false,
       }));
 
@@ -1068,98 +1105,145 @@ export default function WorshipLeadersScheduleModal({
 
       {/* ── AI OCR Preview & Confirmation Modal ────────────────────────────────── */}
       {ocrPreviewItems && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
-          <div className="w-full max-w-xl max-h-[85vh] bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-white/10 flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-white/10 bg-indigo-50/50 dark:bg-indigo-950/30">
+        <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-xs">
+          <div className="w-full sm:max-w-lg max-h-[90vh] sm:max-h-[85vh] bg-white dark:bg-gray-900 rounded-t-2xl sm:rounded-2xl shadow-2xl border border-gray-200 dark:border-white/10 flex flex-col overflow-hidden animate-in slide-in-from-bottom sm:zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 border-b border-gray-100 dark:border-white/10 bg-gradient-to-r from-indigo-50 to-violet-50 dark:from-indigo-950/40 dark:to-violet-950/30 shrink-0">
               <div className="flex items-center gap-2 text-indigo-900 dark:text-indigo-200">
                 <Sparkles size={18} className="text-indigo-600 dark:text-indigo-400" />
-                <h4 className="text-sm font-bold">Review AI Recognized Schedule</h4>
+                <div>
+                  <h4 className="text-sm font-bold">Review AI Schedule</h4>
+                  <p className="text-[10px] text-indigo-600/70 dark:text-indigo-400/60 font-medium">{ocrPreviewItems.length} rotation{ocrPreviewItems.length > 1 ? "s" : ""} detected</p>
+                </div>
               </div>
               <button
                 onClick={() => setOcrPreviewItems(null)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-white"
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-white hover:bg-white/60 dark:hover:bg-white/10 transition-all"
               >
                 <X size={16} />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-5 space-y-3">
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                Please verify or adjust the dates, worship leaders, and backup singers extracted from your image before saving.
+            {/* Scrollable Cards */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3">
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed">
+                Verify the extracted schedule below. Tap any field to edit before importing.
               </p>
 
-              {ocrPreviewItems.map((item, idx) => (
-                <div
-                  key={idx}
-                  className="p-3 rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50/50 dark:bg-white/5 space-y-2"
-                >
-                  <div className="grid grid-cols-3 gap-2">
-                    <div>
-                      <label className="text-[10px] font-bold text-gray-500">Date (YYYY-MM-DD)</label>
-                      <input
-                        type="date"
-                        value={item.date || ""}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setOcrPreviewItems((prev) =>
-                            prev!.map((it, i) => (i === idx ? { ...it, date: val } : it))
-                          );
-                        }}
-                        className="w-full px-2 py-1 text-xs rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-medium"
-                      />
+              {ocrPreviewItems.map((item, idx) => {
+                const dateObj = item.date ? new Date(item.date + "T00:00:00") : null;
+                const displayDate = dateObj
+                  ? dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                  : "No date";
+                const dayName = dateObj
+                  ? dateObj.toLocaleDateString("en-US", { weekday: "long" })
+                  : "";
+
+                return (
+                  <div
+                    key={idx}
+                    className="rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50/50 dark:bg-white/[0.03] overflow-hidden"
+                  >
+                    {/* Date Header Bar */}
+                    <div className="flex items-center gap-2.5 px-3.5 py-2.5 bg-violet-50 dark:bg-violet-950/30 border-b border-violet-100 dark:border-violet-800/30">
+                      <span className="w-7 h-7 rounded-lg bg-violet-600 text-white flex items-center justify-center text-xs font-black shrink-0">
+                        {idx + 1}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <input
+                          type="date"
+                          value={item.date || ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setOcrPreviewItems((prev) =>
+                              prev!.map((it, i) => (i === idx ? { ...it, date: val } : it))
+                            );
+                          }}
+                          className="w-full px-2 py-1 text-xs rounded-lg border border-violet-200 dark:border-violet-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-bold focus:ring-2 focus:ring-violet-400 focus:border-transparent"
+                        />
+                        <span className="text-[10px] text-violet-500 dark:text-violet-400 font-medium mt-0.5 block">
+                          {displayDate}{dayName ? ` · ${dayName}` : ""}
+                        </span>
+                      </div>
                     </div>
 
-                    <div>
-                      <label className="text-[10px] font-bold text-gray-500">Worship Leader</label>
-                      <input
-                        type="text"
-                        value={item.worshipLeader || ""}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setOcrPreviewItems((prev) =>
-                            prev!.map((it, i) => (i === idx ? { ...it, worshipLeader: val } : it))
-                          );
-                        }}
-                        className="w-full px-2 py-1 text-xs rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-medium"
-                      />
-                    </div>
+                    {/* Leader & Backup Fields */}
+                    <div className="px-3.5 py-3 space-y-2.5">
+                      {/* Worship Leader */}
+                      <div>
+                        <label className="flex items-center gap-1 text-[10px] font-extrabold uppercase text-gray-400 dark:text-gray-500 mb-1">
+                          <User size={10} className="text-violet-500" />
+                          Worship Leader
+                        </label>
+                        <input
+                          type="text"
+                          value={item.worshipLeader || ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setOcrPreviewItems((prev) =>
+                              prev!.map((it, i) => (i === idx ? { ...it, worshipLeader: val } : it))
+                            );
+                          }}
+                          className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-bold focus:ring-2 focus:ring-violet-400 focus:border-transparent"
+                        />
+                      </div>
 
-                    <div>
-                      <label className="text-[10px] font-bold text-gray-500">Backup Singers</label>
-                      <input
-                        type="text"
-                        value={(item.backupSingers || []).join(", ")}
-                        onChange={(e) => {
-                          const val = e.target.value
-                            .split(",")
-                            .map((s) => s.trim())
-                            .filter(Boolean);
-                          setOcrPreviewItems((prev) =>
-                            prev!.map((it, i) => (i === idx ? { ...it, backupSingers: val } : it))
-                          );
-                        }}
-                        className="w-full px-2 py-1 text-xs rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-medium"
-                      />
+                      {/* Backup Singers */}
+                      <div>
+                        <label className="flex items-center gap-1 text-[10px] font-extrabold uppercase text-gray-400 dark:text-gray-500 mb-1">
+                          <Users size={10} className="text-indigo-500" />
+                          Backup Singers
+                        </label>
+                        <input
+                          type="text"
+                          value={(item.backupSingers || []).join(", ")}
+                          onChange={(e) => {
+                            const val = e.target.value
+                              .split(",")
+                              .map((s) => s.trim())
+                              .filter(Boolean);
+                            setOcrPreviewItems((prev) =>
+                              prev!.map((it, i) => (i === idx ? { ...it, backupSingers: val } : it))
+                            );
+                          }}
+                          placeholder="Comma separated names"
+                          className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-medium focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
+                        />
+                        {/* Preview Backup Tags */}
+                        {(item.backupSingers || []).length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {item.backupSingers!.map((name, bi) => (
+                              <span
+                                key={bi}
+                                className="px-2 py-0.5 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold border border-indigo-100 dark:border-indigo-800/30"
+                              >
+                                {name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
-            <div className="flex items-center justify-between px-5 py-3.5 border-t border-gray-100 dark:border-white/10 bg-gray-50/50 dark:bg-white/5">
+            {/* Footer Actions */}
+            <div className="flex items-center justify-between px-4 sm:px-5 py-3 border-t border-gray-100 dark:border-white/10 bg-gray-50/50 dark:bg-white/5 shrink-0">
               <button
                 onClick={() => setOcrPreviewItems(null)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/10"
+                className="px-4 py-2.5 rounded-xl text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveOcrPreview}
                 disabled={isSavingOcr}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 disabled:opacity-50"
+                className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-xs font-bold hover:from-indigo-700 hover:to-violet-700 disabled:opacity-50 shadow-lg shadow-indigo-500/25 transition-all"
               >
                 {isSavingOcr ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                <span>Import & Save All Rotations</span>
+                <span>Import & Save All</span>
               </button>
             </div>
           </div>
