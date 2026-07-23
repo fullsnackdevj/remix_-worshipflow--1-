@@ -889,7 +889,7 @@ export default function WorshipLeadersScheduleModal({
                   min={new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" })}
                   value={formDate}
                   onChange={(e) => setFormDate(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-xs font-medium focus:ring-2 focus:ring-violet-500"
+                  className="w-full pl-4 pr-3 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-xs font-medium focus:ring-2 focus:ring-violet-500 box-border min-h-[42px]"
                 />
               </div>
 
