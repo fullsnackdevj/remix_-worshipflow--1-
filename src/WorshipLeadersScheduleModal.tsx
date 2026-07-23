@@ -242,7 +242,8 @@ export default function WorshipLeadersScheduleModal({
       return;
     }
 
-    if (!formBackup1.trim() && !formBackup2.trim()) {
+    const backups = [formBackup1 ? formBackup1.trim() : "", formBackup2 ? formBackup2.trim() : ""].filter(Boolean);
+    if (backups.length === 0) {
       showToast("error", "At least 1 Backup Singer must be assigned for each rotation.");
       return;
     }
@@ -510,6 +511,12 @@ export default function WorshipLeadersScheduleModal({
 
       for (const item of ocrPreviewItems) {
         if (!item.date || !item.worshipLeader) continue;
+        const validBackups = (item.backupSingers || []).filter((b) => b && b.trim());
+        if (validBackups.length === 0) {
+          showToast("error", `Rotation on ${item.date} is missing a Backup Singer. At least 1 Backup Singer is required.`);
+          setIsSavingOcr(false);
+          return;
+        }
 
         const dateObj = new Date(item.date + "T00:00:00");
         const monthStr =
@@ -774,55 +781,77 @@ export default function WorshipLeadersScheduleModal({
                   return (
                     <div
                       key={item.id}
-                      className={`group flex items-center justify-between p-3.5 rounded-xl border transition-all ${
+                      className={`group flex flex-col sm:flex-row sm:items-center justify-between p-3.5 sm:p-4 rounded-2xl border gap-3 transition-all ${
                         item.completed
                           ? "bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/40"
                           : "bg-white dark:bg-gray-800/90 border-gray-200 dark:border-white/10 shadow-sm hover:border-violet-300 dark:hover:border-violet-600/50"
                       }`}
                     >
-                      {/* Left: Checkbox + Date */}
-                      <div className="flex items-center gap-3 min-w-0">
-                        <button
-                          onClick={() => toggleCompleted(item)}
-                          className="shrink-0 text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
-                          title={item.completed ? "Mark as pending" : "Mark as completed"}
-                        >
-                          {item.completed ? (
-                            <CheckCircle2 size={20} className="text-emerald-600 dark:text-emerald-400" />
-                          ) : (
-                            <Circle size={20} />
-                          )}
-                        </button>
+                      {/* Top / Main Info Row: Checkbox, Date & Actions (Mobile top-right) */}
+                      <div className="flex items-center justify-between gap-3 w-full sm:w-auto">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <button
+                            onClick={() => toggleCompleted(item)}
+                            className="shrink-0 text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                            title={item.completed ? "Mark as pending" : "Mark as completed"}
+                          >
+                            {item.completed ? (
+                              <CheckCircle2 size={20} className="text-emerald-600 dark:text-emerald-400" />
+                            ) : (
+                              <Circle size={20} />
+                            )}
+                          </button>
 
-                        <div className="flex items-center gap-2">
-                          <span className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-white/10 flex items-center justify-center font-black text-sm text-gray-800 dark:text-gray-200 shrink-0">
-                            {dayNum}
-                          </span>
-                          <div>
-                            <span className="text-xs font-bold text-gray-900 dark:text-white block">
-                              {formattedDate}
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="w-8 h-8 rounded-xl bg-violet-100 dark:bg-white/10 flex items-center justify-center font-black text-xs text-violet-700 dark:text-gray-200 shrink-0">
+                              {dayNum}
                             </span>
-                            <span className="text-[10px] text-gray-400 font-medium">Sunday Service</span>
+                            <div className="min-w-0">
+                              <span className="text-xs font-bold text-gray-900 dark:text-white block whitespace-nowrap">
+                                {formattedDate}
+                              </span>
+                              <span className="text-[10px] text-gray-400 font-medium block">Sunday Service</span>
+                            </div>
                           </div>
+                        </div>
+
+                        {/* Mobile Actions (Top Right) */}
+                        <div className="flex items-center gap-1 shrink-0 sm:hidden">
+                          {canManageItem(item) && (
+                            <>
+                              <button
+                                onClick={() => openManualEdit(item)}
+                                className="p-1.5 rounded-lg text-gray-400 hover:text-violet-600 dark:hover:text-violet-400 hover:bg-gray-100 dark:hover:bg-white/10 transition-all"
+                              >
+                                <Pencil size={15} />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteItem(item)}
+                                className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-white/10 transition-all"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
 
-                      {/* Middle: Worship Leader & Backup Singers */}
-                      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 mx-4">
+                      {/* Middle: Worship Leader & Backup Singers Badges */}
+                      <div className="flex flex-wrap items-center gap-2.5 sm:gap-4 sm:mx-4">
                         {/* Worship Leader */}
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 shrink-0">
                           <span className="text-[10px] font-extrabold uppercase text-gray-400 dark:text-gray-500">
                             Leader:
                           </span>
-                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-violet-100 dark:bg-violet-900/40 text-violet-800 dark:text-violet-200 text-xs font-extrabold">
-                            <User size={13} className="text-violet-600 dark:text-violet-400" />
-                            <span>{item.worshipLeader}</span>
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-violet-100 dark:bg-violet-900/40 text-violet-800 dark:text-violet-200 text-xs font-extrabold shadow-xs">
+                            <User size={13} className="text-violet-600 dark:text-violet-400 shrink-0" />
+                            <span className="whitespace-nowrap">{item.worshipLeader}</span>
                           </div>
                         </div>
 
                         {/* Backup Singers */}
                         {item.backupSingers.length > 0 && (
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="text-[10px] font-extrabold uppercase text-gray-400 dark:text-gray-500">
                               Backups:
                             </span>
@@ -830,7 +859,7 @@ export default function WorshipLeadersScheduleModal({
                               {item.backupSingers.map((bName, bi) => (
                                 <span
                                   key={bi}
-                                  className="px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-[11px] font-bold"
+                                  className="px-2 py-0.5 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-[11px] font-bold whitespace-nowrap border border-indigo-100 dark:border-indigo-800/30"
                                 >
                                   {bName}
                                 </span>
@@ -840,19 +869,16 @@ export default function WorshipLeadersScheduleModal({
                         )}
                       </div>
 
-                      {/* Right Actions — Accessible ONLY by Admin, May Arnuncio, or scheduled Worship Leader on that day */}
-                      <div className="flex items-center gap-1 shrink-0">
+                      {/* Desktop Actions */}
+                      <div className="hidden sm:flex items-center gap-1 shrink-0">
                         {canManageItem(item) && (
                           <>
-                            {/* Edit button */}
                             <button
                               onClick={() => openManualEdit(item)}
                               className="p-1.5 rounded-lg text-gray-400 hover:text-violet-600 dark:hover:text-violet-400 hover:bg-gray-100 dark:hover:bg-white/10 transition-all"
                             >
                               <Pencil size={15} />
                             </button>
-
-                            {/* Delete button */}
                             <button
                               onClick={() => handleDeleteItem(item)}
                               className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-white/10 transition-all"
