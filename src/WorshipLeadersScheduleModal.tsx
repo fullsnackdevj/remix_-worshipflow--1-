@@ -1127,14 +1127,14 @@ export default function WorshipLeadersScheduleModal({
             {/* Scrollable Cards */}
             <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3">
               <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed">
-                Verify the extracted schedule below. Tap any field to edit before importing.
+                Review the AI-extracted schedule below. Click <strong>Import & Save All</strong> to save these rotations to your schedule. You can edit any rotation once saved.
               </p>
 
               {ocrPreviewItems.map((item, idx) => {
                 const dateObj = item.date ? new Date(item.date + "T00:00:00") : null;
                 const displayDate = dateObj
                   ? dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-                  : "No date";
+                  : item.date || "No date";
                 const dayName = dateObj
                   ? dateObj.toLocaleDateString("en-US", { weekday: "long" })
                   : "";
@@ -1144,7 +1144,7 @@ export default function WorshipLeadersScheduleModal({
                     key={idx}
                     className="rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50/50 dark:bg-white/[0.03] overflow-hidden"
                   >
-                    {/* Date Header Bar */}
+                    {/* Date Header Bar (Read-only) */}
                     <div className="flex items-center gap-2.5 px-3.5 py-2.5 bg-violet-50 dark:bg-violet-950/30 border-b border-violet-100 dark:border-violet-800/30">
                       <span className="w-7 h-7 rounded-lg bg-violet-600 text-white flex items-center justify-center text-xs font-black shrink-0">
                         {idx + 1}
@@ -1154,80 +1154,43 @@ export default function WorshipLeadersScheduleModal({
                           {displayDate}
                         </span>
                         <span className="text-[10px] text-violet-500 dark:text-violet-400 font-medium block">
-                          {dayName || "Select a date"}
+                          {dayName ? `${dayName} Service` : "Sunday Service"}
                         </span>
                       </div>
-                      {/* Compact date edit button */}
-                      <label className="shrink-0 p-1.5 rounded-lg bg-violet-100 dark:bg-violet-900/50 text-violet-600 dark:text-violet-400 hover:bg-violet-200 dark:hover:bg-violet-800/50 cursor-pointer transition-colors">
-                        <Calendar size={14} />
-                        <input
-                          type="date"
-                          value={item.date || ""}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setOcrPreviewItems((prev) =>
-                              prev!.map((it, i) => (i === idx ? { ...it, date: val } : it))
-                            );
-                          }}
-                          className="sr-only"
-                        />
-                      </label>
                     </div>
 
-                    {/* Leader & Backup Fields */}
+                    {/* Leader & Backup Fields (Read-only) */}
                     <div className="px-3.5 py-3 space-y-2.5">
                       {/* Worship Leader */}
                       <div>
-                        <label className="flex items-center gap-1 text-[10px] font-extrabold uppercase text-gray-400 dark:text-gray-500 mb-1">
+                        <span className="flex items-center gap-1 text-[10px] font-extrabold uppercase text-gray-400 dark:text-gray-500 mb-1">
                           <User size={10} className="text-violet-500" />
                           Worship Leader
-                        </label>
-                        <input
-                          type="text"
-                          value={item.worshipLeader || ""}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setOcrPreviewItems((prev) =>
-                              prev!.map((it, i) => (i === idx ? { ...it, worshipLeader: val } : it))
-                            );
-                          }}
-                          className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-bold focus:ring-2 focus:ring-violet-400 focus:border-transparent"
-                        />
+                        </span>
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-violet-100 dark:bg-violet-900/40 text-violet-800 dark:text-violet-200 text-xs font-extrabold">
+                          <span>{item.worshipLeader || "None Specified"}</span>
+                        </div>
                       </div>
 
                       {/* Backup Singers */}
                       <div>
-                        <label className="flex items-center gap-1 text-[10px] font-extrabold uppercase text-gray-400 dark:text-gray-500 mb-1">
+                        <span className="flex items-center gap-1 text-[10px] font-extrabold uppercase text-gray-400 dark:text-gray-500 mb-1">
                           <Users size={10} className="text-indigo-500" />
                           Backup Singers
-                        </label>
-                        <input
-                          type="text"
-                          value={(item.backupSingers || []).join(", ")}
-                          onChange={(e) => {
-                            const val = e.target.value
-                              .split(",")
-                              .map((s) => s.trim())
-                              .filter(Boolean);
-                            setOcrPreviewItems((prev) =>
-                              prev!.map((it, i) => (i === idx ? { ...it, backupSingers: val } : it))
-                            );
-                          }}
-                          placeholder="Comma separated names"
-                          className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-medium focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
-                        />
-                        {/* Preview Backup Tags */}
-                        {(item.backupSingers || []).length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1.5">
+                        </span>
+                        {(item.backupSingers || []).length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5">
                             {item.backupSingers!.map((name, bi) => (
                               <span
                                 key={bi}
-                                className="px-2 py-0.5 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold border border-indigo-100 dark:border-indigo-800/30"
+                                className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-xs font-bold border border-indigo-100 dark:border-indigo-800/30"
                               >
                                 {name}
                               </span>
                             ))}
                           </div>
+                        ) : (
+                          <span className="text-xs text-gray-400 italic">No backup singers detected</span>
                         )}
                       </div>
                     </div>
