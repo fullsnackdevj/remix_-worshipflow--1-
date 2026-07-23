@@ -877,14 +877,17 @@ export default function WorshipLeadersScheduleModal({
                 <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
                   Sunday Date
                 </label>
-                <input
-                  type="date"
-                  required
-                  value={formDate}
-                  onChange={(e) => setFormDate(e.target.value)}
-                  style={{ WebkitAppearance: "none", appearance: "none" }}
-                  className="w-full max-w-full block pl-4 pr-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-xs font-medium focus:ring-2 focus:ring-violet-500 box-border min-h-[42px] min-w-0"
-                />
+                <div className="relative w-full">
+                  <input
+                    type="date"
+                    required
+                    value={formDate}
+                    onChange={(e) => setFormDate(e.target.value)}
+                    style={{ WebkitAppearance: "none", appearance: "none" }}
+                    className="w-full max-w-full block pl-4 pr-10 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-xs font-medium focus:ring-2 focus:ring-violet-500 box-border min-h-[42px] min-w-0"
+                  />
+                  <Calendar size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                </div>
               </div>
 
               {/* ── Role Categorized Dropdown Lists ── */}
