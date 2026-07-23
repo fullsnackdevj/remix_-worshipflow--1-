@@ -232,8 +232,18 @@ export default function WorshipLeadersScheduleModal({
     e.preventDefault();
     const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
 
-    if (!formDate || !formLeader.trim()) {
-      showToast("error", "Please specify a date and Worship Leader name.");
+    if (!formDate) {
+      showToast("error", "Sunday Date is required.");
+      return;
+    }
+
+    if (!formLeader.trim()) {
+      showToast("error", "Worship Leader is required.");
+      return;
+    }
+
+    if (!formBackup1.trim() && !formBackup2.trim()) {
+      showToast("error", "At least 1 Backup Singer must be assigned for each rotation.");
       return;
     }
 
