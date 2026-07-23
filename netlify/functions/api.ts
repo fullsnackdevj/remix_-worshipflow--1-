@@ -1673,7 +1673,28 @@ Rules:
 
             const musicPrompt = `You are a precise music document transcriber. Transcribe ALL visible text from this image EXACTLY as it appears, preserving:\n- Every section label (e.g. "Verse:", "Chorus:", "Bridge:", "Pre Chorus:", etc.)\n- Every tag or annotation (e.g. "//JOYFUL", "(3x)", "(Jesus...)")\n- Every song title or header at the top\n- Every chord or lyric line, in the correct order\n- Empty lines between sections for spacing\n\nRules:\n- Do NOT skip any line of text you can see.\n- Do NOT add, invent, or summarize anything.\n- Do NOT use Markdown formatting (no **, no ##, no bullets).\n- Output ONLY the plain text transcription, nothing else.`;
 
-            const prompt = type === "preaching" ? preachingPrompt : musicPrompt;
+            const schedulePrompt = `You are a precise worship schedule analyzer. Analyze this image showing a monthly schedule of Worship Leaders and Backup Singers for Sunday services.
+Extract every scheduled date entry listed in the image.
+
+For each Sunday entry in the image:
+1. Identify the Month and Year (e.g. "August 2026", "September 2026"). If year is missing, assume current/upcoming year (2026).
+2. Identify the day of the month number (e.g. 2, 9, 16, 23, 30). Formulate the ISO date "YYYY-MM-DD" (e.g. "2026-08-02").
+3. Identify the Worship Leader name (the primary bold name, e.g. "PATRICIA", "YEN", "GWEN"). Capitalize properly (e.g. "Patricia").
+4. Identify the Backup Singers (names listed after the leader, e.g. "Jek and Gwen" -> ["Jek", "Gwen"]).
+
+Return ONLY a valid JSON array of objects with NO markdown formatting, NO backticks, NO surrounding text:
+[
+  {
+    "date": "2026-08-02",
+    "month": "August 2026",
+    "worshipLeader": "Patricia",
+    "backupSingers": ["Jek", "Gwen"]
+  }
+]`;
+
+            let prompt = musicPrompt;
+            if (type === "preaching") prompt = preachingPrompt;
+            if (type === "worship_leader_schedule") prompt = schedulePrompt;
 
             const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
             const response = await ai.models.generateContent({
@@ -1715,7 +1736,29 @@ Rules:
                 return json(422, { error: "No text could be extracted from this image. Try a clearer or higher-resolution photo." });
             }
 
-            const cleanText = rawText.replace(/\*\*/g, "");
+            let cleanText = rawText.replace(/\*\*/g, "");
+
+            // For schedule type: extract JSON array server-side so client always gets clean JSON
+            if (type === "worship_leader_schedule") {
+                let jsonStr = cleanText.trim();
+                // Remove markdown code fences
+                jsonStr = jsonStr.replace(/^```(json)?\n?/i, "").replace(/\n?```$/i, "").trim();
+                // Extract the JSON array from any surrounding text (Gemini sometimes adds "August 2026:" etc.)
+                const jsonArrayMatch = jsonStr.match(/(\[\s*\{[\s\S]*\}\s*\])/);
+                if (jsonArrayMatch) {
+                    jsonStr = jsonArrayMatch[1];
+                }
+                // Validate it's parsable JSON before sending
+                try {
+                    JSON.parse(jsonStr);
+                    cleanText = jsonStr;
+                } catch {
+                    // If still not valid JSON, return a clear error
+                    console.error("Schedule OCR: Gemini returned non-JSON:", cleanText.substring(0, 200));
+                    return json(422, { error: "AI could not extract a valid schedule from this image. Please try a clearer screenshot." });
+                }
+            }
+
             return json(200, { text: cleanText });
         } catch (err: any) {
             console.error("OCR Error:", err?.message ?? err);
