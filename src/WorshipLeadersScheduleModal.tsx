@@ -589,34 +589,36 @@ export default function WorshipLeadersScheduleModal({
       {/* Main Modal Container */}
       <div className="relative w-full max-w-4xl max-h-[90vh] bg-white dark:bg-gray-900 rounded-3xl shadow-2xl border border-gray-200 dark:border-white/10 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-white/10 bg-gray-50/50 dark:bg-white/5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-violet-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-violet-500/20">
-              <Users size={20} />
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-gray-100 dark:border-white/10 bg-gray-50/50 dark:bg-white/5 gap-2">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-violet-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-violet-500/20 shrink-0">
+              <Users size={18} className="sm:w-5 sm:h-5" />
             </div>
-            <div>
-              <h3 className="text-lg font-black text-gray-900 dark:text-white tracking-tight flex items-center gap-2">
-                Worship Leaders Schedule
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
+                <h3 className="text-sm sm:text-lg font-black text-gray-900 dark:text-white tracking-tight leading-tight">
+                  Worship Leaders Schedule
+                </h3>
+                <span className="hidden sm:inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 shrink-0">
                   Rotations
                 </span>
-              </h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
+              </div>
+              <p className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
                 Monthly Sunday service worship leaders & backup singers roster
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {/* Add / Import Button */}
             {canAddRotation && (
               <div className="relative">
                 <button
                   onClick={() => setShowAddMenu((prev) => !prev)}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 active:scale-95 text-white text-xs font-bold transition-all shadow-md shadow-violet-500/20"
+                  className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-violet-600 hover:bg-violet-700 active:scale-95 text-white text-xs font-bold transition-all shadow-md shadow-violet-500/20 shrink-0"
                 >
-                  <Plus size={16} />
-                  <span>Add Rotation</span>
+                  <Plus size={15} className="shrink-0" />
+                  <span className="whitespace-nowrap">Add Rotation</span>
                 </button>
 
                 {/* Dropdown Menu */}
