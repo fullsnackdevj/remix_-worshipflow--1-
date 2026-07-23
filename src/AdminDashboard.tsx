@@ -978,7 +978,7 @@ export default function AdminDashboard({
                         onClick={() => onNavigate("songs")} />
                     </div>
                     <div className="stagger-2">
-                    <MetricTile label="Members" value={members.length} sub={`${members.length} registered members`}
+                    <MetricTile label="Members" value={members.length} sub={`${members.length} registered`}
                         iconBg="bg-violet-100 dark:bg-violet-900/40" icon={<Users size={16} className="text-violet-600 dark:text-violet-400" />}
                         onClick={() => onNavigate("members")} />
                     </div>
