@@ -877,9 +877,9 @@ export default function WorshipLeadersScheduleModal({
               </button>
             </div>
 
-            <form onSubmit={handleSaveManualForm} className="p-5 space-y-4">
+            <form onSubmit={handleSaveManualForm} className="p-4 sm:p-5 space-y-4 w-full min-w-0 max-w-full box-border">
               {/* Date */}
-              <div>
+              <div className="w-full min-w-0">
                 <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
                   Sunday Date
                 </label>
@@ -889,7 +889,8 @@ export default function WorshipLeadersScheduleModal({
                   min={new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" })}
                   value={formDate}
                   onChange={(e) => setFormDate(e.target.value)}
-                  className="w-full pl-4 pr-3 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-xs font-medium focus:ring-2 focus:ring-violet-500 box-border min-h-[42px]"
+                  style={{ WebkitAppearance: "none", appearance: "none" }}
+                  className="w-full max-w-full block pl-4 pr-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-xs font-medium focus:ring-2 focus:ring-violet-500 box-border min-h-[42px] min-w-0"
                 />
               </div>
 
