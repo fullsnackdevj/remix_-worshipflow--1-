@@ -46,14 +46,7 @@
   <div id="root"></div>
   <script type="module" src="/src/main.tsx"></script>
 
-  <!-- Register Service Worker (silent — no console noise in prod) -->
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').catch(() => {});
-      });
-    }
-  </script>
+  <!-- Service Worker is registered in main.tsx with update guards -->
 </body>
 
 </html>

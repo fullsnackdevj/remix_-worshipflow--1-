@@ -33,7 +33,9 @@ self.addEventListener('install', event => {
     event.waitUntil(
         caches.open(CACHE_VERSION).then(cache => cache.addAll(PRECACHE_URLS))
     );
-    self.skipWaiting(); // activate immediately
+    // DO NOT call self.skipWaiting() here — it bypasses the client-side guards
+    // and causes the page to reload mid-load (double splash screen).
+    // The client sends a SKIP_WAITING message when it's safe (see main.tsx).
 });
 
 // ── Activate: delete ALL old cache versions immediately ──────────────────────

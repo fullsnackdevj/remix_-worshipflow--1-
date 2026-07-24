@@ -49,14 +49,24 @@ if ('serviceWorker' in navigator) {
     // on the NEXT page open — calling postMessage here triggers an immediate
     // controllerchange → reload() which is the main cause of the flicker.
 
-    // Only activate a SW that installs WHILE this page session is open.
+    // Only activate a SW that installs WHILE this page session is open,
+    // and only after the splash screen is gone (10s safety margin).
     reg.addEventListener('updatefound', () => {
       const newSW = reg.installing;
       if (!newSW) return;
       newSW.addEventListener('statechange', () => {
         // SW installed & there's already an active controller → safe to activate
+        // BUT wait until the page is past the splash screen to avoid reload-during-load
         if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
-          newSW.postMessage({ type: 'SKIP_WAITING' });
+          const elapsed = Date.now() - pageOpenedAt;
+          if (elapsed > 10_000) {
+            newSW.postMessage({ type: 'SKIP_WAITING' });
+          } else {
+            // Defer activation until splash is definitely gone
+            setTimeout(() => {
+              newSW.postMessage({ type: 'SKIP_WAITING' });
+            }, 10_000 - elapsed);
+          }
         }
       });
     });
