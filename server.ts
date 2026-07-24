@@ -1750,10 +1750,26 @@ app.get("/api/songs", async (req, res) => {
       return acc;
     }, {} as any);
 
-    songs = songs.map(song => ({
-      ...song,
-      tags: (song.tagIds || []).map((id: string) => allTags[id]).filter(Boolean)
-    }));
+    // Auto-expire 'Future Line-Up' status if song is >= 7 days (1 week) old
+    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+
+    songs = songs.map(song => {
+      let isFuture = song.isFutureLineup === true;
+      if (isFuture) {
+        const createdTime = song.created_at ? new Date(song.created_at).getTime() : 0;
+        if (!createdTime || isNaN(createdTime) || (now - createdTime >= SEVEN_DAYS_MS)) {
+          isFuture = false;
+          // Asynchronously untag in Firestore permanently
+          firestore.collection("songs").doc(song.id).update({ isFutureLineup: false }).catch(() => {});
+        }
+      }
+      return {
+        ...song,
+        isFutureLineup: isFuture,
+        tags: (song.tagIds || []).map((id: string) => allTags[id]).filter(Boolean)
+      };
+    });
 
     // Client-side filtering
     if (search) {

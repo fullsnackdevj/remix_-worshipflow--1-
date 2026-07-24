@@ -15,6 +15,7 @@ import { loadPlaylists, addSongToPlaylist, Playlist,
   playlistsCol } from "./PlaylistView";
 import { useAuth } from "./AuthContext";
 import { onSnapshot } from "firebase/firestore";
+import { isSongFutureLineup } from "./utils/songUtils";
 
 // ── Module-level helpers ──────────────────────────────────────────────────────
 const CustomYoutubeIcon = ({ size = 24, className = "" }: { size?: number, className?: string }) => (
@@ -870,11 +871,11 @@ export default function SongsView({
   const filteredSongs = useMemo(() => {
     const showFutureLineup = selectedTagIds.includes("future-lineup");
 
-    // When "Future Line-Up" filter is active, show ONLY those songs
-    // When not active, exclude all songs tagged as Future Line-Up from the main library
+    // When "Future Line-Up" filter is active, show ONLY those songs (< 7 days old)
+    // When not active, exclude active songs tagged as Future Line-Up from the main library
     let result = showFutureLineup
-      ? allSongs.filter(s => s.isFutureLineup === true)
-      : allSongs.filter(s => !s.isFutureLineup);
+      ? allSongs.filter(s => isSongFutureLineup(s))
+      : allSongs.filter(s => !isSongFutureLineup(s));
 
     const q = debouncedQuery.trim().toLowerCase();
 
@@ -1648,7 +1649,7 @@ showToast("error", error?.message || "Failed to extract text from image. Please 
                       </p>
                     )}
                     {/* Future Line-Up Badge */}
-                    {selectedSong.isFutureLineup && (
+                    {isSongFutureLineup(selectedSong) && (
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 mb-2 rounded-full text-[11px] font-bold bg-green-500/20 text-green-400 border border-green-500/30 w-fit">
                         <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
                         Future Line-Up
@@ -2123,7 +2124,7 @@ showToast("error", error?.message || "Failed to extract text from image. Please 
                               <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
                               Future Line-Up
                               <span className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400">
-                                {allSongs.filter(s => s.isFutureLineup).length}
+                                {allSongs.filter(s => isSongFutureLineup(s)).length}
                               </span>
                             </span>
                           </button>
@@ -2296,7 +2297,7 @@ showToast("error", error?.message || "Failed to extract text from image. Please 
                             {song.artist || <span className="italic" style={{ color: "rgba(107,114,128,0.8)" }}>Unknown Artist</span>}
                           </p>
                           {/* Future Line-Up badge */}
-                          {song.isFutureLineup && (
+                          {isSongFutureLineup(song) && (
                             <span className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-500/20 text-green-400 border border-green-500/30 w-fit">
                               <span className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
                               Future Line-Up
@@ -2462,7 +2463,7 @@ showToast("error", error?.message || "Failed to extract text from image. Please 
                           </span>
                         )}
                         {/* Future Line-Up badge */}
-                        {song.isFutureLineup && (
+                        {isSongFutureLineup(song) && (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-500/20 text-green-400 border border-green-500/30">
                             <span className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
                             Future Line-Up

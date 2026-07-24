@@ -6,6 +6,7 @@ import { usePushNotifications } from "./usePushNotifications";
 import { useRealtimeNotifications } from "./useRealtimeNotifications";
 import { useSessionTracking } from "./useSessionTracking";
 import { useNetworkStatus } from "./useNetworkStatus";
+import { isSongFutureLineup } from "./utils/songUtils";
 
 
 // ── Lightweight always-loaded components ────────────────────────────────────
@@ -711,16 +712,16 @@ export default function App() {
   const songsWithVideo = useMemo<LibraryTrack[]>(() =>
     allSongs
       .filter(s => !!s.video_url)
-      .map(s => ({ id: s.id, title: s.title, artist: s.artist ?? "", videoUrl: s.video_url!, isFutureLineup: s.isFutureLineup === true })),
+      .map(s => ({ id: s.id, title: s.title, artist: s.artist ?? "", videoUrl: s.video_url!, isFutureLineup: isSongFutureLineup(s) })),
     [allSongs]
   );
 
-  // ALL songs tagged as Future Line-Up — regardless of whether they have a video URL.
+  // ALL songs tagged as Future Line-Up (< 7 days old) — regardless of whether they have a video URL.
   // Passed to the player separately so the "All Future Line-Up" checkbox list
-  // always shows every tagged song, even those without a YouTube link.
+  // always shows every active tagged song, even those without a YouTube link.
   const futureLineupSongs = useMemo<LibraryTrack[]>(() =>
     allSongs
-      .filter(s => s.isFutureLineup === true)
+      .filter(s => isSongFutureLineup(s))
       .map(s => ({ id: s.id, title: s.title, artist: s.artist ?? "", videoUrl: s.video_url ?? "", isFutureLineup: true })),
     [allSongs]
   );

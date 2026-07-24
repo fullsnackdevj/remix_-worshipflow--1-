@@ -1846,13 +1846,26 @@ Return ONLY a valid JSON array of objects with NO markdown formatting, NO backti
                     return acc;
                 }, {} as any);
 
+                const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+                const now = Date.now();
+
                 songs = snapshot.docs.map((doc) => {
                     const data = doc.data();
+                    const createdAt = data.created_at?.toDate?.()?.toISOString() || data.created_at;
+                    let isFuture = data.isFutureLineup === true;
+                    if (isFuture) {
+                        const createdTime = createdAt ? new Date(createdAt).getTime() : 0;
+                        if (!createdTime || isNaN(createdTime) || (now - createdTime >= SEVEN_DAYS_MS)) {
+                            isFuture = false;
+                            firestore.collection("songs").doc(doc.id).update({ isFutureLineup: false }).catch(() => {});
+                        }
+                    }
                     return {
                         id: doc.id,
                         ...data,
+                        isFutureLineup: isFuture,
                         tags: (data.tagIds || []).map((id: string) => allTags[id]).filter(Boolean),
-                        created_at: data.created_at?.toDate?.()?.toISOString() || data.created_at,
+                        created_at: createdAt,
                         updated_at: data.updated_at?.toDate?.()?.toISOString() || data.updated_at,
                     };
                 });

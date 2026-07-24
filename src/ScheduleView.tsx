@@ -7,6 +7,7 @@ import AutoTextarea from "./AutoTextarea";
 import { Member, ScheduleMember, Schedule, Song, Tag } from "./types";
 import TeamTemplatesModal, { TeamTemplate } from "./TeamTemplatesModal";
 import WorshipLeadersScheduleModal from "./WorshipLeadersScheduleModal";
+import { isSongFutureLineup } from "./utils/songUtils";
 import {
   ChevronLeft, ChevronRight, Plus, Calendar, List, X, Settings,
   Copy, Pencil, Lock, Users, Sun, Music, BookOpen, Mail, Eye, Loader2, Heart, SquareKanban, ExternalLink, CheckCircle2, Trash2, Check,
@@ -1841,12 +1842,9 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                       !editSchedMusicians.some(mu => mu.memberId === m.id)
                     );
                     const isMidweek = editSchedEventName.toLowerCase() === "midweek service";
-                    // Helper: check if a song tagged Future Line-Up is at least 1 week old
-                    const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+                    // Helper: check if a song tagged Future Line-Up is eligible (< 7 days old is held in queue, >= 7 days is eligible)
                     const isFutureLineupEligible = (s: typeof allSongs[0]): boolean => {
-                      if (!s.isFutureLineup) return true; // Not tagged — always eligible
-                      const created = s.created_at ? new Date(s.created_at).getTime() : 0;
-                      return Date.now() - created >= ONE_WEEK_MS; // Only eligible if ≥ 1 week old
+                      return !isSongFutureLineup(s);
                     };
                     // Filter songs by mood tag, then optionally by search
                     // Songs tagged as Future Line-Up are excluded unless they are ≥ 1 week old
