@@ -92,9 +92,8 @@ export default function WorshipLeadersScheduleModal({
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
   // ── Permission Rules ────────────────────────────────────────────────────────
-  // 1. Admin
-  // 2. May Arnuncio
-  // 3. The scheduled Worship Leader on that specific day
+  // ONLY Admin and May Arnuncio can add, edit, and delete rotations.
+  // Everyone else gets VIEW-ONLY access.
   const isUserMayArnuncio = (u: any) => {
     if (!u) return false;
     const nameStr = `${u.displayName || ""} ${u.email || ""}`.toLowerCase();
@@ -106,29 +105,13 @@ export default function WorshipLeadersScheduleModal({
     return false;
   };
 
-  const canManageItem = (item: WorshipLeaderScheduleItem) => {
+  const canManageItem = (_item: WorshipLeaderScheduleItem) => {
     if (isAdmin) return true;
     if (isUserMayArnuncio(user)) return true;
-
-    if (user && item.worshipLeader) {
-      const leaderName = item.worshipLeader.trim().toLowerCase();
-      const uDisplayName = (user.displayName || "").trim().toLowerCase();
-      const uEmail = (user.email || "").trim().toLowerCase();
-
-      if (uDisplayName && (uDisplayName === leaderName || leaderName.includes(uDisplayName) || uDisplayName.includes(leaderName))) {
-        return true;
-      }
-      const myMem = allMembers.find(
-        (m) => m.userId === user?.uid || (m.email && uEmail && m.email.toLowerCase() === uEmail)
-      );
-      if (myMem && myMem.name.trim().toLowerCase() === leaderName) {
-        return true;
-      }
-    }
     return false;
   };
 
-  const canAddRotation = isAdmin || isUserMayArnuncio(user) || isLeader || canWriteSchedule;
+  const canAddRotation = isAdmin || isUserMayArnuncio(user);
 
   // ── 1. Fetch Items ──────────────────────────────────────────────────────────
   const fetchItems = async () => {
