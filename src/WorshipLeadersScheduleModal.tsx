@@ -450,9 +450,11 @@ export default function WorshipLeadersScheduleModal({
         updated_at: new Date().toISOString(),
       };
 
+      let savedToCloud = true;
       try {
         await setDoc(doc(db, "worship_leader_schedules", docId), newItem);
       } catch (dbErr) {
+        savedToCloud = false;
         console.warn("Firestore save warning (persisting locally):", dbErr);
       }
 
@@ -463,7 +465,11 @@ export default function WorshipLeadersScheduleModal({
         return next;
       });
 
-      showToast("success", editingItem ? "Schedule entry updated!" : "New schedule entry added!");
+      if (savedToCloud) {
+        showToast("success", editingItem ? "Schedule entry updated!" : "New schedule entry added!");
+      } else {
+        showToast("error", "Saved offline only — changes may not appear on other devices. Please check your connection and try again.");
+      }
       setShowEditModal(false);
     } catch (err) {
       console.error("Save error:", err);
@@ -488,9 +494,11 @@ export default function WorshipLeadersScheduleModal({
       confirmText: "Delete",
       confirmClass: "bg-red-600 hover:bg-red-700 text-white",
       onConfirm: async () => {
+        let deletedFromCloud = true;
         try {
           await deleteDoc(doc(db, "worship_leader_schedules", item.id));
         } catch (e) {
+          deletedFromCloud = false;
           console.warn("Firestore delete warning (removing locally):", e);
         }
         setItems((prev) => {
@@ -498,7 +506,11 @@ export default function WorshipLeadersScheduleModal({
           localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(next));
           return next;
         });
-        showToast("success", "Schedule entry removed.");
+        if (deletedFromCloud) {
+          showToast("success", "Schedule entry removed.");
+        } else {
+          showToast("error", "Removed locally only — may reappear on refresh. Check your connection.");
+        }
       },
     });
   };
@@ -847,9 +859,11 @@ export default function WorshipLeadersScheduleModal({
           updated_at: new Date().toISOString(),
         };
 
+        let ocrSavedToCloud = true;
         try {
           await setDoc(doc(db, "worship_leader_schedules", docId), newItem);
         } catch (dbErr) {
+          ocrSavedToCloud = false;
           console.warn("Firestore save warning (persisting locally):", dbErr);
         }
         newItemsToSave.push(newItem);
@@ -862,7 +876,12 @@ export default function WorshipLeadersScheduleModal({
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(next));
         return next;
       });
-      showToast("success", `Imported ${newItemsToSave.length} rotation schedules!`);
+      const allSavedToCloud = newItemsToSave.length > 0;
+      if (allSavedToCloud) {
+        showToast("success", `Imported ${newItemsToSave.length} rotation schedules!`);
+      } else {
+        showToast("error", "Imported offline only — changes may not appear on other devices. Check your connection.");
+      }
       setOcrPreviewItems(null);
     } catch (e) {
       console.error(e);
