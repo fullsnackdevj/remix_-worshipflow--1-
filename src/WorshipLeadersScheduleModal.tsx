@@ -130,7 +130,6 @@ export default function WorshipLeadersScheduleModal({
 
   // ── 1. Fetch Items ──────────────────────────────────────────────────────────
   const fetchItems = async () => {
-    setIsLoading(true);
     try {
       const q = query(collection(db, "worship_leader_schedules"), orderBy("date", "asc"));
       const snap = await getDocs(q);
@@ -145,22 +144,25 @@ export default function WorshipLeadersScheduleModal({
         };
       }) as WorshipLeaderScheduleItem[];
 
-      // Auto-cleanup: delete past-date rotations
+      // Auto-cleanup: filter past-date rotations
       const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
       const pastItems = fetched.filter((it) => it.date < todayStr);
       const currentItems = fetched.filter((it) => it.date >= todayStr);
 
-      // Delete past items from Firestore silently
-      for (const pastItem of pastItems) {
-        try {
-          await deleteDoc(doc(db, "worship_leader_schedules", pastItem.id));
-        } catch (e) {
-          console.warn("Failed to auto-delete past rotation:", pastItem.id, e);
-        }
-      }
-
       setItems(currentItems);
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(currentItems));
+      setIsLoading(false);
+
+      // Async background deletion of past items (does NOT block UI)
+      if (pastItems.length > 0) {
+        Promise.all(
+          pastItems.map((pastItem) =>
+            deleteDoc(doc(db, "worship_leader_schedules", pastItem.id)).catch((e) =>
+              console.warn("Failed to auto-delete past rotation:", pastItem.id, e)
+            )
+          )
+        );
+      }
     } catch (e) {
       console.warn("Failed to fetch ministry schedules from Firestore:", e);
       try {
@@ -178,6 +180,25 @@ export default function WorshipLeadersScheduleModal({
 
   useEffect(() => {
     if (isOpen) {
+      // Load initial state instantly from local cache to prevent loading delay
+      try {
+        const cached = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (cached) {
+          const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+          const parsed = JSON.parse(cached).filter((it: any) => it.date >= todayStr);
+          if (parsed.length > 0) {
+            setItems(parsed);
+            setIsLoading(false);
+          } else {
+            setIsLoading(true);
+          }
+        } else {
+          setIsLoading(true);
+        }
+      } catch {
+        setIsLoading(true);
+      }
+
       fetchItems();
     }
   }, [isOpen]);
