@@ -1079,10 +1079,10 @@ export default function WorshipLeadersScheduleModal({
                 className="appearance-none pl-3 pr-8 py-1.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-xs font-bold focus:ring-2 focus:ring-violet-500 shadow-xs cursor-pointer"
               >
                 <option value="all">All Roles</option>
-                <option value="worship_leader">🎵 Worship Leaders</option>
-                <option value="preacher_sunday">📖 Preachers (Sunday)</option>
-                <option value="preacher_midweek">✝️ Preachers (Mid-week)</option>
-                <option value="youth_facilitator">👆 Youth Facilitators</option>
+                <option value="worship_leader">Worship Leaders</option>
+                <option value="preacher_sunday">Preachers (Sunday)</option>
+                <option value="preacher_midweek">Preachers (Mid-week)</option>
+                <option value="youth_facilitator">Youth Facilitators</option>
               </select>
               <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             </div>
@@ -1592,7 +1592,7 @@ export default function WorshipLeadersScheduleModal({
                           </option>
                           {/* Guest Speaker option for Preacher & Youth Facilitator */}
                           {(formCategory === "preacher" || formCategory === "youth_facilitator") && (
-                            <option value="__guest__">🎤 Guest Speaker</option>
+                            <option value="__guest__">Guest Speaker</option>
                           )}
                           {formLeader &&
                             formLeader !== "__guest__" &&
