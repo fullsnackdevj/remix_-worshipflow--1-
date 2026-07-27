@@ -638,10 +638,17 @@ function MinistryScheduleCard({ onNavigate }: { onNavigate: (view: string) => vo
             key: "youth_facilitator",
             label: "Youth Facilitator",
             icon: <Flame size={12} className="text-pink-600 dark:text-pink-400 shrink-0" />,
-            badgeBg: "bg-pink-100 dark:bg-pink-900/40 text-pink-800 dark:text-pink-300",
+            badgeBg: "bg-pink-100 dark:bg-pink-900/40 text-pink-700 dark:text-pink-300",
             item: nextYouthFacilitator,
         },
     ];
+
+    // Sort roles dynamically by upcoming scheduled date ascending (unscheduled items go to bottom)
+    const sortedRoles = [...roles].sort((a, b) => {
+        const dateA = a.item?.date || "9999-99-99";
+        const dateB = b.item?.date || "9999-99-99";
+        return dateA.localeCompare(dateB);
+    });
 
     return (
         <Tile onClick={() => onNavigate("schedule")}>
@@ -652,7 +659,7 @@ function MinistryScheduleCard({ onNavigate }: { onNavigate: (view: string) => vo
                 onAction={() => onNavigate("schedule")}
             />
             <div className="p-4 space-y-2 flex-1 flex flex-col justify-between">
-                {roles.map((r) => {
+                {sortedRoles.map((r) => {
                     const it = r.item;
                     return (
                         <div
