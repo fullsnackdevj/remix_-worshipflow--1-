@@ -472,7 +472,8 @@ export default function WorshipLeadersScheduleModal({
 
       let savedToCloud = true;
       try {
-        await setDoc(doc(db, "worship_leader_schedules", docId), newItem);
+        const firestoreData = JSON.parse(JSON.stringify(newItem));
+        await setDoc(doc(db, "worship_leader_schedules", docId), firestoreData);
       } catch (dbErr) {
         savedToCloud = false;
         console.warn("Firestore save warning (persisting locally):", dbErr);
@@ -881,7 +882,8 @@ export default function WorshipLeadersScheduleModal({
 
         let ocrSavedToCloud = true;
         try {
-          await setDoc(doc(db, "worship_leader_schedules", docId), newItem);
+          const firestoreData = JSON.parse(JSON.stringify(newItem));
+          await setDoc(doc(db, "worship_leader_schedules", docId), firestoreData);
         } catch (dbErr) {
           ocrSavedToCloud = false;
           console.warn("Firestore save warning (persisting locally):", dbErr);
