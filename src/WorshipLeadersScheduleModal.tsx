@@ -1067,16 +1067,16 @@ export default function WorshipLeadersScheduleModal({
         </div>
 
         {/* Dual Filter Bar: Category Filter Dropdown + Month Filter Dropdown */}
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-2.5 border-b border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-black/20">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-4 px-4 sm:px-6 py-2.5 border-b border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-black/20 w-full">
           {/* Dropdown 1: Role / Category Filter */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 w-full min-w-0">
             <Filter size={13} className="text-gray-400 shrink-0" />
-            <span className="text-xs font-bold text-gray-500 dark:text-gray-400">Role:</span>
-            <div className="relative inline-block">
+            <span className="text-xs font-bold text-gray-500 dark:text-gray-400 shrink-0">Role:</span>
+            <div className="relative flex-1 w-full min-w-0">
               <select
                 value={selectedCategoryFilter}
                 onChange={(e) => setSelectedCategoryFilter(e.target.value)}
-                className="appearance-none pl-3 pr-8 py-1.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-xs font-bold focus:ring-2 focus:ring-violet-500 shadow-xs cursor-pointer"
+                className="w-full appearance-none pl-3 pr-8 py-1.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-xs font-bold focus:ring-2 focus:ring-violet-500 shadow-xs cursor-pointer truncate"
               >
                 <option value="all">All Roles</option>
                 <option value="worship_leader">Worship Leaders</option>
@@ -1089,14 +1089,14 @@ export default function WorshipLeadersScheduleModal({
           </div>
 
           {/* Dropdown 2: Month Filter */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 w-full min-w-0">
             <Calendar size={13} className="text-gray-400 shrink-0" />
-            <span className="text-xs font-bold text-gray-500 dark:text-gray-400">Month:</span>
-            <div className="relative inline-block">
+            <span className="text-xs font-bold text-gray-500 dark:text-gray-400 shrink-0">Month:</span>
+            <div className="relative flex-1 w-full min-w-0">
               <select
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
-                className="appearance-none pl-3 pr-8 py-1.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-xs font-bold focus:ring-2 focus:ring-violet-500 shadow-xs cursor-pointer"
+                className="w-full appearance-none pl-3 pr-8 py-1.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-xs font-bold focus:ring-2 focus:ring-violet-500 shadow-xs cursor-pointer truncate"
               >
                 <option value="all">All Months</option>
                 {availableMonths.map((m) => (
