@@ -66,19 +66,34 @@ export interface Schedule {
   lineupAcks?: { userId: string; userName: string; photo?: string }[];
 }
 
+export type MinistryScheduleCategory = "worship_leader" | "preacher" | "youth_facilitator";
+export type PreacherServiceType = "sunday" | "midweek";
+
 export interface WorshipLeaderScheduleItem {
   id: string;
   date: string; // YYYY-MM-DD
   month: string; // e.g. "August 2026"
-  worshipLeader: string;
+  category?: MinistryScheduleCategory; // defaults to "worship_leader"
+  preacherServiceType?: PreacherServiceType; // "sunday" | "midweek" if category === "preacher"
+  
+  // Primary assigned member name/info
+  worshipLeader: string; // Used as primary assigned person name for worship_leader, preacher, or facilitator
   worshipLeaderId?: string;
   worshipLeaderPhoto?: string;
+
+  // Specific role fields
   backupSingers: string[];
   backupSingerIds?: string[];
+  sermonTitle?: string; // For Preacher role
+  topicSharing?: string; // For Youth Facilitator role
+
   completed?: boolean;
   notes?: string;
   created_at?: string;
   updated_at?: string;
 }
+
+export type MinistryScheduleItem = WorshipLeaderScheduleItem;
+
 
 

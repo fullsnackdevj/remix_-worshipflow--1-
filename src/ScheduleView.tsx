@@ -779,16 +779,16 @@ showToast("error", "Could not save acknowledgment. Try again.");
           </button>
         </div>
 
-        {/* RIGHT — Worship Leaders Schedule (left) + [Add Event & Settings] (right) */}
+        {/* RIGHT — Ministry Schedule (left) + [Add Event & Settings] (right) */}
         <div className="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-1.5 sm:gap-2">
-          {/* View Worship Leaders Schedule Button */}
+          {/* View Ministry Schedule Button */}
           <button
             onClick={() => setShowWorshipLeadersModal(true)}
-            title="View Worship Leaders & Backup Singers Rotations"
+            title="View & Manage Ministry Schedule (Worship Leaders, Preachers, Youth Facilitators)"
             className="flex items-center justify-center gap-1.5 h-9 px-3 sm:px-3.5 bg-violet-50 dark:bg-violet-950/50 hover:bg-violet-100 dark:hover:bg-violet-900/60 text-violet-700 dark:text-violet-300 rounded-xl border border-violet-200 dark:border-violet-800/50 text-xs font-extrabold transition-all shadow-sm active:scale-95 shrink-0"
           >
             <Users size={14} className="text-violet-600 dark:text-violet-400 shrink-0" />
-            <span className="whitespace-nowrap">View Worship Leaders Schedule</span>
+            <span className="whitespace-nowrap">Ministry Schedule</span>
           </button>
 
           {/* Right Action Group: Add Event + Settings ⚙ */}

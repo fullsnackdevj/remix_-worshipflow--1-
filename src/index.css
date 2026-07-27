@@ -7,6 +7,20 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Hide native black calendar icon on date inputs while keeping field fully clickable */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+
+
 /* ─────────────────────────────────────────────────────────────────────────────
    WORSHIPFLOW DESIGN TOKENS
    All inline-styled modules read these CSS custom properties.
