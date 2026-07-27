@@ -1106,6 +1106,12 @@ export default function AdminDashboard({
                 </div>
                 {/* My Tasks — center col; renders null internally when no tasks */}
                 <MyTasksCard userName={userName} userEmail={userEmail} members={members} onNavigate={onNavigate} onVisibilityChange={setHasActiveTasks} />
+                
+                {/* Mobile-only Ministry Schedule Card — comes after VotD & My Tasks, before 4 metric tiles */}
+                <div className="block lg:hidden">
+                  <MinistryScheduleCard onNavigate={onNavigate} />
+                </div>
+
                 {/* RIGHT — 2×2 metric tiles */}
                 <div className="grid grid-cols-2 gap-4">
                     <div className="stagger-1">
@@ -1143,8 +1149,8 @@ export default function AdminDashboard({
 
                 {/* ── ROW 1 ─────────────────────────── */}
 
-                {/* Ministry Schedule Card */}
-                <div className="stagger-3"><MinistryScheduleCard onNavigate={onNavigate} /></div>
+                {/* Ministry Schedule Card (Desktop & Tablet) */}
+                <div className="hidden lg:block stagger-3"><MinistryScheduleCard onNavigate={onNavigate} /></div>
 
                 {/* Top Song Lineup Listeners — height is self-managed (collapses when empty) */}
                 <div className="stagger-3"><TopListenersCard currentUserId={userId} /></div>
