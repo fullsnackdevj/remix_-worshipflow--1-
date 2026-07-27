@@ -88,6 +88,8 @@ export default function WorshipLeadersScheduleModal({
   const [formSermonTitle, setFormSermonTitle] = useState("");
   const [formTopicSharing, setFormTopicSharing] = useState("");
   const [formNotes, setFormNotes] = useState("");
+  const [formIsGuestSpeaker, setFormIsGuestSpeaker] = useState(false);
+  const [formGuestSpeakerName, setFormGuestSpeakerName] = useState("");
   const [isSavingForm, setIsSavingForm] = useState(false);
   const [showCalendarPopover, setShowCalendarPopover] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
@@ -236,6 +238,8 @@ export default function WorshipLeadersScheduleModal({
     setFormSermonTitle("");
     setFormTopicSharing("");
     setFormNotes("");
+    setFormIsGuestSpeaker(false);
+    setFormGuestSpeakerName("");
     setShowAddMenu(false);
     setShowEditModal(true);
   };
@@ -250,7 +254,14 @@ export default function WorshipLeadersScheduleModal({
       setCalendarMonth(new Date(d.getFullYear(), d.getMonth(), 1, 12, 0, 0));
     }
     setShowCalendarPopover(false);
-    setFormLeader(item.worshipLeader);
+    // Detect if this was a guest speaker (name not in member list, for preacher/facilitator)
+    const cat = item.category || "worship_leader";
+    const isGuest = (cat === "preacher" || cat === "youth_facilitator") &&
+      item.worshipLeader &&
+      !selectableMembers.some((m) => m.name.toLowerCase() === item.worshipLeader.toLowerCase());
+    setFormIsGuestSpeaker(isGuest);
+    setFormGuestSpeakerName(isGuest ? item.worshipLeader : "");
+    setFormLeader(isGuest ? "__guest__" : item.worshipLeader);
     setFormBackup1(item.backupSingers?.[0] || "");
     setFormBackup2(item.backupSingers?.[1] || "");
     setFormSermonTitle(item.sermonTitle || "");
@@ -337,7 +348,15 @@ export default function WorshipLeadersScheduleModal({
       return;
     }
 
-    if (!formLeader.trim()) {
+    // Resolve the actual person name (could be a guest speaker)
+    const resolvedLeaderName = formIsGuestSpeaker ? formGuestSpeakerName.trim() : formLeader.trim();
+
+    if (formIsGuestSpeaker && !formGuestSpeakerName.trim()) {
+      showToast("error", "Guest Speaker name is required.");
+      return;
+    }
+
+    if (!formIsGuestSpeaker && !formLeader.trim()) {
       const roleLabel =
         formCategory === "worship_leader"
           ? "Worship Leader"
@@ -429,7 +448,7 @@ export default function WorshipLeadersScheduleModal({
 
       const backups = formCategory === "worship_leader" ? [formBackup1.trim(), formBackup2.trim()].filter(Boolean) : [];
 
-      const leaderMem = findMemberByName(formLeader);
+      const leaderMem = formIsGuestSpeaker ? undefined : findMemberByName(formLeader);
       const docId = editingItem ? editingItem.id : `ms_${formCategory}_${formDate}_${Date.now()}`;
 
       const newItem: WorshipLeaderScheduleItem = {
@@ -438,9 +457,10 @@ export default function WorshipLeadersScheduleModal({
         month: monthStr,
         category: formCategory,
         preacherServiceType: formCategory === "preacher" ? formPreacherServiceType : undefined,
-        worshipLeader: formLeader.trim(),
+        worshipLeader: resolvedLeaderName,
         worshipLeaderId: leaderMem?.id || "",
         worshipLeaderPhoto: leaderMem?.photo || "",
+        isGuestSpeaker: formIsGuestSpeaker || undefined,
         backupSingers: backups,
         sermonTitle: formCategory === "preacher" ? formSermonTitle.trim() : undefined,
         topicSharing: formCategory === "youth_facilitator" ? formTopicSharing.trim() : undefined,
@@ -1250,6 +1270,9 @@ export default function WorshipLeadersScheduleModal({
                           <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-extrabold shadow-xs ${catBadgeBg}`}>
                             {catIcon}
                             <span className="whitespace-nowrap">{item.worshipLeader}</span>
+                            {item.isGuestSpeaker && (
+                              <span className="px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-300 text-[9px] font-black uppercase tracking-wide">Guest</span>
+                            )}
                           </div>
                         </div>
 
@@ -1543,9 +1566,19 @@ export default function WorshipLeadersScheduleModal({
                       </label>
                       <div className="relative">
                         <select
-                          required
+                          required={!formIsGuestSpeaker}
                           value={formLeader}
-                          onChange={(e) => setFormLeader(e.target.value)}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === "__guest__") {
+                              setFormIsGuestSpeaker(true);
+                              setFormLeader("__guest__");
+                            } else {
+                              setFormIsGuestSpeaker(false);
+                              setFormGuestSpeakerName("");
+                              setFormLeader(val);
+                            }
+                          }}
                           className="w-full appearance-none pl-3.5 pr-9 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-xs font-medium focus:ring-2 focus:ring-violet-500 cursor-pointer"
                         >
                           <option value="">
@@ -1555,7 +1588,12 @@ export default function WorshipLeadersScheduleModal({
                               ? "Select Preacher..."
                               : "Select Youth Facilitator..."}
                           </option>
+                          {/* Guest Speaker option for Preacher & Youth Facilitator */}
+                          {(formCategory === "preacher" || formCategory === "youth_facilitator") && (
+                            <option value="__guest__">🎤 Guest Speaker</option>
+                          )}
                           {formLeader &&
+                            formLeader !== "__guest__" &&
                             !selectableMembers.some((m) => m.name.toLowerCase() === formLeader.toLowerCase()) && (
                               <option value={formLeader}>{formLeader}</option>
                             )}
@@ -1567,6 +1605,23 @@ export default function WorshipLeadersScheduleModal({
                         </select>
                         <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                       </div>
+
+                      {/* Guest Speaker Name Input */}
+                      {formIsGuestSpeaker && (
+                        <div className="mt-2">
+                          <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                            Guest Speaker Name
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Enter the guest speaker's full name"
+                            value={formGuestSpeakerName}
+                            onChange={(e) => setFormGuestSpeakerName(e.target.value)}
+                            className="w-full px-3.5 py-2 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/30 text-gray-900 dark:text-white text-xs font-medium focus:ring-2 focus:ring-amber-500 placeholder:text-amber-400 dark:placeholder:text-amber-600"
+                          />
+                        </div>
+                      )}
                     </div>
 
                     {/* Worship Leader Specific: Backup Singers */}

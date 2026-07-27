@@ -84,6 +84,7 @@ export interface WorshipLeaderScheduleItem {
   // Specific role fields
   backupSingers: string[];
   backupSingerIds?: string[];
+  isGuestSpeaker?: boolean; // True if this is a guest speaker (not a member)
   sermonTitle?: string; // For Preacher role
   topicSharing?: string; // For Youth Facilitator role
 
