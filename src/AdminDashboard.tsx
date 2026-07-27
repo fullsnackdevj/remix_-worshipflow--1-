@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { db } from "./firebase";
-import { collection, getDocs } from "firebase/firestore";
-import { Member, ScheduleMember, Schedule } from "./types";
+import { collection, getDocs, query, orderBy } from "firebase/firestore";
+import { Member, ScheduleMember, Schedule, WorshipLeaderScheduleItem } from "./types";
 import VerseOfTheDay from "./VerseOfTheDay";
 import BirthdayCard from "./BirthdayCard";
 import BirthdayBanner from "./BirthdayBanner";
@@ -12,7 +12,7 @@ import {
     Bug, Lightbulb, CheckCircle2, AlertCircle, Shield, Bell, UserCheck,
     AlertTriangle, CheckCheck, Megaphone, Plus, UserPlus, Zap, BarChart3,
     TrendingUp, ArrowUpRight, Star, Mic2, BookOpen, Radio, ListMusic, Headphones, ListTodo,
-    Crown, ClipboardCheck, Music2, User,
+    Crown, ClipboardCheck, Music2, User, Flame,
 } from "lucide-react";
 
 // Member, ScheduleMember, Schedule are imported from ./types
@@ -572,6 +572,142 @@ function TopListenersCard({ currentUserId }: { currentUserId: string }) {
     );
 }
 
+// ── Ministry Schedule Dashboard Card ──────────────────────────────────────────
+function MinistryScheduleCard({ onNavigate }: { onNavigate: (view: string) => void }) {
+    const [items, setItems] = useState<WorshipLeaderScheduleItem[]>([]);
+
+    useEffect(() => {
+        try {
+            const cached = localStorage.getItem("wf_worship_leader_schedules_cache");
+            if (cached) setItems(JSON.parse(cached));
+        } catch {}
+
+        const q = query(collection(db, "worship_leader_schedules"), orderBy("date", "asc"));
+        getDocs(q).then((snap) => {
+            const fetched = snap.docs.map(d => ({ id: d.id, ...d.data() })) as WorshipLeaderScheduleItem[];
+            const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+            const current = fetched.filter(it => it.date >= todayStr);
+            setItems(current);
+            localStorage.setItem("wf_worship_leader_schedules_cache", JSON.stringify(current));
+        }).catch(err => {
+            console.warn("Failed to fetch ministry schedule card data:", err);
+        });
+    }, []);
+
+    const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+    const upcoming = items.filter(it => it.date >= todayStr).sort((a, b) => a.date.localeCompare(b.date));
+
+    const nextWL = upcoming.find(it => (it.category || "worship_leader") === "worship_leader");
+    const nextSundayPreacher = upcoming.find(it => it.category === "preacher" && (it.preacherServiceType || "sunday") === "sunday");
+    const nextMidweekPreacher = upcoming.find(it => it.category === "preacher" && it.preacherServiceType === "midweek");
+    const nextYouthFacilitator = upcoming.find(it => it.category === "youth_facilitator");
+
+    const formatDateBadge = (dateStr?: string) => {
+        if (!dateStr) return "";
+        try {
+            const d = new Date(dateStr + "T00:00:00");
+            return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+        } catch {
+            return dateStr;
+        }
+    };
+
+    const roles = [
+        {
+            key: "wl",
+            label: "Worship Leader",
+            icon: <Users size={12} className="text-violet-600 dark:text-violet-400 shrink-0" />,
+            badgeBg: "bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300",
+            item: nextWL,
+        },
+        {
+            key: "sunday_preacher",
+            label: "Sunday Preacher",
+            icon: <BookOpen size={12} className="text-amber-600 dark:text-amber-400 shrink-0" />,
+            badgeBg: "bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300",
+            item: nextSundayPreacher,
+        },
+        {
+            key: "midweek_preacher",
+            label: "Mid-week Preacher",
+            icon: <BookOpen size={12} className="text-blue-600 dark:text-blue-400 shrink-0" />,
+            badgeBg: "bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300",
+            item: nextMidweekPreacher,
+        },
+        {
+            key: "youth_facilitator",
+            label: "Youth Facilitator",
+            icon: <Flame size={12} className="text-pink-600 dark:text-pink-400 shrink-0" />,
+            badgeBg: "bg-pink-100 dark:bg-pink-900/40 text-pink-800 dark:text-pink-300",
+            item: nextYouthFacilitator,
+        },
+    ];
+
+    return (
+        <Tile onClick={() => onNavigate("schedule")}>
+            <CardHeader
+                icon={<Calendar size={14} className="text-violet-500" />}
+                title="Ministry Schedule"
+                action="Roster"
+                onAction={() => onNavigate("schedule")}
+            />
+            <div className="p-4 space-y-2 flex-1 flex flex-col justify-between">
+                {roles.map((r) => {
+                    const it = r.item;
+                    return (
+                        <div
+                            key={r.key}
+                            className="flex items-center justify-between p-2 rounded-xl bg-gray-50 dark:bg-gray-700/30 border border-gray-100 dark:border-gray-700/50 hover:border-violet-300/50 dark:hover:border-violet-600/40 transition-colors gap-2"
+                        >
+                            <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-1">
+                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wide ${r.badgeBg}`}>
+                                        {r.icon}
+                                        {r.label}
+                                    </span>
+                                    {it && (
+                                        <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 shrink-0">
+                                            {formatDateBadge(it.date)}
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="mt-1 flex items-center gap-1.5 min-w-0">
+                                    {it ? (
+                                        <>
+                                            <span className="text-xs font-black text-gray-900 dark:text-white truncate">
+                                                {it.worshipLeader}
+                                            </span>
+                                            {it.isGuestSpeaker && (
+                                                <span className="px-1.5 py-0.2 bg-amber-500/20 text-amber-700 dark:text-amber-300 text-[9px] font-black uppercase rounded shrink-0">
+                                                    Guest
+                                                </span>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <span className="text-xs text-gray-400 dark:text-gray-500 italic">
+                                            Not scheduled
+                                        </span>
+                                    )}
+                                </div>
+                                {it && r.key === "wl" && it.backupSingers && it.backupSingers.length > 0 && (
+                                    <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                                        Backups: {it.backupSingers.join(", ")}
+                                    </p>
+                                )}
+                                {it && r.key !== "wl" && (it.sermonTitle || it.topicSharing) && (
+                                    <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate italic mt-0.5">
+                                        "{it.sermonTitle || it.topicSharing}"
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </Tile>
+    );
+}
+
 // ── Main AdminDashboard ───────────────────────────────────────────────────────
 export default function AdminDashboard({
     userName, userEmail, userId = "", userPhoto, songs, members, schedules, notes, onNavigate,
@@ -962,7 +1098,7 @@ export default function AdminDashboard({
             <div className={`grid gap-4 ${
               hasActiveTasks
                 ? "grid-cols-1 lg:grid-cols-[2fr_1.5fr_1.5fr]"
-                : "grid-cols-1 lg:grid-cols-[1fr_1.5fr]"
+                : "grid-cols-1 lg:grid-cols-2"
             }`}>
                 {/* Verse of the Day — always in left slot */}
                 <div className={hasActiveTasks ? "" : "lg:col-span-1"}>
@@ -1006,6 +1142,9 @@ export default function AdminDashboard({
             <div className="grid gap-5 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
 
                 {/* ── ROW 1 ─────────────────────────── */}
+
+                {/* Ministry Schedule Card */}
+                <div className="stagger-3"><MinistryScheduleCard onNavigate={onNavigate} /></div>
 
                 {/* Top Song Lineup Listeners — height is self-managed (collapses when empty) */}
                 <div className="stagger-3"><TopListenersCard currentUserId={userId} /></div>
