@@ -12,8 +12,9 @@ import {
     Bug, Lightbulb, CheckCircle2, AlertCircle, Shield, Bell, UserCheck,
     AlertTriangle, CheckCheck, Megaphone, Plus, UserPlus, Zap, BarChart3,
     TrendingUp, ArrowUpRight, Star, Mic2, BookOpen, Radio, ListMusic, Headphones, ListTodo,
-    Crown, ClipboardCheck, Music2, User, Flame,
+    Crown, ClipboardCheck, Music2, User, Flame, Copy, Check,
 } from "lucide-react";
+import { formatMinistryScheduleForClipboard, copyTextToClipboard } from "./utils/rosterUtils";
 
 // Member, ScheduleMember, Schedule are imported from ./types
 interface Song { id: string; title: string; artist: string; created_at?: string; }
@@ -116,24 +117,27 @@ function Tile({ children, className = "", onClick, style }: {
 }
 
 // ── Card header — Design System v2.0: icon chip w-8 h-8 (32px), 16px icon ───
-function CardHeader({ icon, title, action, onAction }: {
-    icon: React.ReactNode; title: string; action?: string; onAction?: () => void;
+function CardHeader({ icon, title, action, onAction, rightContent }: {
+    icon: React.ReactNode; title: string; action?: string; onAction?: () => void; rightContent?: React.ReactNode;
 }) {
     return (
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-700/60">
-            <div className="flex items-center gap-2.5">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-700/60 gap-2">
+            <div className="flex items-center gap-2.5 min-w-0">
                 {/* STANDARD icon chip: w-8 h-8, rounded-xl */}
                 <span className="w-8 h-8 rounded-xl bg-gray-100 dark:bg-gray-700/80 flex items-center justify-center shrink-0">
                     {icon}
                 </span>
                 {/* H2 — Card section title: base size, bold, dark */}
-                <h2 className="font-bold text-gray-900 dark:text-white text-base tracking-tight">{title}</h2>
+                <h2 className="font-bold text-gray-900 dark:text-white text-base tracking-tight truncate">{title}</h2>
             </div>
-            {action && onAction && (
-                <button onClick={onAction} className="text-sm text-indigo-500 hover:text-indigo-400 flex items-center gap-1 font-medium transition-colors">
-                    {action}<ChevronRight size={13} />
-                </button>
-            )}
+            <div className="flex items-center gap-2.5 shrink-0">
+                {rightContent}
+                {action && onAction && (
+                    <button onClick={(e) => { e.stopPropagation(); onAction(); }} className="text-sm text-indigo-500 hover:text-indigo-400 flex items-center gap-1 font-medium transition-colors">
+                        {action}<ChevronRight size={13} />
+                    </button>
+                )}
+            </div>
         </div>
     );
 }
@@ -575,6 +579,7 @@ function TopListenersCard({ currentUserId }: { currentUserId: string }) {
 // ── Ministry Schedule Dashboard Card ──────────────────────────────────────────
 function MinistryScheduleCard({ onNavigate }: { onNavigate: (view: string) => void }) {
     const [items, setItems] = useState<WorshipLeaderScheduleItem[]>([]);
+    const [copied, setCopied] = useState(false);
 
     useEffect(() => {
         try {
@@ -650,6 +655,23 @@ function MinistryScheduleCard({ onNavigate }: { onNavigate: (view: string) => vo
         return dateA.localeCompare(dateB);
     });
 
+    const handleCopyRoster = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        const activeItems = sortedRoles.map(r => r.item).filter((it): it is WorshipLeaderScheduleItem => Boolean(it));
+        if (activeItems.length === 0) return;
+        const text = formatMinistryScheduleForClipboard(activeItems, {
+            title: "📋 MINISTRY SCHEDULE — UPCOMING ROSTER",
+            shortDate: false,
+        });
+        const success = await copyTextToClipboard(text);
+        if (success) {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        }
+    };
+
+    const hasAnySchedule = sortedRoles.some(r => !!r.item);
+
     return (
         <Tile onClick={() => onNavigate("schedule")}>
             <CardHeader
@@ -657,6 +679,32 @@ function MinistryScheduleCard({ onNavigate }: { onNavigate: (view: string) => vo
                 title="Ministry Schedule"
                 action="Roster"
                 onAction={() => onNavigate("schedule")}
+                rightContent={
+                    hasAnySchedule ? (
+                        <button
+                            type="button"
+                            onClick={handleCopyRoster}
+                            title="Copy upcoming ministry schedule with assigned roles"
+                            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all border active:scale-95 shadow-xs ${
+                                copied
+                                    ? "bg-emerald-500 text-white border-emerald-600 shadow-emerald-500/20"
+                                    : "bg-violet-50 hover:bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:hover:bg-violet-900/60 dark:text-violet-300 border-violet-200/70 dark:border-violet-700/50"
+                            }`}
+                        >
+                            {copied ? (
+                                <>
+                                    <Check size={12} className="shrink-0" />
+                                    <span className="text-[11px] font-extrabold whitespace-nowrap">Copied!</span>
+                                </>
+                            ) : (
+                                <>
+                                    <Copy size={12} className="shrink-0" />
+                                    <span className="text-[11px] whitespace-nowrap">Copy</span>
+                                </>
+                            )}
+                        </button>
+                    ) : null
+                }
             />
             <div className="p-4 space-y-2 flex-1 flex flex-col justify-between">
                 {sortedRoles.map((r) => {

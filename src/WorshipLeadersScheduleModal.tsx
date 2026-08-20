@@ -33,7 +33,9 @@ import {
   Sun,
   Flame,
   Filter,
+  Copy,
 } from "lucide-react";
+import { formatMinistryScheduleForClipboard, copyTextToClipboard } from "./utils/rosterUtils";
 
 interface WorshipLeadersScheduleModalProps {
   isOpen: boolean;
@@ -75,6 +77,7 @@ export default function WorshipLeadersScheduleModal({
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>("all");
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
   const [showAddMenu, setShowAddMenu] = useState(false);
+  const [isCopied, setIsCopied] = useState(false);
 
   // Manual Edit/Add Modal State
   const [showEditModal, setShowEditModal] = useState(false);
@@ -953,6 +956,41 @@ export default function WorshipLeadersScheduleModal({
     groupedByMonth[it.month].push(it);
   });
 
+  const handleCopyRoster = async (itemsToCopy = filteredItems, customTitle?: string) => {
+    if (!itemsToCopy || itemsToCopy.length === 0) {
+      showToast("warning", "No schedule items to copy");
+      return;
+    }
+    let sub = "";
+    if (selectedMonth !== "all") {
+      sub = `Month: ${selectedMonth}`;
+    }
+    if (selectedCategoryFilter !== "all") {
+      const roleLabels: Record<string, string> = {
+        worship_leader: "Worship Leaders",
+        preacher_sunday: "Sunday Preachers",
+        preacher_midweek: "Mid-week Preachers",
+        youth_facilitator: "Youth Facilitators",
+      };
+      const roleName = roleLabels[selectedCategoryFilter] || selectedCategoryFilter;
+      sub = sub ? `${sub} • ${roleName}` : `Role: ${roleName}`;
+    }
+
+    const text = formatMinistryScheduleForClipboard(itemsToCopy, {
+      title: customTitle || "📋 MINISTRY SCHEDULE / ROSTER",
+      subtitle: sub || undefined,
+    });
+
+    const ok = await copyTextToClipboard(text);
+    if (ok) {
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2000);
+      showToast("success", "Ministry roster copied to clipboard!");
+    } else {
+      showToast("error", "Failed to copy roster to clipboard");
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-5 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
       {/* Hidden File Inputs */}
@@ -1002,6 +1040,32 @@ export default function WorshipLeadersScheduleModal({
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* Copy Roster Button */}
+            <button
+              onClick={() => handleCopyRoster(filteredItems)}
+              disabled={filteredItems.length === 0}
+              title="Copy current ministry roster with assigned roles to clipboard"
+              className={`flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
+                filteredItems.length === 0
+                  ? "opacity-50 cursor-not-allowed bg-gray-100 dark:bg-white/5 text-gray-400"
+                  : isCopied
+                  ? "bg-emerald-500 text-white shadow-md shadow-emerald-500/20"
+                  : "bg-violet-50 hover:bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:hover:bg-violet-900/60 dark:text-violet-300 border border-violet-200 dark:border-violet-800/60 shadow-xs active:scale-95"
+              }`}
+            >
+              {isCopied ? (
+                <>
+                  <Check size={14} className="shrink-0 text-white" />
+                  <span className="whitespace-nowrap font-extrabold">Copied!</span>
+                </>
+              ) : (
+                <>
+                  <Copy size={14} className="shrink-0" />
+                  <span className="whitespace-nowrap">Copy Roster</span>
+                </>
+              )}
+            </button>
+
             {/* Add Schedule Button */}
             {canAddRotation && (
               <div className="relative">
@@ -1204,10 +1268,24 @@ export default function WorshipLeadersScheduleModal({
               key={monthName}
               className="bg-gray-50/50 dark:bg-white/5 rounded-2xl p-4 border border-gray-200 dark:border-white/10 space-y-3"
             >
-              <h4 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2 border-b border-gray-200 dark:border-white/10 pb-2">
-                <Calendar size={15} className="text-violet-600 dark:text-violet-400" />
-                {monthName}
-              </h4>
+              <div className="flex items-center justify-between border-b border-gray-200 dark:border-white/10 pb-2">
+                <h4 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                  <Calendar size={15} className="text-violet-600 dark:text-violet-400" />
+                  {monthName}
+                  <span className="text-xs font-bold text-gray-400 normal-case">
+                    ({monthList.length} {monthList.length === 1 ? "entry" : "entries"})
+                  </span>
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => handleCopyRoster(monthList, `📋 MINISTRY SCHEDULE — ${monthName.toUpperCase()}`)}
+                  title={`Copy ${monthName} schedule`}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-violet-700 dark:text-violet-300 bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/50 dark:hover:bg-violet-900/60 border border-violet-200 dark:border-violet-800/40 transition-all active:scale-95 shadow-xs"
+                >
+                  <Copy size={12} />
+                  <span>Copy Month</span>
+                </button>
+              </div>
 
               <div className="grid grid-cols-1 gap-2.5">
                 {monthList.map((item) => {
