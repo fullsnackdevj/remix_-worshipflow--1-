@@ -11,6 +11,7 @@ interface DatePickerProps {
   icon?: React.ReactNode;
   dropdownAlign?: "left" | "right";
   variant?: "default" | "inline"; // inline = compact dark pill for canvas use
+  className?: string;
 }
 
 const MONTHS = [
@@ -42,6 +43,7 @@ export default function DatePicker({
   icon,
   dropdownAlign = "left",
   variant = "default",
+  className = "",
 }: DatePickerProps) {
   const today = new Date();
   const todayYMD = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" }); // YYYY-MM-DD in PH timezone
@@ -124,7 +126,7 @@ export default function DatePicker({
   for (let y = maxYear; y >= minYear; y--) yearRange.push(y);
 
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className={`relative ${className}`}>
       {/* ── Trigger ── */}
       {variant === "inline" ? (
         // Compact dark pill — for canvas/dark-bg contexts — full-width to match adjacent fields

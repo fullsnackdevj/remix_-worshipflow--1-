@@ -393,7 +393,7 @@ export default function LeaveCalendarView({
                 key={dateStr}
                 onClick={() => {
                   if (!isCellPast) {
-                    if (dayLeaves.length > 0 && !isAdmin) {
+                    if (dayLeaves.length > 0) {
                       setSelectedLeave(dayLeaves[0]);
                     } else {
                       handleOpenForm(dateStr);
@@ -412,16 +412,15 @@ export default function LeaveCalendarView({
                         ? "text-gray-300 dark:text-gray-600"
                         : "text-gray-700 dark:text-gray-300 group-hover:text-teal-700 dark:group-hover:text-teal-300"
                   }`}>{day}</span>
-                  {!isCellPast && dayLeaves.length === 0 && (
+                  {!isCellPast && (
                     <span className="hidden sm:flex w-5 h-5 items-center justify-center rounded-full bg-teal-600 text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                       +
                     </span>
                   )}
                 </div>
 
-                {/* Leaves for this day (Hidden for Admins to prevent crowding) */}
-                {!isAdmin && (
-                  <div className="flex-1 overflow-y-auto space-y-1 pr-1 custom-scrollbar w-full">
+                {/* Leaves for this day */}
+                <div className="flex-1 overflow-y-auto space-y-1 pr-1 custom-scrollbar w-full">
                   {dayLeaves.map(leave => (
                     <div 
                       key={leave.id}
@@ -442,8 +441,7 @@ export default function LeaveCalendarView({
                       {leave.memberName}
                     </div>
                   ))}
-                  </div>
-                )}
+                </div>
               </div>
             );
           })}

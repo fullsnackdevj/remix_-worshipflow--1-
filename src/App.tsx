@@ -575,7 +575,7 @@ export default function App() {
       setPendingDeepLinkEventDate(resourceDate);
     } else if (type === "access_request") {
       setCurrentView("admin");
-    } else if (type === "leave_requested" || type === "leave_status_updated") {
+    } else if (type === "leave_requested" || type === "leave_status_updated" || type === "leave_reminder") {
       setCurrentView("leave-calendar");
     } else if (["team_note", "note_resolved", "note_done", "note_acknowledged", "note_followup"].includes(type)) {
       // Navigate to the Team Notes module and deep-link to the specific note
@@ -626,6 +626,9 @@ export default function App() {
     new_design_request: <Palette size={14} className="text-purple-400" />,
     design_claimed: <Feather size={14} className="text-purple-400" />,
     design_done: <CheckCircle size={14} className="text-emerald-400" />,
+    leave_requested: <CalendarOff size={14} className="text-amber-400" />,
+    leave_status_updated: <CalendarOff size={14} className="text-teal-400" />,
+    leave_reminder: <CalendarOff size={14} className="text-indigo-400" />,
   };
   // ── Role-based permission flags ───────────────────────────────────────────
   // All flags use effectiveRole so QA Specialist simulation works correctly
@@ -1863,7 +1866,7 @@ showToast("warning", "️ Another player is active. Please close the Song Librar
                           <button
                             onClick={() => markOneRead(n.id, n.type, n.resourceId, n.resourceDate)}
                             className="flex items-start gap-3 flex-1 min-w-0 text-left"
-                            title={`Open ${n.type === "new_song" ? "song" : n.type === "access_request" ? "admin panel" : (n.type === "leave_requested" || n.type === "leave_status_updated") ? "leave calendar" : "event"}`}
+                            title={`Open ${n.type === "new_song" ? "song" : n.type === "access_request" ? "admin panel" : (n.type === "leave_requested" || n.type === "leave_status_updated" || n.type === "leave_reminder") ? "leave calendar" : "event"}`}
                           >
                             {/* Actor photo */}
                             <div className="shrink-0 mt-0.5">

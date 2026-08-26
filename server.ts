@@ -268,13 +268,15 @@ function plannerTypeVerb(type: string): string {
 }
 
 async function writeNotification(firestore: admin.firestore.Firestore, payload: {
-  type: "new_event" | "updated_event" | "new_song" | "access_request" | "team_note" | "note_resolved" | "note_done" | "note_acknowledged" | "leave_status_updated" | "leave_reminder";
+  type: "new_event" | "updated_event" | "new_song" | "access_request" | "team_note" | "note_resolved" | "note_done" | "note_acknowledged" | "leave_requested" | "leave_status_updated" | "leave_reminder";
   message: string;
   subMessage: string;
   actorName: string;
   actorPhoto: string;
   actorUserId?: string;
-  targetAudience: "all" | "non_member" | "admin_only";
+  targetAudience?: "all" | "non_member" | "admin_only" | "direct";
+  recipientId?: string;
+  targetUserId?: string;
   resourceId?: string;
   resourceType?: string;
   resourceDate?: string;
@@ -292,7 +294,8 @@ async function writeNotification(firestore: admin.firestore.Firestore, payload: 
       title: payload.message,
       body: payload.subMessage,
       actorUserId: payload.actorUserId,
-      targetAudience: payload.targetAudience,
+      targetAudience: payload.targetAudience || "all",
+      recipientUserId: payload.targetUserId || payload.recipientId,
       type: payload.type,
       resourceId: payload.resourceId,
       resourceDate: payload.resourceDate,
@@ -4419,6 +4422,219 @@ app.post("/api/public-playlist/publish", async (req, res) => {
   }
 });
 
+// ── Leaves API ─────────────────────────────────────────────────────────────
+
+app.get("/api/leaves", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(500).json({ error: "Firebase not configured" });
+  try {
+    const snap = await firestore.collection("leaves").get();
+    const leaves = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    leaves.sort((a: any, b: any) => {
+      const aTime = typeof a.createdAt === "number" ? a.createdAt : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+      const bTime = typeof b.createdAt === "number" ? b.createdAt : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
+      return bTime - aTime;
+    });
+    res.json(leaves);
+  } catch (error: any) {
+    console.error("[leaves GET]", error?.message);
+    res.status(500).json({ error: "Failed to fetch leaves" });
+  }
+});
+
+app.post("/api/leaves", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(500).json({ error: "Firebase not configured" });
+  try {
+    const data = { ...req.body };
+    if (!data.createdAt) data.createdAt = Date.now();
+    const notifyAdmin = data._notifyAdmin;
+    const actorName = data._actorName;
+    const actorPhoto = data._actorPhoto;
+    const actorUserId = data._actorUserId;
+    delete data._notifyAdmin;
+    delete data._actorName;
+    delete data._actorPhoto;
+    delete data._actorUserId;
+
+    const docRef = await firestore.collection("leaves").add(data);
+
+    if (notifyAdmin && data.status === "pending") {
+      await writeNotification(firestore, {
+        type: "leave_requested",
+        message: `${data.memberName} requested a leave`,
+        subMessage: `${data.startDate} to ${data.endDate}`,
+        actorName: actorName || data.memberName || "System",
+        actorPhoto: actorPhoto || "",
+        actorUserId: actorUserId || "",
+        targetAudience: "admin_only",
+        resourceId: docRef.id,
+        resourceType: "leave",
+        resourceDate: data.startDate,
+      });
+    }
+
+    res.status(201).json({ id: docRef.id, ...data });
+  } catch (error: any) {
+    console.error("[leaves POST]", error?.message);
+    res.status(500).json({ error: "Failed to create leave" });
+  }
+});
+
+const handleUpdateLeave = async (req: express.Request, res: express.Response) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(500).json({ error: "Firebase not configured" });
+  const { id } = req.params;
+  try {
+    const data = { ...req.body };
+    const notifyUser = data._notifyUser;
+    const actorName = data._actorName;
+    const actorPhoto = data._actorPhoto;
+    const actorUserId = data._actorUserId;
+    delete data._notifyUser;
+    delete data._targetUserId;
+    delete data._actorName;
+    delete data._actorPhoto;
+    delete data._actorUserId;
+    delete data._startDate;
+    delete data._endDate;
+
+    await firestore.collection("leaves").doc(id).update(data);
+
+    // 1. Resolve / clean up any pending "leave_requested" notifications for admins
+    try {
+      const pendingNotifs = await firestore.collection("notifications")
+        .where("type", "==", "leave_requested")
+        .where("resourceId", "==", id)
+        .get();
+
+      const batch = firestore.batch();
+      pendingNotifs.docs.forEach(d => {
+        batch.delete(d.ref);
+      });
+      if (!pendingNotifs.empty) {
+        await batch.commit();
+      }
+
+      // Also clean up legacy leave_requested notifications without resourceId matching this leave
+      const leaveDoc = await firestore.collection("leaves").doc(id).get();
+      const leaveData = leaveDoc.data();
+      if (leaveData) {
+        const legacySnap = await firestore.collection("notifications")
+          .where("type", "==", "leave_requested")
+          .where("message", "==", `${leaveData.memberName} requested a leave`)
+          .get();
+        if (!legacySnap.empty) {
+          const legacyBatch = firestore.batch();
+          legacySnap.docs.forEach(d => legacyBatch.delete(d.ref));
+          await legacyBatch.commit();
+        }
+      }
+    } catch (cleanupErr: any) {
+      console.warn("[leaves] Error cleaning up admin notification:", cleanupErr?.message);
+    }
+
+    // 2. Notify the member whose leave was approved/rejected
+    if (notifyUser && data.status) {
+      try {
+        const leaveDoc = await firestore.collection("leaves").doc(id).get();
+        const leaveData = leaveDoc.data();
+        if (leaveData && leaveData.memberId) {
+          const memberDoc = await firestore.collection("members").doc(leaveData.memberId).get();
+          const memberData = memberDoc.data();
+          let targetUserId = memberData?.userId;
+          if (!targetUserId && memberData?.email) {
+            try {
+              const authUser = await admin.auth().getUserByEmail(memberData.email.trim().toLowerCase());
+              targetUserId = authUser.uid;
+              await firestore.collection("members").doc(leaveData.memberId).update({ userId: targetUserId });
+            } catch (authErr: any) {
+              console.warn(`[leaves] Could not resolve auth user for email ${memberData.email}:`, authErr?.message);
+            }
+          }
+          if (targetUserId) {
+            await firestore.collection("notifications").add({
+              type: "leave_status_updated",
+              message: `Your leave request was ${data.status}`,
+              subMessage: `${leaveData.startDate} to ${leaveData.endDate}`,
+              actorName: actorName || "Admin",
+              actorPhoto: actorPhoto || "",
+              actorUserId: actorUserId || "",
+              targetUserId: targetUserId,
+              resourceId: id,
+              resourceType: "leave",
+              resourceDate: leaveData.startDate,
+              readBy: [],
+              deletedBy: [],
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            sendPushNotification(firestore, {
+              title: `Your leave request was ${data.status}`,
+              body: `${leaveData.startDate} to ${leaveData.endDate}`,
+              actorUserId: actorUserId,
+              targetAudience: "direct",
+              recipientUserId: targetUserId,
+              type: "leave_status_updated",
+              resourceId: id,
+              resourceDate: leaveData.startDate,
+            });
+          }
+        }
+      } catch (notifErr: any) {
+        console.error("[leaves] Failed to send status notification:", notifErr?.message);
+      }
+    }
+
+    res.json({ ok: true, success: true });
+  } catch (error: any) {
+    console.error("[leaves PATCH/PUT]", error?.message);
+    res.status(500).json({ error: "Failed to update leave" });
+  }
+};
+app.patch("/api/leaves/:id", handleUpdateLeave);
+app.put("/api/leaves/:id", handleUpdateLeave);
+
+app.delete("/api/leaves/:id", async (req, res) => {
+  const firestore = getDb();
+  if (!firestore) return res.status(500).json({ error: "Firebase not configured" });
+  const { id } = req.params;
+  try {
+    const leaveDoc = await firestore.collection("leaves").doc(id).get();
+    const leaveData = leaveDoc.data();
+
+    await firestore.collection("leaves").doc(id).delete();
+
+    // Clean up any notifications associated with this leave
+    try {
+      const notifSnap = await firestore.collection("notifications")
+        .where("resourceId", "==", id)
+        .get();
+      const batch = firestore.batch();
+      notifSnap.docs.forEach(d => batch.delete(d.ref));
+      if (!notifSnap.empty) await batch.commit();
+
+      if (leaveData) {
+        const legacySnap = await firestore.collection("notifications")
+          .where("type", "==", "leave_requested")
+          .where("message", "==", `${leaveData.memberName} requested a leave`)
+          .get();
+        if (!legacySnap.empty) {
+          const legacyBatch = firestore.batch();
+          legacySnap.docs.forEach(d => legacyBatch.delete(d.ref));
+          await legacyBatch.commit();
+        }
+      }
+    } catch (e: any) {
+      console.warn("[leaves] Error cleaning up notifications on delete:", e?.message);
+    }
+
+    res.json({ ok: true, success: true });
+  } catch (error: any) {
+    console.error("[leaves DELETE]", error?.message);
+    res.status(500).json({ error: "Failed to delete leave" });
+  }
+});
+
 function startLeaveRemindersLoop() {
   // Run every hour
   setInterval(async () => {
@@ -4435,10 +4651,10 @@ function startLeaveRemindersLoop() {
         .where("status", "==", "approved")
         .get();
 
-      snap.docs.forEach(doc => {
+      for (const doc of snap.docs) {
         const leave = doc.data();
         if (leave.startDate === futureDateStr && !leave.reminded48h) {
-          writeNotification(firestore, {
+          await writeNotification(firestore, {
             type: "leave_reminder",
             message: `Reminder: ${leave.memberName} is on leave starting in 48 hours`,
             subMessage: `Leave from ${leave.startDate} to ${leave.endDate}`,
@@ -4450,9 +4666,9 @@ function startLeaveRemindersLoop() {
             resourceType: "leave",
             resourceDate: leave.startDate
           });
-          doc.ref.update({ reminded48h: true });
+          await doc.ref.update({ reminded48h: true });
         }
-      });
+      }
     } catch (error) {
       console.error("[Leave Reminders Loop Error]", error);
     }

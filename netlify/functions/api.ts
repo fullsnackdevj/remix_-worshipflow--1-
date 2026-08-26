@@ -4551,12 +4551,18 @@ Return ONLY a valid JSON array of objects with NO markdown formatting, NO backti
         };
     }
     // ── LEAVES ──────────────────────────────────────────────────────────────────
+    // ── LEAVES ──────────────────────────────────────────────────────────────────
     if (rawPath === "/leaves" && method === "GET") {
         try {
             let leaves: any[] | null = cacheGet("leaves");
             if (!leaves) {
-                const snapshot = await firestore.collection("leaves").orderBy("createdAt", "desc").get();
+                const snapshot = await firestore.collection("leaves").get();
                 leaves = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                leaves.sort((a: any, b: any) => {
+                    const aTime = typeof a.createdAt === "number" ? a.createdAt : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+                    const bTime = typeof b.createdAt === "number" ? b.createdAt : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
+                    return bTime - aTime;
+                });
                 cacheSet("leaves", leaves);
             }
             return json(200, leaves);
@@ -4583,17 +4589,21 @@ Return ONLY a valid JSON array of objects with NO markdown formatting, NO backti
             const docRef = await firestore.collection("leaves").add(data);
             cacheDel("leaves");
 
-            if (notifyAdmin) {
+            if (notifyAdmin && data.status === "pending") {
                 await firestore.collection("notifications").add({
                     type: "leave_requested",
                     message: `${data.memberName} requested a leave`,
                     subMessage: `${data.startDate} to ${data.endDate}`,
-                    actorName: actorName || "System",
+                    actorName: actorName || data.memberName || "System",
                     actorPhoto: actorPhoto || "",
                     actorUserId: actorUserId || "",
                     targetAudience: "admin_only",
-                    createdAt: new Date().toISOString(),
-                    isRead: false
+                    resourceId: docRef.id,
+                    resourceType: "leave",
+                    resourceDate: data.startDate,
+                    readBy: [],
+                    deletedBy: [],
+                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
                 }).catch(err => console.error("Failed to add leave notification:", err));
             }
 
@@ -4625,7 +4635,40 @@ Return ONLY a valid JSON array of objects with NO markdown formatting, NO backti
                 await firestore.collection("leaves").doc(id).update(data);
                 cacheDel("leaves");
 
-                // Send notification to the member whose leave was approved/rejected
+                // 1. Resolve / clean up any pending "leave_requested" notifications for admins
+                try {
+                    const pendingNotifs = await firestore.collection("notifications")
+                        .where("type", "==", "leave_requested")
+                        .where("resourceId", "==", id)
+                        .get();
+
+                    const batch = firestore.batch();
+                    pendingNotifs.docs.forEach(d => {
+                        batch.delete(d.ref);
+                    });
+                    if (!pendingNotifs.empty) {
+                        await batch.commit();
+                    }
+
+                    // Also clean up legacy leave_requested notifications without resourceId matching this leave
+                    const leaveDoc = await firestore.collection("leaves").doc(id).get();
+                    const leaveData = leaveDoc.data();
+                    if (leaveData) {
+                        const legacySnap = await firestore.collection("notifications")
+                            .where("type", "==", "leave_requested")
+                            .where("message", "==", `${leaveData.memberName} requested a leave`)
+                            .get();
+                        if (!legacySnap.empty) {
+                            const legacyBatch = firestore.batch();
+                            legacySnap.docs.forEach(d => legacyBatch.delete(d.ref));
+                            await legacyBatch.commit();
+                        }
+                    }
+                } catch (cleanupErr: any) {
+                    console.warn("[leaves] Error cleaning up admin notification:", cleanupErr?.message);
+                }
+
+                // 2. Send notification to the member whose leave was approved/rejected
                 if (notifyUser && data.status) {
                     try {
                         const leaveDoc = await firestore.collection("leaves").doc(id).get();
@@ -4633,14 +4676,11 @@ Return ONLY a valid JSON array of objects with NO markdown formatting, NO backti
                         if (leaveData && leaveData.memberId) {
                             const memberDoc = await firestore.collection("members").doc(leaveData.memberId).get();
                             const memberData = memberDoc.data();
-                            // The userId field is often not set on member docs.
-                            // Fall back to resolving the member's email → Firebase Auth UID.
                             let targetUserId = memberData?.userId;
                             if (!targetUserId && memberData?.email) {
                                 try {
                                     const authUser = await admin.auth().getUserByEmail(memberData.email.trim().toLowerCase());
                                     targetUserId = authUser.uid;
-                                    // Backfill the userId on the member doc for future use
                                     await firestore.collection("members").doc(leaveData.memberId).update({ userId: targetUserId });
                                     cacheDel("members");
                                     console.log(`[leaves] Backfilled userId=${targetUserId} on member ${leaveData.memberId}`);
@@ -4657,8 +4697,12 @@ Return ONLY a valid JSON array of objects with NO markdown formatting, NO backti
                                     actorPhoto: actorPhoto || "",
                                     actorUserId: actorUserId || "",
                                     targetUserId: targetUserId,
-                                    createdAt: new Date().toISOString(),
-                                    isRead: false
+                                    resourceId: id,
+                                    resourceType: "leave",
+                                    resourceDate: leaveData.startDate,
+                                    readBy: [],
+                                    deletedBy: [],
+                                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
                                 });
                                 console.log(`[leaves] Notification sent to userId=${targetUserId} for leave ${id} status=${data.status}`);
                             } else {
@@ -4678,8 +4722,36 @@ Return ONLY a valid JSON array of objects with NO markdown formatting, NO backti
         }
         if (method === "DELETE") {
             try {
+                const leaveDoc = await firestore.collection("leaves").doc(id).get();
+                const leaveData = leaveDoc.data();
+
                 await firestore.collection("leaves").doc(id).delete();
                 cacheDel("leaves");
+
+                // Clean up any notifications associated with this leave
+                try {
+                    const notifSnap = await firestore.collection("notifications")
+                        .where("resourceId", "==", id)
+                        .get();
+                    const batch = firestore.batch();
+                    notifSnap.docs.forEach(d => batch.delete(d.ref));
+                    if (!notifSnap.empty) await batch.commit();
+
+                    if (leaveData) {
+                        const legacySnap = await firestore.collection("notifications")
+                            .where("type", "==", "leave_requested")
+                            .where("message", "==", `${leaveData.memberName} requested a leave`)
+                            .get();
+                        if (!legacySnap.empty) {
+                            const legacyBatch = firestore.batch();
+                            legacySnap.docs.forEach(d => legacyBatch.delete(d.ref));
+                            await legacyBatch.commit();
+                        }
+                    }
+                } catch (e: any) {
+                    console.warn("[leaves] Error cleaning up notifications on delete:", e?.message);
+                }
+
                 return json(200, { ok: true });
             } catch (e: any) {
                 console.error("Failed to delete leave:", e?.message);
