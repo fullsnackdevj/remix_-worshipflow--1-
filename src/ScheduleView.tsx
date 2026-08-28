@@ -194,7 +194,7 @@ useEffect(() => {
 // Leader-specific schedule derived flags (placed here, after state declarations)
 const isServiceEventType = ["sunday service", "midweek service"].includes(editSchedEventName.toLowerCase());
 const leaderCanAddOnDate = isLeader && !!selectedScheduleDate && selectedScheduleDate >= new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" }); // no past dates
-const leaderCanEditEvent = isLeader && isServiceEventType;    // leader can only edit service-type events
+const leaderCanEditEvent = isLeader;    // leaders can edit all event types
 const [newGroupFocusIdx, setNewGroupFocusIdx] = useState<number | null>(null);
 const [editSchedSongLineup, setEditSchedSongLineup] = useState<{ joyful?: string; solemn?: string }>({});
 const [joyfulSearch, setJoyfulSearch] = useState("");
@@ -1269,10 +1269,8 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
           // Single event panel
           const isServiceEvent = ["sunday service", "midweek service"].includes(editSchedEventName.toLowerCase());
           const dow = selectedScheduleDate ? new Date(selectedScheduleDate + "T00:00:00").getDay() : -1;
-          // Leaders see only the relevant service preset; others see full list
-          const presets = isLeader
-            ? (dow === 0 ? ["Sunday Service"] : ["Midweek Service"])
-            : dow === 0
+          // All schedule writers (including leaders) see the full preset list
+          const presets = dow === 0
               ? ["Sunday Service", "Prayer Night", "Worship Night", "Youth Service", "Revival"]
               : ["Midweek Service", "Prayer Night", "Worship Night", "Youth Service", "Revival"];
           const isOnLeave = (memberId: string) => {
@@ -1677,14 +1675,12 @@ navigator.clipboard.writeText(lines.join("\n")).then(() => showToast("success", 
                         ));
                       })()}
                     </div>
-                    {/* Custom event name input — hidden for Worship Leaders */}
-                    {!isLeader && (
-                      <input
-                        type="text" value={editSchedEventName} onChange={e => setEditSchedEventName(e.target.value)}
-                        placeholder="Or type a custom event name…"
-                        className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder-gray-400"
-                      />
-                    )}
+                    {/* Custom event name input — available to all schedule writers */}
+                    <input
+                      type="text" value={editSchedEventName} onChange={e => setEditSchedEventName(e.target.value)}
+                      placeholder="Or type a custom event name…"
+                      className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder-gray-400"
+                    />
                   </div>
 
                   {/* Grouped Role Assignments — only for NON-service events */}
