@@ -1906,6 +1906,7 @@ function DraftList({ drafts, activeDraftId, onSelect, onNew, onDelete, onSubmit,
   const [genDate, setGenDate] = useState("");
   const [genInstructions, setGenInstructions] = useState("");
   const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
   const [copiedShareId, setCopiedShareId] = useState<string | null>(null);
   const [revokingId, setRevokingId] = useState<string | null>(null);
 
@@ -1924,13 +1925,15 @@ function DraftList({ drafts, activeDraftId, onSelect, onNew, onDelete, onSubmit,
   const handleGenerate = async () => {
     if (!currentUserId) return;
     setGenerating(true);
+    setGenError(null);
     try {
       const res = await fetch("/api/preaching-shares", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           createdBy: currentUserId,
-          createdByName: currentUserName,
+          // API requires a non-empty name — fall back so users without a display name can still share
+          createdByName: currentUserName?.trim() || "WorshipFlow Team",
           serviceType: genServiceType,
           scheduledDate: genDate,
           instructions: genInstructions,
@@ -1940,8 +1943,13 @@ function DraftList({ drafts, activeDraftId, onSelect, onNew, onDelete, onSubmit,
         setShowGenerateModal(false);
         setGenServiceType(""); setGenDate(""); setGenInstructions("");
         await fetchShares();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setGenError(err?.error || "Couldn't generate the link. Please try again.");
       }
-    } catch { /* silent */ }
+    } catch {
+      setGenError("Network error. Please check your connection and try again.");
+    }
     setGenerating(false);
   };
 
@@ -1957,7 +1965,19 @@ function DraftList({ drafts, activeDraftId, onSelect, onNew, onDelete, onSubmit,
 
   const copyLink = async (id: string) => {
     const url = `${window.location.origin}/preach-request/${id}`;
-    await navigator.clipboard.writeText(url).catch(() => {});
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      // Fallback for non-secure contexts / older iOS Safari
+      const ta = document.createElement("textarea");
+      ta.value = url;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); } catch { /* noop */ }
+      document.body.removeChild(ta);
+    }
     setCopiedShareId(id);
     setTimeout(() => setCopiedShareId(cid => cid === id ? null : cid), 2000);
   };
@@ -2274,7 +2294,7 @@ function DraftList({ drafts, activeDraftId, onSelect, onNew, onDelete, onSubmit,
           <div style={{ paddingBottom: 80 }}>
             {/* Generate button */}
             <button
-              onClick={() => setShowGenerateModal(true)}
+              onClick={() => { setGenError(null); setShowGenerateModal(true); }}
               className="w-full flex items-center justify-center gap-2 rounded-2xl transition-all active:scale-95"
               style={{ height: 48, marginBottom: 16, background: "linear-gradient(135deg,rgba(var(--wf-c1),0.85),rgba(var(--wf-c2),0.75))", color: "#fff", fontSize: 14, fontWeight: 700, boxShadow: "0 4px 16px rgba(var(--wf-c1),0.3)" }}
             >
@@ -2418,6 +2438,9 @@ function DraftList({ drafts, activeDraftId, onSelect, onNew, onDelete, onSubmit,
                   style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)", color: "rgba(255,255,255,0.75)", borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", resize: "vertical", boxSizing: "border-box" }}
                 />
               </div>
+              {genError && (
+                <p style={{ color: "#fca5a5", fontSize: 12, margin: 0, padding: "8px 12px", borderRadius: 10, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}>{genError}</p>
+              )}
               {/* Generate button */}
               <button
                 onClick={handleGenerate}

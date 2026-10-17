@@ -3931,8 +3931,9 @@ Return ONLY a valid JSON array of objects with NO markdown formatting, NO backti
 
     // POST /preaching-shares — create a new shareable link (authenticated)
     if (rawPath === "/preaching-shares" && method === "POST") {
-        const { createdBy, createdByName, serviceType = "", scheduledDate = "", instructions = "" } = body;
-        if (!createdBy || !createdByName) return json(400, { error: "createdBy and createdByName required" });
+        const { createdBy, createdByName: rawName, serviceType = "", scheduledDate = "", instructions = "" } = body;
+        const createdByName = (rawName ?? "").toString().trim() || "WorshipFlow Team";
+        if (!createdBy) return json(400, { error: "createdBy required" });
         try {
             const shareId = genShareId();
             const now = new Date().toISOString();

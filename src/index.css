@@ -7,7 +7,13 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Hide native black calendar icon on date inputs while keeping field fully clickable */
+/* Hide native black calendar icon on date inputs while keeping field fully clickable.
+   The input MUST be position:relative, otherwise the stretched indicator below is
+   sized against the nearest positioned ancestor (e.g. a whole modal) and every
+   click inside that ancestor opens the calendar. */
+input[type="date"] {
+  position: relative;
+}
 input[type="date"]::-webkit-calendar-picker-indicator {
   opacity: 0;
   position: absolute;
