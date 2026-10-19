@@ -32,6 +32,19 @@ app.use(express.json({ limit: "50mb" }));
 const toTitleCase = (str: string) =>
   str.trim().replace(/\b\w/g, (char) => char.toUpperCase());
 
+/** Validate/normalise the tablature array sent by the client (Songs → Tabs). */
+function sanitizeSongTabs(raw: unknown) {
+  if (!Array.isArray(raw)) return [];
+  return raw.slice(0, 10).map((t: any, i: number) => ({
+    id: String(t?.id ?? "").slice(0, 40) || `tab_${i}`,
+    label: String(t?.label ?? "").trim().slice(0, 40),
+    instrument: ["guitar", "bass", "piano"].includes(t?.instrument) ? t.instrument : "guitar",
+    tuning: Array.isArray(t?.tuning) ? t.tuning.slice(0, 8).map((x: any) => String(x).slice(0, 8)) : [],
+    capo: Math.max(0, Math.min(12, Math.round(Number(t?.capo) || 0))),
+    content: String(t?.content ?? "").slice(0, 20000),
+  })).filter((t) => t.content.trim() && t.tuning.length >= 1);
+}
+
 /**
  * Normalize lyrics for comparison:
  *  - lowercase
@@ -1844,7 +1857,7 @@ app.post("/api/songs", async (req, res) => {
   const firestore = getDb();
   if (!firestore) return res.status(500).json({ error: "Firebase not configured" });
 
-  const { title, artist, lyrics, chords, tags, video_url, isFutureLineup } = req.body;
+  const { title, artist, lyrics, chords, tags, video_url, isFutureLineup, tabs } = req.body;
 
   // Required field validation
   const missingFields: string[] = [];
@@ -1888,6 +1901,7 @@ app.post("/api/songs", async (req, res) => {
       artist: toTitleCase(artist),
       lyrics: lyrics.trim().toUpperCase(),
       chords: chords || "",
+      tabs: sanitizeSongTabs(tabs),
       tagIds: tags,
       video_url: video_url || "",
       isFutureLineup: isFutureLineup === true,
@@ -1919,7 +1933,7 @@ app.put("/api/songs/:id", async (req, res) => {
   if (!firestore) return res.status(500).json({ error: "Firebase not configured" });
 
   const { id } = req.params;
-  const { title, artist, lyrics, chords, tags, video_url, isFutureLineup } = req.body;
+  const { title, artist, lyrics, chords, tags, video_url, isFutureLineup, tabs } = req.body;
 
   // Required field validation
   const missingFields: string[] = [];
@@ -1964,6 +1978,8 @@ app.put("/api/songs/:id", async (req, res) => {
       artist: toTitleCase(artist),
       lyrics: lyrics.trim().toUpperCase(),
       chords: chords || "",
+      // Only touch tabs when the client actually sent them (older clients keep existing tabs)
+      ...(Array.isArray(tabs) ? { tabs: sanitizeSongTabs(tabs) } : {}),
       tagIds: tags,
       video_url: video_url || "",
       isFutureLineup: isFutureLineup === true,
@@ -1990,6 +2006,7 @@ app.patch("/api/songs/:id", async (req, res) => {
   if (req.body.title        !== undefined) updates.title         = toTitleCase(req.body.title);
   if (req.body.artist       !== undefined) updates.artist        = toTitleCase(req.body.artist);
   if (req.body.chords       !== undefined) updates.chords        = req.body.chords;
+  if (Array.isArray(req.body.tabs))        updates.tabs          = sanitizeSongTabs(req.body.tabs);
   if (req.body.tags         !== undefined) updates.tagIds        = req.body.tags;
   if (req.body.video_url    !== undefined) updates.video_url     = req.body.video_url;
   if (typeof req.body.isFutureLineup === "boolean") updates.isFutureLineup = req.body.isFutureLineup;

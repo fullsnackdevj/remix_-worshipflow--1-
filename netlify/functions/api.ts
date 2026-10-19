@@ -260,6 +260,19 @@ function json(statusCode: number, body: unknown, extraHeaders: Record<string, st
 const toTitleCase = (str: string) =>
     str.trim().replace(/\b\w/g, (char) => char.toUpperCase());
 
+/** Validate/normalise the tablature array sent by the client (Songs → Tabs). */
+function sanitizeSongTabs(raw: unknown) {
+    if (!Array.isArray(raw)) return [];
+    return raw.slice(0, 10).map((t: any, i: number) => ({
+        id: String(t?.id ?? "").slice(0, 40) || `tab_${i}`,
+        label: String(t?.label ?? "").trim().slice(0, 40),
+        instrument: ["guitar", "bass", "piano"].includes(t?.instrument) ? t.instrument : "guitar",
+        tuning: Array.isArray(t?.tuning) ? t.tuning.slice(0, 8).map((x: any) => String(x).slice(0, 8)) : [],
+        capo: Math.max(0, Math.min(12, Math.round(Number(t?.capo) || 0))),
+        content: String(t?.content ?? "").slice(0, 20000),
+    })).filter((t) => t.content.trim() && t.tuning.length >= 1);
+}
+
 // ── Duplicate-detection helpers ─────────────────────────────────────────────
 
 function normalizeText(s: string): string {
@@ -1897,7 +1910,7 @@ Return ONLY a valid JSON array of objects with NO markdown formatting, NO backti
 
     // POST /songs
     if (rawPath === "/songs" && method === "POST") {
-        const { title, artist, lyrics, chords, tags, video_url, isFutureLineup } = body;
+        const { title, artist, lyrics, chords, tags, video_url, isFutureLineup, tabs } = body;
 
         // Required field validation
         const missingFields: string[] = [];
@@ -1938,6 +1951,7 @@ Return ONLY a valid JSON array of objects with NO markdown formatting, NO backti
                 artist: toTitleCase(artist),
                 lyrics: lyrics.trim().toUpperCase(),
                 chords: chords || "",
+                tabs: sanitizeSongTabs(tabs),
                 tagIds: tags,
                 video_url: video_url || "",
                 isFutureLineup: isFutureLineup === true,
@@ -1985,7 +1999,7 @@ Return ONLY a valid JSON array of objects with NO markdown formatting, NO backti
         }
 
         if (method === "PUT") {
-            const { title, artist, lyrics, chords, tags, video_url, isFutureLineup } = body;
+            const { title, artist, lyrics, chords, tags, video_url, isFutureLineup, tabs } = body;
 
             // Required field validation
             const missingFields: string[] = [];
@@ -2027,6 +2041,8 @@ Return ONLY a valid JSON array of objects with NO markdown formatting, NO backti
                     artist: toTitleCase(artist),
                     lyrics: lyrics.trim().toUpperCase(),
                     chords: chords || "",
+                    // Only touch tabs when the client actually sent them (older clients keep existing tabs)
+                    ...(Array.isArray(tabs) ? { tabs: sanitizeSongTabs(tabs) } : {}),
                     tagIds: tags,
                     video_url: video_url || "",
                     isFutureLineup: isFutureLineup === true,

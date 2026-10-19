@@ -3,8 +3,9 @@ import { toSafeTitle } from "./utils/textFormatting";
 import { createPortal } from "react-dom";
 import { getAuth } from "firebase/auth";
 import AutoTextarea from "./AutoTextarea";
-import { Song, Tag } from "./types";
-import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, ChevronLeft, ChevronRight,
+import { Song, SongTab, Tag } from "./types";
+import { TabsEditorPanel, TabsViewer } from "./TabsPanel";
+import { Music, Search, Plus, Edit, Trash2, X, Save, Tag as TagIcon, ChevronLeft, ChevronRight, Grid3x3,
   ChevronDown, ImagePlus, Loader2, ExternalLink, Printer, CheckSquare, Check, Filter, Users,
   Calendar, Phone, UserPlus, Camera, LayoutGrid, List, BookOpen, Mic2, Copy, Pencil,
   Shield, Mail, Guitar, Sliders, Palette, Lock, AlertTriangle, CheckCircle, BookMarked,
@@ -550,15 +551,19 @@ export default function SongsView({
   const [editVideoUrl, setEditVideoUrl] = useState("");
   const [editLyrics, setEditLyrics] = useState("");
   const [editChords, setEditChords] = useState("");
+  const [editTabs, setEditTabs] = useState<SongTab[]>([]);
   const [editTags, setEditTags] = useState<string[]>([]);
   const [editIsFutureLineup, setEditIsFutureLineup] = useState(false);
   const [copiedField, setCopiedField] = useState<"lyrics" | "chords" | null>(null);
   const [transposeSteps, setTransposeSteps] = useState(0);
   const [formErrors, setFormErrors] = useState<{ title?: string; artist?: string }>({});
   // Mobile detail tab: "lyrics" (default) or "chords"
-  const [detailTab, setDetailTab] = useState<"lyrics" | "chords">("lyrics");
+  // Detail tab: "lyrics" (default), "chords", or "tabs"
+  const [detailTab, setDetailTab] = useState<"lyrics" | "chords" | "tabs">("lyrics");
   // Edit form content tab
-  const [editContentTab, setEditContentTab] = useState<"lyrics" | "chords">("lyrics");
+  const [editContentTab, setEditContentTab] = useState<"lyrics" | "chords" | "tabs">("lyrics");
+  // Opening a different song returns to Lyrics/Chords (an empty Tabs view would be confusing)
+  useEffect(() => { setDetailTab(t => (t === "tabs" ? "lyrics" : t)); }, [selectedSong?.id]);
 
   // ── Lyrics section-label renderer ────────────────────────────────────────
   // Parses raw lyrics text and renders section labels (VERSE, CHORUS, BRIDGE,
@@ -1013,6 +1018,8 @@ showToast("error", `Please fill in: ${missing.join(", ")}.`);
       artist: editArtist,
       lyrics: editLyrics,
       chords: editChords,
+      // Drop tabs that were created but never filled in
+      tabs: editTabs.filter(t => t.content.trim()).map(t => ({ ...t, label: t.label.trim() })),
       tags: editTags,
       video_url: editVideoUrl,
       isFutureLineup: editIsFutureLineup,
@@ -1168,6 +1175,7 @@ showToast("error", "Failed to delete tag.");
       setEditVideoUrl(song.video_url || "");
       setEditLyrics(song.lyrics);
       setEditChords(song.chords ?? "");
+      setEditTabs(Array.isArray(song.tabs) ? song.tabs : []);
       setEditTags(Array.isArray(song.tags) ? song.tags.map((t) => t.id) : []);
       setEditIsFutureLineup(song.isFutureLineup === true);
       resetLyricsHistory(song.lyrics);
@@ -1179,6 +1187,7 @@ showToast("error", "Failed to delete tag.");
       setEditVideoUrl("");
       setEditLyrics(LYRICS_TEMPLATE);
       setEditChords(CHORDS_TEMPLATE);
+      setEditTabs([]);
       setEditTags([]);
       setEditIsFutureLineup(false);
       resetLyricsHistory(LYRICS_TEMPLATE);
@@ -1484,9 +1493,32 @@ showToast("error", error?.message || "Failed to extract text from image. Please 
                   <Guitar size={14} />
                   CHORDS
                 </button>
+                <div className="w-px self-stretch" style={{ background: "rgba(255,255,255,0.06)" }} />
+                <button
+                  type="button"
+                  onClick={() => setEditContentTab("tabs")}
+                  className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-bold tracking-wide transition-all"
+                  style={editContentTab === "tabs"
+                    ? { background: "rgba(45,212,191,0.12)", color: "rgba(94,234,212,0.95)", borderBottom: "2px solid rgba(45,212,191,0.8)" }
+                    : { color: "rgba(255,255,255,0.35)", borderBottom: "2px solid transparent" }}
+                >
+                  <Grid3x3 size={14} />
+                  TABS
+                  {editTabs.length > 0 && (
+                    <span className="px-1.5 rounded-full text-[10px] font-bold" style={{ background: "rgba(45,212,191,0.2)", color: "rgba(94,234,212,0.95)" }}>{editTabs.length}</span>
+                  )}
+                </button>
               </div>
 
+              {/* Tabs (tablature) editor */}
+              {editContentTab === "tabs" && (
+                <div className="p-4">
+                  <TabsEditorPanel tabs={editTabs} onChange={setEditTabs} />
+                </div>
+              )}
+
               {/* Panel content */}
+              {editContentTab !== "tabs" && (
               <div className="p-4 space-y-3">
                 {/* Upload zone */}
                 <button
@@ -1588,6 +1620,7 @@ showToast("error", error?.message || "Failed to extract text from image. Please 
                   <p className="text-xs" style={{ color: "rgba(239,68,68,0.85)" }}>{formErrors.lyrics}</p>
                 )}
               </div>
+              )}
             </div>
 
             {/* Footer action row */}
@@ -1847,9 +1880,46 @@ showToast("error", error?.message || "Failed to extract text from image. Please 
               <Guitar size={16} />
               Chords
             </button>
+            <button
+              onClick={() => setDetailTab("tabs")}
+              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold transition-all ${
+                detailTab === "tabs" ? "text-white shadow-sm" : "hover:bg-white/[0.04]"
+              }`}
+              style={detailTab === "tabs" ? { background: "linear-gradient(135deg, #0d9488, #2dd4bf)" } : { color: "rgba(255,255,255,0.45)" }}
+            >
+              <Grid3x3 size={16} />
+              Tabs{selectedSong.tabs?.length ? ` (${selectedSong.tabs.length})` : ""}
+            </button>
+          </div>
+
+          {/* ── Desktop switch: Lyrics & Chords side-by-side  |  Tabs */}
+          <div className="hidden lg:flex rounded-2xl p-1 gap-1 max-w-sm" style={{ background: "#13151f", border: "1px solid rgba(255,255,255,0.07)" }}>
+            <button
+              onClick={() => setDetailTab("lyrics")}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                detailTab !== "tabs" ? "text-white shadow-sm" : "hover:bg-white/[0.04]"
+              }`}
+              style={detailTab !== "tabs" ? { background: "linear-gradient(135deg, #6366f1, #8b5cf6)" } : { color: "rgba(255,255,255,0.45)" }}
+            >
+              <BookOpen size={15} />
+              Lyrics &amp; Chords
+            </button>
+            <button
+              onClick={() => setDetailTab("tabs")}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                detailTab === "tabs" ? "text-white shadow-sm" : "hover:bg-white/[0.04]"
+              }`}
+              style={detailTab === "tabs" ? { background: "linear-gradient(135deg, #0d9488, #2dd4bf)" } : { color: "rgba(255,255,255,0.45)" }}
+            >
+              <Grid3x3 size={15} />
+              Tabs{selectedSong.tabs?.length ? ` (${selectedSong.tabs.length})` : ""}
+            </button>
           </div>
 
           {/* ── Lyrics & Chords Panels ──────────────────────────────────────── */}
+          {detailTab === "tabs" ? (
+            <TabsViewer key={selectedSong.id} tabs={selectedSong.tabs ?? []} />
+          ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
 
             {/* ── LYRICS PANEL ── */}
@@ -1969,6 +2039,7 @@ showToast("error", error?.message || "Failed to extract text from image. Please 
             </div>
 
           </div>
+          )}
         </div>
       ) : (
 

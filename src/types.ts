@@ -4,12 +4,25 @@ export interface Tag {
   color: string;
 }
 
+export type TabInstrument = "guitar" | "bass" | "piano";
+
+/** A guitar/bass/piano tablature attached to a song. `content` is plain ASCII tab. */
+export interface SongTab {
+  id: string;
+  label: string;          // e.g. "Intro Riff", "Solo", "Intro Piano"
+  instrument: TabInstrument;
+  tuning: string[];       // string/line labels (e.g. ["e","B","G","D","A","E"] or ["RH","LH"])
+  capo: number;           // 0 = no capo
+  content: string;        // ASCII tab (source of truth)
+}
+
 export interface Song {
   id: string;
   title: string;
   artist: string;
   lyrics: string;
   chords: string;
+  tabs?: SongTab[];
   tags: Tag[];
   video_url?: string;
   isFutureLineup?: boolean;
