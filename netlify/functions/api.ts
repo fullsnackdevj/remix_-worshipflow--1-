@@ -267,7 +267,7 @@ function sanitizeSongTabs(raw: unknown) {
         id: String(t?.id ?? "").slice(0, 40) || `tab_${i}`,
         label: String(t?.label ?? "").trim().slice(0, 40),
         instrument: ["guitar", "bass", "piano"].includes(t?.instrument) ? t.instrument : "guitar",
-        tuning: Array.isArray(t?.tuning) ? t.tuning.slice(0, 8).map((x: any) => String(x).slice(0, 8)) : [],
+        tuning: Array.isArray(t?.tuning) ? t.tuning.slice(0, 12).map((x: any) => String(x).slice(0, 8)) : [],
         capo: Math.max(0, Math.min(12, Math.round(Number(t?.capo) || 0))),
         content: String(t?.content ?? "").slice(0, 20000),
     })).filter((t) => t.content.trim() && t.tuning.length >= 1);

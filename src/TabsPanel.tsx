@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, Check, Copy, Guitar, Piano, Grid3x3, FileText, AlertTriangle, Minus, Music } from "lucide-react";
+import { Plus, Trash2, Check, Copy, Guitar, Piano, Grid3x3, FileText, AlertTriangle, Minus, Music, X } from "lucide-react";
 import type { SongTab, TabInstrument } from "./types";
 import TabGridEditor from "./TabGridEditor";
 import PianoVoicingEditor from "./PianoVoicingEditor";
 import PianoVoicingViewer from "./PianoVoicingViewer";
 import {
   INSTRUMENTS, TUNING_PRESETS, tuningName, newTab, parseTab, serializeGrid, emptyGrid,
-  resizeGridStrings, wouldLoseNotes,
+  resizeGridStrings, wouldLoseNotes, addBottomString, addTopString, removeStringAtIndex, stringHasNotes,
 } from "./utils/tabUtils";
 import { defaultPianoVoicings, serializePianoVoicings } from "./utils/pianoUtils";
 
@@ -50,6 +50,8 @@ export function TabsEditorPanel({ tabs, onChange }: { tabs: SongTab[]; onChange:
   const [activeId, setActiveId] = useState<string | null>(tabs[0]?.id ?? null);
   const [mode, setMode] = useState<"grid" | "text">("grid");
   const [copied, setCopied] = useState(false);
+  const [editingStringIdx, setEditingStringIdx] = useState<number | null>(null);
+  const [editingStringVal, setEditingStringVal] = useState("");
 
   const active = tabs.find(t => t.id === activeId) ?? tabs[0] ?? null;
 
@@ -84,12 +86,65 @@ export function TabsEditorPanel({ tabs, onChange }: { tabs: SongTab[]; onChange:
     if (parsed) {
       const from = parsed.tuning.length;
       if (wouldLoseNotes(parsed.grid, from, tuning.length) &&
-          !window.confirm(`Switching to ${tuning.length} strings will remove notes on the top ${from - tuning.length} string(s). Continue?`)) {
+          !window.confirm(`Switching to ${tuning.length} strings will remove notes on the removed string(s). Continue?`)) {
         return;
       }
       content = serializeGrid(resizeGridStrings(parsed.grid, from, tuning.length), tuning);
     }
     update(t.id, { instrument, tuning, content });
+  };
+
+  /** Add a lower pitch string at the bottom (e.g. 7th string B, 8th string F#, 5th string bass B) */
+  const handleAddBottomString = (t: SongTab) => {
+    if (t.tuning.length >= 12) return;
+    const parsed = t.content.trim() ? parseTab(t.content) : null;
+    const grid = parsed ? parsed.grid : emptyGrid(t.tuning.length);
+    const res = addBottomString(grid, t.tuning);
+    const content = t.content.trim() ? serializeGrid(res.grid, res.tuning) : "";
+    update(t.id, { tuning: res.tuning, content });
+  };
+
+  /** Add a higher pitch string at the top (e.g. High C for 6-string bass, or high a) */
+  const handleAddTopString = (t: SongTab) => {
+    if (t.tuning.length >= 12) return;
+    const parsed = t.content.trim() ? parseTab(t.content) : null;
+    const grid = parsed ? parsed.grid : emptyGrid(t.tuning.length);
+    const res = addTopString(grid, t.tuning);
+    const content = t.content.trim() ? serializeGrid(res.grid, res.tuning) : "";
+    update(t.id, { tuning: res.tuning, content });
+  };
+
+  /** Remove a specific string by index */
+  const handleRemoveString = (t: SongTab, idx: number) => {
+    if (t.tuning.length <= 2) {
+      alert("A tab staff must have at least 2 strings.");
+      return;
+    }
+    const parsed = t.content.trim() ? parseTab(t.content) : null;
+    if (parsed && stringHasNotes(parsed.grid, idx)) {
+      const stringName = t.tuning[idx] || `String #${idx + 1}`;
+      if (!window.confirm(`String #${idx + 1} (${stringName}) contains written notes. Deleting it will remove those notes. Continue?`)) {
+        return;
+      }
+    }
+    const grid = parsed ? parsed.grid : emptyGrid(t.tuning.length);
+    const res = removeStringAtIndex(grid, t.tuning, idx);
+    const content = t.content.trim() ? serializeGrid(res.grid, res.tuning) : "";
+    update(t.id, { tuning: res.tuning, content });
+  };
+
+  /** Edit a single string's tuning label */
+  const handleEditStringLabel = (t: SongTab, idx: number, newLabel: string) => {
+    const trimmed = newLabel.trim();
+    if (!trimmed) return;
+    const nextTuning = [...t.tuning];
+    nextTuning[idx] = trimmed;
+    const parsed = t.content.trim() ? parseTab(t.content) : null;
+    let content = t.content;
+    if (parsed) {
+      content = serializeGrid(parsed.grid, nextTuning);
+    }
+    update(t.id, { tuning: nextTuning, content });
   };
 
   const onInstrument = (t: SongTab, instrument: TabInstrument) => {
@@ -112,7 +167,7 @@ export function TabsEditorPanel({ tabs, onChange }: { tabs: SongTab[]; onChange:
   useEffect(() => {
     if (isPiano || mode !== "grid" || !active || !parsedForGrid) return;
     if (parsedForGrid.tuning.length !== active.tuning.length) {
-      const inst: TabInstrument = parsedForGrid.tuning.length === 4 ? "bass" : "guitar";
+      const inst: TabInstrument = active.instrument === "bass" || parsedForGrid.tuning.length <= 5 ? active.instrument : "guitar";
       update(active.id, { instrument: inst, tuning: parsedForGrid.tuning });
     }
   }, [mode, active?.id, parsedForGrid, isPiano]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -225,6 +280,159 @@ export function TabsEditorPanel({ tabs, onChange }: { tabs: SongTab[]; onChange:
         )}
       </div>
 
+      {/* Extended range & Strings bar for guitar and bass */}
+      {!isPiano && (
+        <div className="rounded-xl p-3 space-y-2.5" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.45)" }}>
+                Strings ({active.tuning.length}):
+              </span>
+              {/* Stepper */}
+              <div className="flex items-center rounded-lg overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)" }}>
+                <button
+                  type="button"
+                  title="Remove bottom string"
+                  disabled={active.tuning.length <= 2}
+                  onClick={() => handleRemoveString(active, active.tuning.length - 1)}
+                  className="w-6 h-6 flex items-center justify-center transition-colors disabled:opacity-25"
+                  style={{ color: "rgba(255,255,255,0.7)" }}
+                >
+                  <Minus size={11} />
+                </button>
+                <span className="px-2 text-xs font-mono font-bold select-none" style={{ color: `rgb(${ACCENT})` }}>
+                  {active.tuning.length}
+                </span>
+                <button
+                  type="button"
+                  title="Add low string (bottom)"
+                  disabled={active.tuning.length >= 12}
+                  onClick={() => handleAddBottomString(active)}
+                  className="w-6 h-6 flex items-center justify-center transition-colors disabled:opacity-25"
+                  style={{ color: "rgba(255,255,255,0.7)" }}
+                >
+                  <Plus size={11} />
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Add Buttons */}
+            <div className="flex items-center gap-1.5 ml-auto">
+              <button
+                type="button"
+                disabled={active.tuning.length >= 12}
+                onClick={() => handleAddTopString(active)}
+                className="flex items-center gap-1 px-2.5 h-6 rounded-md text-[11px] font-semibold transition-colors disabled:opacity-30"
+                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.8)" }}
+                title="Add higher-pitch string to top of staff (e.g. High C for 6-string bass, or high a for guitar)"
+              >
+                <Plus size={10} style={{ color: `rgb(${ACCENT})` }} /> + High String
+              </button>
+              <button
+                type="button"
+                disabled={active.tuning.length >= 12}
+                onClick={() => handleAddBottomString(active)}
+                className="flex items-center gap-1 px-2.5 h-6 rounded-md text-[11px] font-semibold transition-colors disabled:opacity-30"
+                style={{ background: `rgba(${ACCENT},0.15)`, border: `1px solid rgba(${ACCENT},0.35)`, color: `rgb(${ACCENT})` }}
+                title="Add lower-pitch string to bottom of staff (e.g. 7th string B, 8th string F#, 5-string bass B)"
+              >
+                <Plus size={10} /> + Low String
+              </button>
+            </div>
+          </div>
+
+          {/* Interactive String Tuning Pills */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+            {active.tuning.map((strLabel, idx) => {
+              const isEditing = editingStringIdx === idx;
+              return (
+                <div
+                  key={idx}
+                  className="group relative flex items-center rounded-lg border transition-all shrink-0"
+                  style={{
+                    background: isEditing ? `rgba(${ACCENT},0.15)` : "rgba(255,255,255,0.04)",
+                    borderColor: isEditing ? `rgba(${ACCENT},0.5)` : "rgba(255,255,255,0.09)",
+                  }}
+                >
+                  {isEditing ? (
+                    <input
+                      autoFocus
+                      value={editingStringVal}
+                      onChange={e => setEditingStringVal(e.target.value.slice(0, 5))}
+                      onBlur={() => {
+                        if (editingStringVal.trim()) {
+                          handleEditStringLabel(active, idx, editingStringVal);
+                        }
+                        setEditingStringIdx(null);
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === "Enter") {
+                          if (editingStringVal.trim()) {
+                            handleEditStringLabel(active, idx, editingStringVal);
+                          }
+                          setEditingStringIdx(null);
+                        } else if (e.key === "Escape") {
+                          setEditingStringIdx(null);
+                        }
+                      }}
+                      className="w-12 h-7 px-1 text-center font-mono text-xs font-bold rounded outline-none"
+                      style={{ color: `rgb(${ACCENT})`, background: "#0e1018" }}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingStringIdx(idx);
+                        setEditingStringVal(strLabel);
+                      }}
+                      title={`Click to edit tuning of string #${idx + 1} (${strLabel})`}
+                      className="flex items-center gap-1.5 px-2 h-7 text-xs font-mono font-bold transition-colors"
+                      style={{ color: "rgba(255,255,255,0.9)" }}
+                    >
+                      <span className="text-[9px] font-sans font-normal opacity-40">#{idx + 1}</span>
+                      <span>{strLabel}</span>
+                    </button>
+                  )}
+
+                  {active.tuning.length > 2 && !isEditing && (
+                    <button
+                      type="button"
+                      title={`Remove string #${idx + 1} (${strLabel})`}
+                      onClick={() => handleRemoveString(active, idx)}
+                      className="w-5 h-7 flex items-center justify-center opacity-40 hover:opacity-100 hover:text-red-400 transition-all pr-1"
+                      style={{ color: "rgba(255,255,255,0.5)" }}
+                    >
+                      <X size={10} />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Quick presets row */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pt-0.5">
+            <span className="text-[9px] uppercase tracking-wider shrink-0" style={{ color: "rgba(255,255,255,0.3)" }}>Presets:</span>
+            {presets.map(p => {
+              const isCurrent = p.tuning.join(",") === active.tuning.join(",");
+              return (
+                <button
+                  key={p.name}
+                  type="button"
+                  onClick={() => retune(active, active.instrument, [...p.tuning])}
+                  className="shrink-0 px-2 py-0.5 rounded text-[10px] font-medium transition-all"
+                  style={isCurrent
+                    ? { background: `rgba(${ACCENT},0.2)`, color: `rgb(${ACCENT})`, border: `1px solid rgba(${ACCENT},0.45)` }
+                    : { background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.45)", border: "1px solid rgba(255,255,255,0.08)" }}
+                >
+                  {p.name.split(":")[0]} ({p.tuning.length}-Str)
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Mode toggle + delete */}
       <div className="flex items-center gap-2">
         <div className="flex rounded-lg p-0.5" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
@@ -289,6 +497,7 @@ export function TabsEditorPanel({ tabs, onChange }: { tabs: SongTab[]; onChange:
               initialContent={active.content}
               tuning={active.tuning}
               onChange={content => update(active.id, { content })}
+              instrument={active.instrument}
             />
             {/* Live ASCII preview */}
             <div className="rounded-xl overflow-hidden" style={{ background: "#0e1018", border: "1px solid rgba(255,255,255,0.07)" }}>

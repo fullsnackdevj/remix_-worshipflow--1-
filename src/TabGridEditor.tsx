@@ -264,10 +264,17 @@ export default function TabGridEditor({ initialContent, tuning, onChange, instru
           <div className="flex flex-col sticky left-0 z-10 pr-2 pl-2" style={{ background: "#0e1018" }}>
             <div style={{ height: HEADER_H }} />
             {tuning.map((label, s) => (
-              <div key={s} className="flex items-center justify-end font-mono text-xs font-bold"
-                style={{ height: CELL_H, minWidth: 26, color: sel.s === s ? `rgb(${ACCENT})` : "rgba(255,255,255,0.4)" }}>
+              <button
+                key={s}
+                type="button"
+                onMouseDown={noFocus}
+                onClick={() => { setSel(p => ({ ...p, s })); wrapRef.current?.focus(); }}
+                className="flex items-center justify-end font-mono text-xs font-bold transition-colors cursor-pointer select-none"
+                style={{ height: CELL_H, minWidth: 30, color: sel.s === s ? `rgb(${ACCENT})` : "rgba(255,255,255,0.4)" }}
+                title={`Select string ${label}`}
+              >
                 {label}
-              </div>
+              </button>
             ))}
           </div>
 

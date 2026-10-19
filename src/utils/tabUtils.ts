@@ -15,14 +15,33 @@ export const INSTRUMENTS: Record<TabInstrument, { label: string; defaultTuning: 
 
 export const TUNING_PRESETS: Record<TabInstrument, { name: string; tuning: string[] }[]> = {
   guitar: [
-    { name: "Standard (EADGBE)", tuning: ["e", "B", "G", "D", "A", "E"] },
-    { name: "Drop D",            tuning: ["e", "B", "G", "D", "A", "D"] },
-    { name: "Half-step down",    tuning: ["eb", "Bb", "Gb", "Db", "Ab", "Eb"] },
-    { name: "DADGAD",            tuning: ["d", "A", "G", "D", "A", "D"] },
+    // 6-String
+    { name: "6-String: Standard (EADGBE)",     tuning: ["e", "B", "G", "D", "A", "E"] },
+    { name: "6-String: Drop D",                tuning: ["e", "B", "G", "D", "A", "D"] },
+    { name: "6-String: Half-step down",        tuning: ["eb", "Bb", "Gb", "Db", "Ab", "Eb"] },
+    { name: "6-String: DADGAD",                tuning: ["d", "A", "G", "D", "A", "D"] },
+    { name: "6-String: Open D",                tuning: ["d", "A", "F#", "D", "A", "D"] },
+    { name: "6-String: Open G",                tuning: ["d", "B", "G", "D", "G", "D"] },
+    // 7-String
+    { name: "7-String: Standard (BEADGBE)",    tuning: ["e", "B", "G", "D", "A", "E", "B"] },
+    { name: "7-String: Drop A (AEADGBE)",      tuning: ["e", "B", "G", "D", "A", "E", "A"] },
+    // 8-String
+    { name: "8-String: Standard (F#BEADGBE)",  tuning: ["e", "B", "G", "D", "A", "E", "B", "F#"] },
+    { name: "8-String: Drop E (EBEADGBE)",     tuning: ["e", "B", "G", "D", "A", "E", "B", "E"] },
   ],
   bass: [
-    { name: "Standard (EADG)", tuning: ["G", "D", "A", "E"] },
-    { name: "Drop D",          tuning: ["G", "D", "A", "D"] },
+    // 4-String
+    { name: "4-String: Standard (EADG)",       tuning: ["G", "D", "A", "E"] },
+    { name: "4-String: Drop D",                tuning: ["G", "D", "A", "D"] },
+    { name: "4-String: Half-step down",        tuning: ["Gb", "Db", "Ab", "Eb"] },
+    // 5-String
+    { name: "5-String: Standard (BEADG)",      tuning: ["G", "D", "A", "E", "B"] },
+    { name: "5-String: Tenor / High C (EADGC)",tuning: ["C", "G", "D", "A", "E"] },
+    { name: "5-String: Drop A",                tuning: ["G", "D", "A", "E", "A"] },
+    // 6-String
+    { name: "6-String: Standard (BEADGC)",     tuning: ["C", "G", "D", "A", "E", "B"] },
+    // 7-String
+    { name: "7-String: Standard (BEADGCF)",    tuning: ["F", "C", "G", "D", "A", "E", "B"] },
   ],
   piano: [
     { name: "Hands (RH / LH)",            tuning: ["RH", "LH"] },
@@ -37,7 +56,7 @@ export function tuningName(instrument: TabInstrument, tuning: string[]): string 
   const hit = TUNING_PRESETS[instrument]?.find(p => p.tuning.join(",") === key);
   if (hit) return hit.name;
   if (instrument === "piano") return tuning.join(" / ");
-  return `Custom (${[...tuning].reverse().join("")})`;
+  return `Custom ${tuning.length}-Str (${[...tuning].reverse().join("")})`;
 }
 
 export const newTabId = () => `tab_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
@@ -63,21 +82,86 @@ export const emptyGrid = (strings: number): TabGrid => [emptyMeasure(strings)];
 export const gridHasNotes = (grid: TabGrid): boolean =>
   grid.some(m => m.some(c => c.some(t => t !== "")));
 
-/** Change the number of strings. When shrinking we keep the LOWEST strings (bottom rows). */
+/** Check if any column has written notes on the specified string index */
+export function stringHasNotes(grid: TabGrid, stringIndex: number): boolean {
+  return grid.some(m => m.some(c => Boolean(c[stringIndex]?.trim())));
+}
+
+/** Change the number of strings. Appends rows to the bottom or trims from the bottom. */
 export function resizeGridStrings(grid: TabGrid, from: number, to: number): TabGrid {
   if (from === to) return grid;
   return grid.map(measure =>
     measure.map(col =>
-      to < from ? col.slice(from - to) : [...Array<string>(to - from).fill(""), ...col],
+      to < from ? col.slice(0, to) : [...col, ...Array<string>(to - from).fill("")],
     ),
   );
 }
 
-/** True when shrinking from `from` to `to` strings would discard written notes. */
+/** True when shrinking from `from` to `to` strings would discard written notes on bottom rows. */
 export function wouldLoseNotes(grid: TabGrid, from: number, to: number): boolean {
   if (to >= from) return false;
-  const dropped = from - to; // top rows are dropped
-  return grid.some(m => m.some(c => c.slice(0, dropped).some(t => t !== "")));
+  return grid.some(m => m.some(c => c.slice(to).some(t => Boolean(t?.trim()))));
+}
+const LOWER_STRING_MAP: Record<string, string> = {
+  "E": "B", "e": "B",
+  "B": "F#", "b": "F#",
+  "F#": "C#", "f#": "C#",
+  "C#": "G#", "c#": "G#",
+  "D": "A", "d": "A",
+  "A": "E", "a": "E",
+  "G": "D", "g": "D",
+  "C": "G", "c": "G",
+  "Eb": "Bb", "eb": "Bb",
+  "Bb": "F", "bb": "F",
+};
+
+const HIGHER_STRING_MAP: Record<string, string> = {
+  "G": "C", "g": "c",
+  "C": "F", "c": "f",
+  "F": "Bb", "f": "Bb",
+  "e": "a", "E": "A",
+  "b": "e", "B": "E",
+  "d": "g", "D": "G",
+  "A": "D", "a": "d",
+};
+
+/**
+ * Add a string to the bottom of the staff (low string).
+ * For 6-str guitar -> default 'B' (7-str), for 7-str -> 'F#' (8-str).
+ * For 4-str bass -> default 'B' (5-str), for 5-str -> 'F#' (6-str).
+ */
+export function addBottomString(grid: TabGrid, tuning: string[], customLabel?: string): { grid: TabGrid; tuning: string[] } {
+  let label = customLabel?.trim();
+  if (!label) {
+    const last = tuning[tuning.length - 1] ?? "E";
+    label = LOWER_STRING_MAP[last] ?? "B";
+  }
+  const nextTuning = [...tuning, label];
+  const nextGrid = grid.map(measure => measure.map(col => [...col, ""]));
+  return { grid: nextGrid, tuning: nextTuning };
+}
+
+/**
+ * Add a string to the top of the staff (high string).
+ * For 4/5-str bass -> default 'C' (high C / tenor).
+ */
+export function addTopString(grid: TabGrid, tuning: string[], customLabel?: string): { grid: TabGrid; tuning: string[] } {
+  let label = customLabel?.trim();
+  if (!label) {
+    const first = tuning[0] ?? "G";
+    label = HIGHER_STRING_MAP[first] ?? "C";
+  }
+  const nextTuning = [label, ...tuning];
+  const nextGrid = grid.map(measure => measure.map(col => ["", ...col]));
+  return { grid: nextGrid, tuning: nextTuning };
+}
+
+/** Remove a string at a specific index */
+export function removeStringAtIndex(grid: TabGrid, tuning: string[], index: number): { grid: TabGrid; tuning: string[] } {
+  if (tuning.length <= 1) return { grid, tuning };
+  const nextTuning = tuning.filter((_, i) => i !== index);
+  const nextGrid = grid.map(measure => measure.map(col => col.filter((_, i) => i !== index)));
+  return { grid: nextGrid, tuning: nextTuning };
 }
 
 // ── Serialize: grid → ASCII ───────────────────────────────────────────────────
